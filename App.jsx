@@ -5,6 +5,7 @@ import Layout from './src/components/Layout.jsx';
 import Topbar from './src/components/Topbar.jsx';
 import EditorView from './src/components/EditorView.jsx';
 import CollectionView from './src/components/CollectionView.jsx';
+import dataService from './src/utils/dataService.js';
 
 export const AppContext = createContext(null);
 export const AuthContext = createContext(null);
@@ -92,16 +93,6 @@ const cloneQuote = (q, patch = {}) => ({
   ...patch
 });
 
-function getUsers() {
-  try { return JSON.parse(localStorage.getItem('registeredUsers') || '[]'); } catch { return []; }
-}
-
-function saveUser(email, password, username) {
-  const users = getUsers();
-  users.push({ email, password, username, regDate: new Date().toLocaleDateString('it-IT') });
-  localStorage.setItem('registeredUsers', JSON.stringify(users));
-}
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -117,57 +108,42 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  const register = (email, password, username) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        if (!email || !password) {
-          resolve({ success: false, error: 'Inserisci email e password' });
-          return;
-        }
-        const users = getUsers();
-        if (users.find(u => u.email === email)) {
-          resolve({ success: false, error: 'Email già registrata' });
-          return;
-        }
-        saveUser(email, password, username || email.split('@')[0]);
-        const fakeToken = btoa(`${email}:${Date.now()}`);
-        const regDate = new Date().toLocaleDateString('it-IT');
-        localStorage.setItem('authToken', fakeToken);
-        localStorage.setItem('userEmail', email);
-        localStorage.setItem('username', username || email.split('@')[0]);
-        localStorage.setItem('注册Date', regDate);
-        setUser({ email, token: fakeToken, username: username || email.split('@')[0], 注册Date: regDate });
-        resolve({ success: true });
-      }, 800);
-    });
+  const register = async (email, password, username, gender) => {
+    const result = await dataService.register(email, password, username, gender);
+    if (result.success) {
+      const uData = result.user || {};
+      localStorage.setItem('authToken', btoa(`${email}:${Date.now()}`));
+      localStorage.setItem('userEmail', email);
+      localStorage.setItem('username', uData.username || username);
+      localStorage.setItem('注册Date', uData.createdAt || new Date().toLocaleDateString('it-IT'));
+      setUser({
+        email,
+        token: btoa(`${email}:${Date.now()}`),
+        username: uData.username || username,
+        gender: uData.gender || gender,
+        注册Date: uData.createdAt || new Date().toLocaleDateString('it-IT')
+      });
+    }
+    return result;
   };
 
-  const login = (email, password) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        if (!email || !password) {
-          resolve({ success: false, error: 'Inserisci email e password' });
-          return;
-        }
-        const users = getUsers();
-        const found = users.find(u => u.email === email);
-        if (!found) {
-          resolve({ success: false, error: 'Nessun account trovato con questa email' });
-          return;
-        }
-        if (found.password !== password) {
-          resolve({ success: false, error: 'Password errata' });
-          return;
-        }
-        const fakeToken = btoa(`${email}:${Date.now()}`);
-        localStorage.setItem('authToken', fakeToken);
-        localStorage.setItem('userEmail', email);
-        localStorage.setItem('username', found.username);
-        localStorage.setItem('注册Date', found.regDate);
-        setUser({ email, token: fakeToken, username: found.username, 注册Date: found.regDate });
-        resolve({ success: true });
-      }, 800);
-    });
+  const login = async (email, password) => {
+    const result = await dataService.login(email, password);
+    if (result.success) {
+      const uData = result.user || {};
+      localStorage.setItem('authToken', btoa(`${email}:${Date.now()}`));
+      localStorage.setItem('userEmail', email);
+      localStorage.setItem('username', uData.username || email.split('@')[0]);
+      localStorage.setItem('注册Date', uData.createdAt || new Date().toLocaleDateString('it-IT'));
+      setUser({
+        email,
+        token: btoa(`${email}:${Date.now()}`),
+        username: uData.username || email.split('@')[0],
+        gender: uData.gender,
+        注册Date: uData.createdAt || new Date().toLocaleDateString('it-IT')
+      });
+    }
+    return result;
   };
 
   const logout = () => {
@@ -190,11 +166,7 @@ export function AuthProvider({ children }) {
 export default function App() {
   const [view, setView] = useState("editor");
   const [quote, setQuote] = useState(STARTER_QUOTE);
-  const [quotes, setQuotes] = useState([
-    STARTER_QUOTE,
-    cloneQuote(STARTER_QUOTE, { id: "PRV-2026-038", title: "Restyling ristorante", client: "Trattoria Porta Nuova", status: "Inviato", color: "#0F766E" }),
-    cloneQuote(STARTER_QUOTE, { id: "PRV-2026-032", title: "Landing evento wellness", client: "Alba Retreat", status: "Accettato", color: "#6D3FD1" })
-  ]);
+  const [quotes, setQuotes] = useState([]);
   const [aiText, setAiText] = useState("Rendi il preventivo più professionale e aggiungi dettagli tecnici");
   const [activity, setActivity] = useState("Pronto: modifica manualmente il preventivo.");
   const [searchQuery, setSearchQuery] = useState("");
@@ -206,6 +178,19 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('deepseekKey', deepseekKey);
   }, [deepseekKey]);
+
+  // Load quotes from data service when user changes
+  useEffect(() => {
+    if (user?.email) {
+      dataService.getQuotes(user.email).then(({ quotes: loaded }) => {
+        if (loaded && loaded.length > 0) {
+          setQuotes(loaded);
+        } else {
+          setQuotes([STARTER_QUOTE]);
+        }
+      }).catch(() => setQuotes([STARTER_QUOTE]));
+    }
+  }, [user?.email]);
 
   const addLog = (type, msg) => setAiLogs(prev => [...prev.slice(-19), { type, msg, time: new Date().toLocaleTimeString('it-IT') }]);
 
@@ -373,13 +358,22 @@ CONTESTO TIPO:
   };
 
   const saveQuote = () => {
-    setQuotes(c => [cloneQuote(quote), ...c.filter(q => q.id !== quote.id)]);
+    const saved = cloneQuote(quote);
+    setQuotes(c => {
+      const updated = [saved, ...c.filter(q => q.id !== quote.id)];
+      if (user?.email) dataService.saveQuote(user.email, saved);
+      return updated;
+    });
     setActivity("Preventivo salvato nella Collection.");
   };
 
   const duplicate = (saved) => {
     const copy = cloneQuote(saved, { id: `PRV-2026-${Math.floor(100 + Math.random() * 899)}`, title: `${saved.title} (copia)`, status: "Bozza" });
-    setQuotes(c => [copy, ...c]);
+    setQuotes(c => {
+      const updated = [copy, ...c];
+      if (user?.email) dataService.saveQuote(user.email, copy);
+      return updated;
+    });
     setQuote(copy);
     setView("editor");
     setActivity("Preventivo duplicato.");
@@ -391,20 +385,19 @@ CONTESTO TIPO:
     setActivity(`${saved.id} aperto in modifica.`);
   };
 
+  const updateQuoteStatus = (id, newStatus) => {
+    setQuotes(c => c.map(q => q.id === id ? { ...q, status: newStatus } : q));
+    if (user?.email) {
+      const q = quotes.find(qq => qq.id === id);
+      if (q) dataService.saveQuote(user.email, { ...q, status: newStatus });
+    }
+  };
+
   const exportPDF = async () => {
     setActivity("Generazione PDF in corso...");
     try {
-      const html2pdf = (await import('html2pdf.js')).default;
-      const element = previewRef.current;
-      if (!element) { setActivity("Errore: preview non trovato."); return; }
-      await html2pdf().set({
-        margin: [10, 10, 10, 10],
-        filename: `${quote.id}_${quote.client || 'preventivo'}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, windowHeight: 1123, scrollY: 0 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      }).from(element).save();
+      const { default: generatePDF } = await import('./src/utils/generatePDF.js');
+      generatePDF(quote);
       setActivity("PDF esportato con successo!");
     } catch (err) {
       console.error(err);
@@ -442,7 +435,11 @@ CONTESTO TIPO:
             activeId={quote.id}
             openQuote={openQuote}
             duplicate={duplicate}
-            removeQuote={(id) => setQuotes(c => c.filter(q => q.id !== id))}
+            removeQuote={(id) => {
+              setQuotes(c => c.filter(q => q.id !== id));
+              if (user?.email) dataService.deleteQuote(id);
+            }}
+            onUpdateStatus={updateQuoteStatus}
           />
         )}
       </Layout>

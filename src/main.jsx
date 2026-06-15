@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import App, { AuthProvider, AuthContext } from '../App.jsx';
+import HomePage from './pages/HomePage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
@@ -18,16 +19,24 @@ function AppWrapper() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={
+          <Route path="/app" element={
             <ProtectedRoute>
               <App />
             </ProtectedRoute>
+          } />
+          <Route path="/" element={
+            <HomePageWrapper />
           } />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
   );
+}
+
+function HomePageWrapper() {
+  const { user } = React.useContext(AuthContext);
+  return <HomePage user={user} />;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<AppWrapper />);

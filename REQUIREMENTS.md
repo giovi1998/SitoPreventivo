@@ -14,106 +14,130 @@
 
 ### 1. Verifica strumenti
 
-Apri un terminale (PowerShell su Windows, bash su Mac/Linux):
-
 ```powershell
 node --version   # deve essere ≥ 18
 npm --version    # deve essere ≥ 9
-git --version    # deve funzionare
+git --version
 ```
 
-### 2. Clona il repository
+### 2. Clona e installa
 
 ```powershell
 git clone https://github.com/giovi1998/SitoPreventivo.git
 cd SitoPreventivo
-```
-
-### 3. Installa dipendenze
-
-```powershell
 npm install
 ```
 
-Questo installa:
-- `react` + `react-dom` — framework UI
-- `react-router-dom` — routing SPA
-- `html2pdf.js` — esportazione PDF lato client
-- `vite` + `@vitejs/plugin-react` — bundler e dev server
-
-### 4. Avvia il dev server
+### 3. Avvia
 
 ```powershell
 npm run dev
 ```
 
-Apri il browser su `http://localhost:8000`
+Apri `http://localhost:8000`
 
-### 5. (Solo Windows) Policy di esecuzione
-
-Se il comando sopra fallisce con errori di permessi:
+### 4. (Solo Windows) Policy di esecuzione
 
 ```powershell
-# Apri PowerShell come Amministratore
+# PowerShell come Amministratore
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-
-# Riavvia il terminale e riprova
-npm run dev
 ```
 
 ## Primo Avvio
 
-1. Vai su `http://localhost:8000` — vedrai la pagina di login
+1. Vai su `http://localhost:8000`
 2. **Registrati**: inserisci email, username, password
-3. **Login**: accedi con le credenziali appena create
-4. Sei nell'editor. Per usare l'AI:
-   - Ottieni una API key da [https://platform.deepseek.com](https://platform.deepseek.com/)
-   - Inseriscila nel campo "DeepSeek API Key" (pannello sinistro)
-   - Usa i pulsanti rapidi o scrivi un prompt personalizzato
+3. **Login**: accedi con le credenziali
+4. Per usare l'AI:
+   - Ottieni API key da [platform.deepseek.com](https://platform.deepseek.com/)
+   - Inseriscila nel campo "DeepSeek API Key"
+   - Usa i pulsanti rapidi o scrivi un prompt
+
+## Dipendenze
+
+| Pacchetto | Scopo |
+|-----------|-------|
+| `react` + `react-dom` | Framework UI |
+| `react-router-dom` | Routing SPA |
+| `pdfmake` | Generazione PDF da dati JSON (zero canvas) |
+| `vite` + `@vitejs/plugin-react` | Bundler e dev server |
+
+### Rimosso
+
+- `html2pdf.js` — sostituito da pdfmake
+
+## Archiviazione Dati (Ibrido)
+
+| Situazione | Dove vanno i dati |
+|------------|-------------------|
+| **Su Netlify** | Netlify Database (Postgres) via API Functions |
+| **Con `netlify dev`** | Postgres locale |
+| **Solo `npm run dev`** | localStorage (fallback automatico) |
+| **Offline** | localStorage (funziona sempre) |
+
+L'app prova sempre prima l'API (`/.netlify/functions/api/...`). Se la chiamata fallisce (rete assente, funzione non disponibile), usa automaticamente localStorage.
+
+### Admin predefinito
+
+| Email | Password | Sesso |
+|-------|----------|-------|
+| `admin@gmail.com` | `admin` | male |
+
+### Dati localStorage (fallback)
+
+| Chiave | Descrizione |
+|--------|-------------|
+| `registeredUsers` | Array JSON utenti registrati |
+| `authToken` | Token sessione |
+| `userEmail` | Email utente corrente |
+| `username` | Username |
+| `注册Date` | Data registrazione |
+| `deepseekKey` | API Key DeepSeek |
+| `precisionQuote_quotes` | Preventivi salvati |
 
 ## Deploy su Netlify
 
-### Opzione 1: Drag & Drop (veloce)
+### Opzione 1: Con Database (completo)
 
 ```powershell
-# Build del progetto
-npm run build
+npx netlify login
+npx netlify database init    # Crea database + migrazione
+npx netlify deploy --prod
 ```
 
-Trascina la cartella `dist/` su [app.netlify.com](https://app.netlify.com)
-
-### Opzione 2: CLI Netlify
+### Opzione 2: Drag & Drop (solo frontend)
 
 ```powershell
-# Login Netlify (apre il browser)
-npx netlify login
-
-# Inizializza sito
-npx netlify init
-# → "Create & configure a new site"
-# → Scegli team
-# → Build command: npm run build
-# → Deploy directory: dist
-
-# Deploy produzione
-npx netlify deploy --prod
+npm run build
+# Trascina dist/ su https://app.netlify.com
 ```
 
 ### Opzione 3: Da repository GitHub
 
-1. Carica il progetto su GitHub
-2. Su [app.netlify.com](https://app.netlify.com) → "Add new site" → "Import an existing project"
-3. Connetti il repository
-4. Netlify rileva automaticamente `netlify.toml` con i settaggi corretti
-5. Il sito si builda e deploya automaticamente a ogni push
+1. Su [app.netlify.com](https://app.netlify.com) → **Add new site** → **Import an existing project**
+2. Connetti il repo `giovi1998/SitoPreventivo`
+3. Netlify legge `netlify.toml` e imposta tutto
+4. Ogni push su master fa deploy automatico
+
+## Sviluppo Database
+
+```powershell
+# Genera migrazione dopo aver modificato db/schema.ts
+npm run db:generate
+
+# Applica migrazioni al DB locale
+netlify database migrations apply
+
+# Apri interfaccia dati
+npm run db:studio
+```
 
 ## Comandi utili
 
 ```powershell
-npm run dev        # Avvia dev server su :8000
+npm run dev        # Dev server su :8000
 npm run build      # Build produzione in /dist
 npm run preview    # Preview del build
-npx vite build     # Build alternativo
 ```
 
 ## Risoluzione Problemi
@@ -123,5 +147,6 @@ npx vite build     # Build alternativo
 | `npm run dev` fallisce | Esegui `Set-ExecutionPolicy` come admin |
 | Build fallisce | Cancella `node_modules` e `npm install` |
 | DeepSeek 402 | Account senza credito — ricarica su platform.deepseek.com |
+| PDF non si esporta | Controlla console F12 per errori pdfmake |
 | CSS non caricato | Hard refresh (Ctrl+F5) |
 | Pagina bianca | Controlla console del browser per errori |

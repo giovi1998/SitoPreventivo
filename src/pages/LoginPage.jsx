@@ -1,15 +1,17 @@
 import React, { useState, useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../../App.jsx';
 
 export default function LoginPage() {
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [gender, setGender] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isRegister, setIsRegister] = useState(false);
+  const [isRegister, setIsRegister] = useState(() => searchParams.get('register') === '1');
   const { login, register } = useContext(AuthContext);
   const navigate = useNavigate();
 
@@ -30,9 +32,9 @@ export default function LoginPage() {
       return;
     }
 
-    const result = isRegister ? await register(email, password, username) : await login(email, password);
+    const result = isRegister ? await register(email, password, username, gender) : await login(email, password);
     if (result.success) {
-      navigate('/', { replace: true });
+      navigate('/app', { replace: true });
     } else {
       setError(result.error);
     }
@@ -128,6 +130,33 @@ export default function LoginPage() {
               </div>
             )}
 
+            {isRegister && (
+              <div className="auth-field">
+                <label htmlFor="reg-gender">Sesso</label>
+                <div className="auth-input-wrap">
+                  <svg className="auth-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="3"/><path d="M12 8v14M8 12h8"/></svg>
+                  <select
+                    id="reg-gender"
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    style={{
+                      width: '100%', height: '48px', padding: '0 44px', border: '2px solid #e2e8f0',
+                      borderRadius: '12px', fontSize: '.95rem', color: gender ? '#07111f' : '#94a3b8',
+                      background: '#fff', outline: 'none', cursor: 'pointer',
+                      transition: 'border-color .2s, box-shadow .2s',
+                    }}
+                    onFocus={(e) => { e.target.style.borderColor = '#0B57D0'; e.target.style.boxShadow = '0 0 0 4px rgba(11,87,208,0.08)'; }}
+                    onBlur={(e) => { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none'; }}
+                  >
+                    <option value="">Seleziona sesso</option>
+                    <option value="male">Maschio</option>
+                    <option value="female">Femmina</option>
+                    <option value="other">Altro</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
             <div className="auth-field">
               <label htmlFor="auth-email">Email</label>
               <div className="auth-input-wrap">
@@ -194,7 +223,7 @@ export default function LoginPage() {
                 {isRegister ? 'Accedi' : 'Registrati'}
               </button>
             </div>
-            <Link to="/" className="auth-back">
+            <Link to="/" className="auth-back" style={{ marginTop: '8px' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
               Torna alla home
             </Link>
