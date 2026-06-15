@@ -1,102 +1,129 @@
-# Preventivi Custom App
+# PrecisionQuote - Preventivi Custom
 
-Prototipo React/SaaS in italiano per creare, personalizzare, salvare e gestire preventivi professionali. Il prodotto è centrato sull'editor: ogni parte del preventivo può essere modificata manualmente oppure tramite un assistente AI applicativo, stile Claude Design, che aggiorna davvero contenuti, voci, colore e struttura del documento.
+App web React per creare preventivi professionali multi-opzione per servizi digitali (siti web, consulenze, etc.). Layout documento identico a PDF professionale con opzioni commerciali, IVA, clausole e riepilogo comparativo.
 
-![Editor Preview](screenshots/editor-preview.svg)
+## Funzionalità
 
-## Cosa include
+- **Multi-opzione**: 4 opzioni predefinite (WordPress/su misura, con/senza manutenzione)
+- **AI co-editor**: prompt rapidi per modificare layout, testi, prezzi e clausole
+- **Riepilogo economico**: tabella Imponibile, IVA 22%, Totale per ogni opzione
+- **Riepilogo comparativo**: confronto tra tutte le opzioni
+- **Clausole e condizioni**: sezione personalizzabile
+- **Esportazione PDF**: genera PDF identico all'anteprima con html2pdf.js
+- **Autenticazione**: login/registrazione con salvataggio dati in localStorage
+- **Collection**: lista preventivi salvati
+- **10 colori brand** personalizzabili
 
-- **Editor core preventivo**: campi cliente, titolo, IVA, testi, sezioni e voci economiche modificabili.
-- **AI co-editor applicativa**: prompt rapidi e input libero per applicare cambiamenti visibili al preventivo, non solo messaggi in chat.
-- **Anteprima documento tipo PDF**: superficie A4-like con totali live, sezioni e colore brand.
-- **Personalizzazione manuale**: 10 preset colore e 10 preset stile documento come base iniziale.
-- **Collection**: lista dei preventivi salvati con azioni modifica, duplica ed elimina.
-- **Persistenza locale mock**: i preventivi vengono salvati in `localStorage` per simulare un flusso reale.
-- **Autenticazione**: pagina di login con form email/password e persistenza token.
-- **Gestione errori**: pagina 404 personalizzata per route non trovate.
-
-## Navigazione
-
-- `/` — Editor preventivo, area principale del prodotto.
-- `/collection` — Raccolta preventivi salvati.
-- `/login` — Pagina di accesso con form email/password.
-- `*` — Pagina 404 per route non trovate.
-
-![Login Page](screenshots/login-page.svg)
-
-![404 Page](screenshots/404-page.svg)
-
-Non è prevista una dashboard: in questa fase il focus resta su creazione, modifica e gestione dei preventivi.
-
-## Struttura progetto
-
-```text
-SitoPreventivo/
-├── App.jsx                    # Prototipo principale self-contained per il runner JSX
-├── index.html                 # Shell HTML locale con favicon
-├── favicon.svg                # Icona locale per evitare 404 favicon
-├── DESIGN.md                  # Baton del design system
-├── README.md                  # Documentazione progetto
-├── .well-known/appspecific/com.chrome.devtools.json
-├── screenshots/               # Screenshot dell'applicazione
-│   ├── editor-preview.png
-│   ├── login-page.png
-│   └── 404-page.png
-└── src/                       # Componenti modulari e pagine
-    ├── main.jsx               # Entry point con routing React Router
-    ├── pages/
-    │   ├── LoginPage.jsx      # Pagina di login
-    │   └── NotFoundPage.jsx   # Pagina 404
-    └── components/            # Componenti UI esistenti
-```
-
-## Avvio locale
+## Avvio
 
 ```bash
-# Installa dipendenze
 npm install
-
-# Avvia server di sviluppo
 npm run dev
 ```
 
-Il server sarà disponibile su `http://localhost:5173`. Naviga tra le route:
-- `http://localhost:5173/` — Editor principale
-- `http://localhost:5173/login` — Pagina di login
-- `http://localhost:5173/non-existent` — Pagina 404
+Server su `http://localhost:8000`
 
-![Route Navigation](screenshots/route-navigation.png)
+> **Nota Windows**: se `npm run dev` fallisce, esegui una volta:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+> ```
+> Poi riapri il terminale.
 
-## Design system
+## Route
 
-`DESIGN.md` è il baton del sistema visivo: colori, tipografia, spacing, componenti e controlli EDITMODE devono restare coerenti con quel file.
+- `/` — Editor preventivo (protetto da login)
+- `/login` — Pagina di accesso/registrazione
+- `*` — Pagina 404
 
-## Screenshot
+## AI Co-Editor
 
-### Editor Preview
-![Editor](screenshots/editor-preview.svg)
-L'editor principale con controllo AI, campi manuali e anteprima documento live.
+Il pannello AI usa **DeepSeek** (modello `deepseek-chat`) se configuri una API key, altrimenti mostra un avviso.
 
-### Login Page
-![Login](screenshots/login-page.svg)
-Form di login con email e password, design pulito e accessibile.
+### Configurazione
 
-### 404 Page
-![404](screenshots/404-page.svg)
-Pagina di errore personalizzata con link per tornare alla home.
+1. Ottieni una API key da [platform.deepseek.com](https://platform.deepseek.com/)
+2. Inseriscila nel campo **DeepSeek API Key** nel pannello AI dell'editor
+3. La chiave viene salvata in `localStorage` e resta anche dopo il refresh
 
-## Prossimi step consigliati
+### Azioni rapide
 
-- Definire esportazione PDF client-side o server-side.
-- Aggiungere gestione clienti/anagrafiche.
-- Rendere le sezioni del documento riordinabili.
-- Collegare la Collection a dati reali o backend.
-- Raffinare il comportamento dell'AI per operazioni più granulari.
+| Azione | Cosa fa |
+|---|---|
+| ✨ Rendi premium | Descrioni più esclusive, colore viola, titolo premium |
+| ❓ Aggiungi FAQ | Aggiunge sezione FAQ alle clausole |
+| 💰 Sconto finale | -10% su tutte le opzioni |
+| 📄 Semplifica | Riduce descrizioni e clausole |
+| Prompt personalizzato | Modifica con AI qualsiasi aspetto del preventivo |
 
-## Stato modularizzazione componenti
+### Esempi di prompt
 
-- `src/components/Layout.jsx`, `Topbar.jsx`, `Icon.jsx`, `EditorView.jsx`, `DocumentPreview.jsx` e `CollectionView.jsx` sono stati preparati come componenti modulari reali.
-- Il routing è configurato con `react-router-dom` in `src/main.jsx`.
-- Le pagine `LoginPage.jsx` e `NotFoundPage.jsx` sono complete e funzionanti.
-- `App.jsx` esporta il componente e il contesto per supportare le pagine modulari.
-- Step consigliato per sviluppo locale: continuare a spostare la logica dati da `App.jsx` verso i componenti modulari già creati.
+- "Rendi le descrizioni più tecniche e professionali"
+- "Aggiungi una clausola sulla privacy e protezione dati"
+- "Crea una opzione aggiuntiva con servizi premium"
+- "Cambia il tono per un cliente non tecnico"
+
+## Login/Registrazione
+
+- **Registrazione**: salva email, password, username e data in `localStorage` (`registeredUsers`)
+- **Login**: verifica che email e password corrispondano a un utente registrato
+- **Logout**: rimuove i dati della sessione corrente
+
+### Dati salvati in localStorage
+
+| Chiave | Descrizione |
+|---|---|
+| `registeredUsers` | Array JSON di utenti registrati |
+| `authToken` | Token di sessione |
+| `userEmail` | Email utente corrente |
+| `username` | Username |
+| `注册Date` | Data registrazione |
+
+## Struttura file
+
+```
+SitoPreventivo/
+├── App.jsx                    # AuthProvider, state, runAI, routing
+├── index.html
+├── package.json
+├── netlify.toml               # Config deploy Netlify
+├── vite.config.js             # Porta 8000
+├── src/
+│   ├── main.jsx               # BrowserRouter + ProtectedRoute
+│   ├── pages/
+│   │   ├── LoginPage.jsx      # Login/registrazione
+│   │   └── NotFoundPage.jsx   # 404
+│   └── components/
+│       ├── DocumentPreview.jsx # Layout PDF (4 opzioni, IVA, clausole)
+│       ├── EditorView.jsx     # AI panel + controlli manuali
+│       ├── CollectionView.jsx # Griglia preventivi salvati
+│       ├── Layout.jsx         # Sidebar
+│       ├── Topbar.jsx         # Salva/Esporta PDF
+│       ├── GlobalStyles.jsx   # CSS completo
+│       └── Icon.jsx           # Icone SVG
+```
+
+## PDF Export
+
+```javascript
+import('html2pdf.js').then(html2pdf => {
+  html2pdf().set({ margin: 10, filename: 'preventivo.pdf' }).from(element).save();
+});
+```
+
+Layout PDF:
+1. Intestazione (titolo, cliente, data)
+2. Testo introduttivo (SEO, pagamento)
+3. Opzioni (costi, IVA, acconto/saldo)
+4. Clausole e condizioni
+5. Riepilogo comparativo
+6. Footer validità 30 giorni
+
+## Deploy Netlify
+
+```bash
+npx netlify login         # Autenticazione browser
+npx netlify init          # Crea/link sito
+npx netlify deploy --prod # Deploy produzione
+```
+
+Il `netlify.toml` include il redirect SPA per React Router.

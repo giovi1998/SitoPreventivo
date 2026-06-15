@@ -1,99 +1,102 @@
 import React from 'react';
-import Icon from './Icon.jsx';
 import DocumentPreview from './DocumentPreview.jsx';
-import AuthorQuoteTemplate from './AuthorQuoteTemplate.jsx';
-import { COLORS, STYLES, sectionLibrary } from '../constants.js';
 
-export default function EditorView(props) {
-  const { quote, totals, aiText, setAiText, activity, patch, updateItem, removeItem, addItem, updateSection, removeSection, addSection, runAI } = props;
+export default function EditorView({ quote, aiText, setAiText, activity, patch, updateOption, addOption, removeOption, updateClause, addClause, removeClause, runAI, deepseekKey, setDeepseekKey, previewRef, aiLogs }) {
   return (
     <div className="editor-grid">
-      <section className="panel ai-panel" aria-labelledby="ai-title">
+      {/* AI Panel */}
+      <section className="panel ai-panel">
         <div className="panel-kicker">Claude Design mode</div>
-        <h2 id="ai-title">AI che modifica il preventivo</h2>
-        <p>Scrivi una richiesta o usa un'azione rapida: l'AI cambia contenuti, stile, sezioni, colore e prezzi in modo visibile.</p>
-        <textarea value={aiText} onChange={(e) => setAiText(e.target.value)} aria-label="Prompt modifica AI" />
+        <h2>AI che modifica il preventivo</h2>
+
+        {/* API Key input */}
+        <div className="api-key-section">
+          <label className="api-key-label">
+            <span>DeepSeek API Key</span>
+            <input type="password" value={deepseekKey} onChange={(e) => setDeepseekKey(e.target.value)} placeholder="sk-..." className="api-key-input" />
+          </label>
+          {deepseekKey ? <span className="api-key-status ok">● Connesso</span> : <span className="api-key-status no">● Non configurato</span>}
+        </div>
+
+        <p>Scrivi una richiesta o usa un'azione rapida per modificare layout, testi, prezzi e clausole.</p>
+        <textarea value={aiText} onChange={(e) => setAiText(e.target.value)} aria-label="Prompt modifica AI" placeholder="Es. Rendi il preventivo più premium, aggiungi FAQ, applica sconto 10%..." />
         <div className="ai-actions">
-          <button onClick={() => runAI('premium')}>Rendi premium</button>
-          <button onClick={() => runAI('timeline')}>Aggiungi timeline</button>
-          <button onClick={() => runAI('compact')}>Compatta</button>
-          <button onClick={() => runAI('discount')}>Sconto finale</button>
-          <button onClick={() => runAI('legal')}>Condizioni</button>
+          <button onClick={() => runAI("premium")}>✨ Rendi premium</button>
+          <button onClick={() => runAI("faq")}>❓ Aggiungi FAQ</button>
+          <button onClick={() => runAI("discount")}>💰 Sconto finale</button>
+          <button onClick={() => runAI("simple")}>📄 Semplifica</button>
         </div>
-        <button className="primary wide" onClick={() => runAI('custom')}><Icon name="spark" />Applica prompt AI</button>
-        <div className="activity-log"><span>Ultima azione</span><b>{activity}</b></div>
+        <button className="primary wide" onClick={() => runAI("custom")}>Applica prompt personalizzato</button>
+        <div className="ai-log-panel">
+          <span className="ai-log-title">Log AI</span>
+          {aiLogs.length === 0 && <div className="ai-log-entry empty">Nessuna attività ancora...</div>}
+          {aiLogs.map((log, i) => (
+            <div key={i} className={`ai-log-entry ${log.type}`}>
+              <span className="ai-log-time">{log.time}</span> {log.msg}
+            </div>
+          ))}
+        </div>
       </section>
 
+      {/* Manual controls */}
       <section className="panel manual-panel" aria-labelledby="manual-title">
-        <div className="panel-kicker">Controllo manuale completo</div>
-        <h2 id="manual-title">Campi, box, stile e prezzi</h2>
-        <ManualFields quote={quote} patch={patch} />
-        <PresetControls quote={quote} patch={patch} />
-        <LineItems quote={quote} updateItem={updateItem} removeItem={removeItem} addItem={addItem} />
-        <SectionInspector quote={quote} updateSection={updateSection} removeSection={removeSection} addSection={addSection} />
+        <div className="panel-kicker">Controllo manuale</div>
+        <h2 id="manual-title">Dati preventivo</h2>
+
+        <div className="stack">
+          <div className="form-grid">
+            <label>Titolo preventivo<input value={quote.title} onChange={(e) => patch("title", e.target.value)} /></label>
+            <label>Cliente<input value={quote.client} onChange={(e) => patch("client", e.target.value)} /></label>
+            <label>Data<input value={quote.date} onChange={(e) => patch("date", e.target.value)} /></label>
+            <label>IVA %<input type="number" value={quote.vat} onChange={(e) => patch("vat", e.target.value)} /></label>
+          </div>
+          <label>Introduzione<textarea value={quote.intro} onChange={(e) => patch("intro", e.target.value)} rows={3} /></label>
+        </div>
+
+        <div className="control-block">
+          <div className="section-head"><h3>10 colori brand</h3></div>
+          <div className="swatches">
+            {["#0B57D0","#11845B","#6D3FD1","#A66200","#D64545","#B83280","#0F766E","#334155","#4F46E5","#5B7F22"].map(c => (
+              <button key={c} className={quote.color === c ? "selected" : ""} style={{ background: c }} onClick={() => patch("color", c)} aria-label={c} />
+            ))}
+          </div>
+        </div>
+
+        <div className="control-block">
+          <div className="section-head"><h3>Opzioni commerciali</h3><button onClick={addOption}>+ Opzione</button></div>
+          {quote.options.map((option) => (
+            <div className="option-editor" key={option.id}>
+              <input value={option.title} onChange={(e) => updateOption(option.id, "title", e.target.value)} className="option-title-input" />
+              <textarea value={option.description} onChange={(e) => updateOption(option.id, "description", e.target.value)} rows={2} />
+              <div className="mini-row">
+                <label>Costo una tantum<input type="number" value={option.oneTimeCost} onChange={(e) => updateOption(option.id, "oneTimeCost", Number(e.target.value))} /></label>
+                <label>Costo mensile<input type="number" value={option.monthlyCost} onChange={(e) => updateOption(option.id, "monthlyCost", Number(e.target.value))} /></label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={option.includesMaintenance} onChange={(e) => updateOption(option.id, "includesMaintenance", e.target.checked)} />
+                  Manutenzione
+                </label>
+              </div>
+              <button className="btn-remove" onClick={() => removeOption(option.id)}>Rimuovi opzione</button>
+            </div>
+          ))}
+        </div>
+
+        <div className="control-block">
+          <div className="section-head"><h3>Clausole e condizioni</h3><button onClick={addClause}>+ Clausola</button></div>
+          {quote.clauses.map((clause) => (
+            <div className="clause-editor" key={clause.id}>
+              <input value={clause.title} onChange={(e) => updateClause(clause.id, "title", e.target.value)} />
+              <textarea value={clause.body} onChange={(e) => updateClause(clause.id, "body", e.target.value)} rows={2} />
+              <button className="btn-remove" onClick={() => removeClause(clause.id)}>Rimuovi</button>
+            </div>
+          ))}
+        </div>
       </section>
 
+      {/* Preview */}
       <section className="preview-wrap" aria-label="Anteprima preventivo">
-        {quote.template === 'autore' ? <AuthorQuoteTemplate client={quote.client} date={quote.date} styleId={quote.styleId} /> : <DocumentPreview quote={quote} totals={totals} />}
+        <DocumentPreview ref={previewRef} quote={quote} />
       </section>
-    </div>
-  );
-}
-
-function ManualFields({ quote, patch }) {
-  return (
-    <div className="stack editor-block">
-      <div className="form-grid">
-        <label>Titolo preventivo<input value={quote.title} onChange={(e) => patch('title', e.target.value)} /></label>
-        <label>Cliente<input value={quote.client} onChange={(e) => patch('client', e.target.value)} /></label>
-        <label>Referente<input value={quote.contact} onChange={(e) => patch('contact', e.target.value)} /></label>
-        <label>IVA %<input type="number" value={quote.vat} onChange={(e) => patch('vat', e.target.value)} /></label>
-      </div>
-      <label>Introduzione<textarea value={quote.intro} onChange={(e) => patch('intro', e.target.value)} /></label>
-      <label>Note finali<textarea value={quote.note} onChange={(e) => patch('note', e.target.value)} /></label>
-      <label>Template documento<select value={quote.template} onChange={(e) => patch('template', e.target.value)}><option value="standard">Preventivo custom</option><option value="autore">Template autrice/sito web</option></select></label>
-    </div>
-  );
-}
-
-function PresetControls({ quote, patch }) {
-  return (
-    <div className="editor-block">
-      <h3>10 colori brand</h3>
-      <div className="swatches">{COLORS.map((color) => <button key={color.value} className={quote.color === color.value ? 'selected' : ''} style={{ '--swatch': color.value }} onClick={() => patch('color', color.value)} aria-label={color.name} />)}</div>
-      <h3>10 stili documento</h3>
-      <div className="style-grid">{STYLES.map((style) => <button key={style.id} className={quote.styleId === style.id ? 'selected' : ''} onClick={() => { patch('styleId', style.id); patch('style', style.name); }}>{style.name}</button>)}</div>
-    </div>
-  );
-}
-
-function LineItems({ quote, updateItem, removeItem, addItem }) {
-  return (
-    <div className="editor-block">
-      <div className="block-head"><h3>Voci economiche</h3><button onClick={addItem}>+ voce</button></div>
-      <div className="items-editor">{quote.items.map((item) => (
-        <div className="item-editor" key={item.id}>
-          <input value={item.description} onChange={(e) => updateItem(item.id, 'description', e.target.value)} aria-label="Descrizione voce" />
-          <textarea value={item.detail} onChange={(e) => updateItem(item.id, 'detail', e.target.value)} aria-label="Dettaglio voce" />
-          <div className="mini-grid"><label>Qtà<input type="number" value={item.qty} onChange={(e) => updateItem(item.id, 'qty', e.target.value)} /></label><label>Prezzo<input type="number" value={item.rate} onChange={(e) => updateItem(item.id, 'rate', e.target.value)} /></label><button onClick={() => removeItem(item.id)}>Elimina</button></div>
-        </div>
-      ))}</div>
-    </div>
-  );
-}
-
-function SectionInspector({ quote, updateSection, removeSection, addSection }) {
-  return (
-    <div className="editor-block">
-      <div className="block-head"><h3>Box e sezioni</h3><span>{quote.sections.length} attive</span></div>
-      <div className="section-library">{sectionLibrary.map((title) => <button key={title} onClick={() => addSection(title)}>+ {title}</button>)}</div>
-      <div className="section-list">{quote.sections.map((section) => (
-        <div className="section-edit" key={section.id}>
-          <input value={section.title} onChange={(e) => updateSection(section.id, 'title', e.target.value)} aria-label="Titolo sezione" />
-          <textarea value={section.body} onChange={(e) => updateSection(section.id, 'body', e.target.value)} aria-label="Testo sezione" />
-          <button onClick={() => removeSection(section.id)}>Rimuovi box</button>
-        </div>
-      ))}</div>
     </div>
   );
 }
