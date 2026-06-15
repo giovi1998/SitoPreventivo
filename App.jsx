@@ -359,11 +359,8 @@ CONTESTO TIPO:
 
   const saveQuote = () => {
     const saved = cloneQuote(quote);
-    setQuotes(c => {
-      const updated = [saved, ...c.filter(q => q.id !== quote.id)];
-      if (user?.email) dataService.saveQuote(user.email, saved);
-      return updated;
-    });
+    setQuotes(c => [saved, ...c.filter(q => q.id !== quote.id)]);
+    if (user?.email) dataService.saveQuote(user.email, saved);
     setActivity("Preventivo salvato nella Collection.");
   };
 

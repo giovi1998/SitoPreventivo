@@ -9,6 +9,11 @@ export default async (req) => {
   const body = req.body ? await req.json() : {};
 
   try {
+    // ─── HEALTH CHECK ───────────────────────────────
+    if (path === "/ping" && method === "GET") {
+      return json(200, { ok: true });
+    }
+
     // ─── USERS ─────────────────────────────────────
     if (path === "/users/register" && method === "POST") {
       const { email, password, username, gender } = body;
