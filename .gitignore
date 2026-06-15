@@ -1,40 +1,103 @@
 # Dependencies
 node_modules/
+.pnp
+.pnp.js
 
 # Build output
 dist/
+build/
+*.tgz
 
-# Environment
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
 .env
 .env.local
-.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# IDE
+# Editor / IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS
+*~
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-npm-debug.log*
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# Vite
+.vite/
+*.local
+
+# Test coverage
+coverage/
+*.lcov
+
+# Cache
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist
 
 # Temporary files
 *.tmp
 *.temp
+App.modular.tmp
+*.bak
+*.swp
 
-# PDF files (can be large)
+# PDFs and binary files
 *.pdf
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
+# Optional npm/ yarn integrity files
+.npm-integrity
+.yarn-integrity
 
-# Chrome DevTools
-.well-known/
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Local development
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Serverless
+.serverless/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+
+# Netlify
+.netlify/
+
+# Vercel
+.vercel/
+
+# Storybook
+storybook-static/
+
+# Temporary modular files
+src/**/*.tmp
+src/**/*.bak
