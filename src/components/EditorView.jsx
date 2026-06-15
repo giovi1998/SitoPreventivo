@@ -26,7 +26,8 @@ export default function EditorView({ quote, aiText, setAiText, activity, patch, 
           <button onClick={() => runAI("discount")}>💰 Sconto finale</button>
           <button onClick={() => runAI("simple")}>📄 Semplifica</button>
         </div>
-        <button className="primary wide" onClick={() => runAI("custom")}>Applica prompt personalizzato</button>
+          {activity && <div className="activity-log"><span>Attività</span><b>{activity}</b></div>}
+          <button className="primary wide" onClick={() => runAI("custom")}>Applica prompt personalizzato</button>
         <div className="ai-log-panel">
           <span className="ai-log-title">Log AI</span>
           {aiLogs.length === 0 && <div className="ai-log-entry empty">Nessuna attività ancora...</div>}
