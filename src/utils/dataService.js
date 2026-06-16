@@ -18,7 +18,8 @@ async function api(method, path, body) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const url = `${API_BASE}${path}`;
+    const res = await fetch(url, {
       method,
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
@@ -27,12 +28,15 @@ async function api(method, path, body) {
     clearTimeout(timeout);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
-      return { error: err.error || `HTTP ${res.status}` };
+      return { error: err.error || `Errore server (${res.status})`, status: res.status, detail: `${method} ${url} → ${res.status}` };
     }
     return await res.json();
   } catch (err) {
     clearTimeout(timeout);
-    return { error: err.message };
+    if (err.name === 'AbortError') {
+      return { error: `Richiesta timeout: ${method} ${path}`, detail: 'Il server non ha risposto entro 5 secondi' };
+    }
+    return { error: `Errore di rete: ${err.message}`, detail: `Impossibile contattare ${API_BASE}${path}` };
   }
 }
 
@@ -53,9 +57,9 @@ function seedAdminLocally() {
 if (IS_LOCAL) {
   seedAdminLocally();
 } else {
-  // In production, try to ensure admin exists in DB (fire-and-forget)
-  api('POST', '/users/register', {
-    email: 'admin@gmail.com', password: 'admin', username: 'admin', gender: 'male', role: 'admin', tokenLimit: 999999999
+  // Use dedicated seed endpoint (silent upsert, no 409)
+  api('POST', '/admin/seed', {
+    email: 'admin@gmail.com', password: 'admin', username: 'admin', gender: 'male', tokenLimit: 999999999
   }).catch(() => {});
 }
 

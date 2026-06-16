@@ -383,7 +383,13 @@ CONTESTO TIPO:
         addLog('success', 'Preventivo aggiornato con successo');
       } catch (err) {
         console.error('DeepSeek error:', err);
-        setActivity(`❌ Errore DeepSeek: ${err.message}`);
+        const hint = err.message?.includes('402') ? 'Credito DeepSeek esaurito. Ricarica su platform.deepseek.com' :
+          err.message?.includes('401') ? 'Chiave API DeepSeek non valida. Contatta l\'amministratore.' :
+          err.message?.includes('429') ? 'Troppe richieste a DeepSeek. Attendi qualche secondo e riprova.' :
+          err.message?.includes('fetch') || err.message?.includes('NetworkError') ? 'Connessione a DeepSeek fallita. Verifica la tua connessione internet.' :
+          null;
+        setActivity(`❌ ${hint || err.message}`);
+        addLog('error', hint || err.message);
       }
   };
 

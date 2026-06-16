@@ -137,6 +137,18 @@ export default async (req) => {
       return json(200, { success: true });
     }
 
+    // ─── ADMIN SEED (create or update admin silently) ─
+    if (path === "/admin/seed" && method === "POST") {
+      const { email, password, username, gender, tokenLimit } = body;
+      const [existing] = await db.select().from(users).where(eq(users.email, email));
+      if (existing) {
+        await db.update(users).set({ role: "admin", tokenLimit: tokenLimit || 999999999 }).where(eq(users.email, email));
+      } else {
+        await db.insert(users).values({ email, password, username, gender, role: "admin", tokenLimit: tokenLimit || 999999999 });
+      }
+      return json(200, { success: true });
+    }
+
     // ─── SETTINGS (admin) ──────────────────────────
     if (path === "/admin/deepseek-key" && method === "GET") {
       const [row] = await db.select().from(settings).where(eq(settings.key, "deepseek_key"));
