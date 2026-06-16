@@ -1,4 +1,4 @@
-const API_BASE = '/.netlify/functions/api';
+const API_BASE = '/api';
 const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
 // ─── HELPERS ──────────────────────────────────────────

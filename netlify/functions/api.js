@@ -4,7 +4,7 @@ import { eq, and, sql } from "drizzle-orm";
 
 export default async (req) => {
   const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/\.netlify\/functions\/api/, "");
+  const path = url.pathname.replace(/^\/\.netlify\/functions\/api/, "").replace(/^\/api/, "");
   const method = req.method;
   const body = req.body ? await req.json() : {};
 
