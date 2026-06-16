@@ -33,9 +33,9 @@ export default function GlobalStyles() {
     .side-avatar{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.08);display:grid;place-items:center;flex-shrink:0;color:#8896ab}
     .side-card b{display:block;font-size:.85rem;font-weight:700;margin-bottom:2px}
     .side-card p{margin:0;font-size:.78rem;color:#8896ab;line-height:1.4}
-    .side-utility{margin-top:auto;display:grid;gap:6px}
-    .side-utility .logout-btn,.side-utility .login-link{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);color:#8896ab;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px 14px;text-decoration:none;font-size:.85rem;font-weight:600;transition:all .15s}
-    .side-utility .logout-btn:hover,.side-utility .login-link:hover{background:rgba(255,255,255,.1);color:#cfe0f2;transform:none;box-shadow:none}
+    .side-card .logout-btn,.side-card .login-link{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);color:#a4b3cc;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:8px 12px;margin-top:10px;text-decoration:none;font-size:.78rem;font-weight:600;transition:all .15s;width:100%;cursor:pointer}
+    .side-card .logout-btn:hover,.side-card .login-link:hover{background:rgba(255,255,255,.1);color:#fff;transform:none;box-shadow:none}
+    .side-utility{display:grid;gap:6px}
 
     /* ─── WORKSPACE / TOPBAR ────────────────────────── */
     .workspace{display:flex;flex-direction:column;min-height:100vh}
@@ -58,7 +58,7 @@ export default function GlobalStyles() {
     .panel-kicker{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);font-weight:900;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
     .panel-toggle{background:none;border:none;padding:3px;color:var(--muted);cursor:pointer;border-radius:4px;display:grid;place-items:center;transition:background .15s,color .15s;width:26px;height:26px}
     .panel-toggle:hover{background:#e2e8f0;color:var(--ink)}
-    .panel-tab{width:34px;height:100%;background:#fff;border-right:1px solid var(--line);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:.5rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);transition:color .15s,background .15s}
+    .panel-tab{width:34px;height:100%;background:#fff;border-right:1px solid var(--line);cursor:pointer;display:flex;flex-direction:column;align-items:center;padding-top:20px;gap:4px;font-size:.5rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);transition:color .15s,background .15s}
     .panel-tab:hover{color:var(--accent);background:#f8fafc}
     .panel-tab svg{flex-shrink:0}
     .panel h2{margin:0 0 8px;font-size:1rem;font-weight:900;letter-spacing:-.02em}
