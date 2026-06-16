@@ -4,8 +4,8 @@ export default function Topbar({ view, onSave, onExport }) {
   return (
     <header className="topbar">
       <div>
-        <p>{view === "editor" ? "Editor operativo" : "Raccolta preventivi"}</p>
-        <h1>{view === "editor" ? "Editor preventivo" : "Collection"}</h1>
+        <p>{view === "editor" ? "Editor operativo" : view === "admin" ? "Pannello di controllo" : "Raccolta preventivi"}</p>
+        <h1>{view === "editor" ? "Editor preventivo" : view === "admin" ? "Admin" : "Collection"}</h1>
       </div>
       {view === "editor" && (
         <div className="top-actions">

@@ -5,6 +5,8 @@ import Layout from './src/components/Layout.jsx';
 import Topbar from './src/components/Topbar.jsx';
 import EditorView from './src/components/EditorView.jsx';
 import CollectionView from './src/components/CollectionView.jsx';
+import AdminDashboard from './src/pages/AdminDashboard.jsx';
+import SaveDialog from './src/components/SaveDialog.jsx';
 import dataService from './src/utils/dataService.js';
 
 export const AppContext = createContext(null);
@@ -94,19 +96,17 @@ const cloneQuote = (q, patch = {}) => ({
 });
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
+  const [user, setUser] = useState(() => {
     const token = localStorage.getItem('authToken');
     const email = localStorage.getItem('userEmail');
     const username = localStorage.getItem('username');
     const regDate = localStorage.getItem('注册Date');
+    const role = localStorage.getItem('userRole');
     if (token && email) {
-      setUser({ email, token, username: username || email.split('@')[0], 注册Date: regDate || new Date().toLocaleDateString('it-IT') });
+      return { email, token, username: username || email.split('@')[0], 注册Date: regDate || new Date().toLocaleDateString('it-IT'), role: role || 'user' };
     }
-    setLoading(false);
-  }, []);
+    return null;
+  });
 
   const register = async (email, password, username, gender) => {
     const result = await dataService.register(email, password, username, gender);
@@ -116,11 +116,15 @@ export function AuthProvider({ children }) {
       localStorage.setItem('userEmail', email);
       localStorage.setItem('username', uData.username || username);
       localStorage.setItem('注册Date', uData.createdAt || new Date().toLocaleDateString('it-IT'));
+      localStorage.setItem('userRole', uData.role || 'user');
       setUser({
         email,
         token: btoa(`${email}:${Date.now()}`),
         username: uData.username || username,
         gender: uData.gender || gender,
+        role: uData.role || 'user',
+        tokensUsed: uData.tokensUsed || 0,
+        tokenLimit: uData.tokenLimit || 1000000,
         注册Date: uData.createdAt || new Date().toLocaleDateString('it-IT')
       });
     }
@@ -135,11 +139,15 @@ export function AuthProvider({ children }) {
       localStorage.setItem('userEmail', email);
       localStorage.setItem('username', uData.username || email.split('@')[0]);
       localStorage.setItem('注册Date', uData.createdAt || new Date().toLocaleDateString('it-IT'));
+      localStorage.setItem('userRole', uData.role || 'user');
       setUser({
         email,
         token: btoa(`${email}:${Date.now()}`),
         username: uData.username || email.split('@')[0],
         gender: uData.gender,
+        role: uData.role || 'user',
+        tokensUsed: uData.tokensUsed || 0,
+        tokenLimit: uData.tokenLimit || 1000000,
         注册Date: uData.createdAt || new Date().toLocaleDateString('it-IT')
       });
     }
@@ -151,10 +159,9 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('userEmail');
     localStorage.removeItem('username');
     localStorage.removeItem('注册Date');
+    localStorage.removeItem('userRole');
     setUser(null);
   };
-
-  if (loading) return <div style={{ display: 'grid', placeItems: 'center', height: '100vh' }}>Caricamento...</div>;
 
   return (
     <AuthContext.Provider value={{ user, login, register, logout }}>
@@ -167,16 +174,25 @@ export default function App() {
   const [view, setView] = useState("editor");
   const [quote, setQuote] = useState(STARTER_QUOTE);
   const [quotes, setQuotes] = useState([]);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [aiText, setAiText] = useState("Rendi il preventivo più professionale e aggiungi dettagli tecnici");
   const [activity, setActivity] = useState("Pronto: modifica manualmente il preventivo.");
   const [searchQuery, setSearchQuery] = useState("");
-  const [deepseekKey, setDeepseekKey] = useState(() => localStorage.getItem('deepseekKey') || '');
+  const [deepseekKey, setDeepseekKey] = useState('');
+  const [aiModel, setAiModel] = useState('deepseek-chat');
   const [aiLogs, setAiLogs] = useState([]);
   const { logout, user } = useContext(AuthContext);
   const previewRef = useRef(null);
 
+  // Load shared DeepSeek key from dataService
+  useEffect(() => {
+    dataService.getDeepseekKey().then(setDeepseekKey);
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('deepseekKey', deepseekKey);
+    // Persist shared key to dataService when changed
+    if (deepseekKey) dataService.saveDeepseekKey(deepseekKey);
   }, [deepseekKey]);
 
   // Load quotes from data service when user changes
@@ -230,6 +246,13 @@ export default function App() {
   }));
 
   const callDeepSeek = async (userPrompt) => {
+    // Check token limit
+    const profile = await dataService.getUserProfile(user?.email);
+    if (profile.error) throw new Error(profile.error);
+    if (profile.tokensUsed >= profile.tokenLimit) {
+      throw new Error('Limite token AI raggiunto. Contatta l\'amministratore.');
+    }
+
     const systemPrompt = `Sei un esperto di preventivi web design professionisti.
 Il tuo compito è modificare il JSON del preventivo in base alla richiesta dell'utente.
 
@@ -284,7 +307,7 @@ CONTESTO TIPO:
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${deepseekKey}` },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: aiModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Preventivo attuale (JSON):\n${JSON.stringify(payload, null, 2)}\n\nRichiesta: ${userPrompt}\n\nRispondi SOLO con il JSON completo del preventivo modificato.` }
@@ -299,6 +322,9 @@ CONTESTO TIPO:
       throw new Error(`DeepSeek error: ${res.status}`);
     }
     const data = await res.json();
+    const tokensUsed = data.usage?.total_tokens || 0;
+    if (user?.email) dataService.trackTokens(user.email, tokensUsed);
+    addLog('info', `Token usati: ${tokensUsed}`);
     const raw = data.choices[0].message.content;
     addLog('success', `Risposta ricevuta (${raw.length} chars)`);
     const reply = JSON.parse(raw);
@@ -311,8 +337,15 @@ CONTESTO TIPO:
     const prompt = aiText.trim();
     if (!prompt && mode === "custom") { setActivity("💡 Scrivi un prompt per l'AI."); return; }
 
-    if (deepseekKey) {
-      setActivity("🤖 Chiamata DeepSeek in corso...");
+    // Reload shared key before each AI call (admin may have just set it)
+    const key = deepseekKey || await dataService.getDeepseekKey();
+    if (!key) {
+      setActivity("⚠️ DeepSeek non configurato. L'amministratore deve impostare la chiave nella Dashboard Admin.");
+      return;
+    }
+    if (!deepseekKey) setDeepseekKey(key); // cache for next time
+
+    setActivity("🤖 Chiamata DeepSeek in corso...");
       try {
         const prompts = {
           premium: "Rendi il preventivo premium: descrizioni più esclusive, colore viola, titolo con 'Edizione Premium'.",
@@ -352,16 +385,18 @@ CONTESTO TIPO:
         console.error('DeepSeek error:', err);
         setActivity(`❌ Errore DeepSeek: ${err.message}`);
       }
-    } else {
-      setActivity("⚠️ Nessuna chiave API DeepSeek configurata. Inseriscila nel campo sopra.");
-    }
   };
 
   const saveQuote = () => {
-    const saved = cloneQuote(quote);
+    setShowSaveDialog(true);
+  };
+
+  const handleSaveConfirmed = (customName) => {
+    setShowSaveDialog(false);
+    const saved = cloneQuote(quote, { title: customName });
     setQuotes(c => [saved, ...c.filter(q => q.id !== quote.id)]);
     if (user?.email) dataService.saveQuote(user.email, saved);
-    setActivity("Preventivo salvato nella Collection.");
+    setActivity(`Preventivo "${customName}" salvato nella Collection.`);
   };
 
   const duplicate = (saved) => {
@@ -422,10 +457,13 @@ CONTESTO TIPO:
             removeClause={removeClause}
             runAI={runAI}
             deepseekKey={deepseekKey}
-            setDeepseekKey={setDeepseekKey}
+            aiModel={aiModel}
+            setAiModel={setAiModel}
             previewRef={previewRef}
             aiLogs={aiLogs}
           />
+        ) : view === "admin" ? (
+          <AdminDashboard />
         ) : (
           <CollectionView
             quotes={quotes.filter(q => `${q.title} ${q.client} ${q.id}`.toLowerCase().includes(searchQuery.toLowerCase()))}
@@ -440,6 +478,12 @@ CONTESTO TIPO:
           />
         )}
       </Layout>
+      <SaveDialog
+        open={showSaveDialog}
+        defaultName={quote.title}
+        onSave={handleSaveConfirmed}
+        onCancel={() => setShowSaveDialog(false)}
+      />
     </AppContext.Provider>
   );
 }

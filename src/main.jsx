@@ -7,8 +7,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
 function ProtectedRoute({ children }) {
-  const { user, loading } = React.useContext(AuthContext);
-  if (loading) return <div style={{ display: 'grid', placeItems: 'center', height: '100vh', fontFamily: 'system-ui' }}>Caricamento...</div>;
+  const { user } = React.useContext(AuthContext);
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }

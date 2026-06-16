@@ -30,8 +30,12 @@ Server su `http://localhost:8000`
 | Funzione | Descrizione |
 |----------|-------------|
 | **Multi-opzione** | 4 preventivi preimpostati (WordPress/su misura, con/senza manutenzione) |
-| **AI Co-Editor** | Modifica testi, prezzi, clausole con AI via prompt (DeepSeek) |
+| **AI Co-Editor** | Modifica testi, prezzi, clausole con AI — chiave condivisa gestita dall'admin |
 | **Log AI visibili** | Pannello log in tempo reale con risposta DeepSeek raw |
+| **Pannelli collassabili** | Pannelli AI e Manuale si collassano in tabs sempre visibili (AI/Man) sul bordo, per vedere il PDF a pieno schermo |
+| **Salva con nome** | Dialog che chiede un nome personalizzato prima del salvataggio |
+| **Admin Dashboard** | Gestione utenti, limiti token, chiave DeepSeek condivisa |
+| **Token tracking** | Monitoraggio token AI usati per utente, con limite configurabile |
 | **PDF export** | Genera PDF con **pdfmake** — tabelle, page break, header/footers automatici |
 | **Riepilogo economico** | Tabella Imponibile / IVA / Totale per ogni opzione |
 | **Acconto/Saldo** | 50% acconto sviluppo, 50% saldo a consegna |
@@ -46,10 +50,16 @@ Server su `http://localhost:8000`
 
 ### Configurazione
 
-1. Ottieni una API key da [platform.deepseek.com](https://platform.deepseek.com/) (serve credito)
-2. Inseriscila nel campo **DeepSeek API Key** nel pannello AI a sinistra
-3. Usa i pulsanti rapidi o scrivi un prompt personalizzato
-4. Il log AI mostra in tempo reale: prompt inviato, risposta ricevuta, campi modificati
+1. L'**admin** ottiene una API key da [platform.deepseek.com](https://platform.deepseek.com/) (serve credito)
+2. Nella **Dashboard Admin** (sidebar → Admin), incolla la chiave nel campo "Chiave DeepSeek" e salva
+3. Tutti gli utenti usano la stessa chiave condivisa — l'admin controlla i **limiti token** per ogni utente
+4. Gli utenti vedono selettore "Modello AI" e stato connessione nel pannello
+
+### Token e Limiti
+
+- Ogni chiamata AI consuma token (monitorati automaticamente)
+- L'admin può impostare un limite token per ogni utente dalla Dashboard
+- Se il limite viene raggiunto, l'AI si disabilita per quell'utente
 
 ### Azioni rapide
 
@@ -78,16 +88,22 @@ Il PDF è generato con **pdfmake** (nessun canvas, page break intelligenti):
 
 ## Architettura Dati
 
-**Ibrido Netlify Database + localStorage fallback:**
-- Su Netlify: i dati vivono su **Netlify Database** (Postgres managed), accesso via **Netlify Functions**
-- In locale/offline: tutto su **localStorage** (nessun cambio di codice, funziona identico)
-- Il passaggio è trasparente — `dataService.js` prova l'API, se fallisce usa localStorage
+**Separazione netta produzione/locale:**
+
+| Ambiente | Storage |
+|----------|---------|
+| **Produzione** (Netlify) | Solo API → Netlify Database (Postgres) |
+| **Locale** (`npm run dev`) | Solo localStorage |
+
+La selezione è automatica in base all'hostname: `localhost` = localStorage, altrimenti = API.
 
 ### Admin predefinito
 
-| Email | Password | Sesso |
+| Email | Password | Ruolo |
 |-------|----------|-------|
-| `admin@gmail.com` | `admin` | male |
+| `admin@gmail.com` | `admin` | admin |
+
+L'admin in locale viene seedato in localStorage; in produzione via API sul DB.
 
 ### localStorage keys
 
@@ -112,6 +128,9 @@ Il PDF è generato con **pdfmake** (nessun canvas, page break intelligenti):
 | `password` | varchar(255) | NOT NULL |
 | `username` | varchar(255) | NOT NULL |
 | `gender` | varchar(50) | male / female / other |
+| `role` | varchar(20) | admin / user (default user) |
+| `tokens_used` | bigint | Token AI consumati |
+| `token_limit` | bigint | Limite token (default 1.000.000) |
 | `created_at` | timestamp | DEFAULT now() |
 
 ### Tabella `quotes`
@@ -191,18 +210,21 @@ SitoPreventivo/
 ├── src/
 │   ├── main.jsx               # BrowserRouter + ProtectedRoute
 │   ├── pages/
+│   │   ├── HomePage.jsx       # Landing page pubblica
 │   │   ├── LoginPage.jsx      # Login/registrazione con sesso
+│   │   ├── AdminDashboard.jsx # Gestione utenti, token, chiave AI
 │   │   └── NotFoundPage.jsx   # 404 animato
 │   ├── components/
 │   │   ├── DocumentPreview.jsx # Layout PDF preview
-│   │   ├── EditorView.jsx     # AI panel + controlli manuali
+│   │   ├── EditorView.jsx     # AI panel + controlli (sezioni collassabili)
 │   │   ├── CollectionView.jsx # Griglia preventivi + stato
+│   │   ├── SaveDialog.jsx     # Modale per nome personalizzato
 │   │   ├── Layout.jsx         # Sidebar con icone
 │   │   ├── Topbar.jsx         # Salva/Esporta (solo editor)
 │   │   ├── GlobalStyles.jsx   # Tutti i CSS
 │   │   └── Icon.jsx           # Icone SVG
 │   └── utils/
-│       ├── dataService.js     # API localStorage ibrido
+│       ├── dataService.js     # API produzione / localStorage locale
 │       └── generatePDF.js     # PDF con pdfmake
 ```
 
