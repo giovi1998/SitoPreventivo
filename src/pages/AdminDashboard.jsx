@@ -12,12 +12,18 @@ export default function AdminDashboard() {
   const [limitValue, setLimitValue] = useState('');
   const [deepseekKey, setDeepseekKey] = useState('');
   const [keySaved, setKeySaved] = useState(false);
+  const [dsStatus, setDsStatus] = useState(null);
 
   useEffect(() => {
     dataService.adminGetUsers().then(({ users: list }) => setUsers(list || []));
     dataService.adminGetAllQuotes().then(({ quotes: list }) => setQuotes(list || []));
     if (IS_LOCAL) dataService.getDeepseekKey().then(setDeepseekKey);
   }, []);
+
+  const checkDeepSeekStatus = async () => {
+    const result = await dataService.checkDeepSeekStatus();
+    setDsStatus(result);
+  };
 
   const saveKey = async () => {
     await dataService.saveDeepseekKey(deepseekKey);
@@ -64,7 +70,15 @@ export default function AdminDashboard() {
         ) : (
           <div className="admin-apikey-info">
             <p>In produzione la chiave è gestita tramite la variabile d'ambiente <code>DEEPSEEK_API_KEY</code> su Netlify.</p>
-            <p>Vai su <strong>Netlify → Site settings → Environment variables</strong> per impostarla.</p>
+            <p>Vai su <strong>Netlify → Site settings → Environment variables</strong> e aggiungila con scope <strong>Functions</strong>.</p>
+            <div className="admin-apikey-check">
+              <button onClick={checkDeepSeekStatus} className="btn-check-status">Verifica stato chiave</button>
+              {dsStatus && (
+                <span className={`ds-status ${dsStatus.configured ? 'ok' : 'no'}`}>
+                  {dsStatus.configured ? '✅ Configurata (prefix: ' + dsStatus.keyPrefix + ')' : '❌ Non configurata'}
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -165,6 +179,13 @@ export default function AdminDashboard() {
         .admin-apikey button:hover{box-shadow:0 4px 12px rgba(11,87,208,.3)}
         .admin-apikey-info{background:#f0f7ff;border:1px solid #b8d6ff;border-radius:12px;padding:16px 20px;font-size:.85rem;color:#1e4a7a;line-height:1.6}
         .admin-apikey-info code{background:rgba(11,87,208,.08);padding:2px 6px;border-radius:4px;font-size:.82rem}
+        .admin-apikey-check{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+        .btn-check-status{padding:8px 16px;border:1px solid #0B57D0;background:#fff;color:#0B57D0;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s}
+        .btn-check-status:hover{background:#e8f0fe}
+        .ds-status{font-size:.82rem;font-weight:600;padding:6px 0}
+        .ds-status.ok{color:#11845b}
+        .ds-status.no{color:#dc2626}
+        .ds-keys-note{font-weight:400;color:#647086;font-size:.78rem}
         @media(max-width:640px){.admin-stats{grid-template-columns:1fr 1fr}.admin-dashboard{padding:16px}}
       `}</style>
     </div>

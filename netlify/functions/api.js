@@ -149,12 +149,23 @@ export default async (req) => {
       return json(200, { success: true });
     }
 
+    // ─── DEEPSEEK STATUS CHECK (debug) ─────────────
+    if (path === "/admin/deepseek-status" && method === "GET") {
+      const hasKey = !!process.env.DEEPSEEK_API_KEY;
+      return json(200, {
+        configured: hasKey,
+        keyPrefix: hasKey ? process.env.DEEPSEEK_API_KEY.substring(0, 5) + '...' : null,
+      });
+    }
+
     // ─── AI CHAT PROXY (env var only — key never reaches client) ─
     if (path === "/ai/chat" && method === "POST") {
       const apiKey = process.env.DEEPSEEK_API_KEY;
       if (!apiKey) {
-        return json(503, { error: "DeepSeek non configurato. L'amministratore deve impostare DEEPSEEK_API_KEY nelle variabili d'ambiente di Netlify." });
+        console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set — check Netlify → Site settings → Environment variables → scoped to Functions');
+        return json(503, { error: "DeepSeek non configurato. L'amministratore deve impostare DEEPSEEK_API_KEY nelle variabili d'ambiente di Netlify (scope: Functions)." });
       }
+      console.log('[DeepSeek] Proxying chat request, key length:', apiKey.length);
       const { model, messages, response_format, temperature } = body;
       const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
         method: "POST",

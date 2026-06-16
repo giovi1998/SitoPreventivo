@@ -235,6 +235,15 @@ const dataService = {
     return { success: false, error: 'In produzione, imposta DEEPSEEK_API_KEY nelle variabili d\'ambiente di Netlify.' };
   },
 
+  // ─── CHECK DEEPSEEK STATUS (production debug) ────
+  async checkDeepSeekStatus() {
+    if (IS_LOCAL) {
+      const key = lsGet('deepseekApiKey') || '';
+      return { configured: !!key, envVarSet: false, localKeySet: !!key };
+    }
+    return await api('GET', '/admin/deepseek-status');
+  },
+
   // ─── AI CHAT (proxy in prod, direct in local) ────
   async chatWithAI({ model, messages, response_format, temperature }) {
     if (IS_LOCAL) {
