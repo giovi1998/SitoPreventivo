@@ -221,8 +221,9 @@ const dataService = {
     if (IS_LOCAL) {
       return lsGet('deepseekApiKey') || '';
     }
-    const result = await api('GET', '/admin/deepseek-key');
-    return result.key || '';
+    // In production, key is set via Netlify env var (DEEPSEEK_API_KEY)
+    // The frontend never reads it — use chatWithAI() instead
+    return '';
   },
 
   async saveDeepseekKey(key) {
@@ -230,8 +231,39 @@ const dataService = {
       lsSet('deepseekApiKey', key);
       return { success: true };
     }
-    const result = await api('POST', '/admin/deepseek-key', { key });
-    return result.error ? { success: false } : { success: true };
+    // In production, key must be set in Netlify UI (DEEPSEEK_API_KEY env var)
+    return { success: false, error: 'In produzione, imposta DEEPSEEK_API_KEY nelle variabili d\'ambiente di Netlify.' };
+  },
+
+  // ─── AI CHAT (proxy in prod, direct in local) ────
+  async chatWithAI({ model, messages, response_format, temperature }) {
+    if (IS_LOCAL) {
+      const key = lsGet('deepseekApiKey') || '';
+      if (!key) return { error: 'Chiave DeepSeek non configurata. Inseriscila nella Dashboard Admin (solo sviluppo locale).' };
+      try {
+        const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+          body: JSON.stringify({
+            model: model || 'deepseek-chat',
+            messages,
+            response_format: response_format || { type: 'json_object' },
+            temperature: temperature ?? 0.7,
+          }),
+        });
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => '');
+          if (res.status === 402) return { error: 'Credito DeepSeek esaurito. Ricarica su platform.deepseek.com' };
+          if (res.status === 401) return { error: 'Chiave API DeepSeek non valida' };
+          return { error: `DeepSeek (${res.status}): ${errBody.substring(0, 200)}` };
+        }
+        return await res.json();
+      } catch (err) {
+        return { error: `Connessione a DeepSeek fallita: ${err.message}` };
+      }
+    }
+    // Production: use Netlify function proxy (key stays server-side)
+    return await api('POST', '/ai/chat', { model, messages, response_format, temperature });
   },
 };
 

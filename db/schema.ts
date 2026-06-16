@@ -28,9 +28,3 @@ export const quotes = pgTable("quotes", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
-
-export const settings = pgTable("settings", {
-  key: varchar({ length: 100 }).primaryKey(),
-  value: text(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});

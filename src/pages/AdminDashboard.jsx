@@ -2,6 +2,8 @@ import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../../App.jsx';
 import dataService from '../utils/dataService.js';
 
+const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
 export default function AdminDashboard() {
   const { user } = useContext(AuthContext);
   const [users, setUsers] = useState([]);
@@ -14,7 +16,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     dataService.adminGetUsers().then(({ users: list }) => setUsers(list || []));
     dataService.adminGetAllQuotes().then(({ quotes: list }) => setQuotes(list || []));
-    dataService.getDeepseekKey().then(setDeepseekKey);
+    if (IS_LOCAL) dataService.getDeepseekKey().then(setDeepseekKey);
   }, []);
 
   const saveKey = async () => {
@@ -53,11 +55,18 @@ export default function AdminDashboard() {
       </div>
 
       <div className="admin-section">
-        <h3>Chiave DeepSeek (condivisa)</h3>
-        <div className="admin-apikey">
-          <input type="password" value={deepseekKey} onChange={e => setDeepseekKey(e.target.value)} placeholder="sk-..." />
-          <button onClick={saveKey}>{keySaved ? 'Salvata!' : 'Salva chiave'}</button>
-        </div>
+        <h3>Chiave DeepSeek</h3>
+        {IS_LOCAL ? (
+          <div className="admin-apikey">
+            <input type="password" value={deepseekKey} onChange={e => setDeepseekKey(e.target.value)} placeholder="sk-..." />
+            <button onClick={saveKey}>{keySaved ? 'Salvata!' : 'Salva chiave'}</button>
+          </div>
+        ) : (
+          <div className="admin-apikey-info">
+            <p>In produzione la chiave è gestita tramite la variabile d'ambiente <code>DEEPSEEK_API_KEY</code> su Netlify.</p>
+            <p>Vai su <strong>Netlify → Site settings → Environment variables</strong> per impostarla.</p>
+          </div>
+        )}
       </div>
 
       <div className="admin-section">
@@ -154,6 +163,8 @@ export default function AdminDashboard() {
         .admin-apikey input:focus{border-color:#0B57D0}
         .admin-apikey button{padding:10px 20px;border:none;border-radius:10px;background:#0B57D0;color:#fff;font-weight:700;font-size:.85rem;cursor:pointer;transition:box-shadow .2s}
         .admin-apikey button:hover{box-shadow:0 4px 12px rgba(11,87,208,.3)}
+        .admin-apikey-info{background:#f0f7ff;border:1px solid #b8d6ff;border-radius:12px;padding:16px 20px;font-size:.85rem;color:#1e4a7a;line-height:1.6}
+        .admin-apikey-info code{background:rgba(11,87,208,.08);padding:2px 6px;border-radius:4px;font-size:.82rem}
         @media(max-width:640px){.admin-stats{grid-template-columns:1fr 1fr}.admin-dashboard{padding:16px}}
       `}</style>
     </div>

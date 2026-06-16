@@ -178,22 +178,10 @@ export default function App() {
   const [aiText, setAiText] = useState("Rendi il preventivo più professionale e aggiungi dettagli tecnici");
   const [activity, setActivity] = useState("Pronto: modifica manualmente il preventivo.");
   const [searchQuery, setSearchQuery] = useState("");
-  const [deepseekKey, setDeepseekKey] = useState('');
   const [aiModel, setAiModel] = useState('deepseek-chat');
   const [aiLogs, setAiLogs] = useState([]);
   const { logout, user } = useContext(AuthContext);
   const previewRef = useRef(null);
-
-  // Load shared DeepSeek key from dataService
-  useEffect(() => {
-    dataService.getDeepseekKey().then(setDeepseekKey);
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('deepseekKey', deepseekKey);
-    // Persist shared key to dataService when changed
-    if (deepseekKey) dataService.saveDeepseekKey(deepseekKey);
-  }, [deepseekKey]);
 
   // Load quotes from data service when user changes
   useEffect(() => {
@@ -303,29 +291,22 @@ CONTESTO TIPO:
     addLog('info', `Prompt inviato: "${userPrompt.substring(0, 80)}..."`);
     addLog('info', `Preventivo: ${quote.options.length} opzioni, ${quote.clauses.length} clausole`);
 
-    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${deepseekKey}` },
-      body: JSON.stringify({
-        model: aiModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Preventivo attuale (JSON):\n${JSON.stringify(payload, null, 2)}\n\nRichiesta: ${userPrompt}\n\nRispondi SOLO con il JSON completo del preventivo modificato.` }
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.7
-      })
+    const result = await dataService.chatWithAI({
+      model: aiModel,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Preventivo attuale (JSON):\n${JSON.stringify(payload, null, 2)}\n\nRichiesta: ${userPrompt}\n\nRispondi SOLO con il JSON completo del preventivo modificato.` }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.7
     });
-    if (!res.ok) {
-      const errBody = await res.text();
-      addLog('error', `DeepSeek ${res.status}: ${errBody.substring(0, 120)}`);
-      throw new Error(`DeepSeek error: ${res.status}`);
-    }
-    const data = await res.json();
-    const tokensUsed = data.usage?.total_tokens || 0;
+
+    if (result.error) throw new Error(result.error);
+
+    const tokensUsed = result.usage?.total_tokens || 0;
     if (user?.email) dataService.trackTokens(user.email, tokensUsed);
     addLog('info', `Token usati: ${tokensUsed}`);
-    const raw = data.choices[0].message.content;
+    const raw = result.choices[0].message.content;
     addLog('success', `Risposta ricevuta (${raw.length} chars)`);
     const reply = JSON.parse(raw);
     addLog('info', `Campi restituiti: ${Object.keys(reply).join(', ')}`);
@@ -336,14 +317,6 @@ CONTESTO TIPO:
   const runAI = async (mode = "custom") => {
     const prompt = aiText.trim();
     if (!prompt && mode === "custom") { setActivity("💡 Scrivi un prompt per l'AI."); return; }
-
-    // Reload shared key before each AI call (admin may have just set it)
-    const key = deepseekKey || await dataService.getDeepseekKey();
-    if (!key) {
-      setActivity("⚠️ DeepSeek non configurato. L'amministratore deve impostare la chiave nella Dashboard Admin.");
-      return;
-    }
-    if (!deepseekKey) setDeepseekKey(key); // cache for next time
 
     setActivity("🤖 Chiamata DeepSeek in corso...");
       try {
@@ -462,7 +435,6 @@ CONTESTO TIPO:
             addClause={addClause}
             removeClause={removeClause}
             runAI={runAI}
-            deepseekKey={deepseekKey}
             aiModel={aiModel}
             setAiModel={setAiModel}
             previewRef={previewRef}

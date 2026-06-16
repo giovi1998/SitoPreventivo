@@ -1,5 +1,5 @@
 import { db } from "../../db/index.js";
-import { users, quotes, settings } from "../../db/schema.js";
+import { users, quotes } from "../../db/schema.js";
 import { eq, and, sql } from "drizzle-orm";
 
 export default async (req) => {
@@ -149,21 +149,29 @@ export default async (req) => {
       return json(200, { success: true });
     }
 
-    // ─── SETTINGS (admin) ──────────────────────────
-    if (path === "/admin/deepseek-key" && method === "GET") {
-      const [row] = await db.select().from(settings).where(eq(settings.key, "deepseek_key"));
-      return json(200, { key: row?.value || "" });
-    }
-
-    if (path === "/admin/deepseek-key" && method === "POST") {
-      const { key } = body;
-      const existing = await db.select().from(settings).where(eq(settings.key, "deepseek_key"));
-      if (existing.length > 0) {
-        await db.update(settings).set({ value: key, updatedAt: sql`now()` }).where(eq(settings.key, "deepseek_key"));
-      } else {
-        await db.insert(settings).values({ key: "deepseek_key", value: key || "" });
+    // ─── AI CHAT PROXY (env var only — key never reaches client) ─
+    if (path === "/ai/chat" && method === "POST") {
+      const apiKey = process.env.DEEPSEEK_API_KEY;
+      if (!apiKey) {
+        return json(503, { error: "DeepSeek non configurato. L'amministratore deve impostare DEEPSEEK_API_KEY nelle variabili d'ambiente di Netlify." });
       }
-      return json(200, { success: true });
+      const { model, messages, response_format, temperature } = body;
+      const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: model || "deepseek-chat",
+          messages,
+          response_format: response_format || { type: "json_object" },
+          temperature: temperature ?? 0.7,
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "Unknown error");
+        return json(res.status, { error: `DeepSeek (${res.status}): ${errBody.substring(0, 200)}` });
+      }
+      const data = await res.json();
+      return json(200, data);
     }
 
     return json(404, { error: "Endpoint non trovato" });

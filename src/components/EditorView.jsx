@@ -17,7 +17,7 @@ function Section({ title, defaultOpen = true, children, extra }) {
   );
 }
 
-export default function EditorView({ quote, aiText, setAiText, activity, patch, updateOption, addOption, removeOption, updateClause, addClause, removeClause, runAI, deepseekKey, aiModel, setAiModel, previewRef, aiLogs }) {
+export default function EditorView({ quote, aiText, setAiText, activity, patch, updateOption, addOption, removeOption, updateClause, addClause, removeClause, runAI, aiModel, setAiModel, previewRef, aiLogs }) {
   const [showAi, setShowAi] = React.useState(true);
   const [showManual, setShowManual] = React.useState(true);
 
@@ -34,7 +34,7 @@ export default function EditorView({ quote, aiText, setAiText, activity, patch, 
               </button>
             </div>
             <h2>AI che modifica il preventivo</h2>
-            <Section title="Configurazione AI" defaultOpen={!!deepseekKey}>
+            <Section title="Configurazione AI" defaultOpen={true}>
               <div className="api-key-section">
                 <div className="ai-model-selector">
                   <label>Modello AI</label>
@@ -42,11 +42,7 @@ export default function EditorView({ quote, aiText, setAiText, activity, patch, 
                     <option value="deepseek-chat">DeepSeek Chat</option>
                   </select>
                 </div>
-                {deepseekKey ? (
-                  <span className="api-key-status ok">● Connesso</span>
-                ) : (
-                  <span className="api-key-status no">● Non configurato</span>
-                )}
+                <span className="api-key-status ok">● Chiave via server (env var)</span>
               </div>
             </Section>
             <Section title="Prompt e azioni rapide">

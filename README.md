@@ -50,8 +50,8 @@ Server su `http://localhost:8000`
 
 ### Configurazione
 
-1. L'**admin** ottiene una API key da [platform.deepseek.com](https://platform.deepseek.com/) (serve credito)
-2. Nella **Dashboard Admin** (sidebar → Admin), incolla la chiave nel campo "Chiave DeepSeek" e salva
+1. **Produzione (Netlify)**: vai su **Netlify → Site settings → Environment variables** e aggiungi `DEEPSEEK_API_KEY` con la tua API key di [platform.deepseek.com](https://platform.deepseek.com/) (la chiave non lascia mai il server)
+2. **Locale (`npm run dev`)**: nella Dashboard Admin (sidebar → Admin), incolla la chiave nel campo "Chiave DeepSeek" e salva (viene conservata in localStorage)
 3. Tutti gli utenti usano la stessa chiave condivisa — l'admin controlla i **limiti token** per ogni utente
 4. Gli utenti vedono selettore "Modello AI" e stato connessione nel pannello
 
