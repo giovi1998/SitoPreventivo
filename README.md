@@ -50,7 +50,7 @@ Server su `http://localhost:8000`
 
 ### Configurazione
 
-1. **Produzione (Netlify)**: vai su **Netlify → Site settings → Environment variables** e aggiungi `DEEPSEEK_API_KEY` con la tua API key di [platform.deepseek.com](https://platform.deepseek.com/) (la chiave non lascia mai il server)
+1. **Produzione (Netlify)**: vai su **Netlify → Site settings → Environment variables** e aggiungi `DEEPSEEK_API_KEY` con scope **Functions**. La chiave viene letta solo dalla Netlify Function e non deve essere esposta come variabile `VITE_*`.
 2. **Locale (`npm run dev`)**: nella Dashboard Admin (sidebar → Admin), incolla la chiave nel campo "Chiave DeepSeek" e salva (viene conservata in localStorage)
 3. Tutti gli utenti usano la stessa chiave condivisa — l'admin controlla i **limiti token** per ogni utente
 4. Gli utenti vedono selettore "Modello AI" e stato connessione nel pannello
@@ -96,6 +96,20 @@ Il PDF è generato con **pdfmake** (nessun canvas, page break intelligenti):
 | **Locale** (`npm run dev`) | Solo localStorage |
 
 La selezione è automatica in base all'hostname: `localhost` = localStorage, altrimenti = API.
+
+### Variabili d'ambiente Netlify
+
+In produzione il progetto deve leggere sempre le variabili iniettate da Netlify:
+
+- `DEEPSEEK_API_KEY`: configurata in Netlify con scope **Functions**. Serve solo alla Function `/api/ai/chat`; il browser non la riceve mai.
+- Database Netlify: viene collegato e gestito da Netlify Database. Non impostare manualmente `DATABASE_URL` a un database esterno nella build se vuoi usare il database del sito Netlify.
+
+Per evitare deploy su database sbagliati:
+
+1. Collega il database con `npx netlify database init` o dalla UI Netlify del sito corretto.
+2. Lascia che `@netlify/database` e il comando Netlify Database usino le variabili generate dalla piattaforma.
+3. Applica le migration solo con il sito Netlify collegato al database atteso.
+4. Non stampare chiavi, URL database o token nei log: l'app mostra solo se una variabile è configurata.
 
 ### Admin predefinito
 
@@ -158,12 +172,18 @@ L'admin in locale viene seedato in localStorage; in produzione via API sul DB.
 # Genera una migrazione dopo aver modificato db/schema.ts
 npm run db:generate
 
-# Applica migrazioni al DB locale (con netlify dev)
+# Applica migrazioni usando il database collegato al sito Netlify corrente
 netlify database migrations apply
 
 # Apri Drizzle Studio per vedere i dati
 npm run db:studio
 ```
+
+Note importanti sulle migration:
+
+- Le migration già applicate su Netlify non vanno rinominate, eliminate o modificate.
+- Se una migration pendente deve rimuovere una tabella opzionale, usa SQL idempotente come `DROP TABLE IF EXISTS ...` per non bloccare ambienti che hanno già uno schema diverso.
+- Se il deploy segnala una tabella mancante, verifica prima che il sito Netlify e il database collegato siano quelli corretti.
 
 ## Deploy Netlify
 
