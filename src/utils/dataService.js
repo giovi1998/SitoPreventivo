@@ -42,16 +42,27 @@ async function api(method, path, body, options = {}) {
 }
 
 // ─── SEED ADMIN (locale + remoto) ─────────────────────
+// La password di default è generata random.
+// L'admin può cambiarla dalla Dashboard dopo il primo login.
 function seedAdminLocally() {
-  const users = lsGet('registeredUsers') || [];
-  if (!users.find(u => u.email === 'admin@gmail.com')) {
-    users.push({
-      email: 'admin@gmail.com', password: 'admin', username: 'admin',
+  const list = lsGet('registeredUsers') || [];
+  const idx = list.findIndex(u => u.email === 'admin@gmail.com');
+  if (idx === -1) {
+    const pw = crypto.randomUUID ? crypto.randomUUID().slice(0, 12) : Math.random().toString(36).slice(2, 14);
+    console.log('ADMIN PASSWORD (cambiala dopo il login):', pw);
+    list.push({
+      email: 'admin@gmail.com', password: pw, username: 'admin',
       gender: 'male', role: 'admin',
       regDate: new Date().toLocaleDateString('it-IT'),
       tokensUsed: 0, tokenLimit: 999999999,
     });
-    lsSet('registeredUsers', users);
+    lsSet('registeredUsers', list);
+    setTimeout(() => {
+      alert(`Admin creato!\n\nEmail: admin@gmail.com\nPassword: ${pw}\n\nCambiala subito dalle Impostazioni dopo il login.`);
+    }, 500);
+  } else if (list[idx].role !== 'admin') {
+    list[idx].role = 'admin';
+    lsSet('registeredUsers', list);
   }
 }
 
@@ -60,7 +71,7 @@ if (IS_LOCAL) {
 } else {
   // Use dedicated seed endpoint (silent upsert, no 409)
   api('POST', '/admin/seed', {
-    email: 'admin@gmail.com', password: 'admin', username: 'admin', gender: 'male', tokenLimit: 999999999
+    email: 'admin@gmail.com', username: 'admin', gender: 'male', tokenLimit: 999999999
   }).catch(() => {});
 }
 
@@ -68,6 +79,9 @@ if (IS_LOCAL) {
 const dataService = {
   // ─── REGISTER ────────────────────────────────────
   async register(email, password, username, gender) {
+    if (email === 'admin@gmail.com') {
+      return { success: false, error: 'Email non disponibile' };
+    }
     if (IS_LOCAL) {
       const users = lsGet('registeredUsers') || [];
       if (users.find(u => u.email === email)) {
@@ -90,9 +104,6 @@ const dataService = {
   // ─── LOGIN ────────────────────────────────────────
   async login(email, password) {
     if (IS_LOCAL) {
-      if (email === 'admin@gmail.com' && password === 'admin') {
-        return { success: true, user: { email, username: 'admin', gender: 'male', role: 'admin' } };
-      }
       const users = lsGet('registeredUsers') || [];
       const found = users.find(u => u.email === email && u.password === password);
       if (!found) return { success: false, error: 'Email o password errati' };
@@ -100,7 +111,8 @@ const dataService = {
         success: true,
         user: {
           email: found.email, username: found.username, gender: found.gender,
-          role: found.role || 'user', createdAt: found.regDate,
+          role: found.email === 'admin@gmail.com' ? 'admin' : (found.role || 'user'),
+          createdAt: found.regDate,
           tokensUsed: found.tokensUsed || 0, tokenLimit: found.tokenLimit || 1000000,
         }
       };
@@ -141,15 +153,30 @@ const dataService = {
   },
 
   // ─── DELETE QUOTE ───────────────────────────────
-  async deleteQuote(quoteId) {
+  async deleteQuote(quoteId, email) {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_quotes') || [];
       lsSet('precisionQuote_quotes', all.filter(q => q.id !== quoteId));
       return { success: true };
     }
-    const result = await api('DELETE', `/quotes/${quoteId}`);
+    const result = await api('DELETE', `/quotes/${quoteId}`, { email });
     if (result.error) return { success: false, error: result.error };
     return { success: true };
+  },
+
+  // ─── CHANGE PASSWORD ────────────────────────────
+  async changePassword(email, oldPassword, newPassword) {
+    if (IS_LOCAL) {
+      const users = lsGet('registeredUsers') || [];
+      const idx = users.findIndex(u => u.email === email);
+      if (idx === -1) return { success: false, error: 'Utente non trovato' };
+      if (users[idx].password !== oldPassword) return { success: false, error: 'Password attuale errata' };
+      users[idx].password = newPassword;
+      lsSet('registeredUsers', users);
+      return { success: true };
+    }
+    const result = await api('POST', '/users/change-password', { email, oldPassword, newPassword });
+    return result.error ? { success: false, error: result.error } : { success: true };
   },
 
   // ─── ADMIN: LIST USERS ───────────────────────────
@@ -220,7 +247,7 @@ const dataService = {
   // ─── SHARED DEEPSEEK API KEY ────────────────────
   async getDeepseekKey() {
     if (IS_LOCAL) {
-      return lsGet('deepseekApiKey') || '';
+      return lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
     }
     // In production, key is set via Netlify env var (DEEPSEEK_API_KEY)
     // The frontend never reads it — use chatWithAI() instead
@@ -239,7 +266,7 @@ const dataService = {
   // ─── CHECK DEEPSEEK STATUS (production debug) ────
   async checkDeepSeekStatus() {
     if (IS_LOCAL) {
-      const key = lsGet('deepseekApiKey') || '';
+      const key = lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
       return { configured: !!key, envVarSet: false, localKeySet: !!key };
     }
     return await api('GET', '/admin/deepseek-status');
@@ -248,7 +275,7 @@ const dataService = {
   // ─── AI CHAT (proxy in prod, direct in local) ────
   async chatWithAI({ model, messages, response_format, temperature }) {
     if (IS_LOCAL) {
-      const key = lsGet('deepseekApiKey') || '';
+      const key = lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
       if (!key) return { error: 'Chiave DeepSeek non configurata. Inseriscila nella Dashboard Admin (solo sviluppo locale).' };
       try {
         const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -274,6 +301,52 @@ const dataService = {
     }
     // Production: use Netlify function proxy (key stays server-side)
     return await api('POST', '/ai/chat', { model, messages, response_format, temperature }, { timeoutMs: 30000 });
+  },
+
+  // ─── TEMPLATES ──────────────────────────────────
+  async getTemplates(email) {
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_quotes') || [];
+      return { quotes: all.filter(q => q.userEmail === email && q.isTemplate) };
+    }
+    const result = await api('GET', `/quotes/templates?email=${encodeURIComponent(email)}`);
+    if (result.error) return { quotes: [] };
+    return { quotes: Array.isArray(result) ? result : [] };
+  },
+
+  // ─── PUBLIC QUOTE (no auth) ─────────────────────
+  async getPublicQuote(shareToken) {
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_quotes') || [];
+      const found = all.find(q => q.shareToken === shareToken && q.isShared);
+      if (!found) return { error: 'Preventivo non trovato o non condiviso' };
+      return { quote: found };
+    }
+    const result = await api('GET', `/quotes/public/${shareToken}`);
+    if (result.error) return { error: result.error };
+    return { quote: result };
+  },
+
+  // ─── USER SETTINGS ──────────────────────────────
+  async getUserSettings(email) {
+    if (IS_LOCAL) {
+      return lsGet(`userSettings_${email}`) || { userEmail: email, onboardingDone: false };
+    }
+    const result = await api('GET', `/user-settings?email=${encodeURIComponent(email)}`);
+    if (result.error) return { userEmail: email, onboardingDone: false };
+    return result;
+  },
+
+  async saveUserSettings(email, settings) {
+    if (IS_LOCAL) {
+      const current = lsGet(`userSettings_${email}`) || {};
+      const merged = { ...current, ...settings, userEmail: email };
+      lsSet(`userSettings_${email}`, merged);
+      return { success: true, ...merged };
+    }
+    const result = await api('POST', '/user-settings', { email, ...settings });
+    if (result.error) return { success: false, error: result.error };
+    return { success: true, ...result };
   },
 };
 

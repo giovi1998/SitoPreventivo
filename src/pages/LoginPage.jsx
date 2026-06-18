@@ -144,13 +144,12 @@ export default function LoginPage() {
                     value={gender}
                     onChange={(e) => setGender(e.target.value)}
                     style={{
-                      width: '100%', height: '48px', padding: '0 44px', border: '2px solid #e2e8f0',
-                      borderRadius: '12px', fontSize: '.95rem', color: gender ? '#07111f' : '#94a3b8',
-                      background: '#fff', outline: 'none', cursor: 'pointer',
+                      width: '100%', height: '48px', padding: '0 44px',
+                      border: '2px solid var(--line)', borderRadius: '12px',
+                      fontSize: '.95rem', color: gender ? 'var(--ink)' : 'var(--muted-lt)',
+                      background: 'var(--surface)', outline: 'none', cursor: 'pointer',
                       transition: 'border-color .2s, box-shadow .2s',
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = '#0B57D0'; e.target.style.boxShadow = '0 0 0 4px rgba(11,87,208,0.08)'; }}
-                    onBlur={(e) => { e.target.style.borderColor = '#e2e8f0'; e.target.style.boxShadow = 'none'; }}
                   >
                     <option value="">Seleziona sesso</option>
                     <option value="male">Maschio</option>
@@ -227,7 +226,7 @@ export default function LoginPage() {
                 {isRegister ? 'Accedi' : 'Registrati'}
               </button>
             </div>
-            <Link to="/" className="auth-back" style={{ marginTop: '8px' }}>
+            <Link to="/" className="auth-back">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
               Torna alla home
             </Link>
@@ -252,24 +251,32 @@ export default function LoginPage() {
         @keyframes pulse-dot{0%,100%{opacity:0.3;transform:scale(1)}50%{opacity:1;transform:scale(1.5)}}
 
         .auth-form-panel{background:#f8fafc;display:flex;align-items:center;justify-content:center;padding:40px}
+        [data-theme="dark"] .auth-form-panel{background:var(--canvas)}
         .auth-form-wrapper{width:100%;max-width:380px}
         .auth-mobile-logo{display:none;align-items:center;gap:10px;margin-bottom:32px}
         .auth-mobile-logo-icon{width:40px;height:40px;background:var(--accent);border-radius:12px;display:grid;place-items:center}
         .auth-mobile-logo span{font-size:1.15rem;font-weight:800;color:#07111f}
+        [data-theme="dark"] .auth-mobile-logo span{color:var(--ink)}
         .auth-form-header{margin-bottom:32px}
         .auth-form-header h2{margin:0 0 8px;font-size:1.75rem;font-weight:900;color:#07111f;letter-spacing:-0.03em}
+        [data-theme="dark"] .auth-form-header h2{color:var(--ink)}
         .auth-form-header p{margin:0;font-size:.95rem;color:#647086;line-height:1.5}
         .auth-form{display:grid;gap:18px}
         .auth-field{display:grid;gap:6px}
         .auth-field label{font-size:.72rem;text-transform:uppercase;letter-spacing:0.1em;font-weight:800;color:#647086}
+        [data-theme="dark"] .auth-field label{color:var(--muted)}
         .auth-input-wrap{position:relative;display:flex;align-items:center}
         .auth-input-icon{position:absolute;left:14px;color:#94a3b8;pointer-events:none;z-index:1}
+        [data-theme="dark"] .auth-input-icon{color:var(--muted-lt)}
         .auth-input-wrap input{width:100%;height:48px;padding:0 44px 0 44px;border:2px solid #e2e8f0;border-radius:12px;font-size:.95rem;color:#07111f;background:#fff;outline:none;transition:border-color .2s,box-shadow .2s}
+        [data-theme="dark"] .auth-input-wrap input{border-color:var(--line);color:var(--ink);background:var(--surface)}
         .auth-input-wrap input:focus{border-color:#0B57D0;box-shadow:0 0 0 4px rgba(11,87,208,0.08)}
         .auth-input-wrap input::placeholder{color:#94a3b8}
+        [data-theme="dark"] .auth-input-wrap input::placeholder{color:var(--muted-lt)}
         .auth-eye-btn{position:absolute;right:8px;background:none;border:none;padding:8px;color:#94a3b8;cursor:pointer;display:grid;place-items:center;border-radius:8px;transition:color .15s}
         .auth-eye-btn:hover{color:#475569}
         .auth-error{display:flex;align-items:center;gap:8px;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;color:#dc2626;font-size:.85rem;font-weight:500}
+        [data-theme="dark"] .auth-error{background:var(--red-bg);border-color:var(--red-border);color:var(--red)}
         .auth-submit{width:100%;height:50px;background:linear-gradient(135deg,#0B57D0,#1d4ed8);color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 14px rgba(11,87,208,0.3)}
         .auth-submit:hover{transform:translateY(-1px);box-shadow:0 8px 25px rgba(11,87,208,0.4)}
         .auth-submit:active{transform:translateY(0)}
@@ -278,6 +285,7 @@ export default function LoginPage() {
         @keyframes auth-spin{to{transform:rotate(360deg)}}
         .auth-footer{margin-top:28px;display:flex;flex-direction:column;align-items:center;gap:16px}
         .auth-toggle{font-size:.9rem;color:#647086}
+        [data-theme="dark"] .auth-toggle{color:var(--muted)}
         .auth-toggle button{background:none;border:none;color:#0B57D0;font-weight:700;cursor:pointer;padding:0 4px;font-size:.9rem;transition:color .15s}
         .auth-toggle button:hover{color:#1d4ed8}
         .auth-back{display:inline-flex;align-items:center;gap:6px;color:#94a3b8;text-decoration:none;font-size:.85rem;font-weight:500;transition:color .15s}

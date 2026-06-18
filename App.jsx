@@ -1,12 +1,17 @@
-import React from 'react';
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { lazy, Suspense } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import GlobalStyles from './src/components/GlobalStyles.jsx';
 import Layout from './src/components/Layout.jsx';
 import Topbar from './src/components/Topbar.jsx';
 import EditorView from './src/components/EditorView.jsx';
-import CollectionView from './src/components/CollectionView.jsx';
-import AdminDashboard from './src/pages/AdminDashboard.jsx';
+const CollectionView = lazy(() => import('./src/components/CollectionView.jsx'));
+const AdminDashboard = lazy(() => import('./src/pages/AdminDashboard.jsx'));
+import SettingsPage from './src/pages/SettingsPage.jsx';
+import CollectionViewSkeleton from './src/components/CollectionViewSkeleton.jsx';
 import SaveDialog from './src/components/SaveDialog.jsx';
+import ToastContainer from './src/components/ToastContainer.jsx';
+import ConfirmModal from './src/components/ConfirmModal.jsx';
+import OnboardingModal from './src/components/OnboardingModal.jsx';
 import dataService from './src/utils/dataService.js';
 
 export const AppContext = createContext(null);
@@ -95,6 +100,12 @@ const cloneQuote = (q, patch = {}) => ({
   ...patch
 });
 
+function generateId() {
+  const year = new Date().getFullYear();
+  const num = Math.floor(100 + Math.random() * 899);
+  return `PRV-${year}-${num}`;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const token = localStorage.getItem('authToken');
@@ -177,13 +188,55 @@ export default function App() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [aiText, setAiText] = useState("Rendi il preventivo più professionale e aggiungi dettagli tecnici");
   const [activity, setActivity] = useState("Pronto: modifica manualmente il preventivo.");
-  const [searchQuery, setSearchQuery] = useState("");
   const [aiModel, setAiModel] = useState('deepseek-chat');
   const [aiLogs, setAiLogs] = useState([]);
+  const [toasts, setToasts] = useState([]);
+  const [lastSaveTime, setLastSaveTime] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [theme, setThemeState] = useState(() => localStorage.getItem('theme') || 'light');
   const { logout, user } = useContext(AuthContext);
   const previewRef = useRef(null);
 
-  // Load quotes from data service when user changes
+  const addToast = useCallback((type, message) => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, type, message }]);
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const setTheme = useCallback((t) => {
+    setThemeState(t);
+    localStorage.setItem('theme', t);
+    document.documentElement.setAttribute('data-theme', t);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    if (user?.email) {
+      dataService.getUserSettings(user.email).then(settings => {
+        if (!settings.onboardingDone) setShowOnboarding(true);
+      }).catch(() => {});
+    }
+  }, [user?.email]);
+
+  const handleOnboardingComplete = async (settings) => {
+    if (user?.email) {
+      await dataService.saveUserSettings(user.email, settings);
+      if (settings.defaultColor) setQuote(c => ({ ...c, color: settings.defaultColor }));
+      if (settings.defaultVat !== undefined) setQuote(c => ({ ...c, vat: settings.defaultVat }));
+    }
+    setShowOnboarding(false);
+    addToast('success', 'Benvenuto! Configurazione completata.');
+  };
+
   useEffect(() => {
     if (user?.email) {
       dataService.getQuotes(user.email).then(({ quotes: loaded }) => {
@@ -198,13 +251,18 @@ export default function App() {
 
   const addLog = (type, msg) => setAiLogs(prev => [...prev.slice(-19), { type, msg, time: new Date().toLocaleTimeString('it-IT') }]);
 
-  const patch = (key, value) => setQuote(c => ({ ...c, [key]: value }));
+  const markDirty = () => setIsDirty(true);
 
-  const updateOption = (id, key, value) => setQuote(c => ({
+  const patch = (key, value) => { markDirty(); setQuote(c => ({ ...c, [key]: value })); };
+
+  const updateOption = (id, key, value) => { markDirty(); setQuote(c => ({
     ...c,
     options: c.options.map(o => o.id === id ? { ...o, [key]: value } : o)
-  }));
-  const addOption = () => setQuote(c => ({
+  })); };
+
+  const updateOptions = (newOptions) => { markDirty(); setQuote(c => ({ ...c, options: newOptions })); };
+
+  const addOption = () => { markDirty(); setQuote(c => ({
     ...c,
     options: [...c.options, {
       id: Date.now(),
@@ -214,27 +272,26 @@ export default function App() {
       monthlyCost: 0,
       includesMaintenance: false
     }]
-  }));
-  const removeOption = (id) => setQuote(c => ({
+  })); };
+  const removeOption = (id) => { markDirty(); setQuote(c => ({
     ...c,
     options: c.options.filter(o => o.id !== id)
-  }));
+  })); };
 
-  const updateClause = (id, key, value) => setQuote(c => ({
+  const updateClause = (id, key, value) => { markDirty(); setQuote(c => ({
     ...c,
     clauses: c.clauses.map(cl => cl.id === id ? { ...cl, [key]: value } : cl)
-  }));
-  const addClause = () => setQuote(c => ({
+  })); };
+  const addClause = () => { markDirty(); setQuote(c => ({
     ...c,
     clauses: [...c.clauses, { id: `cl-${Date.now()}`, title: "Nuova clausola", body: "Contenuto della clausola..." }]
-  }));
-  const removeClause = (id) => setQuote(c => ({
+  })); };
+  const removeClause = (id) => { markDirty(); setQuote(c => ({
     ...c,
     clauses: c.clauses.filter(cl => cl.id !== id)
-  }));
+  })); };
 
   const callDeepSeek = async (userPrompt) => {
-    // Check token limit
     const profile = await dataService.getUserProfile(user?.email);
     if (profile.error) throw new Error(profile.error);
     if (profile.tokensUsed >= profile.tokenLimit) {
@@ -352,8 +409,10 @@ CONTESTO TIPO:
           addLog('info', `Opzioni finali: ${newQuote.options.map(o => `${o.title} (€${o.oneTimeCost})`).join(' | ')}`);
           return newQuote;
         });
+        markDirty();
         setActivity(`✅ DeepSeek: ${mode === "custom" ? "prompt applicato" : mode} con successo.`);
         addLog('success', 'Preventivo aggiornato con successo');
+        addToast('success', `AI: ${mode === "custom" ? "prompt applicato" : mode}`);
       } catch (err) {
         console.error('DeepSeek error:', err);
         const hint = err.message?.includes('402') ? 'Credito DeepSeek esaurito. Ricarica su platform.deepseek.com' :
@@ -363,6 +422,7 @@ CONTESTO TIPO:
           null;
         setActivity(`❌ ${hint || err.message}`);
         addLog('error', hint || err.message);
+        addToast('error', hint || err.message);
       }
   };
 
@@ -370,16 +430,36 @@ CONTESTO TIPO:
     setShowSaveDialog(true);
   };
 
+  const handleQuickSave = () => {
+    const autoName = `${quote.title} (auto)`;
+    const saved = cloneQuote(quote, { title: autoName });
+    setQuotes(c => [saved, ...c.filter(q => q.id !== quote.id)]);
+    if (user?.email) dataService.saveQuote(user.email, saved);
+    setIsDirty(false);
+    setLastSaveTime(new Date());
+    setActivity(`Preventivo salvato automaticamente.`);
+    addToast('success', 'Preventivo salvato');
+  };
+
   const handleSaveConfirmed = (customName) => {
     setShowSaveDialog(false);
     const saved = cloneQuote(quote, { title: customName });
     setQuotes(c => [saved, ...c.filter(q => q.id !== quote.id)]);
     if (user?.email) dataService.saveQuote(user.email, saved);
+    setIsDirty(false);
+    setLastSaveTime(new Date());
     setActivity(`Preventivo "${customName}" salvato nella Collection.`);
+    addToast('success', `"${customName}" salvato`);
   };
 
   const duplicate = (saved) => {
-    const copy = cloneQuote(saved, { id: `PRV-2026-${Math.floor(100 + Math.random() * 899)}`, title: `${saved.title} (copia)`, status: "Bozza" });
+    const today = new Date().toLocaleDateString('it-IT');
+    const copy = cloneQuote(saved, {
+      id: generateId(),
+      title: `${saved.title} (copia)`,
+      status: 'BOZZA',
+      date: today
+    });
     setQuotes(c => {
       const updated = [copy, ...c];
       if (user?.email) dataService.saveQuote(user.email, copy);
@@ -387,8 +467,69 @@ CONTESTO TIPO:
     });
     setQuote(copy);
     setView("editor");
+    setIsDirty(true);
     setActivity("Preventivo duplicato.");
+    addToast('success', 'Preventivo duplicato');
   };
+
+  const saveAsTemplate = () => {
+    const template = cloneQuote(quote, {
+      id: generateId(),
+      isTemplate: true,
+      status: 'BOZZA',
+      client: '',
+    });
+    setQuotes(c => {
+      const updated = [template, ...c];
+      if (user?.email) dataService.saveQuote(user.email, template);
+      return updated;
+    });
+    addToast('success', 'Template salvato');
+    setActivity('Template salvato nella Collection.');
+  };
+
+  const createFromTemplate = (template) => {
+    const today = new Date().toLocaleDateString('it-IT');
+    const newQuote = cloneQuote(template, {
+      id: generateId(),
+      isTemplate: false,
+      client: '',
+      date: today,
+      status: 'BOZZA',
+      shareToken: null,
+      isShared: false,
+    });
+    setQuote(newQuote);
+    setView("editor");
+    setIsDirty(true);
+    setActivity(`Nuovo preventivo creato da template "${template.title}".`);
+    addToast('success', 'Template applicato');
+  };
+
+  const shareInfo = quote.shareToken ? {
+    link: `${window.location.origin}/preventivo/${quote.shareToken}`,
+    token: quote.shareToken,
+  } : null;
+
+  const toggleShare = (enabled) => {
+    if (enabled) {
+      const token = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      patch('isShared', true);
+      patch('shareToken', token);
+    } else {
+      patch('isShared', false);
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.ctrlKey) return;
+      if (e.key === 's') { e.preventDefault(); handleQuickSave(); }
+      if (e.key === 'p') { e.preventDefault(); exportPDF(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [quote]);
 
   const openQuote = (saved) => {
     setQuote(cloneQuote(saved));
@@ -405,23 +546,39 @@ CONTESTO TIPO:
   };
 
   const exportPDF = async () => {
+    setPdfLoading(true);
     setActivity("Generazione PDF in corso...");
     try {
       const { default: generatePDF } = await import('./src/utils/generatePDF.js');
       generatePDF(quote);
       setActivity("PDF esportato con successo!");
+      addToast('success', 'PDF esportato');
     } catch (err) {
       console.error(err);
       setActivity("Errore durante l'esportazione PDF.");
+      addToast('error', 'Errore esportazione PDF');
     }
+    setPdfLoading(false);
   };
 
   return (
     <AppContext.Provider value={{ editingQuote: quote, setEditingQuote: setQuote, saveQuote, quotes }}>
       <GlobalStyles />
-      <Layout view={view} setView={setView} onLogout={logout} user={user}>
-        <Topbar view={view} onSave={saveQuote} onExport={exportPDF} />
-        {view === "editor" ? (
+      <Layout view={view} setView={setView} onLogout={logout} user={user} theme={theme} setTheme={setTheme}>
+        <Topbar
+          view={view}
+          onSave={saveQuote}
+          onExport={exportPDF}
+          lastSaveTime={lastSaveTime}
+          isDirty={isDirty}
+          pdfLoading={pdfLoading}
+          onSaveAsTemplate={saveAsTemplate}
+          theme={theme}
+          setTheme={setTheme}
+        />
+        {view === "settings" ? (
+          <SettingsPage />
+        ) : view === "editor" ? (
           <EditorView
             quote={quote}
             aiText={aiText}
@@ -429,6 +586,7 @@ CONTESTO TIPO:
             activity={activity}
             patch={patch}
             updateOption={updateOption}
+            updateOptions={updateOptions}
             addOption={addOption}
             removeOption={removeOption}
             updateClause={updateClause}
@@ -439,21 +597,32 @@ CONTESTO TIPO:
             setAiModel={setAiModel}
             previewRef={previewRef}
             aiLogs={aiLogs}
+            isDirty={isDirty}
+            saveQuote={handleQuickSave}
+            shareInfo={shareInfo}
+            toggleShare={toggleShare}
           />
         ) : view === "admin" ? (
-          <AdminDashboard />
+          <Suspense fallback={<div className="view-loading"><div className="spinner" /></div>}>
+            <AdminDashboard />
+          </Suspense>
         ) : (
-          <CollectionView
-            quotes={quotes.filter(q => `${q.title} ${q.client} ${q.id}`.toLowerCase().includes(searchQuery.toLowerCase()))}
-            activeId={quote.id}
-            openQuote={openQuote}
-            duplicate={duplicate}
-            removeQuote={(id) => {
-              setQuotes(c => c.filter(q => q.id !== id));
-              if (user?.email) dataService.deleteQuote(id);
-            }}
-            onUpdateStatus={updateQuoteStatus}
-          />
+          <Suspense fallback={<CollectionViewSkeleton />}>
+            <CollectionView
+              quotes={quotes}
+              activeId={quote.id}
+              openQuote={openQuote}
+              duplicate={duplicate}
+              removeQuote={(id) => {
+                setQuotes(c => c.filter(q => q.id !== id));
+                if (user?.email) dataService.deleteQuote(id, user.email);
+              }}
+              onUpdateStatus={updateQuoteStatus}
+              onDeleteRequest={(item) => setDeleteTarget(item)}
+              setView={setView}
+              createFromTemplate={createFromTemplate}
+            />
+          </Suspense>
         )}
       </Layout>
       <SaveDialog
@@ -462,6 +631,24 @@ CONTESTO TIPO:
         onSave={handleSaveConfirmed}
         onCancel={() => setShowSaveDialog(false)}
       />
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <ConfirmModal
+        open={!!deleteTarget}
+        title="Elimina preventivo"
+        message={deleteTarget ? `Stai per eliminare «${deleteTarget.title}». Non potrai recuperarlo.` : ''}
+        confirmLabel="Elimina"
+        confirmClass="danger"
+        onConfirm={() => {
+          if (deleteTarget) {
+            setQuotes(c => c.filter(q => q.id !== deleteTarget.id));
+            if (user?.email) dataService.deleteQuote(deleteTarget.id, user.email);
+            addToast('success', 'Preventivo eliminato');
+            setDeleteTarget(null);
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
+      {showOnboarding && <OnboardingModal onComplete={handleOnboardingComplete} />}
     </AppContext.Provider>
   );
 }

@@ -2,7 +2,7 @@ import React from 'react';
 
 const money = (value) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value || 0));
 
-const DocumentPreview = React.forwardRef(function DocumentPreview({ quote }, ref) {
+const DocumentPreview = React.memo(React.forwardRef(function DocumentPreview({ quote }, ref) {
   const vat = Number(quote.vat || 22);
 
   return (
@@ -178,6 +178,11 @@ const DocumentPreview = React.forwardRef(function DocumentPreview({ quote }, ref
       </footer>
     </article>
   );
+}), (prev, next) => {
+  const p = prev.quote, n = next.quote;
+  return p.title === n.title && p.client === n.client && p.color === n.color
+    && p.intro === n.intro && p.vat === n.vat && p.owner === n.owner && p.date === n.date
+    && p.options === n.options && p.clauses === n.clauses;
 });
 
 export default DocumentPreview;

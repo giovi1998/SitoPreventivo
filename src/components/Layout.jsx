@@ -1,8 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-export default function Layout({ children, view, setView, onLogout, user }) {
+export default function Layout({ children, view, setView, onLogout, user, theme, setTheme }) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const nav = (v) => {
+    setView(v);
+    setDrawerOpen(false);
+  };
+
   return (
     <main className="app-shell">
+      {/* ─── DESKTOP SIDEBAR (>768px) ─────────── */}
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-logo">
@@ -17,16 +25,20 @@ export default function Layout({ children, view, setView, onLogout, user }) {
         </div>
 
         <nav aria-label="Navigazione principale">
-          <button className={view === "editor" ? "active" : ""} onClick={() => setView("editor")}>
+          <button title="Nuovo preventivo" className={view === "editor" ? "active" : ""} onClick={() => setView("editor")}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Editor
           </button>
-          <button className={view === "collection" ? "active" : ""} onClick={() => setView("collection")}>
+          <button title="I miei preventivi" className={view === "collection" ? "active" : ""} onClick={() => setView("collection")}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
             Collection
           </button>
+          <button title="Impostazioni" className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Impostazioni
+          </button>
           {user?.role === 'admin' && (
-            <button className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>
+            <button title="Pannello Admin" className={view === "admin" ? "active" : ""} onClick={() => setView("admin")}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
               Admin
             </button>
@@ -64,6 +76,77 @@ export default function Layout({ children, view, setView, onLogout, user }) {
           )}
         </div>
       </aside>
+
+      {/* ─── MOBILE TOPBAR (<768px) ─────────────── */}
+      {user && (
+        <header className="mobile-topbar">
+          <button className="mobile-hamburger" onClick={() => setDrawerOpen(true)} aria-label="Apri menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <span className="mobile-brand">PrecisionQuote</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button className="mobile-logout-btn" onClick={onLogout} aria-label="Esci">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Esci</span>
+            </button>
+          </div>
+        </header>
+      )}
+
+      {/* ─── MOBILE DRAWER (<768px) ──────────────── */}
+      {drawerOpen && (
+        <div className="drawer-overlay" onClick={() => setDrawerOpen(false)}>
+          <aside className="mobile-drawer" onClick={e => e.stopPropagation()}>
+            <div className="drawer-header">
+              <div className="brand">
+                <div className="brand-logo">
+                  <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><path d="M8 10h16M8 16h12M8 22h8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                </div>
+                <div>
+                  <strong>PrecisionQuote</strong>
+                  <small>Preventivi custom</small>
+                </div>
+              </div>
+              <button className="drawer-close" onClick={() => setDrawerOpen(false)} aria-label="Chiudi menu">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <nav className="drawer-nav">
+              <button className={view === "collection" ? "active" : ""} onClick={() => nav("collection")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                I miei preventivi
+              </button>
+              <button className={view === "editor" ? "active" : ""} onClick={() => nav("editor")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Nuovo preventivo
+              </button>
+              <button className={view === "settings" ? "active" : ""} onClick={() => nav("settings")}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Impostazioni
+              </button>
+              {user?.role === 'admin' && (
+                <button className={view === "admin" ? "active" : ""} onClick={() => nav("admin")}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                  Admin
+                </button>
+              )}
+            </nav>
+
+            <div className="drawer-footer">
+              <div className="drawer-user">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                {user?.email}
+              </div>
+              <button className="drawer-logout" onClick={onLogout}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Logout
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       <section className="workspace" aria-live="polite">{children}</section>
     </main>
   );

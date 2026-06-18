@@ -111,13 +111,28 @@ Per evitare deploy su database sbagliati:
 3. Applica le migration solo con il sito Netlify collegato al database atteso.
 4. Non stampare chiavi, URL database o token nei log: l'app mostra solo se una variabile è configurata.
 
-### Admin predefinito
+### Sicurezza
 
-| Email | Password | Ruolo |
-|-------|----------|-------|
-| `admin@gmail.com` | `admin` | admin |
+- **Password hashate**: bcryptjs (12 rounds) su tutti gli endpoint
+- **Rate limiting**: max 5 tentativi di login falliti per IP in 15 minuti (via Netlify Blobs)
+- **Ownership check**: ogni operazione su preventivi verifica che l'email corrisponda al proprietario
+- **Validazione input**: Zod su tutti gli endpoint (email, password, quote)
+- **Criteri password**: 12+ caratteri, almeno una maiuscola, una minuscola, un numero, un carattere speciale
+- **Security headers**: X-Frame-Options, X-Content-Type-Options, Referrer-Policy, CSP
+- **Admin**: password random generata al primo deploy, cambiabile dalla Dashboard
 
-L'admin in locale viene seedato in localStorage; in produzione via API sul DB.
+### Password di default
+
+Al primo avvio (locale) o deploy (produzione), l'admin `admin@gmail.com` viene creato con una **password randomica** stampata nei log della console/Netlify.
+Dopo il primo login, cambia la password dalla Dashboard Amministratore.
+
+### Setup variabili d'ambiente
+
+```bash
+# Copia il file di esempio
+cp .env.example .env
+# Modifica .env con le tue chiavi
+```
 
 ### localStorage keys
 

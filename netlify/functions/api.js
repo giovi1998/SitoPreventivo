@@ -1,12 +1,172 @@
 import { db } from "../../db/index.js";
-import { users, quotes } from "../../db/schema.js";
+import { users, quotes, userSettings } from "../../db/schema.js";
 import { eq, and, sql } from "drizzle-orm";
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
+
+// ─── ZOD SCHEMAS ──────────────────────────────
+const passwordSchema = z.string()
+  .min(12, 'Password: minimo 12 caratteri')
+  .max(100)
+  .regex(/[A-Z]/, 'Password: deve contenere una maiuscola')
+  .regex(/[a-z]/, 'Password: deve contenere una minuscola')
+  .regex(/[0-9]/, 'Password: deve contenere un numero')
+  .regex(/[^A-Za-z0-9]/, 'Password: deve contenere un carattere speciale');
+
+const RegisterSchema = z.object({
+  email: z.string().email('Email non valida'),
+  password: passwordSchema,
+  username: z.string().min(2, 'Username: minimo 2 caratteri').max(50),
+  gender: z.string().optional(),
+  role: z.string().optional(),
+  tokenLimit: z.number().optional(),
+});
+
+const LoginSchema = z.object({
+  email: z.string().email('Email non valida'),
+  password: z.string().min(1, 'Password richiesta'),
+});
+
+const ChangePasswordSchema = z.object({
+  email: z.string().email('Email non valida'),
+  oldPassword: z.string().min(1, 'Vecchia password richiesta'),
+  newPassword: passwordSchema,
+});
+
+const QuoteBodySchema = z.object({
+  email: z.string().email('Email non valida'),
+  quote: z.object({
+    id: z.string().min(1),
+    title: z.string().optional(),
+    client: z.string().optional(),
+    date: z.string().optional(),
+    intro: z.string().optional(),
+    color: z.string().optional(),
+    vat: z.number().optional(),
+    status: z.string().optional(),
+    owner: z.string().optional(),
+    options: z.array(z.any()).optional(),
+    clauses: z.array(z.any()).optional(),
+    isTemplate: z.boolean().optional(),
+    shareToken: z.string().optional(),
+    isShared: z.boolean().optional(),
+  }),
+});
+
+const UserSettingsSchema = z.object({
+  email: z.string().email('Email non valida'),
+  displayName: z.string().optional(),
+  companyName: z.string().optional(),
+  defaultColor: z.string().optional(),
+  defaultVat: z.number().optional(),
+  logoUrl: z.string().optional(),
+  onboardingDone: z.boolean().optional(),
+});
+
+const TokenLimitSchema = z.object({
+  email: z.string().email('Email non valida'),
+  tokenLimit: z.number().positive('tokenLimit deve essere positivo'),
+});
+
+const TrackTokensSchema = z.object({
+  email: z.string().email('Email non valida'),
+  tokens: z.number().positive('tokens deve essere positivo'),
+});
+
+const AdminSeedSchema = z.object({
+  email: z.string().email('Email non valida'),
+  password: z.string().optional(),
+  username: z.string().optional(),
+  gender: z.string().optional(),
+  tokenLimit: z.number().optional(),
+});
+
+// ─── HELPERS ───────────────────────────────────
+function json(status, data) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  });
+}
+
+function validate(schema, data) {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    return { error: true, errors: result.error.errors.map(e => e.message) };
+  }
+  return { error: false, data: result.data };
+}
+
+// ─── RATE LIMITING ─────────────────────────────
+async function checkRateLimit(ip) {
+  try {
+    const { getStore } = await import('@netlify/blobs');
+    const store = getStore('rate-limit');
+    const key = `login:${ip}`;
+    const record = await store.get(key, { type: 'json' });
+    const now = Date.now();
+    if (record) {
+      if (now - record.firstAttempt < 15 * 60 * 1000) {
+        if (record.count >= 5) {
+          return { blocked: true };
+        }
+        return { blocked: false };
+      }
+      await store.delete(key).catch(() => {});
+    }
+    return { blocked: false };
+  } catch {
+    return { blocked: false };
+  }
+}
+
+async function recordLoginAttempt(ip, success) {
+  try {
+    const { getStore } = await import('@netlify/blobs');
+    const store = getStore('rate-limit');
+    const key = `login:${ip}`;
+    if (success) {
+      await store.delete(key).catch(() => {});
+    } else {
+      const record = await store.get(key, { type: 'json' });
+      const now = Date.now();
+      if (record && (now - record.firstAttempt < 15 * 60 * 1000)) {
+        record.count++;
+        await store.set(key, record);
+      } else {
+        await store.set(key, { count: 1, firstAttempt: now });
+      }
+    }
+  } catch {}
+}
 
 export default async (req) => {
   const url = new URL(req.url);
   const path = url.pathname.replace(/^\/\.netlify\/functions\/api/, "").replace(/^\/api/, "");
   const method = req.method;
-  const body = req.body ? await req.json() : {};
+
+  // CORS preflight
+  if (method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
+  }
+
+  let body = {};
+  try {
+    if (req.body) body = await req.json();
+  } catch {}
 
   try {
     // ─── HEALTH CHECK ───────────────────────────────
@@ -16,16 +176,22 @@ export default async (req) => {
 
     // ─── USERS ─────────────────────────────────────
     if (path === "/users/register" && method === "POST") {
-      const { email, password, username, gender, role, tokenLimit } = body;
-      if (!email || !password || !username) {
-        return json(400, { error: "Email, password e username obbligatori" });
+      const v = validate(RegisterSchema, body);
+      if (v.error) return json(400, { errors: v.errors });
+      const { email, password, username, gender, tokenLimit } = v.data;
+
+      if (email === 'admin@gmail.com') {
+        return json(403, { error: "Email non disponibile" });
       }
+
       const existing = await db.select().from(users).where(eq(users.email, email));
       if (existing.length > 0) {
         return json(409, { error: "Email già registrata" });
       }
+
+      const hashed = await bcrypt.hash(password, 12);
       const [created] = await db.insert(users).values({
-        email, password, username, gender,
+        email, password: hashed, username, gender,
         role: role || "user",
         tokenLimit: tokenLimit || 1000000,
       }).returning();
@@ -40,19 +206,48 @@ export default async (req) => {
     }
 
     if (path === "/users/login" && method === "POST") {
-      const { email, password } = body;
-      const [found] = await db.select().from(users).where(and(eq(users.email, email), eq(users.password, password)));
-      if (!found) {
+      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('client-ip') || 'unknown';
+      const rate = await checkRateLimit(ip);
+      if (rate.blocked) {
+        return json(429, { error: "Troppi tentativi. Riprova tra 15 minuti." });
+      }
+
+      const v = validate(LoginSchema, body);
+      if (v.error) return json(400, { errors: v.errors });
+      const { email, password } = v.data;
+
+      const [found] = await db.select().from(users).where(eq(users.email, email));
+      if (!found || !(await bcrypt.compare(password, found.password))) {
+        await recordLoginAttempt(ip, false);
         return json(401, { error: "Email o password errati" });
       }
+
+      await recordLoginAttempt(ip, true);
       return json(200, {
         success: true,
         user: {
           email: found.email, username: found.username, gender: found.gender,
-          role: found.role, createdAt: found.createdAt,
+          role: found.email === 'admin@gmail.com' ? 'admin' : (found.role || 'user'),
+          createdAt: found.createdAt,
           tokensUsed: found.tokensUsed, tokenLimit: found.tokenLimit,
         }
       });
+    }
+
+    if (path === "/users/change-password" && method === "POST") {
+      const v = validate(ChangePasswordSchema, body);
+      if (v.error) return json(400, { errors: v.errors });
+      const { email, oldPassword, newPassword } = v.data;
+
+      const [found] = await db.select().from(users).where(eq(users.email, email));
+      if (!found) return json(404, { error: "Utente non trovato" });
+      if (!(await bcrypt.compare(oldPassword, found.password))) {
+        return json(401, { error: "Password attuale errata" });
+      }
+
+      const hashed = await bcrypt.hash(newPassword, 12);
+      await db.update(users).set({ password: hashed }).where(eq(users.email, email));
+      return json(200, { success: true });
     }
 
     if (path === "/users" && method === "GET") {
@@ -75,15 +270,17 @@ export default async (req) => {
     }
 
     if (path === "/users/limits" && method === "PATCH") {
-      const { email, tokenLimit } = body;
-      if (!email || tokenLimit === undefined) return json(400, { error: "Email e tokenLimit richiesti" });
+      const v = validate(TokenLimitSchema, body);
+      if (v.error) return json(400, { errors: v.errors });
+      const { email, tokenLimit } = v.data;
       await db.update(users).set({ tokenLimit }).where(eq(users.email, email));
       return json(200, { success: true });
     }
 
     if (path === "/users/tokens" && method === "POST") {
-      const { email, tokens } = body;
-      if (!email || !tokens) return json(400, { error: "Email e tokens richiesti" });
+      const v = validate(TrackTokensSchema, body);
+      if (v.error) return json(400, { errors: v.errors });
+      const { email, tokens } = v.data;
       await db.update(users).set({
         tokensUsed: sql`tokens_used + ${tokens}`
       }).where(eq(users.email, email));
@@ -104,18 +301,24 @@ export default async (req) => {
     }
 
     if (path === "/quotes" && method === "POST") {
-      const { email, quote } = body;
-      if (!email || !quote) return json(400, { error: "Email e quote richiesti" });
+      const v = validate(QuoteBodySchema, body);
+      if (v.error) return json(400, { errors: v.errors });
+      const { email, quote } = v.data;
 
-      // Upsert: try insert, on conflict update
       const existing = await db.select().from(quotes).where(eq(quotes.id, quote.id));
       if (existing.length > 0) {
+        if (existing[0].userEmail !== email) {
+          return json(403, { error: "Non autorizzato" });
+        }
         const [updated] = await db.update(quotes).set({
           title: quote.title, client: quote.client, date: quote.date,
           intro: quote.intro, color: quote.color, vat: quote.vat,
           status: quote.status || "BOZZA", owner: quote.owner,
           options: JSON.stringify(quote.options || []),
           clauses: JSON.stringify(quote.clauses || []),
+          isTemplate: quote.isTemplate ?? existing[0].isTemplate ?? false,
+          shareToken: quote.shareToken ?? existing[0].shareToken,
+          isShared: quote.isShared ?? existing[0].isShared ?? false,
           updatedAt: sql`now()`,
         }).where(eq(quotes.id, quote.id)).returning();
         return json(200, updated);
@@ -127,44 +330,66 @@ export default async (req) => {
         status: quote.status || "BOZZA", owner: quote.owner,
         options: JSON.stringify(quote.options || []),
         clauses: JSON.stringify(quote.clauses || []),
+        isTemplate: quote.isTemplate ?? false,
+        shareToken: quote.shareToken || null,
+        isShared: quote.isShared ?? false,
       }).returning();
       return json(201, saved);
     }
 
     if (path.startsWith("/quotes/") && method === "DELETE") {
       const quoteId = path.replace("/quotes/", "");
+      const email = body.email || url.searchParams.get("email");
+      if (!email) return json(400, { error: "Email richiesta" });
+
+      const [existing] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
+      if (!existing) return json(404, { error: "Preventivo non trovato" });
+      if (existing.userEmail !== email) {
+        return json(403, { error: "Non autorizzato" });
+      }
+
       await db.delete(quotes).where(eq(quotes.id, quoteId));
       return json(200, { success: true });
     }
 
-    // ─── ADMIN SEED (create or update admin silently) ─
+    // ─── ADMIN SEED ─────────────────────────────────
     if (path === "/admin/seed" && method === "POST") {
-      const { email, password, username, gender, tokenLimit } = body;
+      const v = validate(AdminSeedSchema, body);
+      if (v.error) return json(400, { errors: v.errors });
+      const { email, username, gender, tokenLimit } = v.data;
+
       const [existing] = await db.select().from(users).where(eq(users.email, email));
       if (existing) {
-        await db.update(users).set({ role: "admin", tokenLimit: tokenLimit || 999999999 }).where(eq(users.email, email));
-      } else {
-        await db.insert(users).values({ email, password, username, gender, role: "admin", tokenLimit: tokenLimit || 999999999 });
+        if (existing.role !== 'admin') {
+          await db.update(users).set({ role: 'admin' }).where(eq(users.email, email));
+        }
+        return json(200, { success: true, message: "Admin già esistente" });
       }
-      return json(200, { success: true });
+
+      const pw = crypto.randomUUID().slice(0, 12);
+      console.log('ADMIN PASSWORD:', pw);
+      const hashed = await bcrypt.hash(pw, 12);
+      await db.insert(users).values({
+        email, password: hashed, username: username || 'admin',
+        gender: gender || 'other', role: 'admin',
+        tokenLimit: tokenLimit || 999999999,
+      });
+      return json(200, { success: true, message: "Admin creato. Controlla i log Netlify per la password." });
     }
 
-    // ─── DEEPSEEK STATUS CHECK (debug) ─────────────
+    // ─── DEEPSEEK STATUS CHECK ──────────────────────
     if (path === "/admin/deepseek-status" && method === "GET") {
       const hasKey = !!process.env.DEEPSEEK_API_KEY;
-      return json(200, {
-        configured: hasKey,
-      });
+      return json(200, { configured: hasKey });
     }
 
-    // ─── AI CHAT PROXY (env var only — key never reaches client) ─
+    // ─── AI CHAT PROXY ──────────────────────────────
     if (path === "/ai/chat" && method === "POST") {
       const apiKey = process.env.DEEPSEEK_API_KEY;
       if (!apiKey) {
-        console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set — check Netlify → Site settings → Environment variables → scoped to Functions');
+        console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set');
         return json(503, { error: "DeepSeek non configurato. L'amministratore deve impostare DEEPSEEK_API_KEY nelle variabili d'ambiente di Netlify (scope: Functions)." });
       }
-      console.log('[DeepSeek] Proxying chat request with Netlify environment configuration');
       const { model, messages, response_format, temperature } = body;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25000);
@@ -183,8 +408,7 @@ export default async (req) => {
         });
       } catch (err) {
         if (err.name === "AbortError") {
-          console.error("[DeepSeek] Request timed out after 25 seconds");
-          return json(504, { error: "DeepSeek non ha risposto entro 25 secondi. Riprova con un prompt più breve o tra qualche istante." });
+          return json(504, { error: "DeepSeek non ha risposto entro 25 secondi. Riprova." });
         }
         throw err;
       } finally {
@@ -201,19 +425,72 @@ export default async (req) => {
       return json(200, data);
     }
 
+    // ─── TEMPLATES ──────────────────────────────────
+    if (path === "/quotes/templates" && method === "GET") {
+      const userEmail = url.searchParams.get("email");
+      if (!userEmail) return json(400, { error: "Email richiesta" });
+      const list = await db.select().from(quotes)
+        .where(and(eq(quotes.userEmail, userEmail), eq(quotes.isTemplate, true)))
+        .orderBy(sql`created_at DESC`);
+      return json(200, list);
+    }
+
+    // ─── PUBLIC QUOTE (no auth) ─────────────────────
+    if (path.startsWith("/quotes/public/") && method === "GET") {
+      const token = path.replace("/quotes/public/", "");
+      const [found] = await db.select().from(quotes).where(eq(quotes.shareToken, token));
+      if (!found || !found.isShared) {
+        return json(404, { error: "Preventivo non trovato o non condiviso" });
+      }
+      return json(200, {
+        id: found.id, title: found.title, client: found.client, date: found.date,
+        intro: found.intro, color: found.color, vat: found.vat, status: found.status,
+        owner: found.owner, options: found.options, clauses: found.clauses,
+      });
+    }
+
+    // ─── USER SETTINGS ──────────────────────────────
+    if (path === "/user-settings" && method === "GET") {
+      const email = url.searchParams.get("email");
+      if (!email) return json(400, { error: "Email richiesta" });
+      const [settings] = await db.select().from(userSettings).where(eq(userSettings.userEmail, email));
+      return json(200, settings || { userEmail: email, onboardingDone: false });
+    }
+
+    if (path === "/user-settings" && method === "POST") {
+      const v = validate(UserSettingsSchema, body);
+      if (v.error) return json(400, { errors: v.errors });
+      const { email, ...settings } = v.data;
+      const existing = await db.select().from(userSettings).where(eq(userSettings.userEmail, email));
+      if (existing.length > 0) {
+        const [updated] = await db.update(userSettings).set({
+          ...(settings.displayName !== undefined && { displayName: settings.displayName }),
+          ...(settings.companyName !== undefined && { companyName: settings.companyName }),
+          ...(settings.defaultColor !== undefined && { defaultColor: settings.defaultColor }),
+          ...(settings.defaultVat !== undefined && { defaultVat: settings.defaultVat }),
+          ...(settings.logoUrl !== undefined && { logoUrl: settings.logoUrl }),
+          ...(settings.onboardingDone !== undefined && { onboardingDone: settings.onboardingDone }),
+        }).where(eq(userSettings.userEmail, email)).returning();
+        return json(200, updated);
+      }
+      const [created] = await db.insert(userSettings).values({
+        userEmail: email,
+        displayName: settings.displayName,
+        companyName: settings.companyName,
+        defaultColor: settings.defaultColor,
+        defaultVat: settings.defaultVat,
+        logoUrl: settings.logoUrl,
+        onboardingDone: settings.onboardingDone ?? false,
+      }).returning();
+      return json(201, created);
+    }
+
     return json(404, { error: "Endpoint non trovato" });
   } catch (err) {
     console.error("API error:", err);
     return json(500, { error: err.message });
   }
 };
-
-function json(status, data) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 export const config = {
   path: "/api/*",

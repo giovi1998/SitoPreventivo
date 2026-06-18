@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: serial().primaryKey(),
@@ -25,6 +25,19 @@ export const quotes = pgTable("quotes", {
   owner: varchar({ length: 255 }),
   options: jsonb(),
   clauses: jsonb(),
+  isTemplate: boolean("is_template").default(false),
+  shareToken: varchar("share_token", { length: 255 }),
+  isShared: boolean("is_shared").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const userSettings = pgTable("user_settings", {
+  userEmail: varchar("user_email", { length: 255 }).primaryKey().references(() => users.email),
+  displayName: varchar("display_name", { length: 255 }),
+  companyName: varchar("company_name", { length: 255 }),
+  defaultColor: varchar("default_color", { length: 50 }),
+  defaultVat: integer("default_vat").default(22),
+  logoUrl: text("logo_url"),
+  onboardingDone: boolean("onboarding_done").default(false),
 });

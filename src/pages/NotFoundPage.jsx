@@ -51,6 +51,7 @@ export default function NotFoundPage() {
 
       <style>{`
         .notfound-page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#f8fafc 0%,#eef3fb 50%,#f1f5f9 100%);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;position:relative;overflow:hidden;padding:40px}
+        [data-theme="dark"] .notfound-page{background:linear-gradient(160deg,#0f1117 0%,#1a1d27 50%,#151821 100%);color:#e8eaf0}
         .notfound-shapes{position:absolute;inset:0;pointer-events:none}
         .notfound-shape{position:absolute;border-radius:50%;opacity:0.06}
         .shape-1{width:400px;height:400px;background:#0B57D0;top:-100px;right:-80px;animation:float-shape 20s ease-in-out infinite}
@@ -63,22 +64,29 @@ export default function NotFoundPage() {
         .notfound-content{text-align:center;position:relative;z-index:2;max-width:520px}
         .notfound-number{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:32px}
         .digit-4a,.digit-4b{font-size:8rem;font-weight:950;color:#07111f;line-height:1;letter-spacing:-0.04em;opacity:0.08}
+        [data-theme="dark"] .digit-4a,[data-theme="dark"] .digit-4b{color:#e8eaf0}
         .notfound-circle{width:120px;height:120px;animation:spin-slow 12s linear infinite}
         .notfound-circle svg{width:100%;height:100%}
         @keyframes spin-slow{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 
         .notfound-title{font-size:1.75rem;font-weight:900;color:#07111f;margin:0 0 16px;letter-spacing:-0.03em}
+        [data-theme="dark"] .notfound-title{color:#e8eaf0}
         .notfound-desc{font-size:1rem;color:#647086;margin:0 0 40px;line-height:1.7}
+        [data-theme="dark"] .notfound-desc{color:#8892a8}
         .notfound-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
         .notfound-btn{display:inline-flex;align-items:center;gap:10px;padding:14px 28px;border-radius:14px;font-size:.95rem;font-weight:700;text-decoration:none;cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s}
         .notfound-btn.primary{background:#0B57D0;color:#fff;border:2px solid #0B57D0;box-shadow:0 4px 14px rgba(11,87,208,0.25)}
         .notfound-btn.primary:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(11,87,208,0.35)}
         .notfound-btn.secondary{background:#fff;color:#475569;border:2px solid #e2e8f0}
+        [data-theme="dark"] .notfound-btn.secondary{background:#1a1d27;color:#8892a8;border-color:#2d3044}
         .notfound-btn.secondary:hover{border-color:#0B57D0;color:#0B57D0;transform:translateY(-2px)}
 
         .notfound-footer{margin-top:48px;padding:16px 24px;background:rgba(255,255,255,0.7);border-radius:14px;border:1px solid #e2e8f0;backdrop-filter:blur(12px);display:inline-block}
+        [data-theme="dark"] .notfound-footer{background:rgba(26,29,39,0.7);border-color:#2d3044}
         .notfound-footer p{margin:0;font-size:.88rem;color:#647086}
+        [data-theme="dark"] .notfound-footer p{color:#8892a8}
         .notfound-footer strong{color:#07111f}
+        [data-theme="dark"] .notfound-footer strong{color:#e8eaf0}
 
         @media(max-width:600px){
           .digit-4a,.digit-4b{font-size:5rem}

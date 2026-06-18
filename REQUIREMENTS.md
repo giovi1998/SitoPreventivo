@@ -77,11 +77,9 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
 L'app prova sempre prima l'API (`/.netlify/functions/api/...`). Se la chiamata fallisce (rete assente, funzione non disponibile), usa automaticamente localStorage.
 
-### Admin predefinito
+### Password di default
 
-| Email | Password | Sesso |
-|-------|----------|-------|
-| `admin@gmail.com` | `admin` | male |
+Al primo avvio, l'admin `admin@gmail.com` viene creato con una password randomica stampata nella console del browser (in locale) o nei log Netlify (in produzione). Dopo il primo login, cambiala dalla Dashboard.
 
 ### Dati localStorage (fallback)
 
