@@ -44,13 +44,14 @@ async function api(method, path, body, options = {}) {
 }
 
 // ─── SEED ADMIN (locale + remoto) ─────────────────────
-// La password di default è generata random.
+// Usa ADMIN_INITIAL_PASSWORD dal server, VITE_ADMIN_INITIAL_PASSWORD dal client (locale).
 // L'admin può cambiarla dalla Dashboard dopo il primo login.
 async function seedAdminLocally() {
   const list = lsGet('registeredUsers') || [];
   const idx = list.findIndex(u => u.email === 'admin@gmail.com');
+  const envPw = import.meta.env.VITE_ADMIN_INITIAL_PASSWORD;
   if (idx === -1) {
-    const pw = `Admin-${crypto.randomUUID ? crypto.randomUUID().slice(0, 18) : Math.random().toString(36).slice(2, 20)}!1`;
+    const pw = envPw || `Admin-${crypto.randomUUID ? crypto.randomUUID().slice(0, 18) : Math.random().toString(36).slice(2, 20)}!1`;
     const hashed = await bcrypt.hash(pw, 12);
     list.push({
       email: 'admin@gmail.com', password: hashed, username: 'admin',
@@ -60,8 +61,16 @@ async function seedAdminLocally() {
     });
     lsSet('registeredUsers', list);
     setTimeout(() => {
-      alert('Admin locale creato. Imposta una password nota tramite il backend di sviluppo o cambia password dalle Impostazioni.');
+      alert(`Admin locale creato. Password: ${envPw || 'generata random — cambia dalle Impostazioni'}`);
     }, 500);
+  } else if (envPw && list[idx].password && list[idx].password.startsWith('$2')) {
+    // Se l'admin esiste già e la password env è cambiata, aggiorna
+    const currentHash = list[idx].password;
+    const match = await bcrypt.compare(envPw, currentHash).catch(() => false);
+    if (!match) {
+      list[idx].password = await bcrypt.hash(envPw, 12);
+      lsSet('registeredUsers', list);
+    }
   } else if (list[idx].password && !list[idx].password.startsWith('$2')) {
     list[idx].password = await bcrypt.hash(list[idx].password, 12);
     lsSet('registeredUsers', list);
