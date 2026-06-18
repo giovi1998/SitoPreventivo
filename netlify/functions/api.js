@@ -166,18 +166,35 @@ export default async (req) => {
       }
       console.log('[DeepSeek] Proxying chat request with Netlify environment configuration');
       const { model, messages, response_format, temperature } = body;
-      const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: model || "deepseek-chat",
-          messages,
-          response_format: response_format || { type: "json_object" },
-          temperature: temperature ?? 0.7,
-        }),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 25000);
+      let res;
+      try {
+        res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model: model || "deepseek-chat",
+            messages,
+            response_format: response_format || { type: "json_object" },
+            temperature: temperature ?? 0.7,
+          }),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        if (err.name === "AbortError") {
+          console.error("[DeepSeek] Request timed out after 25 seconds");
+          return json(504, { error: "DeepSeek non ha risposto entro 25 secondi. Riprova con un prompt più breve o tra qualche istante." });
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeout);
+      }
       if (!res.ok) {
         const errBody = await res.text().catch(() => "Unknown error");
+        if (res.status === 402) return json(402, { error: "Credito DeepSeek esaurito. Ricarica su platform.deepseek.com" });
+        if (res.status === 401) return json(401, { error: "Chiave API DeepSeek non valida" });
+        if (res.status === 429) return json(429, { error: "Troppe richieste a DeepSeek. Attendi qualche secondo e riprova." });
         return json(res.status, { error: `DeepSeek (${res.status}): ${errBody.substring(0, 200)}` });
       }
       const data = await res.json();

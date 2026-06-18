@@ -14,9 +14,10 @@ function lsSet(key, val) {
 }
 
 // ─── API CALL ─────────────────────────────────────────
-async function api(method, path, body) {
+async function api(method, path, body, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 5000;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const url = `${API_BASE}${path}`;
     const res = await fetch(url, {
@@ -34,7 +35,7 @@ async function api(method, path, body) {
   } catch (err) {
     clearTimeout(timeout);
     if (err.name === 'AbortError') {
-      return { error: `Richiesta timeout: ${method} ${path}`, detail: 'Il server non ha risposto entro 5 secondi' };
+      return { error: `Richiesta timeout: ${method} ${path}`, detail: `Il server non ha risposto entro ${Math.round(timeoutMs / 1000)} secondi` };
     }
     return { error: `Errore di rete: ${err.message}`, detail: `Impossibile contattare ${API_BASE}${path}` };
   }
@@ -272,7 +273,7 @@ const dataService = {
       }
     }
     // Production: use Netlify function proxy (key stays server-side)
-    return await api('POST', '/ai/chat', { model, messages, response_format, temperature });
+    return await api('POST', '/ai/chat', { model, messages, response_format, temperature }, { timeoutMs: 30000 });
   },
 };
 
