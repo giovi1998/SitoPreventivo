@@ -75,7 +75,6 @@ const TrackTokensSchema = z.object({
 
 const AdminSeedSchema = z.object({
   email: z.string().email('Email non valida'),
-  password: z.string().optional(),
   username: z.string().optional(),
   gender: z.string().optional(),
   tokenLimit: z.number().optional(),
@@ -100,6 +99,10 @@ function validate(schema, data) {
     return { error: true, errors: result.error.errors.map(e => e.message) };
   }
   return { error: false, data: result.data };
+}
+
+function isValidPassword(password) {
+  return passwordSchema.safeParse(password).success;
 }
 
 // ─── RATE LIMITING ─────────────────────────────
@@ -357,24 +360,33 @@ export default async (req) => {
       const v = validate(AdminSeedSchema, body);
       if (v.error) return json(400, { errors: v.errors });
       const { email, username, gender, tokenLimit } = v.data;
+      const configuredAdminPassword = process.env.ADMIN_INITIAL_PASSWORD;
+      if (configuredAdminPassword && !isValidPassword(configuredAdminPassword)) {
+        console.error('[Admin seed] ADMIN_INITIAL_PASSWORD non rispetta i requisiti minimi');
+        return json(500, { error: "Password admin non valida nella configurazione server" });
+      }
 
       const [existing] = await db.select().from(users).where(eq(users.email, email));
       if (existing) {
-        if (existing.role !== 'admin') {
-          await db.update(users).set({ role: 'admin' }).where(eq(users.email, email));
+        const updates = { role: 'admin' };
+        if (configuredAdminPassword) {
+          updates.password = await bcrypt.hash(configuredAdminPassword, 12);
         }
+        if (tokenLimit) {
+          updates.tokenLimit = tokenLimit;
+        }
+        await db.update(users).set(updates).where(eq(users.email, email));
         return json(200, { success: true, message: "Admin già esistente" });
       }
 
-      const pw = crypto.randomUUID().slice(0, 12);
-      console.log('ADMIN PASSWORD:', pw);
+      const pw = configuredAdminPassword || `Admin-${crypto.randomUUID()}!1`;
       const hashed = await bcrypt.hash(pw, 12);
       await db.insert(users).values({
         email, password: hashed, username: username || 'admin',
         gender: gender || 'other', role: 'admin',
         tokenLimit: tokenLimit || 999999999,
       });
-      return json(200, { success: true, message: "Admin creato. Controlla i log Netlify per la password." });
+      return json(200, { success: true, message: "Admin creato" });
     }
 
     // ─── DEEPSEEK STATUS CHECK ──────────────────────

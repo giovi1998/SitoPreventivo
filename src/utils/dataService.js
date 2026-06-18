@@ -1,3 +1,5 @@
+import bcrypt from 'bcryptjs';
+
 const API_BASE = '/api';
 const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
@@ -44,22 +46,25 @@ async function api(method, path, body, options = {}) {
 // ─── SEED ADMIN (locale + remoto) ─────────────────────
 // La password di default è generata random.
 // L'admin può cambiarla dalla Dashboard dopo il primo login.
-function seedAdminLocally() {
+async function seedAdminLocally() {
   const list = lsGet('registeredUsers') || [];
   const idx = list.findIndex(u => u.email === 'admin@gmail.com');
   if (idx === -1) {
-    const pw = crypto.randomUUID ? crypto.randomUUID().slice(0, 12) : Math.random().toString(36).slice(2, 14);
-    console.log('ADMIN PASSWORD (cambiala dopo il login):', pw);
+    const pw = `Admin-${crypto.randomUUID ? crypto.randomUUID().slice(0, 18) : Math.random().toString(36).slice(2, 20)}!1`;
+    const hashed = await bcrypt.hash(pw, 12);
     list.push({
-      email: 'admin@gmail.com', password: pw, username: 'admin',
+      email: 'admin@gmail.com', password: hashed, username: 'admin',
       gender: 'male', role: 'admin',
       regDate: new Date().toLocaleDateString('it-IT'),
       tokensUsed: 0, tokenLimit: 999999999,
     });
     lsSet('registeredUsers', list);
     setTimeout(() => {
-      alert(`Admin creato!\n\nEmail: admin@gmail.com\nPassword: ${pw}\n\nCambiala subito dalle Impostazioni dopo il login.`);
+      alert('Admin locale creato. Imposta una password nota tramite il backend di sviluppo o cambia password dalle Impostazioni.');
     }, 500);
+  } else if (list[idx].password && !list[idx].password.startsWith('$2')) {
+    list[idx].password = await bcrypt.hash(list[idx].password, 12);
+    lsSet('registeredUsers', list);
   } else if (list[idx].role !== 'admin') {
     list[idx].role = 'admin';
     lsSet('registeredUsers', list);
@@ -87,8 +92,9 @@ const dataService = {
       if (users.find(u => u.email === email)) {
         return { success: false, error: 'Email già registrata' };
       }
+      const hashed = await bcrypt.hash(password, 12);
       users.push({
-        email, password, username, gender, role: 'user',
+        email, password: hashed, username, gender, role: 'user',
         regDate: new Date().toLocaleDateString('it-IT'),
         tokensUsed: 0, tokenLimit: 1000000,
       });
@@ -105,8 +111,16 @@ const dataService = {
   async login(email, password) {
     if (IS_LOCAL) {
       const users = lsGet('registeredUsers') || [];
-      const found = users.find(u => u.email === email && u.password === password);
+      const found = users.find(u => u.email === email);
+      const validPassword = found?.password?.startsWith('$2')
+        ? await bcrypt.compare(password, found.password)
+        : found?.password === password;
       if (!found) return { success: false, error: 'Email o password errati' };
+      if (!validPassword) return { success: false, error: 'Email o password errati' };
+      if (!found.password.startsWith('$2')) {
+        found.password = await bcrypt.hash(password, 12);
+        lsSet('registeredUsers', users);
+      }
       return {
         success: true,
         user: {
@@ -170,8 +184,11 @@ const dataService = {
       const users = lsGet('registeredUsers') || [];
       const idx = users.findIndex(u => u.email === email);
       if (idx === -1) return { success: false, error: 'Utente non trovato' };
-      if (users[idx].password !== oldPassword) return { success: false, error: 'Password attuale errata' };
-      users[idx].password = newPassword;
+      const validPassword = users[idx].password?.startsWith('$2')
+        ? await bcrypt.compare(oldPassword, users[idx].password)
+        : users[idx].password === oldPassword;
+      if (!validPassword) return { success: false, error: 'Password attuale errata' };
+      users[idx].password = await bcrypt.hash(newPassword, 12);
       lsSet('registeredUsers', users);
       return { success: true };
     }
@@ -182,7 +199,8 @@ const dataService = {
   // ─── ADMIN: LIST USERS ───────────────────────────
   async adminGetUsers() {
     if (IS_LOCAL) {
-      return { users: lsGet('registeredUsers') || [] };
+      const users = (lsGet('registeredUsers') || []).map(({ password, ...user }) => user);
+      return { users };
     }
     const result = await api('GET', '/users');
     if (result.error) return { users: [] };

@@ -119,12 +119,12 @@ Per evitare deploy su database sbagliati:
 - **Validazione input**: Zod su tutti gli endpoint (email, password, quote)
 - **Criteri password**: 12+ caratteri, almeno una maiuscola, una minuscola, un numero, un carattere speciale
 - **Security headers**: X-Frame-Options, X-Content-Type-Options, Referrer-Policy, CSP
-- **Admin**: password random generata al primo deploy, cambiabile dalla Dashboard
+- **Admin**: password iniziale configurabile tramite variabile server-side e salvata solo come hash bcrypt
 
 ### Password di default
 
-Al primo avvio (locale) o deploy (produzione), l'admin `admin@gmail.com` viene creato con una **password randomica** stampata nei log della console/Netlify.
-Dopo il primo login, cambia la password dalla Dashboard Amministratore.
+Al primo deploy, l'admin `admin@gmail.com` viene creato automaticamente. Per impostare o ruotare la password admin, configura la variabile d'ambiente server-side `ADMIN_INITIAL_PASSWORD` con una password che rispetti i requisiti di sicurezza; al seed successivo il database salva solo l'hash bcrypt.
+Dopo il primo login, cambia la password dalla Dashboard Amministratore e rimuovi la variabile se non serve piu.
 
 ### Setup variabili d'ambiente
 

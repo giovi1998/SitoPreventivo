@@ -79,7 +79,7 @@ L'app prova sempre prima l'API (`/.netlify/functions/api/...`). Se la chiamata f
 
 ### Password di default
 
-Al primo avvio, l'admin `admin@gmail.com` viene creato con una password randomica stampata nella console del browser (in locale) o nei log Netlify (in produzione). Dopo il primo login, cambiala dalla Dashboard.
+Al primo avvio, l'admin `admin@gmail.com` viene creato automaticamente. In produzione la password iniziale va impostata tramite la variabile d'ambiente server-side `ADMIN_INITIAL_PASSWORD`; il database salva solo l'hash bcrypt. Dopo il primo login, cambiala dalla Dashboard.
 
 ### Dati localStorage (fallback)
 
