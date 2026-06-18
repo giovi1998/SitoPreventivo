@@ -298,7 +298,7 @@ export default function App() {
       throw new Error('Limite token AI raggiunto. Contatta l\'amministratore.');
     }
 
-    const systemPrompt = `Sei un esperto di preventivi web design professionisti.
+const systemPrompt = `Sei un esperto di preventivi web design professionisti.
 Il tuo compito è modificare il JSON del preventivo in base alla richiesta dell'utente.
 
 REGOLE FONDAMENTALI:
@@ -307,27 +307,28 @@ REGOLE FONDAMENTALI:
 3. Se aggiungi nuovi elementi usa id numerici incrementali (max esistente + 1)
 4. Le descrizioni devono essere professionali, persuasive e dettagliate
 5. I costi sono in euro, arrotondati a interi
+6. Puoi usare i tag [WARNING]testo avviso[/WARNING] e [INFO]testo info[/INFO] all'interno delle descrizioni (description, intro, body delle clausole) per evidenziare blocchi importanti. Questi verranno renderizzati come bellissimi riquadri colorati nel preventivo. Usa [WARNING] per rischi, manutenzione o responsabilità del cliente. Usa [INFO] per vantaggi inclusi o raccomandazioni.
 
 STRUTTURA JSON (NON CAMBIARE):
 {
   "title": "stringa",
   "client": "stringa",
   "date": "stringa",
-  "intro": "stringa (usa \\n per a capo)",
+  "intro": "stringa (usa \\n per a capo o tag [INFO]/[WARNING])",
   "color": "hex color",
   "vat": number,
   "options": [
     {
       "id": number,
       "title": "stringa",
-      "description": "stringa dettagliata con benefit e deliverable",
+      "description": "stringa dettagliata con benefit, deliverable e possibilmente tag [WARNING]/[INFO]",
       "oneTimeCost": number,
       "monthlyCost": number,
       "includesMaintenance": boolean
     }
   ],
   "clauses": [
-    { "id": "stringa", "title": "stringa", "body": "stringa" }
+    { "id": "stringa", "title": "stringa", "body": "stringa (può includere tag [WARNING]/[INFO])" }
   ]
 }
 
@@ -335,7 +336,7 @@ CONTESTO TIPO:
 - Opzione 1: WordPress/Sito esistente (costi bassi, sito già presente)
 - Opzione 2: WordPress/Sito su misura (costi alti, sviluppo custom)
 - Opzioni con manutenzione: costo mensile > 0
-- Opzioni senza manutenzione: monthlyCost = 0
+- Opzioni senza manutenzione: monthlyCost = 0. In questo caso aggiungi SEMPRE un tag [WARNING] indicando i rischi di sicurezza e gestione autonoma.
 - Descrizioni: max 3-4 righe, includi deliverable concreti
 - Clausole: garanzia, pagamenti, proprietà intellettuale, supporto`;
 

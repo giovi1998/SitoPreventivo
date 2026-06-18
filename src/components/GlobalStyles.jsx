@@ -213,12 +213,17 @@ export default function GlobalStyles() {
     .doc-option-desc{margin:0 0 16px;color:#39465b;font-size:.9rem;line-height:1.5}
     .doc-table-label{margin:12px 0 6px;font-size:.9rem}
 
-    .doc-cost-table,.doc-summary-table{width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:.88rem;page-break-inside:avoid;break-inside:avoid}
-    .doc-cost-table td,.doc-summary-table td{padding:8px 0;border-bottom:1px solid #e4e8f0}
+    .doc-cost-table,.doc-summary-table{width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:.88rem;page-break-inside:avoid;break-inside:avoid; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);}
+    .doc-cost-table thead, .doc-summary-table thead { background: var(--doc-sidebar, #082033); color: #fff; }
+    .doc-cost-table th, .doc-summary-table th {text-align:left;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;padding:12px 14px;font-weight:700; color: #fff; border:none;}
+    .doc-cost-table th:nth-child(n+2), .doc-summary-table th:nth-child(n+2){text-align:right}
+    .doc-cost-table td,.doc-summary-table td{padding:10px 14px;border-bottom:1px solid #e4e8f0}
+    .doc-cost-table tbody tr:nth-child(even), .doc-summary-table tbody tr:nth-child(even) {background: #f8fafc;}
     .doc-cost-table td:last-child,.doc-summary-table td:last-child{text-align:right;font-weight:600}
-    .doc-summary-table th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:#344054;border-bottom:2px solid #d8deea;padding:10px 0;font-weight:700}
-    .doc-summary-table th:nth-child(n+2){text-align:right}
     .doc-summary-table td:nth-child(n+2){text-align:right}
+    
+    .doc-callout-warning {background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; margin: 12px 0; color: #78350f; border-radius: 0 6px 6px 0; font-size: 0.9rem;}
+    .doc-callout-info {background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 12px 16px; margin: 12px 0; color: #064e3b; border-radius: 0 6px 6px 0; font-size: 0.9rem;}
 
     .doc-acconto-section{margin:12px 0;padding:12px 16px;background:#fff;border:1px solid #e0e5ee;border-radius:8px;font-size:.88rem;color:#39465b}
     .doc-acconto-section p{margin:0}

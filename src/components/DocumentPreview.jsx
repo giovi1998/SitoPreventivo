@@ -2,6 +2,28 @@ import React from 'react';
 
 const money = (value) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(Number(value || 0));
 
+const renderTextWithCallouts = (text) => {
+  if (!text) return null;
+  const parts = text.split(/(\[WARNING\][\s\S]*?\[\/WARNING\]|\[INFO\][\s\S]*?\[\/INFO\])/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('[WARNING]')) {
+      const content = part.replace(/\[\/?WARNING\]/g, '').trim();
+      return <div key={i} className="doc-callout-warning"><strong>⚠ Attenzione:</strong> {content}</div>;
+    }
+    if (part.startsWith('[INFO]')) {
+      const content = part.replace(/\[\/?INFO\]/g, '').trim();
+      return <div key={i} className="doc-callout-info"><strong>✅ Nota:</strong> {content}</div>;
+    }
+    // Handle standard text, preserving newlines
+    if (!part.trim()) return null;
+    return (
+      <div key={i}>
+        {part.split('\n').map((line, j) => line.trim() ? <p key={`${i}-${j}`}>{line}</p> : null)}
+      </div>
+    );
+  });
+};
+
 const DocumentPreview = React.memo(React.forwardRef(function DocumentPreview({ quote }, ref) {
   const vat = Number(quote.vat || 22);
 
@@ -21,9 +43,7 @@ const DocumentPreview = React.memo(React.forwardRef(function DocumentPreview({ q
       {/* Intro text */}
       {quote.intro && (
         <div className="doc-intro-text">
-          {quote.intro.split('\n').map((line, i) => (
-            <p key={i}>{line}</p>
-          ))}
+          {renderTextWithCallouts(quote.intro)}
         </div>
       )}
 
@@ -38,11 +58,17 @@ const DocumentPreview = React.memo(React.forwardRef(function DocumentPreview({ q
           <div key={option.id} className="doc-option" style={idx > 0 ? { pageBreakBefore: 'always' } : undefined}>
             <h2 className="doc-option-title" style={{ color: quote.color }}>{option.title}</h2>
             <p className="doc-option-desc-label"><strong>Descrizione del progetto</strong></p>
-            <p className="doc-option-desc">{option.description}</p>
+            <div className="doc-option-desc">{renderTextWithCallouts(option.description)}</div>
 
             {/* Cost table */}
             <p className="doc-table-label"><strong>Costi</strong></p>
-            <table className="doc-cost-table">
+            <table className="doc-cost-table" style={{ '--doc-sidebar': quote.color || '#082033' }}>
+              <thead>
+                <tr>
+                  <th>Voce</th>
+                  <th>Costo</th>
+                </tr>
+              </thead>
               <tbody>
                 <tr>
                   <td>Sviluppo sito (una tantum)</td>
@@ -80,7 +106,7 @@ const DocumentPreview = React.memo(React.forwardRef(function DocumentPreview({ q
 
             {/* Summary table */}
             <p className="doc-table-label"><strong>Riepilogo economico</strong></p>
-            <table className="doc-summary-table">
+            <table className="doc-summary-table" style={{ '--doc-sidebar': quote.color || '#082033' }}>
               <thead>
                 <tr>
                   <th>Voce</th>
@@ -123,7 +149,8 @@ const DocumentPreview = React.memo(React.forwardRef(function DocumentPreview({ q
           <h2 className="doc-clauses-title">CLAUSOLE E CONDIZIONI GENERALI</h2>
           {quote.clauses.map(clause => (
             <div key={clause.id} className="doc-clause">
-              <p><strong>{clause.title}</strong><br />{clause.body}</p>
+              <p><strong>{clause.title}</strong></p>
+              {renderTextWithCallouts(clause.body)}
             </div>
           ))}
         </div>
