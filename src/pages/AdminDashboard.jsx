@@ -75,7 +75,7 @@ export default function AdminDashboard() {
               <button onClick={checkDeepSeekStatus} className="btn-check-status">Verifica stato chiave</button>
               {dsStatus && (
                 <span className={`ds-status ${dsStatus.configured ? 'ok' : 'no'}`}>
-                  {dsStatus.configured ? '✅ Configurata (prefix: ' + dsStatus.keyPrefix + ')' : '❌ Non configurata'}
+                  {dsStatus.configured ? 'Configurata su Netlify' : 'Non configurata'}
                 </span>
               )}
             </div>

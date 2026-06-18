@@ -154,7 +154,6 @@ export default async (req) => {
       const hasKey = !!process.env.DEEPSEEK_API_KEY;
       return json(200, {
         configured: hasKey,
-        keyPrefix: hasKey ? process.env.DEEPSEEK_API_KEY.substring(0, 5) + '...' : null,
       });
     }
 
@@ -165,7 +164,7 @@ export default async (req) => {
         console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set — check Netlify → Site settings → Environment variables → scoped to Functions');
         return json(503, { error: "DeepSeek non configurato. L'amministratore deve impostare DEEPSEEK_API_KEY nelle variabili d'ambiente di Netlify (scope: Functions)." });
       }
-      console.log('[DeepSeek] Proxying chat request, key length:', apiKey.length);
+      console.log('[DeepSeek] Proxying chat request with Netlify environment configuration');
       const { model, messages, response_format, temperature } = body;
       const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
         method: "POST",
