@@ -192,7 +192,7 @@ export default async (req) => {
       const hashed = await bcrypt.hash(password, 12);
       const [created] = await db.insert(users).values({
         email, password: hashed, username, gender,
-        role: role || "user",
+        role: "user",
         tokenLimit: tokenLimit || 1000000,
       }).returning();
       return json(201, {
