@@ -352,8 +352,12 @@ export default function GlobalStyles() {
     .mobile-logout-btn{background:none;border:none;color:var(--muted);display:flex;align-items:center;gap:4px;padding:6px 10px;cursor:pointer;border-radius:8px;font-size:.78rem;font-weight:var(--weight-semibold);transition:color var(--transition-fast),background var(--transition-fast);flex-shrink:0}
     .mobile-logout-btn:hover{color:var(--ink);background:var(--surface-hov);transform:none;box-shadow:none}
     .mobile-logout-btn svg{flex-shrink:0}
-    .mobile-theme-btn{background:none;border:none;color:var(--ink);padding:8px;display:grid;place-items:center;cursor:pointer;border-radius:8px;transition:background var(--transition-fast);font-size:1.1rem;line-height:1;flex-shrink:0}
+    .mobile-theme-btn{background:none;border:none;color:var(--ink);padding:8px;display:grid;place-items:center;cursor:pointer;border-radius:8px;transition:background var(--transition-fast);font-size:1.1rem;line-height:1;flex-shrink:0;min-width:40px;min-height:40px}
     .mobile-theme-btn:hover{background:var(--surface-hov);transform:none;box-shadow:none}
+    .mobile-theme-btn:active{background:var(--blue-bg);transform:none}
+    .mobile-save-btn{background:none;border:none;color:var(--ink);padding:8px;display:grid;place-items:center;cursor:pointer;border-radius:8px;transition:background var(--transition-fast);flex-shrink:0;min-width:40px;min-height:40px}
+    .mobile-save-btn:hover{background:var(--surface-hov);transform:none;box-shadow:none}
+    .mobile-save-btn:active{background:var(--blue-bg);transform:none}
 
     /* ─── DRAWER ──────────────────────────────────────── */
     .drawer-overlay{position:fixed;inset:0;background:var(--overlay);z-index:100;animation:fadeIn .2s ease}
