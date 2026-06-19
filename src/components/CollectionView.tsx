@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useContext } from 'react';
+import { AppContext } from '../../App';
 import Icon from './Icon';
 
 interface Quote {
@@ -54,18 +55,14 @@ function exportCSV(quotes: Quote[]) {
 }
 
 interface CollectionViewProps {
-  quotes: Quote[];
   activeId: string;
-  openQuote: (q: Quote) => void;
-  duplicate: (q: Quote) => void;
-  removeQuote: (id: string) => void;
-  onUpdateStatus?: (id: string, status: string) => void;
-  onDeleteRequest?: (q: Quote) => void;
-  setView: (v: string) => void;
-  createFromTemplate?: (q: Quote) => void;
 }
 
-export default function CollectionView({ quotes, activeId, openQuote, duplicate, removeQuote, onUpdateStatus, onDeleteRequest, setView, createFromTemplate }: CollectionViewProps) {
+export default function CollectionView({ activeId }: CollectionViewProps) {
+  const {
+    quotes, openQuote, duplicate, removeQuote,
+    onUpdateStatus, onDeleteRequest, setView, createFromTemplate,
+  } = useContext(AppContext);
   const [activeTab, setActiveTab] = useState('quotes');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('TUTTI');

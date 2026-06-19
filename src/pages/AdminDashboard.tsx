@@ -52,7 +52,7 @@ export default function AdminDashboard() {
     await dataService.adminUpdateLimits(email, val);
     setEditingLimit(null);
     setLimitValue('');
-    const { users: list } = await dataService.adminGetUsers();
+    const { users: list } = await dataService.adminGetUsers('admin_users_fresh');
     setUsers(list || []);
   };
 

@@ -43,6 +43,16 @@ async function api(method, path, body, options = {}) {
   }
 }
 
+// ─── SIMPLE CACHE (30s TTL) ─────────────────────────
+const cache = new Map();
+function getCached(key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > 30000) { cache.delete(key); return null; }
+  return entry.data;
+}
+function setCache(key, data) { cache.set(key, { data, ts: Date.now() }); }
+
 // ─── PUBLIC API ──────────────────────────────────────
 const dataService = {
   // ─── REGISTER ────────────────────────────────────
@@ -115,14 +125,16 @@ const dataService = {
   },
 
   // ─── GET QUOTES ──────────────────────────────────
-  async getQuotes(email) {
+  async getQuotes(email, page = 1, limit = 50) {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_quotes') || [];
-      return { quotes: all.filter(q => q.owner === email) };
+      const filtered = all.filter(q => q.owner === email);
+      const start = (page - 1) * limit;
+      return { quotes: filtered.slice(start, start + limit), total: filtered.length, page, limit };
     }
-    const result = await api('GET', `/quotes?email=${encodeURIComponent(email)}`);
-    if (result.error) return { quotes: [] };
-    return { quotes: Array.isArray(result) ? result : [] };
+    const result = await api('GET', `/quotes?email=${encodeURIComponent(email)}&page=${page}&limit=${limit}`);
+    if (result.error) return { quotes: [], total: 0, page, limit };
+    return { quotes: Array.isArray(result) ? result : (result.data || []), total: result.total || 0, page, limit };
   },
 
   // ─── SAVE QUOTE ─────────────────────────────────
@@ -174,24 +186,38 @@ const dataService = {
   },
 
   // ─── ADMIN: LIST USERS ───────────────────────────
-  async adminGetUsers() {
+  async adminGetUsers(cacheKey = 'admin_users') {
+    const cached = getCached(cacheKey);
+    if (cached) return cached;
+    let result;
     if (IS_LOCAL) {
       const users = (lsGet('registeredUsers') || []).map(({ password, ...user }) => user);
-      return { users };
+      result = { users };
+    } else {
+      const res = await api('GET', '/users');
+      result = res.error ? { users: [] } : { users: Array.isArray(res) ? res : [] };
     }
-    const result = await api('GET', '/users');
-    if (result.error) return { users: [] };
-    return { users: Array.isArray(result) ? result : [] };
+    setCache(cacheKey, result);
+    return result;
   },
 
   // ─── ADMIN: LIST ALL QUOTES ─────────────────────
-  async adminGetAllQuotes() {
-    if (IS_LOCAL) {
-      return { quotes: lsGet('precisionQuote_quotes') || [] };
+  async adminGetAllQuotes(page = 1, limit = 100, cacheKey = 'admin_quotes') {
+    if (!page || page === 1) {
+      const cached = getCached(cacheKey);
+      if (cached) return cached;
     }
-    const result = await api('GET', '/quotes/all');
-    if (result.error) return { quotes: [] };
-    return { quotes: Array.isArray(result) ? result : [] };
+    let result;
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_quotes') || [];
+      const start = (page - 1) * limit;
+      result = { quotes: all.slice(start, start + limit), total: all.length, page, limit };
+    } else {
+      const res = await api('GET', `/quotes/all?page=${page}&limit=${limit}`);
+      result = res.error ? { quotes: [], total: 0, page, limit } : { quotes: Array.isArray(res) ? res : (res.data || []), total: res.total || 0, page, limit };
+    }
+    if (page === 1) setCache(cacheKey, result);
+    return result;
   },
 
   // ─── ADMIN: UPDATE USER LIMITS ──────────────────
@@ -237,6 +263,26 @@ const dataService = {
     }
     const result = await api('GET', `/users/${encodeURIComponent(email)}/profile`);
     return result;
+  },
+
+  // ─── AI STREAM CHAT ──────────────────────────────
+  async streamChat(params) {
+    if (IS_LOCAL) {
+      const key = lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+      if (!key) return { error: 'Chiave DeepSeek non configurata.' };
+      const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ ...params, stream: true }),
+      });
+      return res;
+    }
+    const res = await fetch('/api/ai/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return res;
   },
 
   // ─── SHARED DEEPSEEK API KEY ────────────────────

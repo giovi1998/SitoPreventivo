@@ -68,7 +68,6 @@ interface EditorViewProps {
   quote: PremiumQuote;
   aiText: string;
   setAiText: (t: string) => void;
-  activity: string;
   patch: (key: string, value: any) => void;
   updateOption: (id: string, key: string, value: any) => void;
   addOption: () => void;
@@ -77,11 +76,14 @@ interface EditorViewProps {
   updateClause: (id: string, key: string, value: string) => void;
   addClause: () => void;
   removeClause: (id: string) => void;
-  runAI: (mode?: string) => void;
+  onRunAI: (mode?: string) => void;
   aiModel: string;
-  setAiModel: (m: string) => void;
+  onAiModelChange: (m: string) => void;
   previewRef: React.Ref<HTMLElement>;
   aiLogs: any[];
+  isProcessing: boolean;
+  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
+  onResetChat: () => void;
   isDirty: boolean;
   saveQuote: () => void;
   shareInfo: { link: string; token: string } | null;
@@ -90,9 +92,10 @@ interface EditorViewProps {
 }
 
 export default function EditorView({
-  quote, aiText, setAiText, activity, patch, updateOption, addOption, removeOption,
-  updateOptions, updateClause, addClause, removeClause, runAI, aiModel, setAiModel,
-  previewRef, aiLogs, isDirty, saveQuote, shareInfo, toggleShare, documentTheme = 'corporate',
+  quote, aiText, setAiText, patch, updateOption, addOption, removeOption,
+  updateOptions, updateClause, addClause, removeClause, onRunAI, aiModel, onAiModelChange,
+  previewRef, aiLogs, isProcessing, availableModels, onResetChat,
+  isDirty, saveQuote, shareInfo, toggleShare, documentTheme = 'corporate',
 }: EditorViewProps) {
   const [showAi, setShowAi] = React.useState(true);
   const [showManual, setShowManual] = React.useState(true);
@@ -101,12 +104,16 @@ export default function EditorView({
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  const saveRef = React.useRef(saveQuote);
+  const dirtyRef = React.useRef(isDirty);
+  saveRef.current = saveQuote;
+  dirtyRef.current = isDirty;
   React.useEffect(() => {
     const timer = setInterval(() => {
-      if (isDirty) saveQuote();
+      if (dirtyRef.current) saveRef.current();
     }, 30000);
     return () => clearInterval(timer);
-  }, [isDirty, saveQuote]);
+  }, []);
 
   const handleDragEnd = (event: any) => {
     const { active, over } = event;
@@ -166,8 +173,14 @@ export default function EditorView({
         <div className="api-key-section">
           <div className="ai-model-selector">
             <label>Modello AI</label>
-            <select value={aiModel} onChange={(e) => setAiModel(e.target.value)}>
-              <option value="deepseek-chat">DeepSeek Chat</option>
+            <select value={aiModel} onChange={(e) => onAiModelChange(e.target.value)}>
+              {availableModels.length > 0 ? availableModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} — {m.model}
+                </option>
+              )) : (
+                <option value="deepseek-chat">DeepSeek Chat</option>
+              )}
             </select>
           </div>
           <span className="api-key-status ok">● Chiave via server (env var)</span>
@@ -176,13 +189,25 @@ export default function EditorView({
       <Section title="Prompt e azioni rapide">
         <textarea value={aiText} onChange={(e) => setAiText(e.target.value)} aria-label="Prompt modifica AI" placeholder="Es. Rendi il preventivo più premium, aggiungi FAQ, applica sconto 10%..." />
         <div className="ai-actions">
-          <button onClick={() => runAI("premium")}>Rendi premium</button>
-          <button onClick={() => runAI("faq")}>Aggiungi FAQ</button>
-          <button onClick={() => runAI("discount")}>Sconto finale</button>
-          <button onClick={() => runAI("simple")}>Semplifica</button>
+          <button onClick={() => onRunAI("premium")}>Rendi premium</button>
+          <button onClick={() => onRunAI("faq")}>Aggiungi FAQ</button>
+          <button onClick={() => onRunAI("discount")}>Sconto finale</button>
+          <button onClick={() => onRunAI("simple")}>Semplifica</button>
         </div>
-        {activity && <div className="activity-log"><span>Attività</span><b>{activity}</b></div>}
-        <button className="primary wide" onClick={() => runAI("custom")}>Applica prompt personalizzato</button>
+        {isProcessing && (
+          <div className="activity-log">
+            <span>Attività</span>
+            <b>🤖 Richiesta AI in corso...</b>
+          </div>
+        )}
+        <div className="ai-extra-actions">
+          <button className="primary wide" onClick={() => onRunAI("custom")} disabled={isProcessing}>
+            {isProcessing ? 'Elaborazione...' : 'Applica prompt personalizzato'}
+          </button>
+          <button className="btn-ghost" onClick={onResetChat} style={{ width: '100%', marginTop: '4px', fontSize: '.75rem' }}>
+            Nuova conversazione
+          </button>
+        </div>
       </Section>
       <Section title="Log AI" defaultOpen={true}>
         <div className="ai-log-panel" style={{ border: 'none', padding: 0, margin: 0 }}>

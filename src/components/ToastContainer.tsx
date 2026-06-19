@@ -1,10 +1,5 @@
 import React, { useEffect } from 'react';
-
-interface ToastItem {
-  id: string;
-  type: string;
-  message: string;
-}
+import type { ToastItem } from '../hooks/useToast';
 
 const TOAST_COLORS: Record<string, { bg: string; icon: string }> = {
   success: { bg: '#059669', icon: '✓' },
@@ -20,11 +15,7 @@ function Toast({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: string)
 
   const c = TOAST_COLORS[toast.type] || TOAST_COLORS.success;
   return (
-    <div
-      onClick={() => onDismiss(toast.id)}
-      className="toast"
-      style={{ background: c.bg }}
-    >
+    <div onClick={() => onDismiss(toast.id)} className="toast" style={{ background: c.bg }}>
       <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{c.icon}</span>
       <span>{toast.message}</span>
     </div>
@@ -35,8 +26,8 @@ export default function ToastContainer({ toasts, onDismiss }: { toasts: ToastIte
   if (!toasts || toasts.length === 0) return null;
   return (
     <div className="toast-container">
-      {toasts.map(t => (
-        <div key={t.id} style={{ pointerEvents: 'auto' as const }}>
+      {toasts.map((t) => (
+        <div key={t.id} style={{ pointerEvents: 'auto' }}>
           <Toast toast={t} onDismiss={onDismiss} />
         </div>
       ))}

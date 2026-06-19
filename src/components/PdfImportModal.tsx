@@ -19,6 +19,7 @@ export default function PdfImportModal({ onClose, onImport, chatWithAI }: PdfImp
   const [error, setError] = useState('');
   const [importedQuote, setImportedQuote] = useState<PremiumQuote | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState<{ page: number; progress: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(async (selectedFile: File) => {
@@ -30,11 +31,15 @@ export default function PdfImportModal({ onClose, onImport, chatWithAI }: PdfImp
     setError('');
     setLoading(true);
     setStep('analyze');
+    setOcrProgress(null);
 
     try {
-      const parsed = await parsePDF(selectedFile);
+      const parsed = await parsePDF(selectedFile, (page, progress) => {
+        setOcrProgress({ page, progress });
+      });
       setRawText(parsed.rawText);
       setParsedText(parsed.rawText.slice(0, 3000));
+      setOcrProgress(null);
 
       const prompt = buildImportPrompt(parsed);
       const aiResponse = await chatWithAI(prompt);
@@ -86,8 +91,11 @@ export default function PdfImportModal({ onClose, onImport, chatWithAI }: PdfImp
     if (!file) return;
     setLoading(true);
     setStep('analyze');
+    setOcrProgress(null);
     try {
-      const parsed = await parsePDF(file);
+      const parsed = await parsePDF(file, (page, progress) => {
+        setOcrProgress({ page, progress });
+      });
       const prompt = buildImportPrompt(parsed);
       const aiResponse = await chatWithAI(prompt + '\n\nRigenera con maggior precisione.');
       let aiJson: Record<string, unknown>;
@@ -156,8 +164,17 @@ export default function PdfImportModal({ onClose, onImport, chatWithAI }: PdfImp
           {step === 'analyze' && (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
               <div className="spinner" style={{ margin: '0 auto 16px' }} />
-              <p style={{ fontWeight: 700, fontSize: '.9rem' }}>Analisi del PDF in corso...</p>
-              <p style={{ color: 'var(--muted)', fontSize: '.82rem' }}>Il testo viene estratto e inviato all'AI per la ricostruzione.</p>
+              <p style={{ fontWeight: 700, fontSize: '.9rem' }}>
+                {ocrProgress ? `OCR in corso (pagina ${ocrProgress.page})...` : 'Analisi del PDF in corso...'}
+              </p>
+              <p style={{ color: 'var(--muted)', fontSize: '.82rem' }}>
+                {ocrProgress ? 'Riconoscimento ottico dei caratteri per PDF scansionato.' : 'Il testo viene estratto e inviato all\'AI per la ricostruzione.'}
+              </p>
+              {ocrProgress && (
+                <div style={{ width: '80%', maxWidth: '300px', margin: '12px auto', height: '6px', background: 'var(--surface-sun)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${ocrProgress.progress * 100}%`, background: 'var(--accent)', borderRadius: '3px', transition: 'width 0.2s' }} />
+                </div>
+              )}
               {parsedText && (
                 <details style={{ marginTop: '16px', textAlign: 'left' }}>
                   <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '.8rem' }}>Testo estratto (anteprima)</summary>

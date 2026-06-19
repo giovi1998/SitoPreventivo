@@ -66,9 +66,9 @@ export default function Layout({ children, view, setView, onLogout, user, theme,
           </div>
           {user && (
             <>
-              {user.注册Date && (
+              {user.dataRegistrazione && (
                 <p style={{ fontSize: '.7rem', color: '#8896ab', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,.08)' }}>
-                  Membro dal {user.注册Date}
+                  Membro dal {user.dataRegistrazione}
                 </p>
               )}
               <button onClick={onLogout} className="logout-btn">

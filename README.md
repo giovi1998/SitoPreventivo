@@ -140,7 +140,7 @@ cp .env.example .env
 | `authToken` | Token sessione |
 | `userEmail` | Email utente corrente |
 | `username` | Username |
-| `注册Date` | Data registrazione |
+| `dataRegistrazione` | Data registrazione |
 | `deepseekKey` | API Key DeepSeek (se configurata) |
 | `precisionQuote_quotes` | Preventivi salvati |
 
@@ -257,7 +257,7 @@ SitoPreventivo/
 │   │   └── Icon.jsx           # Icone SVG
 │   └── utils/
 │       ├── dataService.js     # API produzione / localStorage locale
-│       └── generatePDF.js     # PDF con pdfmake
+│       └── generatePDF.ts     # PDF con pdfmake
 ```
 
 ## Sviluppo

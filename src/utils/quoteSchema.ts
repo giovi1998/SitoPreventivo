@@ -428,6 +428,7 @@ interface LegacyQuote {
   isTemplate?: boolean;
   shareToken?: string;
   isShared?: boolean;
+  _premium?: Record<string, unknown>;
 }
 
 function mapLegacyStatus(s: string): QuoteStatus {
@@ -442,6 +443,11 @@ function mapLegacyStatus(s: string): QuoteStatus {
 }
 
 export function migrateFromLegacy(legacy: LegacyQuote): PremiumQuote {
+  if (legacy._premium) {
+    try { return legacy._premium as unknown as PremiumQuote; }
+    catch { /* fall through to legacy migration */ }
+  }
+
   const now = new Date().toISOString();
   const vatRate = legacy.vat ?? 22;
 
@@ -491,7 +497,7 @@ export function migrateFromLegacy(legacy: LegacyQuote): PremiumQuote {
     }
     const summary = calculateOptionSummary(items);
     return {
-      id: opt.id || generateId('opt'),
+      id: String(opt.id ?? '') || generateId('opt'),
       label: opt.title || `Opzione ${i + 1}`,
       description: opt.description || '',
       isDefault: i === 0,
@@ -605,5 +611,6 @@ export function toLegacyFormat(quote: PremiumQuote): LegacyQuote {
       title: c.title,
       body: c.body,
     })),
+    _premium: quote as unknown as Record<string, unknown>,
   };
 }

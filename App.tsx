@@ -8,8 +8,10 @@ import type { PremiumQuote, DocumentTemplateId } from './src/utils/quoteSchema';
 import { createEmptyQuote, migrateFromLegacy, toLegacyFormat, recalculateQuote, addEmptyOption } from './src/utils/quoteSchema';
 import { generateDOCX } from './src/utils/generateDOCX';
 import PdfImportModal from './src/components/PdfImportModal';
-import { ToolDispatcher } from './src/utils/toolDispatcher';
-import { applyDiscount, adjustMargin, duplicateOption, recalculateTotals, reorderOptions, removeEmptyItems, mergeDuplicateItems, roundPrices, calculateAnnualCost, checkConsistency, generateSummary, validateQuoteTool, enhanceDescriptionsPrompt, translateQuotePrompt } from './src/utils/quoteTools';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import { useAI } from './src/hooks/useAI';
+import { useToast } from './src/hooks/useToast';
+import { tryCatch } from './src/utils/errors';
 const CollectionView = lazy(() => import('./src/components/CollectionView'));
 const AdminDashboard = lazy(() => import('./src/pages/AdminDashboard'));
 import SettingsPage from './src/pages/SettingsPage';
@@ -64,10 +66,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = localStorage.getItem('authToken');
     const email = localStorage.getItem('userEmail');
     const username = localStorage.getItem('username');
-    const regDate = localStorage.getItem('注册Date');
+    const regDate = localStorage.getItem('dataRegistrazione');
     const role = localStorage.getItem('userRole');
     if (token && email) {
-      return { email, token, username: username || email.split('@')[0], 注册Date: regDate || new Date().toLocaleDateString('it-IT'), role: role || 'user' };
+      return { email, token, username: username || email.split('@')[0], dataRegistrazione: regDate || new Date().toLocaleDateString('it-IT'), role: role || 'user' };
     }
     return null;
   });
@@ -79,13 +81,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('authToken', btoa(`${email}:${Date.now()}`));
       localStorage.setItem('userEmail', email);
       localStorage.setItem('username', uData.username || username);
-      localStorage.setItem('注册Date', uData.createdAt || new Date().toLocaleDateString('it-IT'));
+      localStorage.setItem('dataRegistrazione', uData.createdAt || new Date().toLocaleDateString('it-IT'));
       localStorage.setItem('userRole', uData.role || 'user');
       setUser({
         email, token: btoa(`${email}:${Date.now()}`), username: uData.username || username,
         gender: uData.gender || gender, role: uData.role || 'user',
         tokensUsed: uData.tokensUsed || 0, tokenLimit: uData.tokenLimit || 1000000,
-        注册Date: uData.createdAt || new Date().toLocaleDateString('it-IT'),
+        dataRegistrazione: uData.createdAt || new Date().toLocaleDateString('it-IT'),
       });
     }
     return result;
@@ -98,13 +100,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('authToken', btoa(`${email}:${Date.now()}`));
       localStorage.setItem('userEmail', email);
       localStorage.setItem('username', uData.username || email.split('@')[0]);
-      localStorage.setItem('注册Date', uData.createdAt || new Date().toLocaleDateString('it-IT'));
+      localStorage.setItem('dataRegistrazione', uData.createdAt || new Date().toLocaleDateString('it-IT'));
       localStorage.setItem('userRole', uData.role || 'user');
       setUser({
         email, token: btoa(`${email}:${Date.now()}`), username: uData.username || email.split('@')[0],
         gender: uData.gender, role: uData.role || 'user',
         tokensUsed: uData.tokensUsed || 0, tokenLimit: uData.tokenLimit || 1000000,
-        注册Date: uData.createdAt || new Date().toLocaleDateString('it-IT'),
+        dataRegistrazione: uData.createdAt || new Date().toLocaleDateString('it-IT'),
       });
     }
     return result;
@@ -114,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('authToken');
     localStorage.removeItem('userEmail');
     localStorage.removeItem('username');
-    localStorage.removeItem('注册Date');
+    localStorage.removeItem('dataRegistrazione');
     localStorage.removeItem('userRole');
     setUser(null);
   };
@@ -130,13 +132,9 @@ export default function App() {
   const [view, setView] = useState("editor");
   const [quote, setQuote] = useState<PremiumQuote>(STARTER_QUOTE_PREMIUM);
   const [quotes, setQuotes] = useState<any[]>([]);
-  const [premiumQuotes, setPremiumQuotes] = useState<PremiumQuote[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [aiText, setAiText] = useState("Rendi il preventivo più professionale e aggiungi dettagli tecnici");
-  const [activity, setActivity] = useState("Pronto: modifica manualmente il preventivo.");
   const [aiModel, setAiModel] = useState('deepseek-chat');
-  const [aiLogs, setAiLogs] = useState<any[]>([]);
-  const [toasts, setToasts] = useState<any[]>([]);
   const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
@@ -144,20 +142,22 @@ export default function App() {
   const [docxLoading, setDocxLoading] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showPdfImport, setShowPdfImport] = useState(false);
-  const [documentTheme, setDocumentTheme] = useState<DocumentTemplateId>('corporate');
+  const [documentTheme, setDocumentTheme] = useState<DocumentTemplateId>(() =>
+    (localStorage.getItem('documentTheme') as DocumentTemplateId) || 'corporate'
+  );
   const [theme, setThemeState] = useState(() => localStorage.getItem('theme') || 'light');
-  const toolDispatcherRef = useRef(new ToolDispatcher());
   const { logout, user } = useContext(AuthContext);
+
+  const {
+    processPrompt,
+    resetChat,
+    aiLogs,
+    isProcessing,
+    availableModels,
+  } = useAI(user?.email);
   const previewRef = useRef<HTMLElement>(null);
 
-  const addToast = useCallback((type: string, message: string) => {
-    const id = Date.now() + Math.random();
-    setToasts((prev: any[]) => [...prev, { id, type, message }]);
-  }, []);
-
-  const dismissToast = useCallback((id: number) => {
-    setToasts((prev: any[]) => prev.filter((t: any) => t.id !== id));
-  }, []);
+  const { toasts, addToast, dismissToast } = useToast();
 
   const setTheme = useCallback((t: string) => {
     setThemeState(t);
@@ -170,16 +170,21 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    localStorage.setItem('documentTheme', documentTheme);
+  }, [documentTheme]);
+
+  useEffect(() => {
     if (user?.email) {
       dataService.getUserSettings(user.email).then((settings: any) => {
         if (!settings.onboardingDone) setShowOnboarding(true);
+        if (settings.documentTheme) setDocumentTheme(settings.documentTheme);
       }).catch(() => {});
     }
   }, [user?.email]);
 
   const handleOnboardingComplete = async (settings: any) => {
     if (user?.email) {
-      await dataService.saveUserSettings(user.email, settings);
+      await dataService.saveUserSettings(user.email, { ...settings, documentTheme });
       if (settings.defaultColor) {
         setQuote((c) => ({ ...c, uiPreferences: { ...c.uiPreferences, accentColor: settings.defaultColor } }));
       }
@@ -192,435 +197,73 @@ export default function App() {
     if (user?.email) {
       dataService.getQuotes(user.email).then(({ quotes: loaded }: any) => {
         if (loaded && loaded.length > 0) {
-          const migrated = loaded.map((q: any) => {
-            try { return migrateFromLegacy(q); } catch { return null; }
-          }).filter(Boolean);
-          setPremiumQuotes(migrated);
           setQuotes(loaded);
         } else {
-          setPremiumQuotes([STARTER_QUOTE_PREMIUM]);
           setQuotes([]);
         }
-      }).catch(() => {
-        setPremiumQuotes([STARTER_QUOTE_PREMIUM]);
-      });
+      }).catch(() => {});
     }
   }, [user?.email]);
 
-  const addLog = (type: string, msg: string) =>
-    setAiLogs((prev: any[]) => [...prev.slice(-19), { type, msg, time: new Date().toLocaleTimeString('it-IT') }]);
-
   const markDirty = () => setIsDirty(true);
-
-  const mergeAIResponse = (currentQuote: PremiumQuote, modified: any): { quote: PremiumQuote; changes: string[] } => {
-    const updated = { ...currentQuote };
-    const changes: string[] = [];
-
-    if (modified.project?.title) {
-      updated.project = { ...updated.project, title: modified.project.title };
-      changes.push(`Titolo progetto: "${modified.project.title}"`);
-    }
-    if (modified.project?.description) {
-      updated.project = { ...updated.project, description: modified.project.description };
-      changes.push(`Descrizione progetto aggiornata`);
-    }
-    if (modified.client?.name) {
-      updated.client = { ...updated.client, name: modified.client.name };
-      changes.push(`Cliente: "${modified.client.name}"`);
-    }
-    if (modified.uiPreferences?.accentColor) {
-      updated.uiPreferences = { ...updated.uiPreferences, accentColor: modified.uiPreferences.accentColor };
-      changes.push(`Colore tema: ${modified.uiPreferences.accentColor}`);
-    }
-
-    if (modified.options) {
-      for (const mo of modified.options) {
-        const existing = currentQuote.options.find((o) => o.id === mo.id);
-        if (!existing) { changes.push(`Nuova opzione aggiunta`); continue; }
-
-        const optLabel = existing.label;
-        if (mo.label && mo.label !== existing.label) changes.push(`Opzione "${optLabel}": nome → "${mo.label}"`);
-        if (mo.description !== undefined && mo.description !== existing.description) changes.push(`Opzione "${optLabel}": descrizione modificata`);
-
-        if (mo.items) {
-          for (const mi of mo.items) {
-            const existingItem = existing.items.find((ei) => ei.id === mi.id);
-            if (!existingItem) { changes.push(`Opzione "${optLabel}": nuova voce "${mi.label || 'senza nome'}"`); continue; }
-            if (mi.unitPrice !== undefined && mi.unitPrice !== existingItem.unitPrice) changes.push(`Opzione "${optLabel}" → "${existingItem.label}": prezzo ${existingItem.unitPrice}€ → ${mi.unitPrice}€`);
-            if (mi.quantity !== undefined && mi.quantity !== existingItem.quantity) changes.push(`Opzione "${optLabel}" → "${existingItem.label}": quantità ${existingItem.quantity} → ${mi.quantity}`);
-            if (mi.description !== undefined && mi.description !== existingItem.description) changes.push(`Opzione "${optLabel}" → "${existingItem.label}": descrizione modificata`);
-            if (mi.label && mi.label !== existingItem.label) changes.push(`Opzione "${optLabel}": voce rinominata "${existingItem.label}" → "${mi.label}"`);
-          }
-        }
-
-        updated.options = modified.options.map((mo2: any) => {
-          const ex = currentQuote.options.find((o) => o.id === mo2.id);
-          if (ex) {
-            return {
-              ...ex,
-              label: mo2.label || ex.label,
-              description: mo2.description !== undefined ? mo2.description : ex.description,
-              items: mo2.items ? mo2.items.map((mi: any) => {
-                const ei = ex.items.find((e) => e.id === mi.id);
-                return ei ? { ...ei, ...mi } : mi;
-              }) : ex.items,
-            };
-          }
-          return mo2;
-        });
-      }
-      const recalculated = recalculateQuote({ ...currentQuote, options: updated.options });
-      updated.options = recalculated.options;
-      updated.globalTotals = recalculated.globalTotals;
-    }
-
-    if (modified.legalClauses) {
-      for (const mc of modified.legalClauses) {
-        const existing = currentQuote.legalClauses.find((cl) => cl.id === mc.id);
-        if (existing) {
-          if (mc.title && mc.title !== existing.title) changes.push(`Clausola: titolo → "${mc.title}"`);
-          if (mc.body && mc.body !== existing.body) changes.push(`Clausola "${existing.title || mc.title}": testo modificato`);
-        } else {
-          changes.push(`Nuova clausola aggiunta: "${mc.title || 'senza titolo'}"`);
-        }
-      }
-      updated.legalClauses = modified.legalClauses.map((mc: any) => {
-        const existing = currentQuote.legalClauses.find((cl) => cl.id === mc.id);
-        return existing ? { ...existing, ...mc } : mc;
-      });
-    }
-
-    if (modified.notes?.internal !== undefined) {
-      updated.notes = { ...updated.notes, internal: modified.notes.internal };
-      changes.push(`Note interne modificate`);
-    }
-    if (modified.notes?.clientVisible !== undefined) {
-      updated.notes = { ...updated.notes, clientVisible: modified.notes.clientVisible };
-      changes.push(`Note per il cliente modificate`);
-    }
-    if (modified.issuer) {
-      updated.issuer = { ...updated.issuer, ...modified.issuer };
-      if (modified.issuer.name) changes.push(`Emittente: "${modified.issuer.name}"`);
-      if (modified.issuer.email) changes.push(`Email emittente: ${modified.issuer.email}`);
-    }
-    if (modified.paymentTerms) {
-      const pt = modified.paymentTerms;
-      updated.paymentTerms = { ...updated.paymentTerms };
-      if (pt.paymentMethod !== undefined) { updated.paymentTerms.paymentMethod = pt.paymentMethod; changes.push(`Metodo pagamento: ${pt.paymentMethod}`); }
-      if (pt.paymentSchedule !== undefined) { updated.paymentTerms.paymentSchedule = pt.paymentSchedule; changes.push(`Scadenze pagamento: ${pt.paymentSchedule.length} tranche`); }
-      if (pt.latePaymentInterest !== undefined) { updated.paymentTerms.latePaymentInterest = pt.latePaymentInterest; changes.push(`Interessi ritardato pagamento aggiornati`); }
-      if (pt.iban !== undefined) { updated.paymentTerms.iban = pt.iban; changes.push(`IBAN aggiornato`); }
-      if (pt.bic !== undefined) { updated.paymentTerms.bic = pt.bic; changes.push(`BIC aggiornato`); }
-    }
-    if (modified.status) { updated.status = modified.status; changes.push(`Stato: ${modified.status}`); }
-    if (modified.validUntil) { updated.validUntil = modified.validUntil; changes.push(`Valido fino al: ${modified.validUntil}`); }
-    if (modified.currency) { updated.currency = modified.currency; changes.push(`Valuta: ${modified.currency}`); }
-    if (modified.locale) { updated.locale = modified.locale; changes.push(`Localizzazione: ${modified.locale}`); }
-    if (modified.attachments) { updated.attachments = modified.attachments; changes.push(`Allegati aggiornati`); }
-    if (modified.uiPreferences) {
-      updated.uiPreferences = { ...updated.uiPreferences, ...modified.uiPreferences };
-      const uiChanges: string[] = [];
-      if (modified.uiPreferences.templateId) uiChanges.push(`template: ${modified.uiPreferences.templateId}`);
-      if (modified.uiPreferences.accentColor) uiChanges.push(`colore: ${modified.uiPreferences.accentColor}`);
-      if (modified.uiPreferences.fontFamily) uiChanges.push(`font: ${modified.uiPreferences.fontFamily}`);
-      if (modified.uiPreferences.showLogo !== undefined) uiChanges.push(`logo: ${modified.uiPreferences.showLogo ? 'sì' : 'no'}`);
-      if (modified.uiPreferences.showTotalsPerOption !== undefined) uiChanges.push(`totali opzione: ${modified.uiPreferences.showTotalsPerOption ? 'sì' : 'no'}`);
-      if (modified.uiPreferences.showGlobalTotals !== undefined) uiChanges.push(`totali globali: ${modified.uiPreferences.showGlobalTotals ? 'sì' : 'no'}`);
-      if (uiChanges.length > 0) changes.push(`Preferenze UI: ${uiChanges.join(', ')}`);
-    }
-
-    updated.updatedAt = new Date().toISOString();
-    return { quote: updated, changes };
-  };
-
-  const SYSTEM_PROMPT = `Sei un assistente AI per la creazione di preventivi professionali.
-Il tuo compito è modificare il JSON del preventivo in base alla richiesta dell'utente.
-
-CAMPI DISPONIBILI (puoi modificare qualsiasi campo):
-- project.title, project.description, project.code, project.startDate, project.endDate
-- client.name, client.contactPerson, client.address, client.email, client.phone, client.vatNumber, client.taxCode, client.notes
-- issuer.name, issuer.email, issuer.vatNumber, issuer.taxCode, issuer.address, issuer.phone, issuer.website
-- options[{id, label, description, isDefault, selectionType, items[{id, label, description, category, unit, quantity, unitPrice, discount, tax}]}]
-- paymentTerms.paymentMethod, paymentTerms.paymentSchedule[{label, dueDaysFromIssue, percentage, notes}], paymentTerms.latePaymentInterest, paymentTerms.iban, paymentTerms.bic
-- legalClauses[{id, title, body}]
-- uiPreferences.templateId, uiPreferences.accentColor, uiPreferences.fontFamily, uiPreferences.showLogo, uiPreferences.showTotalsPerOption, uiPreferences.showGlobalTotals
-- notes.internal, notes.clientVisible
-- status, validUntil, currency, locale
-- Puoi AGGIUNGERE nuove opzioni, item e clausole (usa un nuovo ID formato da "opt_xxx", "item_xxx", "cl_xxx")
-- Puoi RIMUOVERE opzioni, item e clausole esistenti (toglili dall'array)
-
-REGOLE IMPORTANTI:
-1. Mantieni SEMPRE gli ID esistenti di opzioni, item e clausole (tranne quando ne aggiungi di nuovi)
-2. Non modificare i campi 'total' (net, tax, gross) — li calcola il sistema
-3. Non modificare i campi 'summary' e 'globalTotals' — li calcola il sistema
-4. Per i costi numerici, modifica solo unitPrice e quantity
-5. Per sconti: modifica discount.type ("percentage"/"absolute"/"none") e discount.value
-6. Usa [WARNING]...[/WARNING] e [INFO]...[/INFO] nei testi per callout visivi
-7. Non inventare prezzi se non richiesto
-8. Rispondi SOLO con JSON valido contenente SOLO i campi da modificare
-9. Se la richiesta è in italiano, rispondi in italiano nei testi
-10. Se l'utente chiede di ricalcolare acconti/tranche, modifica paymentTerms.paymentSchedule
-
-TOOL DISPONIBILI (il sistema li applica automaticamente dal prompt dell'utente):
-- "sconto X%" → applica sconto percentuale
-- "margine X%" → ricalcola prezzi con margine target
-- "duplica" → duplica la prima opzione
-- "ricalcola" → ricalcola tutti i totali
-- "riordina" → riordina opzioni per prezzo/nome
-- "rimuovi vuoti" → elimina voci con costo zero
-- "unisci duplicate" → merge voci identiche
-- "arrotonda X" → arrotonda prezzi al multiplo di X
-- "annuale" → calcola costo annuale per voci mensili
-- "verifica" / "controlla" → controlla coerenza totali
-- "riassunto" → genera riepilogo testuale
-- "traduci [lingua]" → traduci il documento
-- "migliora descrizioni" → riscrivi descrizioni in modo professionale
-
-Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI TESTO (titoli, descrizioni, clausole, paymentTerms) e il sistema applicherà i tool numerici automaticamente.`;
-
-  const callDeepSeek = async (userPrompt: string): Promise<any> => {
-    const profile = await dataService.getUserProfile(user?.email);
-    if (profile.error) throw new Error(profile.error);
-    if (profile.tokensUsed >= profile.tokenLimit) {
-      throw new Error('Limite token AI raggiunto. Contatta l\'amministratore.');
-    }
-
-    addLog('info', `→ DeepSeek [${aiModel}] invio...`);
-    addLog('info', `Prompt: "${userPrompt.substring(0, 80)}..."`);
-
-    const result = await dataService.chatWithAI({
-      model: aiModel,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `Preventivo attuale (JSON):\n${JSON.stringify(quote, null, 2)}\n\nRichiesta: ${userPrompt}\n\nRispondi SOLO con il JSON delle modifiche da applicare. Nessun testo extra, nessun markdown, solo JSON puro.`,
-        },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.7,
-    });
-
-    if (result.error) {
-      addLog('error', `DeepSeek: ${result.error}`);
-      throw new Error(result.error);
-    }
-
-    const tokensUsed = result.usage?.total_tokens || 0;
-    if (user?.email) dataService.trackTokens(user.email, tokensUsed);
-    addLog('info', `Token: ${tokensUsed}`);
-
-    let raw = result.choices[0].message.content;
-    raw = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-    addLog('success', `Risposta (${raw.length} chars): ${raw.substring(0, 120)}...`);
-    return JSON.parse(raw);
-  };
-
-  const applyToolByKeyword = (prompt: string, currentQuote: PremiumQuote): PremiumQuote => {
-    let q = { ...currentQuote };
-    const lowerPrompt = prompt.toLowerCase();
-    let changes: string[] = [];
-
-    if (lowerPrompt.includes('sconto') || lowerPrompt.includes('discount')) {
-      const match = lowerPrompt.match(/(\d+)\s*%/);
-      const pct = match ? parseInt(match[1]) : 10;
-      const scopeMatch = lowerPrompt.match(/(opzione|option)\s*(\d+)/);
-      const scope = scopeMatch ? 'option' : 'all';
-      const result = applyDiscount(q, {
-        type: 'percentage',
-        value: pct,
-        scope,
-        ...(scope === 'option' ? { optionIds: [q.options[parseInt(scopeMatch![2]) - 1]?.id].filter(Boolean) as string[] } : {}),
-      });
-      q = result.quote;
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('margine') || lowerPrompt.includes('margin')) {
-      const match = lowerPrompt.match(/(\d+)\s*%/);
-      const target = match ? parseInt(match[1]) : 30;
-      const result = adjustMargin(q, target);
-      q = result.quote;
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('duplica') || lowerPrompt.includes('duplicate') || lowerPrompt.includes('copia')) {
-      if (q.options.length > 0) {
-        const result = duplicateOption(q, q.options[0].id);
-        q = result.quote;
-        changes.push(result.changes);
-      }
-    }
-
-    if (lowerPrompt.includes('ricalcola') || lowerPrompt.includes('recalculate')) {
-      const result = recalculateTotals(q);
-      q = result.quote;
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('riordina') || lowerPrompt.includes('reorder') || lowerPrompt.includes('ordina')) {
-      let sortBy: 'price_asc' | 'price_desc' | 'name' = 'price_asc';
-      if (lowerPrompt.includes('decresc') || lowerPrompt.includes('alto') || lowerPrompt.includes('maggior')) sortBy = 'price_desc';
-      if (lowerPrompt.includes('nome') || lowerPrompt.includes('alpha')) sortBy = 'name';
-      const result = reorderOptions(q, sortBy);
-      q = result.quote;
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('rimuovi') && (lowerPrompt.includes('vuot') || lowerPrompt.includes('zero') || lowerPrompt.includes('empty'))) {
-      const result = removeEmptyItems(q);
-      q = result.quote;
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('unisci') && (lowerPrompt.includes('duplicat') || lowerPrompt.includes('doppie') || lowerPrompt.includes('identiche'))) {
-      const result = mergeDuplicateItems(q);
-      q = result.quote;
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('arrotonda') || lowerPrompt.includes('round')) {
-      const match = lowerPrompt.match(/(\d+)/);
-      const nearest = match ? parseInt(match[1]) : 5;
-      const result = roundPrices(q, nearest);
-      q = result.quote;
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('annuale') || lowerPrompt.includes('annual') || lowerPrompt.includes('12 mesi') || lowerPrompt.includes('yearly')) {
-      const result = calculateAnnualCost(q);
-      q = result.quote;
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('coeren') || lowerPrompt.includes('verific') || lowerPrompt.includes('consist') || lowerPrompt.includes('check')) {
-      const result = checkConsistency(q);
-      q = result.quote;
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('riassunto') || lowerPrompt.includes('sommario') || lowerPrompt.includes('summary')) {
-      const result = generateSummary(q);
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('valida') || lowerPrompt.includes('validat') || lowerPrompt.includes('controlla')) {
-      const result = validateQuoteTool(q);
-      changes.push(result.changes);
-    }
-
-    if (lowerPrompt.includes('traduci') || lowerPrompt.includes('translate')) {
-      const langMatch = lowerPrompt.match(/(english|inglese|spanish|spagnolo|french|francese|german|tedesco|portoghese)/);
-      const langMap: Record<string, string> = { english: 'en', inglese: 'en', spanish: 'es', spagnolo: 'es', french: 'fr', francese: 'fr', german: 'de', tedesco: 'de', portoghese: 'pt' };
-      const lang = langMatch ? langMap[langMatch[1]] || 'en' : 'en';
-      const result = translateQuotePrompt(q, lang);
-      changes.push(`Traduzione richiesta in ${lang} (verrà eseguita dall'AI).`);
-    }
-
-    if (lowerPrompt.includes('migliora') && (lowerPrompt.includes('descrizion') || lowerPrompt.includes('testo') || lowerPrompt.includes('enhance'))) {
-      const result = enhanceDescriptionsPrompt(q);
-      changes.push(`Miglioramento descrizioni richiesto (verrà eseguito dall'AI).`);
-    }
-
-    q = recalculateTotals(q).quote;
-
-    if (changes.length > 0) {
-      addLog('success', `Tool automatici (${changes.length}):`);
-      changes.forEach((c) => addLog('info', `  ⚙ ${c}`));
-    }
-
-    return q;
-  };
 
   const runAI = async (mode = "custom") => {
     const prompt = aiText.trim();
-    if (!prompt && mode === "custom") { setActivity("💡 Scrivi un prompt per l'AI."); return; }
+    if (!prompt && mode === "custom") { addToast('info', 'Scrivi un prompt per l\'AI.'); return; }
 
-    addLog('info', `▶ runAI [${mode}] "${prompt.substring(0, 80)}..."`);
-    setActivity("🤖 Chiamata DeepSeek in corso...");
+    const prompts: Record<string, string> = {
+      premium: "Rendi il preventivo premium: descrizioni più esclusive, colore accattivante, titolo con 'Edizione Premium'.",
+      faq: "Aggiungi una clausola 'FAQ cliente' con domande frequenti su tempi, revisioni, proprietà dei file e supporto. Mantieni le clausole esistenti.",
+      discount: "Applica uno sconto del 10% su tutti i costi una tantum delle opzioni.",
+      simple: "Semplifica il documento: riduci le descrizioni delle opzioni all'essenziale, mantieni solo le prime 2 clausole.",
+      custom: prompt,
+    };
+    const userPrompt = prompts[mode] || prompt;
+
     try {
-      const prompts: Record<string, string> = {
-        premium: "Rendi il preventivo premium: descrizioni più esclusive, colore accattivante, titolo con 'Edizione Premium'.",
-        faq: "Aggiungi una clausola 'FAQ cliente' con domande frequenti su tempi, revisioni, proprietà dei file e supporto. Mantieni le clausole esistenti.",
-        discount: "Applica uno sconto del 10% su tutti i costi una tantum delle opzioni.",
-        simple: "Semplifica il documento: riduci le descrizioni delle opzioni all'essenziale, mantieni solo le prime 2 clausole.",
-        custom: prompt,
-      };
-      const userPrompt = prompts[mode] || prompt;
-      addLog('info', `Prompt inviato all'AI (${userPrompt.length} chars)`);
-
-      const reply = await callDeepSeek(userPrompt);
-
-      let aiChanges: string[] = [];
-      setQuote((currentQuote) => {
-        const { quote: merged, changes } = mergeAIResponse(currentQuote, reply);
-        aiChanges = changes;
-        return applyToolByKeyword(userPrompt, merged);
+      const result = await processPrompt(quote, userPrompt, {
+        modelId: aiModel,
+        onProgress: () => {},
       });
+
+      setQuote(result.quote as PremiumQuote);
       markDirty();
 
-      if (aiChanges.length > 0) {
-        addLog('success', `AI modifiche (${aiChanges.length}):`);
-        aiChanges.forEach((c) => addLog('info', `  • ${c}`));
-      } else {
-        addLog('info', 'AI: nessuna modifica testuale applicata');
-      }
-
-      const toolMsg = userPrompt !== prompt ? ' + tool automatici' : '';
-      setActivity(`✅ AI: ${mode === "custom" ? "prompt applicato" : mode}${toolMsg} con successo.`);
-      addLog('success', `Preventivo aggiornato${toolMsg}`);
-      addToast('success', `AI: ${mode === "custom" ? "prompt applicato" : mode}${toolMsg}`);
+      addToast('success', `AI: ${mode === "custom" ? "prompt applicato" : mode} con successo`);
     } catch (err: any) {
-      const hint = err.message?.includes('402') ? 'Credito DeepSeek esaurito.' :
-        err.message?.includes('401') ? 'Chiave API DeepSeek non valida.' :
-        err.message?.includes('429') ? 'Troppe richieste. Attendi e riprova.' :
-        err.message?.includes('fetch') || err.message?.includes('NetworkError') ? 'Connessione fallita.' : null;
-      setActivity(`❌ ${hint || err.message}`);
-      addLog('error', hint || err.message);
-      addToast('error', hint || err.message);
+      addToast('error', err.message);
     }
   };
 
   const saveQuote = () => setShowSaveDialog(true);
 
-  const persistQuote = (q: PremiumQuote) => {
-    const legacy = toLegacyFormat(q);
+  const saveCurrentQuote = (title?: string) => {
+    const saved = title
+      ? { ...quote, project: { ...quote.project, title } }
+      : { ...quote, project: { ...quote.project, title: `${quote.project.title} (auto)` } };
+    const legacy = toLegacyFormat(saved);
     setQuotes((c: any[]) => {
-      const updated = [legacy, ...c.filter((qq: any) => qq.id !== q.quoteId)];
+      const updated = [legacy, ...c.filter((qq: any) => qq.id !== saved.quoteId)];
       if (user?.email) dataService.saveQuote(user.email, legacy);
       return updated;
     });
-    setPremiumQuotes((c) => {
-      const updated = [q, ...c.filter((pq) => pq.quoteId !== q.quoteId)];
-      return updated;
-    });
-  };
-
-  const handleQuickSave = () => {
-    const saved = { ...quote, project: { ...quote.project, title: `${quote.project.title} (auto)` } };
-    persistQuote(saved);
     setIsDirty(false);
     setLastSaveTime(new Date());
-    setActivity('Preventivo salvato automaticamente.');
-    addToast('success', 'Preventivo salvato');
+    addToast('success', title ? `"${title}" salvato` : 'Preventivo salvato');
   };
 
   const handleSaveConfirmed = (customName: string) => {
     setShowSaveDialog(false);
-    const saved = { ...quote, project: { ...quote.project, title: customName } };
-    persistQuote(saved);
-    setIsDirty(false);
-    setLastSaveTime(new Date());
-    setActivity(`Preventivo "${customName}" salvato.`);
-    addToast('success', `"${customName}" salvato`);
+    saveCurrentQuote(customName);
   };
 
   const duplicate = (saved: any) => {
     const now = new Date().toISOString();
     const copy = migrateFromLegacy({ ...saved, id: generateId(), status: 'Bozza', date: now.slice(0, 10), title: `${saved.title} (copia)` });
-    setPremiumQuotes((c) => {
-      const updated = [copy, ...c];
-      if (user?.email) dataService.saveQuote(user.email, toLegacyFormat(copy));
+    const legacy = toLegacyFormat(copy);
+    setQuotes((c: any[]) => {
+      const updated = [legacy, ...c];
+      if (user?.email) dataService.saveQuote(user.email, legacy);
       return updated;
     });
     setQuote(copy);
@@ -631,7 +274,12 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
 
   const saveAsTemplate = () => {
     const template = { ...quote, quoteId: generateId(), client: { ...quote.client, name: '' } };
-    persistQuote({ ...template, quoteId: generateId() });
+    const legacy = toLegacyFormat(template);
+    setQuotes((c: any[]) => {
+      const updated = [legacy, ...c];
+      if (user?.email) dataService.saveQuote(user.email, legacy);
+      return updated;
+    });
     addToast('success', 'Template salvato');
   };
 
@@ -748,7 +396,7 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!e.ctrlKey) return;
-      if (e.key === 's') { e.preventDefault(); handleQuickSave(); }
+      if (e.key === 's') { e.preventDefault(); saveCurrentQuote(); }
       if (e.key === 'p') { e.preventDefault(); exportPDF(); }
       if (e.key === 'd') { e.preventDefault(); exportDOCX(); }
     };
@@ -760,7 +408,7 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
     const migrated = migrateFromLegacy(saved);
     setQuote(migrated);
     setView("editor");
-    setActivity(`${saved.id} aperto in modifica.`);
+    addToast('info', `${saved.id} aperto in modifica.`);
   };
 
   const updateQuoteStatus = (id: string, newStatus: string) => {
@@ -773,32 +421,18 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
 
   const exportPDF = async () => {
     setPdfLoading(true);
-    setActivity("Generazione PDF in corso...");
-    try {
+    const { error } = await tryCatch(async () => {
       const { default: generatePDF } = await import('./src/utils/generatePDF');
       generatePDF(quote, documentTheme);
-      setActivity("PDF esportato con successo!");
-      addToast('success', 'PDF esportato');
-    } catch (err) {
-      console.error(err);
-      setActivity("Errore esportazione PDF.");
-      addToast('error', 'Errore esportazione PDF');
-    }
+    }, 'Errore esportazione PDF');
+    if (error) { addToast('error', error); } else { addToast('success', 'PDF esportato'); }
     setPdfLoading(false);
   };
 
   const exportDOCX = async () => {
     setDocxLoading(true);
-    setActivity("Generazione DOCX in corso...");
-    try {
-      await generateDOCX(quote, documentTheme);
-      setActivity("DOCX esportato con successo!");
-      addToast('success', 'DOCX esportato');
-    } catch (err) {
-      console.error(err);
-      setActivity("Errore esportazione DOCX.");
-      addToast('error', 'Errore esportazione DOCX');
-    }
+    const { error } = await tryCatch(() => generateDOCX(quote, documentTheme), 'Errore esportazione DOCX');
+    if (error) { addToast('error', error); } else { addToast('success', 'DOCX esportato'); }
     setDocxLoading(false);
   };
 
@@ -806,13 +440,22 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
     setQuote(importedQuote);
     setShowPdfImport(false);
     setIsDirty(true);
-    setActivity(`Preventivo importato da PDF: ${importedQuote.project?.title}`);
-    addToast('success', 'PDF importato con successo');
+    addToast('success', `PDF importato: ${importedQuote.project?.title}`);
   };
 
   return (
-    <AppContext.Provider value={{ editingQuote: quote, setEditingQuote: setQuote, saveQuote, quotes }}>
+    <AppContext.Provider value={{
+      editingQuote: quote, setEditingQuote: setQuote, saveQuote, quotes,
+      setView, openQuote, duplicate, removeQuote: (id: string) => {
+        setQuotes((c: any[]) => c.filter((q: any) => q.id !== id));
+        if (user?.email) dataService.deleteQuote(id, user.email);
+      },
+      onUpdateStatus: updateQuoteStatus,
+      onDeleteRequest: (item: any) => setDeleteTarget(item),
+      createFromTemplate,
+    }}>
       <GlobalStyles />
+      <ErrorBoundary>
       <Layout view={view} setView={setView} onLogout={logout} user={user} theme={theme} setTheme={setTheme}>
         <Topbar
           view={view}
@@ -837,7 +480,6 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
             quote={quote}
             aiText={aiText}
             setAiText={setAiText}
-            activity={activity}
             patch={patch}
             updateOption={updateOption}
             updateOptions={updateOptions}
@@ -846,13 +488,16 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
             updateClause={updateClause}
             addClause={addClause}
             removeClause={removeClause}
-            runAI={runAI}
+            onRunAI={runAI}
             aiModel={aiModel}
-            setAiModel={setAiModel}
+            onAiModelChange={setAiModel}
             previewRef={previewRef}
             aiLogs={aiLogs}
+            isProcessing={isProcessing}
+            availableModels={availableModels}
+            onResetChat={resetChat}
             isDirty={isDirty}
-            saveQuote={handleQuickSave}
+            saveQuote={() => saveCurrentQuote()}
             shareInfo={shareInfo}
             toggleShare={toggleShare}
             documentTheme={documentTheme}
@@ -863,23 +508,11 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
           </Suspense>
         ) : (
           <Suspense fallback={<CollectionViewSkeleton />}>
-            <CollectionView
-              quotes={quotes}
-              activeId={quote.quoteId}
-              openQuote={openQuote}
-              duplicate={duplicate}
-              removeQuote={(id: string) => {
-                setQuotes((c: any[]) => c.filter((q: any) => q.id !== id));
-                if (user?.email) dataService.deleteQuote(id, user.email);
-              }}
-              onUpdateStatus={updateQuoteStatus}
-              onDeleteRequest={(item: any) => setDeleteTarget(item)}
-              setView={setView}
-              createFromTemplate={createFromTemplate}
-            />
+            <CollectionView activeId={quote.quoteId} />
           </Suspense>
         )}
       </Layout>
+      </ErrorBoundary>
       <SaveDialog
         open={showSaveDialog}
         defaultName={quote.project?.title || 'Preventivo'}
@@ -909,8 +542,8 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
           onClose={() => setShowPdfImport(false)}
           onImport={handlePdfImport}
           chatWithAI={async (prompt: string) => {
-            const reply = await callDeepSeek(prompt);
-            return JSON.stringify(reply);
+            const result = await processPrompt(quote, prompt, { modelId: aiModel });
+            return result.response.content || '{}';
           }}
         />
       )}

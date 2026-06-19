@@ -118,6 +118,21 @@ describe('quoteSchema', () => {
     expect(migrated.quoteId).toBe(withOpt.quoteId);
   });
 
+  it('toLegacyFormat embeds _premium for lossless roundtrip', () => {
+    const q = createEmptyQuote();
+    q.project.title = 'Test roundtrip';
+    q.paymentTerms.iban = 'IT60X0542811101000000123456';
+    q.notes.clientVisible = 'Nota visibile al cliente';
+    const withOpt = addEmptyOption(q);
+    const legacy = toLegacyFormat(withOpt);
+    expect(legacy._premium).toBeDefined();
+    const migrated = migrateFromLegacy(legacy);
+    expect(migrated.quoteId).toBe(withOpt.quoteId);
+    expect(migrated.project.title).toBe('Test roundtrip');
+    expect(migrated.paymentTerms.iban).toBe('IT60X0542811101000000123456');
+    expect(migrated.notes.clientVisible).toBe('Nota visibile al cliente');
+  });
+
   it('validateQuote rejects invalid status', () => {
     const q = createEmptyQuote();
     (q as any).status = 'invalid_status';

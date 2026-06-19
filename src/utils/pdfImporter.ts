@@ -1,6 +1,7 @@
 import type { PremiumQuote, QuoteItem, QuoteOption, DocumentTemplateId } from './quoteSchema';
 import { calculateItemTotal, calculateOptionSummary, calculateGlobalTotals } from './quoteSchema';
 import { setupPdfWorker } from './pdfWorkerSetup';
+import Tesseract from 'tesseract.js';
 
 export interface PdfTextBlock {
   text: string;
@@ -26,7 +27,52 @@ function generateId(prefix = 'id'): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export async function parsePDF(file: File): Promise<PdfParseResult> {
+async function renderPageToCanvas(page: any, scale: number): Promise<HTMLCanvasElement> {
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas;
+}
+
+async function ocrPageWithTesseract(
+  page: any,
+  pageNum: number,
+  scale: number,
+  onProgress?: (page: number, progress: number) => void
+): Promise<PdfPageData> {
+  const canvas = await renderPageToCanvas(page, scale);
+  const { data } = await Tesseract.recognize(canvas, 'ita+eng', {
+    logger: (m: any) => {
+      if (m.status === 'recognizing text' && onProgress) {
+        onProgress(pageNum, m.progress || 0);
+      }
+    },
+  });
+
+  const textBlocks: PdfTextBlock[] = (data as any).words.map((w: any) => ({
+    text: w.text,
+    x: w.bbox.x0,
+    y: w.bbox.y0,
+    width: w.bbox.x1 - w.bbox.x0,
+    height: w.bbox.y1 - w.bbox.y0,
+    fontSize: 10,
+  }));
+
+  return {
+    pageNum,
+    textBlocks,
+  };
+}
+
+export async function parsePDF(
+  file: File,
+  onOcrProgress?: (page: number, progress: number) => void
+): Promise<PdfParseResult> {
   setupPdfWorker();
 
   const pdfjsLib = await import('pdfjs-dist');
@@ -35,7 +81,8 @@ export async function parsePDF(file: File): Promise<PdfParseResult> {
 
   const pages: PdfPageData[] = [];
   const allTexts: string[] = [];
-  let totalConfidence = 0;
+  const confidences: number[] = [];
+  let needsOcr = false;
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
@@ -57,13 +104,38 @@ export async function parsePDF(file: File): Promise<PdfParseResult> {
     allTexts.push(`--- Pagina ${i} ---\n${pageText}`);
 
     pages.push({ pageNum: i, textBlocks });
-    totalConfidence += 0.8;
+    confidences.push(0.8);
+
+    // If page has very little text (< 100 chars), flag for OCR
+    if (pageText.length < 100 && textContent.items.length > 0) {
+      needsOcr = true;
+    }
+  }
+
+  // Fall back to OCR if any page has sparse text (likely scanned PDF)
+  if (needsOcr && onOcrProgress) {
+    const ocrPages: PdfPageData[] = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const ocrResult = await ocrPageWithTesseract(page, i, 2, onOcrProgress);
+      ocrPages.push(ocrResult);
+
+      const ocrText = ocrResult.textBlocks.map((b) => b.text).join(' ');
+      allTexts[i - 1] = `--- Pagina ${i} ---\n${ocrText}`;
+    }
+
+    return {
+      pages: ocrPages,
+      rawText: allTexts.join('\n\n'),
+      confidence: 0.7,
+    };
   }
 
   return {
     pages,
     rawText: allTexts.join('\n\n'),
-    confidence: pdf.numPages > 0 ? totalConfidence / pdf.numPages : 0.5,
+    confidence: confidences.length > 0 ? confidences.reduce((a, b) => a + b, 0) / confidences.length : 0.5,
   };
 }
 

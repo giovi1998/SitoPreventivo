@@ -88,7 +88,7 @@ L'admin `admin@gmail.com` viene autenticato direttamente dalla variabile d'ambie
 | `authToken` | Token sessione |
 | `userEmail` | Email utente corrente |
 | `username` | Username |
-| `注册Date` | Data registrazione |
+| `dataRegistrazione` | Data registrazione |
 | `deepseekKey` | API Key DeepSeek |
 | `precisionQuote_quotes` | Preventivi salvati |
 
