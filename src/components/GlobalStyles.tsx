@@ -412,11 +412,9 @@ export default function GlobalStyles() {
       .editor-mobile-panel{display:block;border-bottom:1px solid var(--line);background:var(--surface);max-height:50vh;overflow-y:auto}
       .editor-mobile-panel .panel{border-right:none;padding:16px;height:auto;overflow-x:auto}
       .preview-wrap{width:100%;padding:12px;min-height:40vh}
-      .top-actions button span{display:none}
-      .top-actions button{font-size:0;padding:9px 12px}
-      .topbar{padding:0 16px}
+      .topbar{display:none}
       .form-grid{grid-template-columns:1fr}
-      .document{padding:20px;font-size:.82rem}
+      .document{padding:16px;font-size:.82rem;overflow-x:auto}
       .doc-footer{flex-direction:column;gap:8px}
       .option-editor .mini-row{grid-template-columns:1fr}
       .collection-view{padding:16px}
