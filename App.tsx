@@ -290,9 +290,44 @@ export default function App() {
       });
     }
 
-    if (modified.notes?.internal !== undefined) changes.push(`Note interne modificate`);
-    if (modified.notes?.clientVisible !== undefined) changes.push(`Note per il cliente modificate`);
-    if (modified.issuer?.name) changes.push(`Emittente: "${modified.issuer.name}"`);
+    if (modified.notes?.internal !== undefined) {
+      updated.notes = { ...updated.notes, internal: modified.notes.internal };
+      changes.push(`Note interne modificate`);
+    }
+    if (modified.notes?.clientVisible !== undefined) {
+      updated.notes = { ...updated.notes, clientVisible: modified.notes.clientVisible };
+      changes.push(`Note per il cliente modificate`);
+    }
+    if (modified.issuer) {
+      updated.issuer = { ...updated.issuer, ...modified.issuer };
+      if (modified.issuer.name) changes.push(`Emittente: "${modified.issuer.name}"`);
+      if (modified.issuer.email) changes.push(`Email emittente: ${modified.issuer.email}`);
+    }
+    if (modified.paymentTerms) {
+      const pt = modified.paymentTerms;
+      updated.paymentTerms = { ...updated.paymentTerms };
+      if (pt.paymentMethod !== undefined) { updated.paymentTerms.paymentMethod = pt.paymentMethod; changes.push(`Metodo pagamento: ${pt.paymentMethod}`); }
+      if (pt.paymentSchedule !== undefined) { updated.paymentTerms.paymentSchedule = pt.paymentSchedule; changes.push(`Scadenze pagamento: ${pt.paymentSchedule.length} tranche`); }
+      if (pt.latePaymentInterest !== undefined) { updated.paymentTerms.latePaymentInterest = pt.latePaymentInterest; changes.push(`Interessi ritardato pagamento aggiornati`); }
+      if (pt.iban !== undefined) { updated.paymentTerms.iban = pt.iban; changes.push(`IBAN aggiornato`); }
+      if (pt.bic !== undefined) { updated.paymentTerms.bic = pt.bic; changes.push(`BIC aggiornato`); }
+    }
+    if (modified.status) { updated.status = modified.status; changes.push(`Stato: ${modified.status}`); }
+    if (modified.validUntil) { updated.validUntil = modified.validUntil; changes.push(`Valido fino al: ${modified.validUntil}`); }
+    if (modified.currency) { updated.currency = modified.currency; changes.push(`Valuta: ${modified.currency}`); }
+    if (modified.locale) { updated.locale = modified.locale; changes.push(`Localizzazione: ${modified.locale}`); }
+    if (modified.attachments) { updated.attachments = modified.attachments; changes.push(`Allegati aggiornati`); }
+    if (modified.uiPreferences) {
+      updated.uiPreferences = { ...updated.uiPreferences, ...modified.uiPreferences };
+      const uiChanges: string[] = [];
+      if (modified.uiPreferences.templateId) uiChanges.push(`template: ${modified.uiPreferences.templateId}`);
+      if (modified.uiPreferences.accentColor) uiChanges.push(`colore: ${modified.uiPreferences.accentColor}`);
+      if (modified.uiPreferences.fontFamily) uiChanges.push(`font: ${modified.uiPreferences.fontFamily}`);
+      if (modified.uiPreferences.showLogo !== undefined) uiChanges.push(`logo: ${modified.uiPreferences.showLogo ? 'sì' : 'no'}`);
+      if (modified.uiPreferences.showTotalsPerOption !== undefined) uiChanges.push(`totali opzione: ${modified.uiPreferences.showTotalsPerOption ? 'sì' : 'no'}`);
+      if (modified.uiPreferences.showGlobalTotals !== undefined) uiChanges.push(`totali globali: ${modified.uiPreferences.showGlobalTotals ? 'sì' : 'no'}`);
+      if (uiChanges.length > 0) changes.push(`Preferenze UI: ${uiChanges.join(', ')}`);
+    }
 
     updated.updatedAt = new Date().toISOString();
     return { quote: updated, changes };
@@ -301,17 +336,21 @@ export default function App() {
   const SYSTEM_PROMPT = `Sei un assistente AI per la creazione di preventivi professionali.
 Il tuo compito è modificare il JSON del preventivo in base alla richiesta dell'utente.
 
-Puoi modificare questi campi:
-- project.title, project.description
-- client.name, client.contactPerson
-- options[{id, label, description, items[{id, label, description, category, unit, quantity, unitPrice, discount, tax}]}]
+CAMPI DISPONIBILI (puoi modificare qualsiasi campo):
+- project.title, project.description, project.code, project.startDate, project.endDate
+- client.name, client.contactPerson, client.address, client.email, client.phone, client.vatNumber, client.taxCode, client.notes
+- issuer.name, issuer.email, issuer.vatNumber, issuer.taxCode, issuer.address, issuer.phone, issuer.website
+- options[{id, label, description, isDefault, selectionType, items[{id, label, description, category, unit, quantity, unitPrice, discount, tax}]}]
+- paymentTerms.paymentMethod, paymentTerms.paymentSchedule[{label, dueDaysFromIssue, percentage, notes}], paymentTerms.latePaymentInterest, paymentTerms.iban, paymentTerms.bic
 - legalClauses[{id, title, body}]
-- uiPreferences.accentColor
+- uiPreferences.templateId, uiPreferences.accentColor, uiPreferences.fontFamily, uiPreferences.showLogo, uiPreferences.showTotalsPerOption, uiPreferences.showGlobalTotals
 - notes.internal, notes.clientVisible
-- issuer.name, issuer.email, issuer.vatNumber
+- status, validUntil, currency, locale
+- Puoi AGGIUNGERE nuove opzioni, item e clausole (usa un nuovo ID formato da "opt_xxx", "item_xxx", "cl_xxx")
+- Puoi RIMUOVERE opzioni, item e clausole esistenti (toglili dall'array)
 
 REGOLE IMPORTANTI:
-1. Mantieni SEMPRE gli ID esistenti di opzioni, item e clausole
+1. Mantieni SEMPRE gli ID esistenti di opzioni, item e clausole (tranne quando ne aggiungi di nuovi)
 2. Non modificare i campi 'total' (net, tax, gross) — li calcola il sistema
 3. Non modificare i campi 'summary' e 'globalTotals' — li calcola il sistema
 4. Per i costi numerici, modifica solo unitPrice e quantity
@@ -320,9 +359,10 @@ REGOLE IMPORTANTI:
 7. Non inventare prezzi se non richiesto
 8. Rispondi SOLO con JSON valido contenente SOLO i campi da modificare
 9. Se la richiesta è in italiano, rispondi in italiano nei testi
+10. Se l'utente chiede di ricalcolare acconti/tranche, modifica paymentTerms.paymentSchedule
 
 TOOL DISPONIBILI (il sistema li applica automaticamente dal prompt dell'utente):
-- "sconto X%" → applica sconto percentuale a tutte le opzioni
+- "sconto X%" → applica sconto percentuale
 - "margine X%" → ricalcola prezzi con margine target
 - "duplica" → duplica la prima opzione
 - "ricalcola" → ricalcola tutti i totali
@@ -336,7 +376,7 @@ TOOL DISPONIBILI (il sistema li applica automaticamente dal prompt dell'utente):
 - "traduci [lingua]" → traduci il documento
 - "migliora descrizioni" → riscrivi descrizioni in modo professionale
 
-Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI TESTO (titoli, descrizioni, clausole) e il sistema applicherà i tool numerici automaticamente.`;
+Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI TESTO (titoli, descrizioni, clausole, paymentTerms) e il sistema applicherà i tool numerici automaticamente.`;
 
   const callDeepSeek = async (userPrompt: string): Promise<any> => {
     const profile = await dataService.getUserProfile(user?.email);
