@@ -5,12 +5,13 @@ interface LayoutProps {
   view: string;
   setView: (v: string) => void;
   onLogout: () => void;
+  onSave: () => void;
   user: any;
   theme: string;
   setTheme: (t: string) => void;
 }
 
-export default function Layout({ children, view, setView, onLogout, user, theme, setTheme }: LayoutProps) {
+export default function Layout({ children, view, setView, onLogout, onSave, user, theme, setTheme }: LayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const nav = (v: string) => {
@@ -95,6 +96,9 @@ export default function Layout({ children, view, setView, onLogout, user, theme,
           </button>
           <span className="mobile-brand">PrecisionQuote</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button className="mobile-save-btn" onClick={onSave} aria-label="Salva" title="Salva (Ctrl+S)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            </button>
             <button className="mobile-theme-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Cambia tema">
               {theme === 'dark' ? (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>

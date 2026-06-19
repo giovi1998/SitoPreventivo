@@ -390,13 +390,21 @@ export default function App() {
   const toggleShare = (enabled: boolean) => {
     if (enabled) {
       const token = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      setQuote((c) => ({ ...c, shareToken: token }));
+      setQuote((c) => ({ ...c, shareToken: token, isShared: true }));
+      if (user?.email && quote.quoteId) {
+        dataService.saveQuote(user.email, { ...quote, shareToken: token, isShared: true });
+      }
+    } else {
+      setQuote((c) => ({ ...c, shareToken: undefined, isShared: false }));
+      if (user?.email && quote.quoteId) {
+        dataService.saveQuote(user.email, { ...quote, shareToken: undefined, isShared: false });
+      }
     }
   };
 
-  const shareInfo = quote.quoteId ? {
-    link: `${window.location.origin}/preventivo/${quote.quoteId}`,
-    token: quote.quoteId,
+  const shareInfo = quote.shareToken && quote.isShared ? {
+    link: `${window.location.origin}/preventivo/${quote.shareToken}`,
+    token: quote.shareToken,
   } : null;
 
   useEffect(() => {
@@ -462,7 +470,7 @@ export default function App() {
     }}>
       <GlobalStyles />
       <ErrorBoundary>
-      <Layout view={view} setView={setView} onLogout={logout} user={user} theme={theme} setTheme={setTheme}>
+      <Layout view={view} setView={setView} onLogout={logout} onSave={saveQuote} user={user} theme={theme} setTheme={setTheme}>
         <Topbar
           view={view}
           onSave={saveQuote}
