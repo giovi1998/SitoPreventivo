@@ -93,6 +93,9 @@ export default function Layout({ children, view, setView, onLogout, user, theme,
           </button>
           <span className="mobile-brand">PrecisionQuote</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button className="mobile-theme-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Cambia tema">
+              {theme === 'dark' ? '\u2600\uFE0F' : '\uD83C\uDF19'}
+            </button>
             <button className="mobile-logout-btn" onClick={onLogout} aria-label="Esci">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               <span>Esci</span>
@@ -141,6 +144,9 @@ export default function Layout({ children, view, setView, onLogout, user, theme,
             </nav>
 
             <div className="drawer-footer">
+              <button className="drawer-logout" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+                {theme === 'dark' ? '\u2600\uFE0F Tema chiaro' : '\uD83C\uDF19 Tema scuro'}
+              </button>
               <div className="drawer-user">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 {user?.email}

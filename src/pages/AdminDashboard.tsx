@@ -248,7 +248,35 @@ export default function AdminDashboard() {
         .pw-msg{font-size:.7rem;font-weight:600;color:#11845b}
         [data-theme="dark"] .pw-msg{color:#22c55e}
         .ds-keys-note{font-weight:400;color:#647086;font-size:.78rem}
-        @media(max-width:640px){.admin-stats{grid-template-columns:1fr 1fr}.admin-dashboard{padding:16px}}
+        @media(max-width:768px){
+          .admin-dashboard{padding:16px}
+          .admin-head{flex-direction:column;align-items:flex-start;gap:8px}
+          .admin-stats{grid-template-columns:1fr 1fr;gap:10px}
+          .admin-stat{padding:16px 12px;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+          .admin-stat b{font-size:1.5rem;line-height:1.2;margin-bottom:4px}
+          .admin-stat span{font-size:.7rem;line-height:1.3}
+          .admin-table{font-size:.75rem}
+          .admin-table th,.admin-table td{padding:8px 10px}
+          .admin-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+          .admin-pw-edit{min-width:160px}
+          .admin-pw-edit input{font-size:.7rem}
+          .admin-limit-edit input{width:60px}
+          .admin-section h3{font-size:.9rem}
+          .admin-apikey-info{padding:12px 14px;font-size:.8rem}
+          .btn-check-status{padding:6px 12px;font-size:.78rem}
+        }
+        @media(max-width:480px){
+          .admin-stats{grid-template-columns:1fr 1fr;gap:8px}
+          .admin-stat{padding:14px 10px;min-height:72px}
+          .admin-stat b{font-size:1.3rem}
+          .admin-stat span{font-size:.65rem}
+          .admin-table{font-size:.7rem}
+          .admin-table th,.admin-table td{padding:6px 8px}
+          .admin-pw-edit{min-width:0;width:100%}
+          .admin-pw-edit input{font-size:.65rem}
+          .admin-limit-edit{flex-wrap:wrap}
+          .admin-head h2{font-size:1.1rem}
+        }
       `}</style>
     </div>
   );

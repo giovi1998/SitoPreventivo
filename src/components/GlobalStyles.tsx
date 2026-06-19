@@ -86,6 +86,8 @@ export default function GlobalStyles() {
 
     [data-theme="dark"] body{background:linear-gradient(135deg,#0f1117,#1a1d27 54%,#151821);color:var(--ink)}
     [data-theme="dark"] button{background:var(--surface);color:var(--ink);border-color:var(--line)}
+    [data-theme="dark"] .admin-stat b{color:#4d94ff}
+    [data-theme="dark"] .admin-stat span{color:#8892a8}
     [data-theme="dark"] input,[data-theme="dark"] textarea,[data-theme="dark"] select{background:var(--surface);color:var(--ink);border-color:var(--line)}
     [data-theme="dark"] select option{background:var(--surface);color:var(--ink)}
 
@@ -248,7 +250,7 @@ export default function GlobalStyles() {
     .preview-wrap{flex:1;min-width:0;overflow:auto;padding:28px;background:var(--line-lt)}
 
     /* Document base styles */
-    .document{width:min(100%,794px);max-width:100%;margin:0 auto;background:var(--doc-color-background,#fff);color:#101828;box-shadow:0 24px 80px rgba(35,44,62,.12);border:1px solid #d7deea;padding:48px;font-family:var(--doc-font-family,Georgia,'Times New Roman',serif);line-height:1.6;overflow:hidden;word-wrap:break-word}
+    .document{width:min(100%,794px);max-width:100%;margin:0 auto;background:var(--doc-color-background,#fff);color:#101828;box-shadow:0 24px 80px rgba(35,44,62,.12);border:1px solid #d7deea;padding:48px;font-family:var(--doc-font-family,Georgia,'Times New Roman',serif);line-height:1.6;overflow-x:auto;word-wrap:break-word}
     .doc-title-section{margin-bottom:32px}
     .doc-main-title{margin:0 0 20px;font-size:2rem;letter-spacing:-.03em;font-weight:var(--weight-bold);color:var(--accent)}
     .doc-client-info{border-top:1px solid #d7deea;padding-top:16px}
@@ -262,7 +264,7 @@ export default function GlobalStyles() {
     .doc-option-desc{margin:0 0 16px;color:#39465b;font-size:.9rem;line-height:1.5}
     .doc-table-label{margin:12px 0 6px;font-size:.9rem}
 
-    .doc-cost-table,.doc-summary-table{width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:.88rem;page-break-inside:avoid;break-inside:avoid;border-radius:var(--doc-bdrs,6px);overflow:hidden;box-shadow:var(--doc-shadow,0 1px 3px rgba(0,0,0,0.05))}
+    .doc-cost-table,.doc-summary-table{width:100%;min-width:520px;border-collapse:collapse;margin:8px 0 16px;font-size:.88rem;page-break-inside:avoid;break-inside:avoid;border-radius:var(--doc-bdrs,6px);box-shadow:var(--doc-shadow,0 1px 3px rgba(0,0,0,0.05))}
     .doc-cost-table thead,.doc-summary-table thead{background:var(--doc-color-header-bg,var(--sidebar,#082033));color:var(--doc-color-header-text,#fff)}
     .doc-cost-table th,.doc-summary-table th{text-align:left;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;padding:12px 14px;font-weight:var(--weight-bold);color:var(--doc-color-header-text,#fff);border:none}
     .doc-cost-table th:nth-child(n+2),.doc-summary-table th:nth-child(n+2){text-align:right}
@@ -415,6 +417,8 @@ export default function GlobalStyles() {
       .topbar{display:none}
       .form-grid{grid-template-columns:1fr}
       .document{padding:16px;font-size:.82rem;overflow-x:auto}
+      .doc-main-title{font-size:1.4rem}
+      .doc-option-title{font-size:1rem}
       .doc-footer{flex-direction:column;gap:8px}
       .option-editor .mini-row{grid-template-columns:1fr}
       .collection-view{padding:16px}

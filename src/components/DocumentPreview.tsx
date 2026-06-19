@@ -80,46 +80,49 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
               {items.length > 0 && (
                 <>
                   <p className="doc-table-label"><strong>Costi</strong></p>
-                  <table className="doc-cost-table">
-                    <thead>
-                      <tr>
-                        <th>Voce</th>
-                        <th>Q.tà</th>
-                        <th>Prezzo</th>
-                        <th>Totale</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.label}</td>
-                          <td>{item.quantity} {item.unit}</td>
-                          <td>{money(item.unitPrice)}</td>
-                          <td>{money(item.total?.gross || 0)}</td>
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table className="doc-cost-table">
+                      <thead>
+                        <tr>
+                          <th>Voce</th>
+                          <th>Q.tà</th>
+                          <th>Prezzo</th>
+                          <th>Totale</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {items.map((item) => (
+                          <tr key={item.id}>
+                            <td>{item.label}</td>
+                            <td>{item.quantity} {item.unit}</td>
+                            <td>{money(item.unitPrice)}</td>
+                            <td>{money(item.total?.gross || 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
                   <p className="doc-table-label"><strong>Riepilogo economico</strong></p>
-                  <table className="doc-summary-table">
-                    <thead>
-                      <tr>
-                        <th>Voce</th>
-                        <th>Imponibile</th>
-                        <th>IVA {vat}%</th>
-                        <th>Totale IVA inclusa</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.label}</td>
-                          <td>{money(item.total?.net || 0)}</td>
-                          <td>{money(item.total?.tax || 0)}</td>
-                          <td>{money(item.total?.gross || 0)}</td>
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table className="doc-summary-table">
+                      <thead>
+                        <tr>
+                          <th>Voce</th>
+                          <th>Imponibile</th>
+                          <th>IVA {vat}%</th>
+                          <th>Totale IVA inclusa</th>
                         </tr>
-                      ))}
+                      </thead>
+                      <tbody>
+                        {items.map((item) => (
+                          <tr key={item.id}>
+                            <td>{item.label}</td>
+                            <td>{money(item.total?.net || 0)}</td>
+                            <td>{money(item.total?.tax || 0)}</td>
+                            <td>{money(item.total?.gross || 0)}</td>
+                          </tr>
+                        ))}
                       <tr>
                         <td><strong>Totale opzione</strong></td>
                         <td><strong>{money(option.summary?.totalNet || 0)}</strong></td>
@@ -127,7 +130,8 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
                         <td><strong>{money(option.summary?.totalGross || 0)}</strong></td>
                       </tr>
                     </tbody>
-                  </table>
+                    </table>
+                  </div>
                 </>
               )}
 
