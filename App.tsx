@@ -21,6 +21,7 @@ import ToastContainer from './src/components/ToastContainer';
 import ConfirmModal from './src/components/ConfirmModal';
 import OnboardingModal from './src/components/OnboardingModal';
 import dataService from './src/utils/dataService';
+import { DEFAULT_TEMPLATES } from './src/utils/defaultTemplates';
 
 export const AppContext = createContext<any>(null);
 export const AuthContext = createContext<any>(null);
@@ -196,10 +197,14 @@ export default function App() {
   useEffect(() => {
     if (user?.email) {
       dataService.getQuotes(user.email).then(({ quotes: loaded }: any) => {
-        if (loaded && loaded.length > 0) {
-          setQuotes(loaded);
+        const all = loaded || [];
+        const hasTemplates = all.some((q: any) => q.isTemplate);
+        if (!hasTemplates) {
+          const seeded = DEFAULT_TEMPLATES.map(t => ({ ...t, owner: user.email }));
+          seeded.forEach(t => dataService.saveQuote(user.email, t));
+          setQuotes([...seeded, ...all]);
         } else {
-          setQuotes([]);
+          setQuotes(all);
         }
       }).catch(() => {});
     }
@@ -274,7 +279,7 @@ export default function App() {
 
   const saveAsTemplate = () => {
     const template = { ...quote, quoteId: generateId(), client: { ...quote.client, name: '' } };
-    const legacy = toLegacyFormat(template);
+    const legacy = { ...toLegacyFormat(template), isTemplate: true };
     setQuotes((c: any[]) => {
       const updated = [legacy, ...c];
       if (user?.email) dataService.saveQuote(user.email, legacy);

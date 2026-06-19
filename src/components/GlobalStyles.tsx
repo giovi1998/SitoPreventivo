@@ -89,8 +89,8 @@ export default function GlobalStyles() {
     [data-theme="dark"] input,[data-theme="dark"] textarea,[data-theme="dark"] select{background:var(--surface);color:var(--ink);border-color:var(--line)}
     [data-theme="dark"] select option{background:var(--surface);color:var(--ink)}
 
-    *{box-sizing:border-box}html{background:var(--canvas)}
-    body{margin:0;font-family:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(135deg,var(--canvas),#eef3fb 54%,#ffffff);color:var(--ink)}
+    *{box-sizing:border-box}html{background:var(--canvas);overflow-x:hidden}
+    body{margin:0;overflow-x:hidden;font-family:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(135deg,var(--canvas),#eef3fb 54%,#ffffff);color:var(--ink)}
     button,input,textarea{font:inherit}
     button{border:1px solid var(--line);background:var(--surface);border-radius:var(--radius-md);padding:.72rem .9rem;cursor:pointer;font-weight:var(--weight-extrabold);color:var(--ink);transition:transform var(--transition-fast),box-shadow var(--transition-fast),border-color var(--transition-fast)}
     button:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(8,32,51,.09)}
@@ -292,6 +292,7 @@ export default function GlobalStyles() {
     .doc-comparison-table td:first-child{font-weight:var(--weight-bold);color:#101828}
     .doc-comparison-table tr{display:table-row}
     .doc-comparison-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -48px;padding:0 48px}
+    @media(max-width:768px){.doc-comparison-wrap{margin:0;padding:0}}
 
     .doc-footer{display:flex;justify-content:space-between;padding-top:24px;border-top:1px solid #d7deea;font-size:.85rem;color:#687589}
 
@@ -409,7 +410,7 @@ export default function GlobalStyles() {
       .editor-mobile-bar button:hover{background:var(--surface-sun);transform:none;box-shadow:none}
       .editor-mobile-bar button.active{color:var(--accent);background:var(--blue-bg);border-bottom:2px solid var(--accent)}
       .editor-mobile-panel{display:block;border-bottom:1px solid var(--line);background:var(--surface);max-height:50vh;overflow-y:auto}
-      .editor-mobile-panel .panel{border-right:none;padding:16px;height:auto;overflow:visible}
+      .editor-mobile-panel .panel{border-right:none;padding:16px;height:auto;overflow-x:auto}
       .preview-wrap{width:100%;padding:12px;min-height:40vh}
       .top-actions button span{display:none}
       .top-actions button{font-size:0;padding:9px 12px}

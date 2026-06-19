@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { PROFESSIONI } from '../utils/defaultTemplates';
 
 interface OnboardingData {
   displayName: string;
   companyName: string;
+  professions: string[];
   defaultColor: string;
   defaultVat: number;
   onboardingDone: boolean;
@@ -19,6 +21,7 @@ const VAT_OPTIONS = [
 const STEPS = [
   { title: 'Benvenuto!', subtitle: 'Come ti chiami?' },
   { title: 'Il tuo business', subtitle: 'Nome della tua azienda/studio?' },
+  { title: 'Di che settore sei?', subtitle: 'Scegli una o più opzioni (ti suggeriremo template su misura)' },
   { title: 'Colore brand', subtitle: 'Scegli il colore predefinito' },
   { title: 'IVA predefinita', subtitle: 'Quale aliquota usi di solito?' },
 ];
@@ -27,15 +30,20 @@ export default function OnboardingModal({ onComplete }: { onComplete: (data: Onb
   const [step, setStep] = useState(0);
   const [displayName, setDisplayName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [professions, setProfessions] = useState<string[]>([]);
   const [defaultColor, setDefaultColor] = useState('#0B57D0');
   const [defaultVat, setDefaultVat] = useState(22);
 
   const next = () => {
     if (step < STEPS.length - 1) setStep(step + 1);
-    else onComplete({ displayName, companyName, defaultColor, defaultVat, onboardingDone: true });
+    else onComplete({ displayName, companyName, professions, defaultColor, defaultVat, onboardingDone: true });
   };
 
   const canAdvance = step === 0 ? displayName.trim().length > 0 : true;
+
+  const toggleProfession = (id: string) => {
+    setProfessions(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+  };
 
   return (
     <div className="onb-overlay">
@@ -71,6 +79,24 @@ export default function OnboardingModal({ onComplete }: { onComplete: (data: Onb
           />
         )}
         {step === 2 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '24px' }}>
+            {PROFESSIONI.map(p => {
+              const selected = professions.includes(p.id);
+              return (
+                <button key={p.id} onClick={() => toggleProfession(p.id)} style={{
+                  padding: '12px', borderRadius: '10px', fontWeight: 600, fontSize: '.82rem', textAlign: 'left',
+                  border: selected ? '2px solid var(--accent)' : '2px solid var(--line)',
+                  background: selected ? 'var(--blue-bg)' : 'var(--surface)',
+                  color: selected ? 'var(--accent)' : 'var(--ink)',
+                  cursor: 'pointer', transition: 'all .15s',
+                }}>
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {step === 3 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '24px' }}>
             {BRAND_COLORS.map(c => (
               <button key={c} onClick={() => setDefaultColor(c)} style={{
@@ -82,7 +108,7 @@ export default function OnboardingModal({ onComplete }: { onComplete: (data: Onb
             ))}
           </div>
         )}
-        {step === 3 && (
+        {step === 4 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '24px' }}>
             {VAT_OPTIONS.map(v => (
               <button key={v.value} onClick={() => setDefaultVat(v.value)} style={{
