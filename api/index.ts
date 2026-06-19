@@ -1,9 +1,59 @@
 // @ts-nocheck
-import { db } from "../db/index";
-import { users, quotes, userSettings } from "../db/schema";
+import { drizzle } from "drizzle-orm/neon-http";
+import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean } from "drizzle-orm/pg-core";
 import { eq, and, sql } from "drizzle-orm";
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+
+// ─── DB SCHEMA (inlined for Vercel compatibility) ───
+const usersTable = pgTable("users", {
+  id: serial().primaryKey(),
+  email: varchar({ length: 255 }).notNull().unique(),
+  password: varchar({ length: 255 }).notNull(),
+  username: varchar({ length: 255 }).notNull(),
+  gender: varchar({ length: 50 }),
+  role: varchar({ length: 20 }).default("user"),
+  tokensUsed: bigint("tokens_used", { mode: "number" }).default(0),
+  tokenLimit: bigint("token_limit", { mode: "number" }).default(1000000),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+const quotesTable = pgTable("quotes", {
+  id: varchar({ length: 50 }).primaryKey(),
+  userEmail: varchar("user_email", { length: 255 }).notNull(),
+  title: varchar({ length: 255 }),
+  client: varchar({ length: 255 }),
+  date: varchar({ length: 50 }),
+  intro: text(),
+  color: varchar({ length: 50 }),
+  vat: integer().default(22),
+  status: varchar({ length: 50 }).default("BOZZA"),
+  owner: varchar({ length: 255 }),
+  options: jsonb(),
+  clauses: jsonb(),
+  isTemplate: boolean("is_template").default(false),
+  shareToken: varchar("share_token", { length: 255 }),
+  isShared: boolean("is_shared").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+const userSettingsTable = pgTable("user_settings", {
+  userEmail: varchar("user_email", { length: 255 }).primaryKey().references(() => usersTable.email),
+  displayName: varchar("display_name", { length: 255 }),
+  companyName: varchar("company_name", { length: 255 }),
+  defaultColor: varchar("default_color", { length: 50 }),
+  defaultVat: integer("default_vat").default(22),
+  logoUrl: text("logo_url"),
+  onboardingDone: boolean("onboarding_done").default(false),
+});
+
+// ─── DB CONNECTION ───────────────────────────────────
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("DATABASE_URL environment variable is required");
+}
+const db = drizzle(connectionString, { schema: { users: usersTable, quotes: quotesTable, userSettings: userSettingsTable } });
 
 // ─── ZOD SCHEMAS ──────────────────────────────
 const passwordSchema = z.string()
@@ -161,13 +211,13 @@ export default async function handler(req, res) {
         return json(res, 403, { error: "Email non disponibile" });
       }
 
-      const existing = await db.select().from(users).where(eq(users.email, email));
+      const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
       if (existing.length > 0) {
         return json(res, 409, { error: "Email già registrata" });
       }
 
       const hashed = await bcrypt.hash(password, 12);
-      const [created] = await db.insert(users).values({
+      const [created] = await db.insert(usersTable).values({
         email, password: hashed, username, gender,
         role: "user",
         tokenLimit: tokenLimit || 1000000,
@@ -214,7 +264,7 @@ export default async function handler(req, res) {
         });
       }
 
-      const [found] = await db.select().from(users).where(eq(users.email, email));
+      const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
       if (!found || !(await bcrypt.compare(password, found.password))) {
         recordLoginAttempt(ip, false);
         return json(res, 401, { error: "Email o password errati" });
@@ -237,29 +287,29 @@ export default async function handler(req, res) {
       if (v.error) return json(res, 400, { errors: v.errors });
       const { email, oldPassword, newPassword } = v.data;
 
-      const [found] = await db.select().from(users).where(eq(users.email, email));
+      const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
       if (!found) return json(res, 404, { error: "Utente non trovato" });
       if (!(await bcrypt.compare(oldPassword, found.password))) {
         return json(res, 401, { error: "Password attuale errata" });
       }
 
       const hashed = await bcrypt.hash(newPassword, 12);
-      await db.update(users).set({ password: hashed }).where(eq(users.email, email));
+      await db.update(usersTable).set({ password: hashed }).where(eq(usersTable.email, email));
       return json(res, 200, { success: true });
     }
 
     if (path === "/users" && method === "GET") {
       const list = await db.select({
-        email: users.email, username: users.username, gender: users.gender,
-        role: users.role, createdAt: users.createdAt,
-        tokensUsed: users.tokensUsed, tokenLimit: users.tokenLimit,
-      }).from(users).orderBy(sql`created_at DESC`);
+        email: usersTable.email, username: usersTable.username, gender: usersTable.gender,
+        role: usersTable.role, createdAt: usersTable.createdAt,
+        tokensUsed: usersTable.tokensUsed, tokenLimit: usersTable.tokenLimit,
+      }).from(usersTable).orderBy(sql`created_at DESC`);
       return json(res, 200, list);
     }
 
     if (path.startsWith("/users/") && path.endsWith("/profile") && method === "GET") {
       const email = decodeURIComponent(path.replace("/users/", "").replace("/profile", ""));
-      const [found] = await db.select().from(users).where(eq(users.email, email));
+      const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
       if (!found) return json(res, 404, { error: "Utente non trovato" });
       return json(res, 200, {
         email: found.email, username: found.username, gender: found.gender,
@@ -271,7 +321,7 @@ export default async function handler(req, res) {
       const v = validate(TokenLimitSchema, body);
       if (v.error) return json(res, 400, { errors: v.errors });
       const { email, tokenLimit } = v.data;
-      await db.update(users).set({ tokenLimit }).where(eq(users.email, email));
+      await db.update(usersTable).set({ tokenLimit }).where(eq(usersTable.email, email));
       return json(res, 200, { success: true });
     }
 
@@ -279,9 +329,9 @@ export default async function handler(req, res) {
       const v = validate(TrackTokensSchema, body);
       if (v.error) return json(res, 400, { errors: v.errors });
       const { email, tokens } = v.data;
-      await db.update(users).set({
+      await db.update(usersTable).set({
         tokensUsed: sql`tokens_used + ${tokens}`
-      }).where(eq(users.email, email));
+      }).where(eq(usersTable.email, email));
       return json(res, 200, { success: true });
     }
 
@@ -289,12 +339,12 @@ export default async function handler(req, res) {
     if (path === "/quotes" && method === "GET") {
       const userEmail = searchParams.get("email");
       if (!userEmail) return json(res, 400, { error: "Email richiesta" });
-      const list = await db.select().from(quotes).where(eq(quotes.userEmail, userEmail)).orderBy(sql`created_at DESC`);
+      const list = await db.select().from(quotesTable).where(eq(quotesTable.userEmail, userEmail)).orderBy(sql`created_at DESC`);
       return json(res, 200, list);
     }
 
     if (path === "/quotes/all" && method === "GET") {
-      const list = await db.select().from(quotes).orderBy(sql`created_at DESC`);
+      const list = await db.select().from(quotesTable).orderBy(sql`created_at DESC`);
       return json(res, 200, list);
     }
 
@@ -303,12 +353,12 @@ export default async function handler(req, res) {
       if (v.error) return json(res, 400, { errors: v.errors });
       const { email, quote } = v.data;
 
-      const existing = await db.select().from(quotes).where(eq(quotes.id, quote.id));
+      const existing = await db.select().from(quotesTable).where(eq(quotesTable.id, quote.id));
       if (existing.length > 0) {
         if (existing[0].userEmail !== email) {
           return json(res, 403, { error: "Non autorizzato" });
         }
-        const [updated] = await db.update(quotes).set({
+        const [updated] = await db.update(quotesTable).set({
           title: quote.title, client: quote.client, date: quote.date,
           intro: quote.intro, color: quote.color, vat: quote.vat,
           status: quote.status || "BOZZA", owner: quote.owner,
@@ -318,11 +368,11 @@ export default async function handler(req, res) {
           shareToken: quote.shareToken ?? existing[0].shareToken,
           isShared: quote.isShared ?? existing[0].isShared ?? false,
           updatedAt: sql`now()`,
-        }).where(eq(quotes.id, quote.id)).returning();
+        }).where(eq(quotesTable.id, quote.id)).returning();
         return json(res, 200, updated);
       }
 
-      const [saved] = await db.insert(quotes).values({
+      const [saved] = await db.insert(quotesTable).values({
         id: quote.id, userEmail: email, title: quote.title, client: quote.client,
         date: quote.date, intro: quote.intro, color: quote.color, vat: quote.vat,
         status: quote.status || "BOZZA", owner: quote.owner,
@@ -340,13 +390,13 @@ export default async function handler(req, res) {
       const email = body.email || searchParams.get("email");
       if (!email) return json(res, 400, { error: "Email richiesta" });
 
-      const [existing] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
+      const [existing] = await db.select().from(quotesTable).where(eq(quotesTable.id, quoteId));
       if (!existing) return json(res, 404, { error: "Preventivo non trovato" });
       if (existing.userEmail !== email) {
         return json(res, 403, { error: "Non autorizzato" });
       }
 
-      await db.delete(quotes).where(eq(quotes.id, quoteId));
+      await db.delete(quotesTable).where(eq(quotesTable.id, quoteId));
       return json(res, 200, { success: true });
     }
 
@@ -402,8 +452,8 @@ export default async function handler(req, res) {
     if (path === "/quotes/templates" && method === "GET") {
       const userEmail = searchParams.get("email");
       if (!userEmail) return json(res, 400, { error: "Email richiesta" });
-      const list = await db.select().from(quotes)
-        .where(and(eq(quotes.userEmail, userEmail), eq(quotes.isTemplate, true)))
+      const list = await db.select().from(quotesTable)
+        .where(and(eq(quotesTable.userEmail, userEmail), eq(quotesTable.isTemplate, true)))
         .orderBy(sql`created_at DESC`);
       return json(res, 200, list);
     }
@@ -411,7 +461,7 @@ export default async function handler(req, res) {
     // ─── PUBLIC QUOTE (no auth) ─────────────────────
     if (path.startsWith("/quotes/public/") && method === "GET") {
       const token = path.replace("/quotes/public/", "");
-      const [found] = await db.select().from(quotes).where(eq(quotes.shareToken, token));
+      const [found] = await db.select().from(quotesTable).where(eq(quotesTable.shareToken, token));
       if (!found || !found.isShared) {
         return json(res, 404, { error: "Preventivo non trovato o non condiviso" });
       }
@@ -426,7 +476,7 @@ export default async function handler(req, res) {
     if (path === "/user-settings" && method === "GET") {
       const email = searchParams.get("email");
       if (!email) return json(res, 400, { error: "Email richiesta" });
-      const [settings] = await db.select().from(userSettings).where(eq(userSettings.userEmail, email));
+      const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
       return json(res, 200, settings || { userEmail: email, onboardingDone: false });
     }
 
@@ -434,19 +484,19 @@ export default async function handler(req, res) {
       const v = validate(UserSettingsSchema, body);
       if (v.error) return json(res, 400, { errors: v.errors });
       const { email, ...settings } = v.data;
-      const existing = await db.select().from(userSettings).where(eq(userSettings.userEmail, email));
+      const existing = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
       if (existing.length > 0) {
-        const [updated] = await db.update(userSettings).set({
+        const [updated] = await db.update(userSettingsTable).set({
           ...(settings.displayName !== undefined && { displayName: settings.displayName }),
           ...(settings.companyName !== undefined && { companyName: settings.companyName }),
           ...(settings.defaultColor !== undefined && { defaultColor: settings.defaultColor }),
           ...(settings.defaultVat !== undefined && { defaultVat: settings.defaultVat }),
           ...(settings.logoUrl !== undefined && { logoUrl: settings.logoUrl }),
           ...(settings.onboardingDone !== undefined && { onboardingDone: settings.onboardingDone }),
-        }).where(eq(userSettings.userEmail, email)).returning();
+        }).where(eq(userSettingsTable.userEmail, email)).returning();
         return json(res, 200, updated);
       }
-      const [created] = await db.insert(userSettings).values({
+      const [created] = await db.insert(userSettingsTable).values({
         userEmail: email,
         displayName: settings.displayName,
         companyName: settings.companyName,
