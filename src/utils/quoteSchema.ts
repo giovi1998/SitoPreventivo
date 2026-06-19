@@ -426,6 +426,8 @@ interface LegacyQuote {
   options?: LegacyOption[];
   clauses?: LegacyClause[];
   isTemplate?: boolean;
+  isGlobal?: boolean;
+  profession?: string;
   shareToken?: string;
   isShared?: boolean;
   _premium?: Record<string, unknown>;
@@ -611,6 +613,8 @@ export function toLegacyFormat(quote: PremiumQuote): LegacyQuote {
       title: c.title,
       body: c.body,
     })),
+    isGlobal: (quote as any).isGlobal,
+    profession: (quote as any).profession,
     _premium: quote as unknown as Record<string, unknown>,
   };
 }

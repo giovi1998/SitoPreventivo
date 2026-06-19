@@ -222,9 +222,9 @@ export default function AdminDashboard() {
         .admin-table td button{padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;font-size:.72rem;font-weight:600;cursor:pointer;transition:border-color .15s}
         [data-theme="dark"] .admin-table td button{border-color:#2d3044;background:#1a1d27;color:#e8eaf0}
         .admin-table td button:hover{border-color:#0B57D0;color:#0B57D0}
-        .admin-apikey-info{background:#f0f7ff;border:1px solid #b8d6ff;border-radius:12px;padding:16px 20px;font-size:.85rem;color:#1e4a7a;line-height:1.6}
+        .admin-apikey-info{background:#f0f7ff;border:1px solid #b8d6ff;border-radius:12px;padding:16px 20px;font-size:.85rem;color:#1e4a7a;line-height:1.6;overflow-wrap:break-word;word-break:break-word}
         [data-theme="dark"] .admin-apikey-info{background:rgba(77,148,255,.08);border-color:rgba(77,148,255,.15);color:#8ab4f8}
-        .admin-apikey-info code{background:rgba(11,87,208,.08);padding:2px 6px;border-radius:4px;font-size:.82rem}
+        .admin-apikey-info code{background:rgba(11,87,208,.08);padding:2px 6px;border-radius:4px;font-size:.82rem;overflow-wrap:break-word;word-break:break-all}
         [data-theme="dark"] .admin-apikey-info code{background:rgba(77,148,255,.15)}
         .admin-apikey-check{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
         .btn-check-status{padding:8px 16px;border:1px solid #0B57D0;background:#fff;color:#0B57D0;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s}
@@ -251,27 +251,29 @@ export default function AdminDashboard() {
         @media(max-width:768px){
           .admin-dashboard{padding:16px}
           .admin-head{flex-direction:column;align-items:flex-start;gap:8px}
-          .admin-stats{grid-template-columns:1fr 1fr;gap:10px}
+          .admin-stats{grid-template-columns:1fr 1fr !important;gap:10px}
           .admin-stat{padding:16px 12px;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center}
           .admin-stat b{font-size:1.5rem;line-height:1.2;margin-bottom:4px}
           .admin-stat span{font-size:.7rem;line-height:1.3}
-          .admin-table{font-size:.75rem}
-          .admin-table th,.admin-table td{padding:8px 10px}
-          .admin-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+          .admin-table{font-size:.65rem;table-layout:fixed;white-space:normal}
+          .admin-table th,.admin-table td{padding:6px 6px;word-break:break-word;overflow:hidden}
+          .admin-table th:nth-child(7),.admin-table th:nth-child(8),.admin-table td:nth-child(7),.admin-table td:nth-child(8){display:none}
+          .admin-table-wrap{overflow-x:hidden}
           .admin-pw-edit{min-width:160px}
           .admin-pw-edit input{font-size:.7rem}
           .admin-limit-edit input{width:60px}
           .admin-section h3{font-size:.9rem}
-          .admin-apikey-info{padding:12px 14px;font-size:.8rem}
+          .admin-apikey-info{padding:12px 14px;font-size:.8rem;overflow-wrap:break-word;word-break:break-word}
           .btn-check-status{padding:6px 12px;font-size:.78rem}
         }
         @media(max-width:480px){
-          .admin-stats{grid-template-columns:1fr 1fr;gap:8px}
+          .admin-stats{grid-template-columns:1fr 1fr !important;gap:8px}
           .admin-stat{padding:14px 10px;min-height:72px}
           .admin-stat b{font-size:1.3rem}
           .admin-stat span{font-size:.65rem}
-          .admin-table{font-size:.7rem}
-          .admin-table th,.admin-table td{padding:6px 8px}
+          .admin-table{font-size:.55rem;table-layout:fixed;white-space:normal}
+          .admin-table th,.admin-table td{padding:4px 4px;word-break:break-word;overflow:hidden}
+          .admin-table th:nth-child(7),.admin-table th:nth-child(8),.admin-table td:nth-child(7),.admin-table td:nth-child(8){display:none}
           .admin-pw-edit{min-width:0;width:100%}
           .admin-pw-edit input{font-size:.65rem}
           .admin-limit-edit{flex-wrap:wrap}

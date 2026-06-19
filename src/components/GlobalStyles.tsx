@@ -402,7 +402,7 @@ export default function GlobalStyles() {
     @media(max-width:1400px){.editor-col{width:320px}}
     @media(max-width:1200px){.editor-col{width:280px}.preview-wrap{padding:20px}}
     @media(max-width:1023px){.collection-grid{grid-template-columns:repeat(2,1fr)}}
-    @media(max-width:900px){.app-shell{grid-template-columns:1fr}.sidebar{display:none}.preview-wrap{min-height:60vh}}
+    @media(max-width:900px){.app-shell{grid-template-columns:1fr}.sidebar{display:none}.preview-wrap{min-height:60vh;overflow-x:hidden}.top-actions{flex-wrap:wrap;gap:6px}.top-actions button span{display:none}}
     @media(max-width:768px){
       .mobile-topbar{display:flex}
       .editor-grid{flex-direction:column;overflow:visible}
@@ -413,8 +413,10 @@ export default function GlobalStyles() {
       .editor-mobile-bar button.active{color:var(--accent);background:var(--blue-bg);border-bottom:2px solid var(--accent)}
       .editor-mobile-panel{display:block;border-bottom:1px solid var(--line);background:var(--surface);max-height:50vh;overflow-y:auto}
       .editor-mobile-panel .panel{border-right:none;padding:16px;height:auto;overflow-x:auto}
-      .preview-wrap{width:100%;padding:12px;min-height:40vh}
-      .topbar{display:none}
+      .preview-wrap{width:100%;padding:12px;min-height:40vh;overflow-x:hidden}
+      .workspace{overflow-x:hidden}
+      .workspace > .topbar{display:none !important}
+      .top-actions{flex-wrap:wrap;gap:6px}
       .form-grid{grid-template-columns:1fr}
       .document{padding:16px;font-size:.82rem;overflow-x:auto}
       .doc-main-title{font-size:1.4rem}

@@ -9,6 +9,7 @@ export const PROFESSIONI = [
   { id: 'social', label: 'Social Media Manager' },
   { id: 'videomaker', label: 'Videomaker' },
   { id: 'seo', label: 'Consulente SEO' },
+  { id: 'altro', label: 'Altro' },
 ];
 
 function makeId() {
@@ -20,7 +21,7 @@ export const DEFAULT_TEMPLATES = [
     id: makeId(), title: 'Sviluppo Sito Web', client: '', status: 'Bozza',
     date: new Date().toISOString().slice(0, 10), owner: '',
     intro: 'Preventivo per la realizzazione di un sito web professionale, comprensivo di progettazione, sviluppo e ottimizzazione.',
-    color: '#0B57D0', vat: 22, isTemplate: true,
+    color: '#0B57D0', vat: 22, isTemplate: true, isGlobal: true, owner: 'admin@gmail.com',
     options: [
       { id: 'opt_1', title: 'Sito Vetrina', description: 'Sito one-page con chi siamo, servizi, contatti e modulo richiesta.', oneTimeCost: 1200, monthlyCost: 0 },
       { id: 'opt_2', title: 'Sito Multi-pagina', description: 'Sito fino a 5 pagine con CMS, blog e form contatti avanzato.', oneTimeCost: 2500, monthlyCost: 0 },
@@ -37,7 +38,7 @@ export const DEFAULT_TEMPLATES = [
     id: makeId(), title: 'Progetto Grafico', client: '', status: 'Bozza',
     date: new Date().toISOString().slice(0, 10), owner: '',
     intro: 'Preventivo per servizi di graphic design: identità visiva, materiale cartaceo e digitale.',
-    color: '#7C3AED', vat: 22, isTemplate: true,
+    color: '#7C3AED', vat: 22, isTemplate: true, isGlobal: true, owner: 'admin@gmail.com',
     options: [
       { id: 'opt_1', title: 'Logo + Brand Identity', description: 'Logo principale, varianti colore, palette, tipografia e manuale d\'uso essenziale.', oneTimeCost: 800, monthlyCost: 0 },
       { id: 'opt_2', title: 'Biglietti da Visita', description: 'Design e stampa 250 biglietti fronte/retro in carta pregiata 350g.', oneTimeCost: 250, monthlyCost: 0 },
@@ -54,7 +55,7 @@ export const DEFAULT_TEMPLATES = [
     id: makeId(), title: 'Consulenza Marketing Digitale', client: '', status: 'Bozza',
     date: new Date().toISOString().slice(0, 10), owner: '',
     intro: 'Strategia marketing digitale su misura per far crescere il tuo business online.',
-    color: '#F59E0B', vat: 22, isTemplate: true,
+    color: '#F59E0B', vat: 22, isTemplate: true, isGlobal: true, owner: 'admin@gmail.com',
     options: [
       { id: 'opt_1', title: 'Audit Marketing', description: 'Analisi completo canali digitali, competitor audit e report con raccomandazioni.', oneTimeCost: 500, monthlyCost: 0 },
       { id: 'opt_2', title: 'Strategia Trimestrale', description: 'Piano editoriale, calendario contenuti, strategia canali e KPI mensili.', oneTimeCost: 0, monthlyCost: 600 },
@@ -70,7 +71,7 @@ export const DEFAULT_TEMPLATES = [
     id: makeId(), title: 'Servizi Commercialista', client: '', status: 'Bozza',
     date: new Date().toISOString().slice(0, 10), owner: '',
     intro: 'Servizi contabili e fiscali per partite IVA e professionisti. Trasparenza e competenza.',
-    color: '#10B981', vat: 22, isTemplate: true,
+    color: '#10B981', vat: 22, isTemplate: true, isGlobal: true, owner: 'admin@gmail.com',
     options: [
       { id: 'opt_1', title: 'Contabilità Ordinaria', description: 'Tenuta contabilità, registrazioni IVA, libro giornale e inventari.', oneTimeCost: 0, monthlyCost: 120 },
       { id: 'opt_2', title: 'Dichiarazione Redditi', description: 'Preparazione e invio dichiarazione annuale PF o SP.', oneTimeCost: 350, monthlyCost: 0 },
@@ -86,7 +87,7 @@ export const DEFAULT_TEMPLATES = [
     id: makeId(), title: 'Prestazione Legale', client: '', status: 'Bozza',
     date: new Date().toISOString().slice(0, 10), owner: '',
     intro: 'Preventivo per prestazioni legali: assistenza, pareri e contenzioso.',
-    color: '#EF4444', vat: 22, isTemplate: true,
+    color: '#EF4444', vat: 22, isTemplate: true, isGlobal: true, owner: 'admin@gmail.com',
     options: [
       { id: 'opt_1', title: 'Parere Legale Scritto', description: 'Analisi del caso e parere legale motivato su questioni di diritto civile o commerciale.', oneTimeCost: 600, monthlyCost: 0 },
       { id: 'opt_2', title: 'Assistenza Contrattuale', description: 'Redazione/revisione contratti fino a 10 pagine, inclusa due diligence.', oneTimeCost: 800, monthlyCost: 0 },
@@ -102,7 +103,7 @@ export const DEFAULT_TEMPLATES = [
     id: makeId(), title: 'Progetto Architettonico', client: '', status: 'Bozza',
     date: new Date().toISOString().slice(0, 10), owner: '',
     intro: 'Servizi di progettazione architettonica, direzione lavori e pratiche edilizie.',
-    color: '#14B8A6', vat: 22, isTemplate: true,
+    color: '#14B8A6', vat: 22, isTemplate: true, isGlobal: true, owner: 'admin@gmail.com',
     options: [
       { id: 'opt_1', title: 'Progetto Preliminare', description: 'Rilievi, schizzi di massima, concept plan e preventivo sommario.', oneTimeCost: 1500, monthlyCost: 0 },
       { id: 'opt_2', title: 'Progetto Definitivo', description: 'Piante, prospetti, sezioni, computo metrico e capitolato lavori.', oneTimeCost: 3500, monthlyCost: 0 },
@@ -118,7 +119,7 @@ export const DEFAULT_TEMPLATES = [
     id: makeId(), title: 'Servizio Fotografico', client: '', status: 'Bozza',
     date: new Date().toISOString().slice(0, 10), owner: '',
     intro: 'Preventivo per servizi di fotografia professionale per aziende e privati.',
-    color: '#EC4899', vat: 22, isTemplate: true,
+    color: '#EC4899', vat: 22, isTemplate: true, isGlobal: true, owner: 'admin@gmail.com',
     options: [
       { id: 'opt_1', title: 'Book Ritratti', description: 'Sessione studio 2h, 10 foto ritoccate HD con diritto d\'uso commerciale.', oneTimeCost: 350, monthlyCost: 0 },
       { id: 'opt_2', title: 'Servizio Evento', description: 'Copertura evento fino a 4h, 100+ foto editate in galleria online privata.', oneTimeCost: 600, monthlyCost: 0 },
@@ -135,7 +136,7 @@ export const DEFAULT_TEMPLATES = [
     id: makeId(), title: 'Social Media Management', client: '', status: 'Bozza',
     date: new Date().toISOString().slice(0, 10), owner: '',
     intro: 'Gestione professionale dei tuoi canali social per aumentare engagement e visibilità.',
-    color: '#6366F1', vat: 22, isTemplate: true,
+    color: '#6366F1', vat: 22, isTemplate: true, isGlobal: true, owner: 'admin@gmail.com',
     options: [
       { id: 'opt_1', title: 'Gestione Base', description: '2 canali social, 8 post/mese, community management base e report mensile.', oneTimeCost: 0, monthlyCost: 400 },
       { id: 'opt_2', title: 'Gestione Avanzata', description: '3 canali social, 15 post/mese, stories, adv gestito e report avanzato.', oneTimeCost: 0, monthlyCost: 700 },
@@ -151,7 +152,7 @@ export const DEFAULT_TEMPLATES = [
     id: makeId(), title: 'Produzione Video', client: '', status: 'Bozza',
     date: new Date().toISOString().slice(0, 10), owner: '',
     intro: 'Realizzazione di contenuti video professionali dal concept alla post-produzione.',
-    color: '#84CC16', vat: 22, isTemplate: true,
+    color: '#84CC16', vat: 22, isTemplate: true, isGlobal: true, owner: 'admin@gmail.com',
     options: [
       { id: 'opt_1', title: 'Video Aziendale', description: 'Video 60-90s, soggetto e sceneggiatura, riprese 4h, montaggio e color correction.', oneTimeCost: 1200, monthlyCost: 0 },
       { id: 'opt_2', title: 'Intervista/Testimonial', description: 'Intervista professionale, 2 camere, set luce, montaggio e sottotitoli.', oneTimeCost: 800, monthlyCost: 0 },
@@ -167,7 +168,7 @@ export const DEFAULT_TEMPLATES = [
     id: makeId(), title: 'Consulenza SEO', client: '', status: 'Bozza',
     date: new Date().toISOString().slice(0, 10), owner: '',
     intro: 'Servizi di ottimizzazione per motori di ricerca: visibilità, traffico e conversioni organiche.',
-    color: '#84CC16', vat: 22, isTemplate: true,
+    color: '#84CC16', vat: 22, isTemplate: true, isGlobal: true, owner: 'admin@gmail.com',
     options: [
       { id: 'opt_1', title: 'SEO Audit', description: 'Analisi tecnica, competitor, parole chiave, backlink e report con raccomandazioni.', oneTimeCost: 500, monthlyCost: 0 },
       { id: 'opt_2', title: 'SEO On-page', description: 'Ottimizzazione contenuti, meta tag, heading, struttura URL e internal linking.', oneTimeCost: 0, monthlyCost: 300 },

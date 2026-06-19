@@ -4,7 +4,7 @@ import { PROFESSIONI } from '../utils/defaultTemplates';
 interface OnboardingData {
   displayName: string;
   companyName: string;
-  professions: string[];
+  profession: string;
   defaultColor: string;
   defaultVat: number;
   onboardingDone: boolean;
@@ -30,19 +30,19 @@ export default function OnboardingModal({ onComplete }: { onComplete: (data: Onb
   const [step, setStep] = useState(0);
   const [displayName, setDisplayName] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [professions, setProfessions] = useState<string[]>([]);
+  const [profession, setProfession] = useState<string>('');
   const [defaultColor, setDefaultColor] = useState('#0B57D0');
   const [defaultVat, setDefaultVat] = useState(22);
 
   const next = () => {
     if (step < STEPS.length - 1) setStep(step + 1);
-    else onComplete({ displayName, companyName, professions, defaultColor, defaultVat, onboardingDone: true });
+    else onComplete({ displayName, companyName, profession, defaultColor, defaultVat, onboardingDone: true });
   };
 
-  const canAdvance = step === 0 ? displayName.trim().length > 0 : true;
+  const canAdvance = step === 0 ? displayName.trim().length > 0 : step === 2 ? profession !== '' : true;
 
-  const toggleProfession = (id: string) => {
-    setProfessions(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+  const selectProfession = (id: string) => {
+    setProfession(id);
   };
 
   return (
@@ -81,9 +81,9 @@ export default function OnboardingModal({ onComplete }: { onComplete: (data: Onb
         {step === 2 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '24px' }}>
             {PROFESSIONI.map(p => {
-              const selected = professions.includes(p.id);
+              const selected = profession === p.id;
               return (
-                <button key={p.id} onClick={() => toggleProfession(p.id)} style={{
+                <button key={p.id} onClick={() => selectProfession(p.id)} style={{
                   padding: '12px', borderRadius: '10px', fontWeight: 600, fontSize: '.82rem', textAlign: 'left',
                   border: selected ? '2px solid var(--accent)' : '2px solid var(--line)',
                   background: selected ? 'var(--blue-bg)' : 'var(--surface)',

@@ -348,7 +348,7 @@ const dataService = {
   async getTemplates(email) {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_quotes') || [];
-      return { quotes: all.filter(q => q.userEmail === email && q.isTemplate) };
+      return { quotes: all.filter(q => q.isTemplate && (q.isGlobal || q.owner === email)) };
     }
     const result = await api('GET', `/quotes/templates?email=${encodeURIComponent(email)}`);
     if (result.error) return { quotes: [] };

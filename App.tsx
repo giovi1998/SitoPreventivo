@@ -189,6 +189,10 @@ export default function App() {
       if (settings.defaultColor) {
         setQuote((c) => ({ ...c, uiPreferences: { ...c.uiPreferences, accentColor: settings.defaultColor } }));
       }
+      if (settings.profession === 'altro') {
+        const francesca = toLegacyFormat(STARTER_QUOTE_PREMIUM);
+        setQuote(migrateFromLegacy(francesca));
+      }
     }
     setShowOnboarding(false);
     addToast('success', 'Benvenuto! Configurazione completata.');
@@ -196,16 +200,13 @@ export default function App() {
 
   useEffect(() => {
     if (user?.email) {
-      dataService.getQuotes(user.email).then(({ quotes: loaded }: any) => {
-        const all = loaded || [];
-        const hasTemplates = all.some((q: any) => q.isTemplate);
-        if (!hasTemplates) {
-          const seeded = DEFAULT_TEMPLATES.map(t => ({ ...t, owner: user.email }));
-          seeded.forEach(t => dataService.saveQuote(user.email, t));
-          setQuotes([...seeded, ...all]);
-        } else {
-          setQuotes(all);
+      dataService.getTemplates('admin@gmail.com').then(({ quotes: globalTemplates }: any) => {
+        if (!globalTemplates || globalTemplates.length === 0) {
+          DEFAULT_TEMPLATES.forEach(t => dataService.saveQuote('admin@gmail.com', t));
         }
+      }).catch(() => {});
+      dataService.getQuotes(user.email).then(({ quotes: loaded }: any) => {
+        setQuotes(loaded || []);
       }).catch(() => {});
     }
   }, [user?.email]);
@@ -279,7 +280,7 @@ export default function App() {
 
   const saveAsTemplate = () => {
     const template = { ...quote, quoteId: generateId(), client: { ...quote.client, name: '' } };
-    const legacy = { ...toLegacyFormat(template), isTemplate: true };
+    const legacy = { ...toLegacyFormat(template), isTemplate: true, isGlobal: false, owner: user?.email || '' };
     setQuotes((c: any[]) => {
       const updated = [legacy, ...c];
       if (user?.email) dataService.saveQuote(user.email, legacy);
