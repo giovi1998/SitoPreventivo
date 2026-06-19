@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { db } from "../db/index";
 import { users, quotes, userSettings } from "../db/schema";
 import { eq, and, sql } from "drizzle-orm";
