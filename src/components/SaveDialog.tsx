@@ -1,6 +1,13 @@
 import React from 'react';
 
-export default function SaveDialog({ open, defaultName, onSave, onCancel }) {
+interface SaveDialogProps {
+  open: boolean;
+  defaultName: string;
+  onSave: (name: string) => void;
+  onCancel: () => void;
+}
+
+export default function SaveDialog({ open, defaultName, onSave, onCancel }: SaveDialogProps) {
   const [name, setName] = React.useState(defaultName || '');
   const [confirmCancel, setConfirmCancel] = React.useState(false);
 

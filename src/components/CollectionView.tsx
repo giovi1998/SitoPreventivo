@@ -1,23 +1,34 @@
 import React, { useState, useMemo } from 'react';
-import Icon from './Icon.jsx';
+import Icon from './Icon';
+
+interface Quote {
+  id: string;
+  title?: string;
+  client?: string;
+  status?: string;
+  date?: string;
+  isTemplate?: boolean;
+  options?: any[];
+  [key: string]: any;
+}
 
 const STATUSES = ['BOZZA', 'INVIATO', 'ACCETTATO', 'RIFIUTATO'];
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   BOZZA: { bg: 'var(--surface-hov)', color: 'var(--muted)' },
   INVIATO: { bg: 'var(--blue-bg)', color: 'var(--accent)' },
   ACCETTATO: { bg: '#f7eddc', color: 'var(--amber)' },
   RIFIUTATO: { bg: 'var(--red-bg)', color: 'var(--red)' },
 };
 
-function money(value) {
+function money(value: number) {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Number(value || 0));
 }
 
-function parseDate(d) {
+function parseDate(d: string) {
   if (!d) return new Date(0);
   const parts = d.split(' ');
   if (parts.length === 3) {
-    const months = { gennaio:0, febbraio:1, marzo:2, aprile:3, maggio:4, giugno:5, luglio:6, agosto:7, settembre:8, ottobre:9, novembre:10, dicembre:11 };
+    const months: Record<string, number> = { gennaio:0, febbraio:1, marzo:2, aprile:3, maggio:4, giugno:5, luglio:6, agosto:7, settembre:8, ottobre:9, novembre:10, dicembre:11 };
     const day = parseInt(parts[0], 10);
     const month = months[parts[1]?.toLowerCase()];
     const year = parseInt(parts[2], 10);
@@ -26,7 +37,7 @@ function parseDate(d) {
   return new Date(d) || new Date(0);
 }
 
-function exportCSV(quotes) {
+function exportCSV(quotes: Quote[]) {
   const header = 'id,cliente,titolo,stato,valore_totale,data\n';
   const rows = quotes.map(q => {
     const first = q.options?.[0];
@@ -42,7 +53,19 @@ function exportCSV(quotes) {
   URL.revokeObjectURL(url);
 }
 
-export default function CollectionView({ quotes, activeId, openQuote, duplicate, removeQuote, onUpdateStatus, onDeleteRequest, setView, createFromTemplate }) {
+interface CollectionViewProps {
+  quotes: Quote[];
+  activeId: string;
+  openQuote: (q: Quote) => void;
+  duplicate: (q: Quote) => void;
+  removeQuote: (id: string) => void;
+  onUpdateStatus?: (id: string, status: string) => void;
+  onDeleteRequest?: (q: Quote) => void;
+  setView: (v: string) => void;
+  createFromTemplate?: (q: Quote) => void;
+}
+
+export default function CollectionView({ quotes, activeId, openQuote, duplicate, removeQuote, onUpdateStatus, onDeleteRequest, setView, createFromTemplate }: CollectionViewProps) {
   const [activeTab, setActiveTab] = useState('quotes');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('TUTTI');
@@ -63,8 +86,8 @@ export default function CollectionView({ quotes, activeId, openQuote, duplicate,
       list = list.filter(item => (item.status || 'BOZZA').toUpperCase() === statusFilter);
     }
     list.sort((a, b) => {
-      if (sort === 'date-asc') return parseDate(a.date) - parseDate(b.date);
-      if (sort === 'date-desc') return parseDate(b.date) - parseDate(a.date);
+      if (sort === 'date-asc') return parseDate(a.date!) - parseDate(b.date!);
+      if (sort === 'date-desc') return parseDate(b.date!) - parseDate(a.date!);
       if (sort === 'name-asc') return (a.title || '').localeCompare(b.title || '');
       return 0;
     });

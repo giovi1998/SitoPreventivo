@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../../App';
-import dataService from '../utils/dataService.js';
+import dataService from '../utils/dataService';
 
 const pwRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
 
@@ -13,7 +13,7 @@ export default function SettingsPage() {
   const [msgType, setMsgType] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleChangePassword = async (e) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage('');
     setMsgType('');

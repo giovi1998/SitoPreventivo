@@ -1,7 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-export default function HomePage({ user }) {
+interface HomePageProps {
+  user: any;
+}
+
+export default function HomePage({ user }: HomePageProps) {
   return (
     <div className="home-page">
       <header className="home-header">

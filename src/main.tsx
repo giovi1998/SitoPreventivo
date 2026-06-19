@@ -2,15 +2,15 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import App, { AuthProvider, AuthContext } from '../App';
-import HomePage from './pages/HomePage.jsx';
-import LoginPage from './pages/LoginPage.jsx';
-import PublicQuoteView from './pages/PublicQuoteView.jsx';
-import NotFoundPage from './pages/NotFoundPage.jsx';
+import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import PublicQuoteView from './pages/PublicQuoteView';
+import NotFoundPage from './pages/NotFoundPage';
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user } = React.useContext(AuthContext);
   if (!user) return <Navigate to="/login" replace />;
-  return children;
+  return <>{children}</>;
 }
 
 function AppWrapper() {
@@ -40,4 +40,4 @@ function HomePageWrapper() {
   return <HomePage user={user} />;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<AppWrapper />);
+ReactDOM.createRoot(document.getElementById('root')!).render(<AppWrapper />);

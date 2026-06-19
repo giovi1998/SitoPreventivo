@@ -15,7 +15,7 @@ export default function LoginPage() {
   const { login, register } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -47,7 +47,6 @@ export default function LoginPage() {
 
   return (
     <div className="auth-page">
-      {/* Left panel — branding */}
       <div className="auth-brand-panel">
         <div className="auth-brand-content">
           <div className="auth-logo">
@@ -91,7 +90,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Decorative dots */}
         <div className="auth-dots">
           {Array.from({ length: 48 }, (_, i) => (
             <div key={i} className="auth-dot" style={{ animationDelay: `${(i % 8) * 0.15}s` }} />
@@ -99,10 +97,8 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Right panel — form */}
       <div className="auth-form-panel">
         <div className="auth-form-wrapper">
-          {/* Mobile logo */}
           <div className="auth-mobile-logo">
             <div className="auth-mobile-logo-icon">
               <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
@@ -249,7 +245,6 @@ export default function LoginPage() {
         .auth-dots{position:absolute;inset:0;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(6,1fr);gap:24px;padding:40px;opacity:0.08;z-index:1}
         .auth-dot{width:4px;height:4px;background:#fff;border-radius:50%;animation:pulse-dot 3s ease-in-out infinite}
         @keyframes pulse-dot{0%,100%{opacity:0.3;transform:scale(1)}50%{opacity:1;transform:scale(1.5)}}
-
         .auth-form-panel{background:#f8fafc;display:flex;align-items:center;justify-content:center;padding:40px}
         [data-theme="dark"] .auth-form-panel{background:var(--canvas)}
         .auth-form-wrapper{width:100%;max-width:380px}
@@ -290,7 +285,6 @@ export default function LoginPage() {
         .auth-toggle button:hover{color:#1d4ed8}
         .auth-back{display:inline-flex;align-items:center;gap:6px;color:#94a3b8;text-decoration:none;font-size:.85rem;font-weight:500;transition:color .15s}
         .auth-back:hover{color:#475569}
-
         @media(max-width:900px){
           .auth-page{grid-template-columns:1fr}
           .auth-brand-panel{display:none}

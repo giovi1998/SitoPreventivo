@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 export default function NotFoundPage() {
   return (
     <div className="notfound-page">
-      {/* Floating shapes */}
       <div className="notfound-shapes">
         <div className="notfound-shape shape-1" />
         <div className="notfound-shape shape-2" />
@@ -14,7 +13,6 @@ export default function NotFoundPage() {
       </div>
 
       <div className="notfound-content">
-        {/* Big 404 */}
         <div className="notfound-number">
           <span className="digit-4a">4</span>
           <div className="notfound-circle">
@@ -60,7 +58,6 @@ export default function NotFoundPage() {
         .shape-4{width:80px;height:80px;background:#60a5fa;top:20%;right:20%;animation:float-shape 12s ease-in-out infinite 1s}
         .shape-5{width:160px;height:160px;background:#1d4ed8;bottom:20%;right:10%;animation:float-shape 22s ease-in-out infinite 3s}
         @keyframes float-shape{0%,100%{transform:translate(0,0) scale(1)}25%{transform:translate(20px,-30px) scale(1.05)}50%{transform:translate(-10px,20px) scale(0.95)}75%{transform:translate(15px,10px) scale(1.02)}}
-
         .notfound-content{text-align:center;position:relative;z-index:2;max-width:520px}
         .notfound-number{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:32px}
         .digit-4a,.digit-4b{font-size:8rem;font-weight:950;color:#07111f;line-height:1;letter-spacing:-0.04em;opacity:0.08}
@@ -68,7 +65,6 @@ export default function NotFoundPage() {
         .notfound-circle{width:120px;height:120px;animation:spin-slow 12s linear infinite}
         .notfound-circle svg{width:100%;height:100%}
         @keyframes spin-slow{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-
         .notfound-title{font-size:1.75rem;font-weight:900;color:#07111f;margin:0 0 16px;letter-spacing:-0.03em}
         [data-theme="dark"] .notfound-title{color:#e8eaf0}
         .notfound-desc{font-size:1rem;color:#647086;margin:0 0 40px;line-height:1.7}
@@ -80,14 +76,12 @@ export default function NotFoundPage() {
         .notfound-btn.secondary{background:#fff;color:#475569;border:2px solid #e2e8f0}
         [data-theme="dark"] .notfound-btn.secondary{background:#1a1d27;color:#8892a8;border-color:#2d3044}
         .notfound-btn.secondary:hover{border-color:#0B57D0;color:#0B57D0;transform:translateY(-2px)}
-
         .notfound-footer{margin-top:48px;padding:16px 24px;background:rgba(255,255,255,0.7);border-radius:14px;border:1px solid #e2e8f0;backdrop-filter:blur(12px);display:inline-block}
         [data-theme="dark"] .notfound-footer{background:rgba(26,29,39,0.7);border-color:#2d3044}
         .notfound-footer p{margin:0;font-size:.88rem;color:#647086}
         [data-theme="dark"] .notfound-footer p{color:#8892a8}
         .notfound-footer strong{color:#07111f}
         [data-theme="dark"] .notfound-footer strong{color:#e8eaf0}
-
         @media(max-width:600px){
           .digit-4a,.digit-4b{font-size:5rem}
           .notfound-circle{width:80px;height:80px}

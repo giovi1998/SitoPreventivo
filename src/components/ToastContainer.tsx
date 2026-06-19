@@ -1,12 +1,18 @@
 import React, { useEffect } from 'react';
 
-const TOAST_COLORS = {
+interface ToastItem {
+  id: string;
+  type: string;
+  message: string;
+}
+
+const TOAST_COLORS: Record<string, { bg: string; icon: string }> = {
   success: { bg: '#059669', icon: '✓' },
   warning: { bg: '#D97706', icon: '⚠' },
   error: { bg: '#DC2626', icon: '✕' },
 };
 
-function Toast({ toast, onDismiss }) {
+function Toast({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: string) => void }) {
   useEffect(() => {
     const timer = setTimeout(() => onDismiss(toast.id), 3000);
     return () => clearTimeout(timer);
@@ -25,12 +31,12 @@ function Toast({ toast, onDismiss }) {
   );
 }
 
-export default function ToastContainer({ toasts, onDismiss }) {
+export default function ToastContainer({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: string) => void }) {
   if (!toasts || toasts.length === 0) return null;
   return (
     <div className="toast-container">
       {toasts.map(t => (
-        <div key={t.id} style={{ pointerEvents: 'auto' }}>
+        <div key={t.id} style={{ pointerEvents: 'auto' as const }}>
           <Toast toast={t} onDismiss={onDismiss} />
         </div>
       ))}

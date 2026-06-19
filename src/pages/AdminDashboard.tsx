@@ -1,24 +1,24 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../../App';
-import dataService from '../utils/dataService.js';
+import dataService from '../utils/dataService';
 
 const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
 export default function AdminDashboard() {
   const { user } = useContext(AuthContext);
-  const [users, setUsers] = useState([]);
-  const [quotes, setQuotes] = useState([]);
-  const [editingLimit, setEditingLimit] = useState(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [quotes, setQuotes] = useState<any[]>([]);
+  const [editingLimit, setEditingLimit] = useState<string | null>(null);
   const [limitValue, setLimitValue] = useState('');
-  const [dsStatus, setDsStatus] = useState(null);
-  const [pwChange, setPwChange] = useState(null);
+  const [dsStatus, setDsStatus] = useState<any>(null);
+  const [pwChange, setPwChange] = useState<string | null>(null);
   const [pwOld, setPwOld] = useState('');
   const [pwNew, setPwNew] = useState('');
   const [pwMsg, setPwMsg] = useState('');
 
   useEffect(() => {
-    dataService.adminGetUsers().then(({ users: list }) => setUsers(list || []));
-    dataService.adminGetAllQuotes().then(({ quotes: list }) => setQuotes(list || []));
+    dataService.adminGetUsers().then(({ users: list }: any) => setUsers(list || []));
+    dataService.adminGetAllQuotes().then(({ quotes: list }: any) => setQuotes(list || []));
   }, []);
 
   const checkDeepSeekStatus = async () => {
@@ -31,7 +31,7 @@ export default function AdminDashboard() {
 
   const pwRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
 
-  const handleChangePassword = async (email) => {
+  const handleChangePassword = async (email: string) => {
     if (!pwOld || !pwNew) { setPwMsg('Compila tutti i campi'); return; }
     if (!pwRegex.test(pwNew)) { setPwMsg('Minimo 12 caratteri, maiuscola, minuscola, numero e speciale'); return; }
     const result = await dataService.changePassword(email, pwOld, pwNew);
@@ -46,7 +46,7 @@ export default function AdminDashboard() {
     setTimeout(() => setPwMsg(''), 3000);
   };
 
-  const handleSetLimit = async (email) => {
+  const handleSetLimit = async (email: string) => {
     const val = parseInt(limitValue, 10);
     if (isNaN(val) || val < 0) return;
     await dataService.adminUpdateLimits(email, val);

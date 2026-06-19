@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import DocumentPreview from '../components/DocumentPreview';
-import dataService from '../utils/dataService.js';
+import dataService from '../utils/dataService';
 
 export default function PublicQuoteView() {
   const { shareToken } = useParams();
-  const [quote, setQuote] = useState(null);
-  const [error, setError] = useState(null);
+  const [quote, setQuote] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    dataService.getPublicQuote(shareToken).then(({ quote: q, error: err }) => {
+    dataService.getPublicQuote(shareToken).then(({ quote: q, error: err }: any) => {
       if (err) setError(err);
       else setQuote(q);
       setLoading(false);

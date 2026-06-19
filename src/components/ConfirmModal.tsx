@@ -1,6 +1,16 @@
 import React from 'react';
 
-export default function ConfirmModal({ open, title, message, confirmLabel, confirmClass, onConfirm, onCancel }) {
+interface ConfirmModalProps {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  confirmClass?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+export default function ConfirmModal({ open, title, message, confirmLabel, confirmClass, onConfirm, onCancel }: ConfirmModalProps) {
   if (!open) return null;
   return (
     <div className="confirm-overlay" onClick={onCancel}>

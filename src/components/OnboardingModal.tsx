@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
 
+interface OnboardingData {
+  displayName: string;
+  companyName: string;
+  defaultColor: string;
+  defaultVat: number;
+  onboardingDone: boolean;
+}
+
 const BRAND_COLORS = ["#0B57D0","#11845B","#6D3FD1","#A66200","#D64545","#B83280","#0F766E","#334155","#4F46E5","#5B7F22"];
 const VAT_OPTIONS = [
   { value: 22, label: '22%' },
@@ -15,7 +23,7 @@ const STEPS = [
   { title: 'IVA predefinita', subtitle: 'Quale aliquota usi di solito?' },
 ];
 
-export default function OnboardingModal({ onComplete }) {
+export default function OnboardingModal({ onComplete }: { onComplete: (data: OnboardingData) => void }) {
   const [step, setStep] = useState(0);
   const [displayName, setDisplayName] = useState('');
   const [companyName, setCompanyName] = useState('');

@@ -1,16 +1,25 @@
 import React, { useState } from 'react';
 
-export default function Layout({ children, view, setView, onLogout, user, theme, setTheme }) {
+interface LayoutProps {
+  children: React.ReactNode;
+  view: string;
+  setView: (v: string) => void;
+  onLogout: () => void;
+  user: any;
+  theme: string;
+  setTheme: (t: string) => void;
+}
+
+export default function Layout({ children, view, setView, onLogout, user, theme, setTheme }: LayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const nav = (v) => {
+  const nav = (v: string) => {
     setView(v);
     setDrawerOpen(false);
   };
 
   return (
     <main className="app-shell">
-      {/* ─── DESKTOP SIDEBAR (>768px) ─────────── */}
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-logo">
@@ -77,7 +86,6 @@ export default function Layout({ children, view, setView, onLogout, user, theme,
         </div>
       </aside>
 
-      {/* ─── MOBILE TOPBAR (<768px) ─────────────── */}
       {user && (
         <header className="mobile-topbar">
           <button className="mobile-hamburger" onClick={() => setDrawerOpen(true)} aria-label="Apri menu">
@@ -93,7 +101,6 @@ export default function Layout({ children, view, setView, onLogout, user, theme,
         </header>
       )}
 
-      {/* ─── MOBILE DRAWER (<768px) ──────────────── */}
       {drawerOpen && (
         <div className="drawer-overlay" onClick={() => setDrawerOpen(false)}>
           <aside className="mobile-drawer" onClick={e => e.stopPropagation()}>
