@@ -355,9 +355,12 @@ export default function GlobalStyles() {
     .mobile-theme-btn{background:none;border:none;color:var(--ink);padding:8px;display:grid;place-items:center;cursor:pointer;border-radius:8px;transition:background var(--transition-fast);font-size:1.1rem;line-height:1;flex-shrink:0;min-width:40px;min-height:40px}
     .mobile-theme-btn:hover{background:var(--surface-hov);transform:none;box-shadow:none}
     .mobile-theme-btn:active{background:var(--blue-bg);transform:none}
-    .mobile-save-btn{background:none;border:none;color:var(--ink);padding:8px;display:grid;place-items:center;cursor:pointer;border-radius:8px;transition:background var(--transition-fast);flex-shrink:0;min-width:40px;min-height:40px}
+    .mobile-save-btn{background:none;border:none;color:var(--ink);padding:8px;display:grid;place-items:center;cursor:pointer;border-radius:8px;transition:background var(--transition-fast);flex-shrink:0;min-width:40px;min-height:40px;touch-action:manipulation;position:relative;z-index:1}
     .mobile-save-btn:hover{background:var(--surface-hov);transform:none;box-shadow:none}
     .mobile-save-btn:active{background:var(--blue-bg);transform:none}
+    [data-theme="dark"] .mobile-save-btn{background:none;border:none;color:var(--ink)}
+    [data-theme="dark"] .mobile-save-btn:hover{background:var(--surface-hov)}
+    [data-theme="dark"] .mobile-save-btn:active{background:var(--blue-bg)}
 
     /* ─── DRAWER ──────────────────────────────────────── */
     .drawer-overlay{position:fixed;inset:0;background:var(--overlay);z-index:100;animation:fadeIn .2s ease}
@@ -379,6 +382,18 @@ export default function GlobalStyles() {
     .drawer-logout:hover{background:rgba(255,255,255,.1);color:#fff;transform:none;box-shadow:none}
 
     /* ─── EDITOR MOBILE INLINE ────────────────────────── */
+    .editor-mobile-actions{display:none;flex-direction:column;gap:6px;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
+    .editor-mobile-actions-buttons{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+    .mobile-action-btn{background:none;border:none;color:var(--ink);padding:8px;display:grid;place-items:center;cursor:pointer;border-radius:8px;transition:background var(--transition-fast);min-width:40px;min-height:40px;touch-action:manipulation}
+    .mobile-action-btn:hover{background:var(--surface-hov)}
+    .mobile-action-btn:active{background:var(--blue-bg)}
+    .mobile-action-btn:disabled{opacity:.5;cursor:not-allowed}
+    .mobile-action-btn-save{color:var(--accent)}
+    .mobile-action-btn-save:hover{background:var(--blue-bg)}
+    .mobile-action-btn-export{color:#fff;background:var(--accent);border-radius:8px}
+    .mobile-action-btn-export:hover{background:color-mix(in srgb,var(--accent) 90%,#000)}
+    .save-status-mobile{margin-right:auto}
+
     .editor-mobile-bar{display:none}
     .editor-mobile-panel{display:none}
 
@@ -411,6 +426,7 @@ export default function GlobalStyles() {
       .mobile-topbar{display:flex}
       .editor-grid{flex-direction:column;overflow:visible}
       .editor-col{display:none}
+      .editor-mobile-actions{display:flex}
       .editor-mobile-bar{display:flex;flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--line)}
       .editor-mobile-bar button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border:none;border-radius:0;background:var(--surface);color:var(--muted);font-size:.82rem;font-weight:var(--weight-bold);cursor:pointer;padding:12px;transition:color var(--transition-fast),background var(--transition-fast);height:100%}
       .editor-mobile-bar button:hover{background:var(--surface-sun);transform:none;box-shadow:none}

@@ -89,6 +89,14 @@ interface EditorViewProps {
   shareInfo: { link: string; token: string } | null;
   toggleShare: (enabled: boolean) => void;
   documentTheme?: DocumentTemplateId;
+  onSave: () => void;
+  onExportPDF: () => void;
+  onExportDOCX?: () => void;
+  onImportPDF?: () => void;
+  onSaveAsTemplate?: () => void;
+  lastSaveTime: Date | null;
+  pdfLoading: boolean;
+  docxLoading?: boolean;
 }
 
 export default function EditorView({
@@ -96,6 +104,8 @@ export default function EditorView({
   updateOptions, updateClause, addClause, removeClause, onRunAI, aiModel, onAiModelChange,
   previewRef, aiLogs, isProcessing, availableModels, onResetChat,
   isDirty, saveQuote, shareInfo, toggleShare, documentTheme = 'corporate',
+  onSave, onExportPDF, onExportDOCX, onImportPDF, onSaveAsTemplate,
+  lastSaveTime, pdfLoading, docxLoading,
 }: EditorViewProps) {
   const [showAi, setShowAi] = React.useState(true);
   const [showManual, setShowManual] = React.useState(true);
@@ -315,6 +325,48 @@ export default function EditorView({
             <span>Man</span>
           </div>
         )}
+      </div>
+
+      <div className="editor-mobile-actions">
+        {isDirty ? (
+          <span className="save-status-mobile" style={{ color: 'var(--amber)', fontSize: '.7rem', fontWeight: 600 }}>● Modifiche non salvate</span>
+        ) : lastSaveTime ? (
+          <span className="save-status-mobile" style={{ color: 'var(--green)', fontSize: '.7rem', fontWeight: 600 }}>● Salvato alle {lastSaveTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+        ) : null}
+        <div className="editor-mobile-actions-buttons">
+          {onImportPDF && (
+            <button onClick={onImportPDF} className="mobile-action-btn" title="Importa PDF" aria-label="Importa PDF">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </button>
+          )}
+          <button onClick={onSave} className="mobile-action-btn mobile-action-btn-save" title="Salva (Ctrl+S)" aria-label="Salva">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          </button>
+          {onSaveAsTemplate && (
+            <button onClick={onSaveAsTemplate} className="mobile-action-btn" title="Salva come template" aria-label="Salva come template">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+            </button>
+          )}
+          <button onClick={onExportPDF} className="mobile-action-btn mobile-action-btn-export" title="Esporta PDF (Ctrl+P)" aria-label="Esporta PDF" disabled={pdfLoading}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          {onExportDOCX && (
+            <button onClick={onExportDOCX} className="mobile-action-btn" title="Esporta DOCX (Ctrl+D)" aria-label="Esporta DOCX" disabled={docxLoading}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="editor-mobile-bar">

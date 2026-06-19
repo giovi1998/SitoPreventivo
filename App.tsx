@@ -515,6 +515,14 @@ export default function App() {
             shareInfo={shareInfo}
             toggleShare={toggleShare}
             documentTheme={documentTheme}
+            onSave={saveQuote}
+            onExportPDF={exportPDF}
+            onExportDOCX={exportDOCX}
+            onImportPDF={() => setShowPdfImport(true)}
+            onSaveAsTemplate={saveAsTemplate}
+            lastSaveTime={lastSaveTime}
+            pdfLoading={pdfLoading}
+            docxLoading={docxLoading}
           />
         ) : view === "admin" ? (
           <Suspense fallback={<div className="view-loading"><div className="spinner" /></div>}>
