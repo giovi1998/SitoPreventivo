@@ -43,9 +43,8 @@ async function api(method, path, body, options = {}) {
   }
 }
 
-// ─── SEED ADMIN (locale + remoto) ─────────────────────
-// Usa ADMIN_INITIAL_PASSWORD dal server, VITE_ADMIN_INITIAL_PASSWORD dal client (locale).
-// L'admin può cambiarla dalla Dashboard dopo il primo login.
+  // ─── SEED ADMIN (locale + remoto) ─────────────────────
+  // Usa ADMIN_INITIAL_PASSWORD dalla variabile d'ambiente su Vercel, VITE_ADMIN_INITIAL_PASSWORD dal client (locale).
 async function seedAdminLocally() {
   const list = lsGet('registeredUsers') || [];
   const idx = list.findIndex(u => u.email === 'admin@gmail.com');
@@ -276,7 +275,7 @@ const dataService = {
     if (IS_LOCAL) {
       return lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
     }
-    // In production, key is set via Netlify env var (DEEPSEEK_API_KEY)
+    // In production, key is set via Vercel env var (DEEPSEEK_API_KEY)
     // The frontend never reads it — use chatWithAI() instead
     return '';
   },
@@ -286,8 +285,8 @@ const dataService = {
       lsSet('deepseekApiKey', key);
       return { success: true };
     }
-    // In production, key must be set in Netlify UI (DEEPSEEK_API_KEY env var)
-    return { success: false, error: 'In produzione, imposta DEEPSEEK_API_KEY nelle variabili d\'ambiente di Netlify.' };
+    // In production, key must be set in Vercel dashboard (DEEPSEEK_API_KEY env var)
+    return { success: false, error: 'In produzione, imposta DEEPSEEK_API_KEY nelle variabili d\'ambiente su Vercel.' };
   },
 
   // ─── CHECK DEEPSEEK STATUS (production debug) ────
@@ -326,7 +325,7 @@ const dataService = {
         return { error: `Connessione a DeepSeek fallita: ${err.message}` };
       }
     }
-    // Production: use Netlify function proxy (key stays server-side)
+    // Production: use Vercel Serverless Function proxy (key stays server-side)
     return await api('POST', '/ai/chat', { model, messages, response_format, temperature }, { timeoutMs: 30000 });
   },
 

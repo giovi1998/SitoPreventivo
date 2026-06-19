@@ -70,12 +70,11 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
 | Situazione | Dove vanno i dati |
 |------------|-------------------|
-| **Su Netlify** | Netlify Database (Postgres) via API Functions |
-| **Con `netlify dev`** | Postgres locale |
+| **Su Vercel** | Neon Postgres via Vercel Serverless Function (`/api`) |
 | **Solo `npm run dev`** | localStorage (fallback automatico) |
 | **Offline** | localStorage (funziona sempre) |
 
-L'app prova sempre prima l'API (`/.netlify/functions/api/...`). Se la chiamata fallisce (rete assente, funzione non disponibile), usa automaticamente localStorage.
+L'app in produzione chiama l'API su `/api/*`. In locale (`localhost`) usa esclusivamente localStorage.
 
 ### Password di default
 
@@ -93,29 +92,26 @@ Al primo avvio, l'admin `admin@gmail.com` viene creato automaticamente. In produ
 | `deepseekKey` | API Key DeepSeek |
 | `precisionQuote_quotes` | Preventivi salvati |
 
-## Deploy su Netlify
+## Deploy su Vercel
 
 ### Opzione 1: Con Database (completo)
 
 ```powershell
-npx netlify login
-npx netlify database init    # Crea database + migrazione
-npx netlify deploy --prod
+npx vercel login
+npx vercel --prod
 ```
 
-### Opzione 2: Drag & Drop (solo frontend)
+Vercel rileva automaticamente il progetto Vite e deploya sia il frontend che le API.
 
-```powershell
-npm run build
-# Trascina dist/ su https://app.netlify.com
-```
+### Opzione 2: Da repository GitHub
 
-### Opzione 3: Da repository GitHub
-
-1. Su [app.netlify.com](https://app.netlify.com) → **Add new site** → **Import an existing project**
+1. Su [vercel.com](https://vercel.com) → **Add New Project** → **Import Git Repository**
 2. Connetti il repo `giovi1998/SitoPreventivo`
-3. Netlify legge `netlify.toml` e imposta tutto
-4. Ogni push su master fa deploy automatico
+3. Vercel rileva automaticamente Vite e configura build
+4. Aggiungi le variabili d'ambiente su **Settings → Environment Variables**:
+   - `DATABASE_URL` — connection string Neon
+   - `DEEPSEEK_API_KEY` — chiave DeepSeek
+5. Ogni push sul branch collegato fa deploy automatico
 
 ## Sviluppo Database
 
@@ -123,8 +119,8 @@ npm run build
 # Genera migrazione dopo aver modificato db/schema.ts
 npm run db:generate
 
-# Applica migrazioni al DB locale
-netlify database migrations apply
+# Applica migrazioni al database Neon
+$env:DATABASE_URL="postgresql://..." ; npm run db:migrate
 
 # Apri interfaccia dati
 npm run db:studio

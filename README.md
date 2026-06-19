@@ -50,7 +50,7 @@ Server su `http://localhost:8000`
 
 ### Configurazione
 
-1. **Produzione (Netlify)**: vai su **Netlify → Site settings → Environment variables** e aggiungi `DEEPSEEK_API_KEY` con scope **Functions**. La chiave viene letta solo dalla Netlify Function e non deve essere esposta come variabile `VITE_*`.
+1. **Produzione (Vercel)**: vai su **Vercel Dashboard → Settings → Environment Variables** e aggiungi `DEEPSEEK_API_KEY` con scope **Production, Preview**. La chiave viene letta solo dalla Serverless Function e non deve essere esposta come variabile `VITE_*`.
 2. **Locale (`npm run dev`)**: nella Dashboard Admin (sidebar → Admin), incolla la chiave nel campo "Chiave DeepSeek" e salva (viene conservata in localStorage)
 3. Tutti gli utenti usano la stessa chiave condivisa — l'admin controlla i **limiti token** per ogni utente
 4. Gli utenti vedono selettore "Modello AI" e stato connessione nel pannello
@@ -92,29 +92,29 @@ Il PDF è generato con **pdfmake** (nessun canvas, page break intelligenti):
 
 | Ambiente | Storage |
 |----------|---------|
-| **Produzione** (Netlify) | Solo API → Netlify Database (Postgres) |
+| **Produzione** (Vercel + Neon) | Solo API → Neon Postgres |
 | **Locale** (`npm run dev`) | Solo localStorage |
 
 La selezione è automatica in base all'hostname: `localhost` = localStorage, altrimenti = API.
 
-### Variabili d'ambiente Netlify
+### Variabili d'ambiente Vercel
 
-In produzione il progetto deve leggere sempre le variabili iniettate da Netlify:
+In produzione il progetto ha bisogno delle seguenti variabili d'ambiente su Vercel:
 
-- `DEEPSEEK_API_KEY`: configurata in Netlify con scope **Functions**. Serve solo alla Function `/api/ai/chat`; il browser non la riceve mai.
-- Database Netlify: viene collegato e gestito da Netlify Database. Non impostare manualmente `DATABASE_URL` a un database esterno nella build se vuoi usare il database del sito Netlify.
+- `DATABASE_URL`: connection string Neon Postgres (`postgresql://...`). Necessaria per connettere la Serverless Function al database. Scope: **Production, Preview**.
+- `DEEPSEEK_API_KEY`: chiave API DeepSeek. Serve solo alla Function `/api/ai/chat`; il browser non la riceve mai. Scope: **Production, Preview**.
 
-Per evitare deploy su database sbagliati:
+Per configurare:
 
-1. Collega il database con `npx netlify database init` o dalla UI Netlify del sito corretto.
-2. Lascia che `@netlify/database` e il comando Netlify Database usino le variabili generate dalla piattaforma.
-3. Applica le migration solo con il sito Netlify collegato al database atteso.
-4. Non stampare chiavi, URL database o token nei log: l'app mostra solo se una variabile è configurata.
+1. Crea un database su [neon.tech](https://neon.tech) (piano Free)
+2. Copia la connection string `postgresql://...`
+3. Vai su **Vercel Dashboard → Settings → Environment Variables** e aggiungi `DATABASE_URL` e `DEEPSEEK_API_KEY`
+4. Applica le migration: `DATABASE_URL="postgresql://..." npm run db:migrate`
 
 ### Sicurezza
 
 - **Password hashate**: bcryptjs (12 rounds) su tutti gli endpoint
-- **Rate limiting**: max 5 tentativi di login falliti per IP in 15 minuti (via Netlify Blobs)
+- **Rate limiting**: max 5 tentativi di login falliti per IP in 15 minuti (in-memory)
 - **Ownership check**: ogni operazione su preventivi verifica che l'email corrisponda al proprietario
 - **Validazione input**: Zod su tutti gli endpoint (email, password, quote)
 - **Criteri password**: 12+ caratteri, almeno una maiuscola, una minuscola, un numero, un carattere speciale
@@ -187,8 +187,8 @@ cp .env.example .env
 # Genera una migrazione dopo aver modificato db/schema.ts
 npm run db:generate
 
-# Applica migrazioni usando il database collegato al sito Netlify corrente
-netlify database migrations apply
+# Applica migrazioni al database Neon
+DATABASE_URL="postgresql://..." npm run db:migrate
 
 # Apri Drizzle Studio per vedere i dati
 npm run db:studio
@@ -196,32 +196,33 @@ npm run db:studio
 
 Note importanti sulle migration:
 
-- Le migration già applicate su Netlify non vanno rinominate, eliminate o modificate.
-- Se una migration pendente deve rimuovere una tabella opzionale, usa SQL idempotente come `DROP TABLE IF EXISTS ...` per non bloccare ambienti che hanno già uno schema diverso.
-- Se il deploy segnala una tabella mancante, verifica prima che il sito Netlify e il database collegato siano quelli corretti.
+- Le migration vanno applicate puntando al database Neon corretto (produzione / preview).
+- Usa `drizzle-kit migrate` che applica solo le migration non ancora eseguite.
+- Se il deploy segnala una tabella mancante, verifica che `DATABASE_URL` punti al database giusto.
 
-## Deploy Netlify
+## Deploy su Vercel
 
-### Con Database
-
-```bash
-# Login
-npx netlify login
-
-# Init (crea database e collega)
-npx netlify database init
-# → Segui la procedura guidata
-
-# Deploy
-npx netlify deploy --prod
-```
-
-### Drag & Drop (solo frontend, senza DB)
+### Con Database (completo)
 
 ```bash
-npm run build
-# Trascina dist/ su https://app.netlify.com
+# Installa Vercel CLI
+npx vercel login
+
+# Deploy (collega il progetto)
+npx vercel --prod
 ```
+
+Vercel rileva automaticamente il progetto Vite, esegue `npm run build` e deploya la cartella `dist/` insieme alle Serverless Functions in `api/`.
+
+### Variabili d'ambiente su Vercel
+
+Dopo il deploy, vai su **Vercel Dashboard → Settings → Environment Variables** e aggiungi:
+
+| Variabile | Valore | Scope |
+|-----------|--------|-------|
+| `DATABASE_URL` | `postgresql://...` da Neon | Production, Preview |
+| `DEEPSEEK_API_KEY` | La tua chiave DeepSeek | Production, Preview |
+| `ADMIN_INITIAL_PASSWORD` | (opzionale) Password admin iniziale | Production, Preview |
 
 ## Struttura file
 
@@ -231,19 +232,17 @@ SitoPreventivo/
 ├── index.html
 ├── package.json               # react, react-router-dom, pdfmake, drizzle
 ├── vite.config.js             # Porta 8000, React plugin
-├── netlify.toml               # SPA redirect + functions config
+├── vercel.json                # SPA rewrites + API routing
 ├── REQUIREMENTS.md            # Prerequisiti dettagliati
 ├── drizzle.config.ts          # Drizzle ORM config
+├── drizzle/                   # Migrazioni database
+├── api/
+│   └── index.js               # Vercel Serverless Function (REST API)
 ├── db/
-│   ├── schema.ts              # Schema Postgres (users + quotes)
-│   └── index.ts               # Drizzle client
-├── netlify/
-│   ├── functions/
-│   │   └── api.js             # REST API (CRUD users + quotes)
-│   └── database/
-│       └── migrations/        # Migrazioni automatiche
+│   ├── schema.ts              # Schema Postgres (users + quotes + user_settings)
+│   └── index.ts               # Drizzle client (Neon)
 ├── src/
-│   ├── main.jsx               # BrowserRouter + ProtectedRoute
+│   ├── main.tsx               # BrowserRouter + ProtectedRoute
 │   ├── pages/
 │   │   ├── HomePage.jsx       # Landing page pubblica
 │   │   ├── LoginPage.jsx      # Login/registrazione con sesso

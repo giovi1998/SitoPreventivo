@@ -1,5 +1,5 @@
-import { db } from "../../db/index.js";
-import { users, quotes, userSettings } from "../../db/schema.js";
+import { db } from "../db/index.js";
+import { users, quotes, userSettings } from "../db/schema.js";
 import { eq, and, sql } from "drizzle-orm";
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
@@ -81,16 +81,15 @@ const AdminSeedSchema = z.object({
 });
 
 // ─── HELPERS ───────────────────────────────────
-function json(status, data) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    },
-  });
+function addCorsHeaders(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+function json(res, status, data) {
+  addCorsHeaders(res);
+  res.status(status).json(data);
 }
 
 function validate(schema, data) {
@@ -105,91 +104,76 @@ function isValidPassword(password) {
   return passwordSchema.safeParse(password).success;
 }
 
-// ─── RATE LIMITING ─────────────────────────────
-async function checkRateLimit(ip) {
-  try {
-    const { getStore } = await import('@netlify/blobs');
-    const store = getStore('rate-limit');
-    const key = `login:${ip}`;
-    const record = await store.get(key, { type: 'json' });
-    const now = Date.now();
-    if (record) {
-      if (now - record.firstAttempt < 15 * 60 * 1000) {
-        if (record.count >= 5) {
-          return { blocked: true };
-        }
-        return { blocked: false };
-      }
-      await store.delete(key).catch(() => {});
+// ─── RATE LIMITING (in-memory) ─────────────────
+const rateLimitStore = new Map();
+
+function checkRateLimit(ip) {
+  const key = `login:${ip}`;
+  const record = rateLimitStore.get(key);
+  const now = Date.now();
+  if (record) {
+    if (now - record.firstAttempt < 15 * 60 * 1000) {
+      if (record.count >= 5) return { blocked: true };
+      return { blocked: false };
     }
-    return { blocked: false };
-  } catch {
-    return { blocked: false };
+    rateLimitStore.delete(key);
+  }
+  return { blocked: false };
+}
+
+function recordLoginAttempt(ip, success) {
+  const key = `login:${ip}`;
+  if (success) {
+    rateLimitStore.delete(key);
+  } else {
+    const record = rateLimitStore.get(key);
+    const now = Date.now();
+    if (record && (now - record.firstAttempt < 15 * 60 * 1000)) {
+      record.count++;
+      rateLimitStore.set(key, record);
+    } else {
+      rateLimitStore.set(key, { count: 1, firstAttempt: now });
+    }
   }
 }
 
-async function recordLoginAttempt(ip, success) {
-  try {
-    const { getStore } = await import('@netlify/blobs');
-    const store = getStore('rate-limit');
-    const key = `login:${ip}`;
-    if (success) {
-      await store.delete(key).catch(() => {});
-    } else {
-      const record = await store.get(key, { type: 'json' });
-      const now = Date.now();
-      if (record && (now - record.firstAttempt < 15 * 60 * 1000)) {
-        record.count++;
-        await store.set(key, record);
-      } else {
-        await store.set(key, { count: 1, firstAttempt: now });
-      }
-    }
-  } catch {}
-}
-
-export default async (req) => {
-  const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/\.netlify\/functions\/api/, "").replace(/^\/api/, "");
+export default async function handler(req, res) {
+  const { pathname, searchParams } = new URL(req.url, 'http://localhost');
+  const path = pathname.replace(/^\/api/, "");
   const method = req.method;
 
   // CORS preflight
   if (method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Access-Control-Max-Age": "86400",
-      },
-    });
+    addCorsHeaders(res);
+    res.setHeader('Access-Control-Max-Age', '86400');
+    return res.status(204).end();
   }
 
   let body = {};
   try {
-    if (req.body) body = await req.json();
+    if (req.body && typeof req.body === 'object') body = req.body;
+    else if (req.body) body = JSON.parse(req.body);
   } catch {}
 
   try {
     // ─── HEALTH CHECK ───────────────────────────────
     if (path === "/ping" && method === "GET") {
-      return json(200, { ok: true });
+      return json(res, 200, { ok: true });
     }
 
     // ─── USERS ─────────────────────────────────────
     if (path === "/users/register" && method === "POST") {
       const v = validate(RegisterSchema, body);
-      if (v.error) return json(400, { errors: v.errors });
+      if (v.error) return json(res, 400, { errors: v.errors });
       const { email, password, username, gender, tokenLimit } = v.data;
 
       if (email === 'admin@gmail.com') {
-        return json(403, { error: "Email non disponibile" });
+        return json(res, 403, { error: "Email non disponibile" });
       }
 
       const existing = await db.select().from(users).where(eq(users.email, email));
       if (existing.length > 0) {
-        return json(409, { error: "Email già registrata" });
+        return json(res, 409, { error: "Email già registrata" });
       }
 
       const hashed = await bcrypt.hash(password, 12);
@@ -198,7 +182,7 @@ export default async (req) => {
         role: "user",
         tokenLimit: tokenLimit || 1000000,
       }).returning();
-      return json(201, {
+      return json(res, 201, {
         success: true,
         user: {
           email: created.email, username: created.username, gender: created.gender,
@@ -209,24 +193,24 @@ export default async (req) => {
     }
 
     if (path === "/users/login" && method === "POST") {
-      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('client-ip') || 'unknown';
-      const rate = await checkRateLimit(ip);
+      const ip = (req.headers['x-forwarded-for'] || '').split(',')[0]?.trim() || req.headers['client-ip'] || 'unknown';
+      const rate = checkRateLimit(ip);
       if (rate.blocked) {
-        return json(429, { error: "Troppi tentativi. Riprova tra 15 minuti." });
+        return json(res, 429, { error: "Troppi tentativi. Riprova tra 15 minuti." });
       }
 
       const v = validate(LoginSchema, body);
-      if (v.error) return json(400, { errors: v.errors });
+      if (v.error) return json(res, 400, { errors: v.errors });
       const { email, password } = v.data;
 
       const [found] = await db.select().from(users).where(eq(users.email, email));
       if (!found || !(await bcrypt.compare(password, found.password))) {
-        await recordLoginAttempt(ip, false);
-        return json(401, { error: "Email o password errati" });
+        recordLoginAttempt(ip, false);
+        return json(res, 401, { error: "Email o password errati" });
       }
 
-      await recordLoginAttempt(ip, true);
-      return json(200, {
+      recordLoginAttempt(ip, true);
+      return json(res, 200, {
         success: true,
         user: {
           email: found.email, username: found.username, gender: found.gender,
@@ -239,18 +223,18 @@ export default async (req) => {
 
     if (path === "/users/change-password" && method === "POST") {
       const v = validate(ChangePasswordSchema, body);
-      if (v.error) return json(400, { errors: v.errors });
+      if (v.error) return json(res, 400, { errors: v.errors });
       const { email, oldPassword, newPassword } = v.data;
 
       const [found] = await db.select().from(users).where(eq(users.email, email));
-      if (!found) return json(404, { error: "Utente non trovato" });
+      if (!found) return json(res, 404, { error: "Utente non trovato" });
       if (!(await bcrypt.compare(oldPassword, found.password))) {
-        return json(401, { error: "Password attuale errata" });
+        return json(res, 401, { error: "Password attuale errata" });
       }
 
       const hashed = await bcrypt.hash(newPassword, 12);
       await db.update(users).set({ password: hashed }).where(eq(users.email, email));
-      return json(200, { success: true });
+      return json(res, 200, { success: true });
     }
 
     if (path === "/users" && method === "GET") {
@@ -259,14 +243,14 @@ export default async (req) => {
         role: users.role, createdAt: users.createdAt,
         tokensUsed: users.tokensUsed, tokenLimit: users.tokenLimit,
       }).from(users).orderBy(sql`created_at DESC`);
-      return json(200, list);
+      return json(res, 200, list);
     }
 
     if (path.startsWith("/users/") && path.endsWith("/profile") && method === "GET") {
       const email = decodeURIComponent(path.replace("/users/", "").replace("/profile", ""));
       const [found] = await db.select().from(users).where(eq(users.email, email));
-      if (!found) return json(404, { error: "Utente non trovato" });
-      return json(200, {
+      if (!found) return json(res, 404, { error: "Utente non trovato" });
+      return json(res, 200, {
         email: found.email, username: found.username, gender: found.gender,
         role: found.role, tokensUsed: found.tokensUsed, tokenLimit: found.tokenLimit,
       });
@@ -274,44 +258,44 @@ export default async (req) => {
 
     if (path === "/users/limits" && method === "PATCH") {
       const v = validate(TokenLimitSchema, body);
-      if (v.error) return json(400, { errors: v.errors });
+      if (v.error) return json(res, 400, { errors: v.errors });
       const { email, tokenLimit } = v.data;
       await db.update(users).set({ tokenLimit }).where(eq(users.email, email));
-      return json(200, { success: true });
+      return json(res, 200, { success: true });
     }
 
     if (path === "/users/tokens" && method === "POST") {
       const v = validate(TrackTokensSchema, body);
-      if (v.error) return json(400, { errors: v.errors });
+      if (v.error) return json(res, 400, { errors: v.errors });
       const { email, tokens } = v.data;
       await db.update(users).set({
         tokensUsed: sql`tokens_used + ${tokens}`
       }).where(eq(users.email, email));
-      return json(200, { success: true });
+      return json(res, 200, { success: true });
     }
 
     // ─── QUOTES ─────────────────────────────────────
     if (path === "/quotes" && method === "GET") {
-      const userEmail = url.searchParams.get("email");
-      if (!userEmail) return json(400, { error: "Email richiesta" });
+      const userEmail = searchParams.get("email");
+      if (!userEmail) return json(res, 400, { error: "Email richiesta" });
       const list = await db.select().from(quotes).where(eq(quotes.userEmail, userEmail)).orderBy(sql`created_at DESC`);
-      return json(200, list);
+      return json(res, 200, list);
     }
 
     if (path === "/quotes/all" && method === "GET") {
       const list = await db.select().from(quotes).orderBy(sql`created_at DESC`);
-      return json(200, list);
+      return json(res, 200, list);
     }
 
     if (path === "/quotes" && method === "POST") {
       const v = validate(QuoteBodySchema, body);
-      if (v.error) return json(400, { errors: v.errors });
+      if (v.error) return json(res, 400, { errors: v.errors });
       const { email, quote } = v.data;
 
       const existing = await db.select().from(quotes).where(eq(quotes.id, quote.id));
       if (existing.length > 0) {
         if (existing[0].userEmail !== email) {
-          return json(403, { error: "Non autorizzato" });
+          return json(res, 403, { error: "Non autorizzato" });
         }
         const [updated] = await db.update(quotes).set({
           title: quote.title, client: quote.client, date: quote.date,
@@ -324,7 +308,7 @@ export default async (req) => {
           isShared: quote.isShared ?? existing[0].isShared ?? false,
           updatedAt: sql`now()`,
         }).where(eq(quotes.id, quote.id)).returning();
-        return json(200, updated);
+        return json(res, 200, updated);
       }
 
       const [saved] = await db.insert(quotes).values({
@@ -337,33 +321,33 @@ export default async (req) => {
         shareToken: quote.shareToken || null,
         isShared: quote.isShared ?? false,
       }).returning();
-      return json(201, saved);
+      return json(res, 201, saved);
     }
 
     if (path.startsWith("/quotes/") && method === "DELETE") {
       const quoteId = path.replace("/quotes/", "");
-      const email = body.email || url.searchParams.get("email");
-      if (!email) return json(400, { error: "Email richiesta" });
+      const email = body.email || searchParams.get("email");
+      if (!email) return json(res, 400, { error: "Email richiesta" });
 
       const [existing] = await db.select().from(quotes).where(eq(quotes.id, quoteId));
-      if (!existing) return json(404, { error: "Preventivo non trovato" });
+      if (!existing) return json(res, 404, { error: "Preventivo non trovato" });
       if (existing.userEmail !== email) {
-        return json(403, { error: "Non autorizzato" });
+        return json(res, 403, { error: "Non autorizzato" });
       }
 
       await db.delete(quotes).where(eq(quotes.id, quoteId));
-      return json(200, { success: true });
+      return json(res, 200, { success: true });
     }
 
     // ─── ADMIN SEED ─────────────────────────────────
     if (path === "/admin/seed" && method === "POST") {
       const v = validate(AdminSeedSchema, body);
-      if (v.error) return json(400, { errors: v.errors });
+      if (v.error) return json(res, 400, { errors: v.errors });
       const { email, username, gender, tokenLimit } = v.data;
       const configuredAdminPassword = process.env.ADMIN_INITIAL_PASSWORD;
       if (configuredAdminPassword && !isValidPassword(configuredAdminPassword)) {
         console.error('[Admin seed] ADMIN_INITIAL_PASSWORD non rispetta i requisiti minimi');
-        return json(500, { error: "Password admin non valida nella configurazione server" });
+        return json(res, 500, { error: "Password admin non valida nella configurazione server" });
       }
 
       const [existing] = await db.select().from(users).where(eq(users.email, email));
@@ -376,7 +360,7 @@ export default async (req) => {
           updates.tokenLimit = tokenLimit;
         }
         await db.update(users).set(updates).where(eq(users.email, email));
-        return json(200, { success: true, message: "Admin già esistente" });
+        return json(res, 200, { success: true, message: "Admin già esistente" });
       }
 
       const pw = configuredAdminPassword || `Admin-${crypto.randomUUID()}!1`;
@@ -386,13 +370,13 @@ export default async (req) => {
         gender: gender || 'other', role: 'admin',
         tokenLimit: tokenLimit || 999999999,
       });
-      return json(200, { success: true, message: "Admin creato" });
+      return json(res, 200, { success: true, message: "Admin creato" });
     }
 
     // ─── DEEPSEEK STATUS CHECK ──────────────────────
     if (path === "/admin/deepseek-status" && method === "GET") {
       const hasKey = !!process.env.DEEPSEEK_API_KEY;
-      return json(200, { configured: hasKey });
+      return json(res, 200, { configured: hasKey });
     }
 
     // ─── AI CHAT PROXY ──────────────────────────────
@@ -400,14 +384,14 @@ export default async (req) => {
       const apiKey = process.env.DEEPSEEK_API_KEY;
       if (!apiKey) {
         console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set');
-        return json(503, { error: "DeepSeek non configurato. L'amministratore deve impostare DEEPSEEK_API_KEY nelle variabili d'ambiente di Netlify (scope: Functions)." });
+        return json(res, 503, { error: "DeepSeek non configurato. L'amministratore deve impostare DEEPSEEK_API_KEY nelle variabili d'ambiente su Vercel (scope: Production, Preview)." });
       }
       const { model, messages, response_format, temperature } = body;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 25000);
-      let res;
+      let apiRes;
       try {
-        res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        apiRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
           body: JSON.stringify({
@@ -420,31 +404,31 @@ export default async (req) => {
         });
       } catch (err) {
         if (err.name === "AbortError") {
-          return json(504, { error: "DeepSeek non ha risposto entro 25 secondi. Riprova." });
+          return json(res, 504, { error: "DeepSeek non ha risposto entro 25 secondi. Riprova." });
         }
         throw err;
       } finally {
         clearTimeout(timeout);
       }
-      if (!res.ok) {
-        const errBody = await res.text().catch(() => "Unknown error");
-        if (res.status === 402) return json(402, { error: "Credito DeepSeek esaurito. Ricarica su platform.deepseek.com" });
-        if (res.status === 401) return json(401, { error: "Chiave API DeepSeek non valida" });
-        if (res.status === 429) return json(429, { error: "Troppe richieste a DeepSeek. Attendi qualche secondo e riprova." });
-        return json(res.status, { error: `DeepSeek (${res.status}): ${errBody.substring(0, 200)}` });
+      if (!apiRes.ok) {
+        const errBody = await apiRes.text().catch(() => "Unknown error");
+        if (apiRes.status === 402) return json(res, 402, { error: "Credito DeepSeek esaurito. Ricarica su platform.deepseek.com" });
+        if (apiRes.status === 401) return json(res, 401, { error: "Chiave API DeepSeek non valida" });
+        if (apiRes.status === 429) return json(res, 429, { error: "Troppe richieste a DeepSeek. Attendi qualche secondo e riprova." });
+        return json(res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` });
       }
-      const data = await res.json();
-      return json(200, data);
+      const data = await apiRes.json();
+      return json(res, 200, data);
     }
 
     // ─── TEMPLATES ──────────────────────────────────
     if (path === "/quotes/templates" && method === "GET") {
-      const userEmail = url.searchParams.get("email");
-      if (!userEmail) return json(400, { error: "Email richiesta" });
+      const userEmail = searchParams.get("email");
+      if (!userEmail) return json(res, 400, { error: "Email richiesta" });
       const list = await db.select().from(quotes)
         .where(and(eq(quotes.userEmail, userEmail), eq(quotes.isTemplate, true)))
         .orderBy(sql`created_at DESC`);
-      return json(200, list);
+      return json(res, 200, list);
     }
 
     // ─── PUBLIC QUOTE (no auth) ─────────────────────
@@ -452,9 +436,9 @@ export default async (req) => {
       const token = path.replace("/quotes/public/", "");
       const [found] = await db.select().from(quotes).where(eq(quotes.shareToken, token));
       if (!found || !found.isShared) {
-        return json(404, { error: "Preventivo non trovato o non condiviso" });
+        return json(res, 404, { error: "Preventivo non trovato o non condiviso" });
       }
-      return json(200, {
+      return json(res, 200, {
         id: found.id, title: found.title, client: found.client, date: found.date,
         intro: found.intro, color: found.color, vat: found.vat, status: found.status,
         owner: found.owner, options: found.options, clauses: found.clauses,
@@ -463,15 +447,15 @@ export default async (req) => {
 
     // ─── USER SETTINGS ──────────────────────────────
     if (path === "/user-settings" && method === "GET") {
-      const email = url.searchParams.get("email");
-      if (!email) return json(400, { error: "Email richiesta" });
+      const email = searchParams.get("email");
+      if (!email) return json(res, 400, { error: "Email richiesta" });
       const [settings] = await db.select().from(userSettings).where(eq(userSettings.userEmail, email));
-      return json(200, settings || { userEmail: email, onboardingDone: false });
+      return json(res, 200, settings || { userEmail: email, onboardingDone: false });
     }
 
     if (path === "/user-settings" && method === "POST") {
       const v = validate(UserSettingsSchema, body);
-      if (v.error) return json(400, { errors: v.errors });
+      if (v.error) return json(res, 400, { errors: v.errors });
       const { email, ...settings } = v.data;
       const existing = await db.select().from(userSettings).where(eq(userSettings.userEmail, email));
       if (existing.length > 0) {
@@ -483,7 +467,7 @@ export default async (req) => {
           ...(settings.logoUrl !== undefined && { logoUrl: settings.logoUrl }),
           ...(settings.onboardingDone !== undefined && { onboardingDone: settings.onboardingDone }),
         }).where(eq(userSettings.userEmail, email)).returning();
-        return json(200, updated);
+        return json(res, 200, updated);
       }
       const [created] = await db.insert(userSettings).values({
         userEmail: email,
@@ -494,16 +478,18 @@ export default async (req) => {
         logoUrl: settings.logoUrl,
         onboardingDone: settings.onboardingDone ?? false,
       }).returning();
-      return json(201, created);
+      return json(res, 201, created);
     }
 
-    return json(404, { error: "Endpoint non trovato" });
+    return json(res, 404, { error: "Endpoint non trovato" });
   } catch (err) {
     console.error("API error:", err);
-    return json(500, { error: err.message });
+    return json(res, 500, { error: err.message });
   }
-};
+}
 
 export const config = {
-  path: "/api/*",
+  api: {
+    bodyParser: true,
+  },
 };

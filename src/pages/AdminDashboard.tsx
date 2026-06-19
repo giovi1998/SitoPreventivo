@@ -88,13 +88,13 @@ export default function AdminDashboard() {
           </div>
         ) : (
           <div className="admin-apikey-info">
-            <p>Chiave gestita tramite la variabile d'ambiente <code>DEEPSEEK_API_KEY</code> su Netlify.</p>
-            <p>Vai su <strong>Netlify → Site settings → Environment variables</strong> e aggiungila con scope <strong>Functions</strong>.</p>
+            <p>Chiave gestita tramite la variabile d'ambiente <code>DEEPSEEK_API_KEY</code> su Vercel.</p>
+            <p>Vai su <strong>Vercel Dashboard → Settings → Environment Variables</strong> e aggiungila con scope <strong>Production, Preview</strong>.</p>
             <div className="admin-apikey-check">
               <button onClick={checkDeepSeekStatus} className="btn-check-status">Verifica stato chiave</button>
               {dsStatus && (
                 <span className={`ds-status ${dsStatus.configured ? 'ok' : 'no'}`}>
-                  {dsStatus.configured ? 'Configurata su Netlify' : 'Non configurata'}
+                  {dsStatus.configured ? 'Configurata su Vercel' : 'Non configurata'}
                 </span>
               )}
             </div>
