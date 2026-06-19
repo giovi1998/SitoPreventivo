@@ -654,6 +654,7 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
     else if (key === 'note') setQuote((c) => ({ ...c, notes: { ...c.notes, internal: value } }));
     else if (key === 'date') setQuote((c) => ({ ...c, createdAt: value }));
     else if (key === 'contact') setQuote((c) => ({ ...c, client: { ...c.client, contactPerson: value } }));
+    else if (key === 'documentTheme') setDocumentTheme(value);
   };
 
   const updateOption = (id: string, key: string, value: any) => {
