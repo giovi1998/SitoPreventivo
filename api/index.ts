@@ -139,7 +139,8 @@ function json(res, status, data) {
 function validate(schema, data) {
   const result = schema.safeParse(data);
   if (!result.success) {
-    return { error: true, errors: result.error.errors.map(e => e.message) };
+    const messages = result.error?.errors?.map?.(e => e.message) ?? ['Dati non validi'];
+    return { error: true, errors: messages };
   }
   return { error: false, data: result.data };
 }
@@ -510,8 +511,9 @@ export default async function handler(req, res) {
 
     return json(res, 404, { error: "Endpoint non trovato" });
   } catch (err) {
-    console.error("API error:", err);
-    return json(res, 500, { error: err.message });
+    console.error(`[API] ${req.method} ${req.url} error:`, err?.stack || err?.message || err);
+    const msg = process.env.VERCEL_ENV === 'development' ? err?.message || 'Errore interno del server' : 'Errore interno del server';
+    return json(res, 500, { error: msg });
   }
 }
 
