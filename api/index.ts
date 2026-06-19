@@ -139,7 +139,8 @@ function json(res, status, data) {
 function validate(schema, data) {
   const result = schema.safeParse(data);
   if (!result.success) {
-    const messages = result.error?.errors?.map?.(e => e.message) ?? ['Dati non validi'];
+    const issues = result.error?.issues;
+    const messages = issues ? issues.map(e => e.message) : ['Errore di validazione dati'];
     return { error: true, errors: messages };
   }
   return { error: false, data: result.data };
