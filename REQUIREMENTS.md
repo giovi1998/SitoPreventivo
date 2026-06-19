@@ -78,7 +78,7 @@ L'app in produzione chiama l'API su `/api/*`. In locale (`localhost`) usa esclus
 
 ### Password di default
 
-Al primo avvio, l'admin `admin@gmail.com` viene creato automaticamente. In produzione la password iniziale va impostata tramite la variabile d'ambiente server-side `ADMIN_INITIAL_PASSWORD`; il database salva solo l'hash bcrypt. Dopo il primo login, cambiala dalla Dashboard.
+L'admin `admin@gmail.com` viene autenticato direttamente dalla variabile d'ambiente server-side `ADMIN_PASSWORD` (locale: `VITE_ADMIN_PASSWORD`). Non viene mai salvato su database.
 
 ### Dati localStorage (fallback)
 

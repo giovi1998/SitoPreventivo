@@ -43,51 +43,6 @@ async function api(method, path, body, options = {}) {
   }
 }
 
-  // ─── SEED ADMIN (locale + remoto) ─────────────────────
-  // Usa ADMIN_INITIAL_PASSWORD dalla variabile d'ambiente su Vercel, VITE_ADMIN_INITIAL_PASSWORD dal client (locale).
-async function seedAdminLocally() {
-  const list = lsGet('registeredUsers') || [];
-  const idx = list.findIndex(u => u.email === 'admin@gmail.com');
-  const envPw = import.meta.env.VITE_ADMIN_INITIAL_PASSWORD;
-  if (idx === -1) {
-    const pw = envPw || `Admin-${crypto.randomUUID ? crypto.randomUUID().slice(0, 18) : Math.random().toString(36).slice(2, 20)}!1`;
-    const hashed = await bcrypt.hash(pw, 12);
-    list.push({
-      email: 'admin@gmail.com', password: hashed, username: 'admin',
-      gender: 'male', role: 'admin',
-      regDate: new Date().toLocaleDateString('it-IT'),
-      tokensUsed: 0, tokenLimit: 999999999,
-    });
-    lsSet('registeredUsers', list);
-    setTimeout(() => {
-      alert(`Admin locale creato. Password: ${envPw || 'generata random — cambia dalle Impostazioni'}`);
-    }, 500);
-  } else if (envPw && list[idx].password && list[idx].password.startsWith('$2')) {
-    // Se l'admin esiste già e la password env è cambiata, aggiorna
-    const currentHash = list[idx].password;
-    const match = await bcrypt.compare(envPw, currentHash).catch(() => false);
-    if (!match) {
-      list[idx].password = await bcrypt.hash(envPw, 12);
-      lsSet('registeredUsers', list);
-    }
-  } else if (list[idx].password && !list[idx].password.startsWith('$2')) {
-    list[idx].password = await bcrypt.hash(list[idx].password, 12);
-    lsSet('registeredUsers', list);
-  } else if (list[idx].role !== 'admin') {
-    list[idx].role = 'admin';
-    lsSet('registeredUsers', list);
-  }
-}
-
-if (IS_LOCAL) {
-  seedAdminLocally();
-} else {
-  // Use dedicated seed endpoint (silent upsert, no 409)
-  api('POST', '/admin/seed', {
-    email: 'admin@gmail.com', username: 'admin', gender: 'male', tokenLimit: 999999999
-  }).catch(() => {});
-}
-
 // ─── PUBLIC API ──────────────────────────────────────
 const dataService = {
   // ─── REGISTER ────────────────────────────────────
@@ -118,6 +73,20 @@ const dataService = {
   // ─── LOGIN ────────────────────────────────────────
   async login(email, password) {
     if (IS_LOCAL) {
+      if (email === 'admin@gmail.com') {
+        const adminPw = import.meta.env.VITE_ADMIN_PASSWORD;
+        if (!adminPw || password !== adminPw) {
+          return { success: false, error: 'Email o password errati' };
+        }
+        return {
+          success: true,
+          user: {
+            email: 'admin@gmail.com', username: 'admin', gender: 'male',
+            role: 'admin', createdAt: new Date().toISOString(),
+            tokensUsed: 0, tokenLimit: 999999999,
+          }
+        };
+      }
       const users = lsGet('registeredUsers') || [];
       const found = users.find(u => u.email === email);
       const validPassword = found?.password?.startsWith('$2')
@@ -133,7 +102,7 @@ const dataService = {
         success: true,
         user: {
           email: found.email, username: found.username, gender: found.gender,
-          role: found.email === 'admin@gmail.com' ? 'admin' : (found.role || 'user'),
+          role: found.role || 'user',
           createdAt: found.regDate,
           tokensUsed: found.tokensUsed || 0, tokenLimit: found.tokenLimit || 1000000,
         }

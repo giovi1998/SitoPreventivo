@@ -73,13 +73,6 @@ const TrackTokensSchema = z.object({
   tokens: z.number().positive('tokens deve essere positivo'),
 });
 
-const AdminSeedSchema = z.object({
-  email: z.string().email('Email non valida'),
-  username: z.string().optional(),
-  gender: z.string().optional(),
-  tokenLimit: z.number().optional(),
-});
-
 // ─── HELPERS ───────────────────────────────────
 function addCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -98,10 +91,6 @@ function validate(schema, data) {
     return { error: true, errors: result.error.errors.map(e => e.message) };
   }
   return { error: false, data: result.data };
-}
-
-function isValidPassword(password) {
-  return passwordSchema.safeParse(password).success;
 }
 
 // ─── RATE LIMITING (in-memory) ─────────────────
@@ -203,6 +192,27 @@ export default async function handler(req, res) {
       if (v.error) return json(res, 400, { errors: v.errors });
       const { email, password } = v.data;
 
+      // Admin: validated against env var, not DB
+      if (email === 'admin@gmail.com') {
+        const adminPassword = process.env.ADMIN_PASSWORD;
+        if (!adminPassword) {
+          return json(res, 503, { error: "Admin password non configurata. L'amministratore deve impostare ADMIN_PASSWORD su Vercel." });
+        }
+        if (password !== adminPassword) {
+          recordLoginAttempt(ip, false);
+          return json(res, 401, { error: "Email o password errati" });
+        }
+        recordLoginAttempt(ip, true);
+        return json(res, 200, {
+          success: true,
+          user: {
+            email: 'admin@gmail.com', username: 'admin', gender: 'male',
+            role: 'admin', createdAt: new Date().toISOString(),
+            tokensUsed: 0, tokenLimit: 999999999,
+          }
+        });
+      }
+
       const [found] = await db.select().from(users).where(eq(users.email, email));
       if (!found || !(await bcrypt.compare(password, found.password))) {
         recordLoginAttempt(ip, false);
@@ -214,7 +224,7 @@ export default async function handler(req, res) {
         success: true,
         user: {
           email: found.email, username: found.username, gender: found.gender,
-          role: found.email === 'admin@gmail.com' ? 'admin' : (found.role || 'user'),
+          role: found.role || 'user',
           createdAt: found.createdAt,
           tokensUsed: found.tokensUsed, tokenLimit: found.tokenLimit,
         }
@@ -337,40 +347,6 @@ export default async function handler(req, res) {
 
       await db.delete(quotes).where(eq(quotes.id, quoteId));
       return json(res, 200, { success: true });
-    }
-
-    // ─── ADMIN SEED ─────────────────────────────────
-    if (path === "/admin/seed" && method === "POST") {
-      const v = validate(AdminSeedSchema, body);
-      if (v.error) return json(res, 400, { errors: v.errors });
-      const { email, username, gender, tokenLimit } = v.data;
-      const configuredAdminPassword = process.env.ADMIN_INITIAL_PASSWORD;
-      if (configuredAdminPassword && !isValidPassword(configuredAdminPassword)) {
-        console.error('[Admin seed] ADMIN_INITIAL_PASSWORD non rispetta i requisiti minimi');
-        return json(res, 500, { error: "Password admin non valida nella configurazione server" });
-      }
-
-      const [existing] = await db.select().from(users).where(eq(users.email, email));
-      if (existing) {
-        const updates = { role: 'admin' };
-        if (configuredAdminPassword) {
-          updates.password = await bcrypt.hash(configuredAdminPassword, 12);
-        }
-        if (tokenLimit) {
-          updates.tokenLimit = tokenLimit;
-        }
-        await db.update(users).set(updates).where(eq(users.email, email));
-        return json(res, 200, { success: true, message: "Admin già esistente" });
-      }
-
-      const pw = configuredAdminPassword || `Admin-${crypto.randomUUID()}!1`;
-      const hashed = await bcrypt.hash(pw, 12);
-      await db.insert(users).values({
-        email, password: hashed, username: username || 'admin',
-        gender: gender || 'other', role: 'admin',
-        tokenLimit: tokenLimit || 999999999,
-      });
-      return json(res, 200, { success: true, message: "Admin creato" });
     }
 
     // ─── DEEPSEEK STATUS CHECK ──────────────────────

@@ -117,14 +117,12 @@ Per configurare:
 - **Rate limiting**: max 5 tentativi di login falliti per IP in 15 minuti (in-memory)
 - **Ownership check**: ogni operazione su preventivi verifica che l'email corrisponda al proprietario
 - **Validazione input**: Zod su tutti gli endpoint (email, password, quote)
-- **Criteri password**: 12+ caratteri, almeno una maiuscola, una minuscola, un numero, un carattere speciale
-- **Security headers**: X-Frame-Options, X-Content-Type-Options, Referrer-Policy, CSP
-- **Admin**: password iniziale configurabile tramite variabile server-side e salvata solo come hash bcrypt
+- **Admin**: autenticato via env var (`ADMIN_PASSWORD`), mai salvato su database
 
-### Password di default
+### Password admin
 
-Al primo deploy, l'admin `admin@gmail.com` viene creato automaticamente. Per impostare o ruotare la password admin, configura la variabile d'ambiente server-side `ADMIN_INITIAL_PASSWORD` con una password che rispetti i requisiti di sicurezza; al seed successivo il database salva solo l'hash bcrypt.
-Dopo il primo login, cambia la password dalla Dashboard Amministratore e rimuovi la variabile se non serve piu.
+L'admin `admin@gmail.com` non viene salvato su database. La password viene letta direttamente dalla variabile d'ambiente `ADMIN_PASSWORD` (server) / `VITE_ADMIN_PASSWORD` (locale).  
+In produzione, imposta `ADMIN_PASSWORD` su **Vercel Dashboard → Environment Variables**. In locale, modifica `.env`.
 
 ### Setup variabili d'ambiente
 
@@ -222,7 +220,7 @@ Dopo il deploy, vai su **Vercel Dashboard → Settings → Environment Variables
 |-----------|--------|-------|
 | `DATABASE_URL` | `postgresql://...` da Neon | Production, Preview |
 | `DEEPSEEK_API_KEY` | La tua chiave DeepSeek | Production, Preview |
-| `ADMIN_INITIAL_PASSWORD` | (opzionale) Password admin iniziale | Production, Preview |
+| `ADMIN_PASSWORD` | Password admin (admin@gmail.com) | Production, Preview |
 
 ## Struttura file
 
