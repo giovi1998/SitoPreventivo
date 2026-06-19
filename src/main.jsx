@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import App, { AuthProvider, AuthContext } from '../App.jsx';
+import App, { AuthProvider, AuthContext } from '../App';
 import HomePage from './pages/HomePage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import PublicQuoteView from './pages/PublicQuoteView.jsx';

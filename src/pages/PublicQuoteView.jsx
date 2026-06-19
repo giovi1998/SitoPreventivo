@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import DocumentPreview from '../components/DocumentPreview.jsx';
+import DocumentPreview from '../components/DocumentPreview';
 import dataService from '../utils/dataService.js';
 
 export default function PublicQuoteView() {

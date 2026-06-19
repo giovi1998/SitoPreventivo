@@ -311,7 +311,7 @@ const dataService = {
           body: JSON.stringify({
             model: model || 'deepseek-chat',
             messages,
-            response_format: response_format || { type: 'json_object' },
+            ...(response_format ? { response_format } : {}),
             temperature: temperature ?? 0.7,
           }),
         });

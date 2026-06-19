@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { AuthContext } from '../../App.jsx';
+import { AuthContext } from '../../App';
 
 export default function LoginPage() {
   const [searchParams] = useSearchParams();
