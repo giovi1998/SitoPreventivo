@@ -177,8 +177,16 @@ export default function App() {
   useEffect(() => {
     if (user?.email) {
       dataService.getUserSettings(user.email).then((settings: any) => {
-        if (!settings.onboardingDone) setShowOnboarding(true);
-        if (settings.documentTheme) setDocumentTheme(settings.documentTheme);
+        const requiredFields = ['displayName', 'companyName', 'profession', 'defaultColor', 'defaultVat', 'documentTheme'];
+        const isComplete = requiredFields.every(f => settings[f] != null && settings[f] !== '');
+        
+        if (!isComplete) {
+          setShowOnboarding(true);
+        } else {
+          if (settings.defaultColor) setQuote((c) => ({ ...c, uiPreferences: { ...c.uiPreferences, accentColor: settings.defaultColor } }));
+          if (settings.defaultVat) setQuote((c) => ({ ...c, options: c.options.map((o) => ({ ...o, items: o.items.map((i) => ({ ...i, tax: { ...i.tax, rate: settings.defaultVat } })) })) }));
+          if (settings.documentTheme) setDocumentTheme(settings.documentTheme);
+        }
       }).catch(() => {});
     }
   }, [user?.email]);
@@ -189,6 +197,10 @@ export default function App() {
       if (settings.defaultColor) {
         setQuote((c) => ({ ...c, uiPreferences: { ...c.uiPreferences, accentColor: settings.defaultColor } }));
       }
+      if (settings.defaultVat) {
+        setQuote((c) => ({ ...c, options: c.options.map((o) => ({ ...o, items: o.items.map((i) => ({ ...i, tax: { ...i.tax, rate: settings.defaultVat } })) })) }));
+      }
+      if (settings.documentTheme) setDocumentTheme(settings.documentTheme);
       if (settings.profession === 'altro') {
         const francesca = toLegacyFormat(STARTER_QUOTE_PREMIUM);
         setQuote(migrateFromLegacy(francesca));

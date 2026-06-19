@@ -13,6 +13,7 @@ interface OnboardingData {
 const BRAND_COLORS = ["#0B57D0","#11845B","#6D3FD1","#A66200","#D64545","#B83280","#0F766E","#334155","#4F46E5","#5B7F22"];
 const VAT_OPTIONS = [
   { value: 22, label: '22%' },
+  { value: 26, label: '26%' },
   { value: 10, label: '10%' },
   { value: 4, label: '4%' },
   { value: 0, label: '0%' },
