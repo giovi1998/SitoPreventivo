@@ -394,9 +394,10 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
         { role: 'system', content: SYSTEM_PROMPT },
         {
           role: 'user',
-          content: `Preventivo attuale (JSON):\n${JSON.stringify(quote, null, 2)}\n\nRichiesta: ${userPrompt}\n\nRispondi SOLO con il JSON delle modifiche da applicare.`,
+          content: `Preventivo attuale (JSON):\n${JSON.stringify(quote, null, 2)}\n\nRichiesta: ${userPrompt}\n\nRispondi SOLO con il JSON delle modifiche da applicare. Nessun testo extra, nessun markdown, solo JSON puro.`,
         },
       ],
+      response_format: { type: 'json_object' },
       temperature: 0.7,
     });
 
@@ -409,7 +410,8 @@ Quando l'utente chiede una di queste operazioni, concentrati sulle MODIFICHE DI 
     if (user?.email) dataService.trackTokens(user.email, tokensUsed);
     addLog('info', `Token: ${tokensUsed}`);
 
-    const raw = result.choices[0].message.content;
+    let raw = result.choices[0].message.content;
+    raw = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
     addLog('success', `Risposta (${raw.length} chars): ${raw.substring(0, 120)}...`);
     return JSON.parse(raw);
   };
