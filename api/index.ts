@@ -34,6 +34,7 @@ const quotesTable = pgTable("quotes", {
   isTemplate: boolean("is_template").default(false),
   shareToken: varchar("share_token", { length: 255 }),
   isShared: boolean("is_shared").default(false),
+  sharedAt: timestamp("shared_at"),
   pdfUrl: text("pdf_url"),
   documentTheme: varchar("document_theme", { length: 50 }).default("corporate"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -105,6 +106,7 @@ const QuoteBodySchema = z.object({
     isTemplate: z.boolean().optional(),
     shareToken: z.string().optional(),
     isShared: z.boolean().optional(),
+    sharedAt: z.string().optional(),
     pdfUrl: z.string().optional(),
     documentTheme: z.string().optional(),
   }),
@@ -377,6 +379,7 @@ export default async function handler(req, res) {
           isTemplate: quote.isTemplate ?? existing[0].isTemplate ?? false,
           shareToken: quote.shareToken ?? existing[0].shareToken,
           isShared: quote.isShared ?? existing[0].isShared ?? false,
+          sharedAt: quote.sharedAt ?? existing[0].sharedAt,
           pdfUrl: quote.pdfUrl ?? existing[0].pdfUrl,
           documentTheme: quote.documentTheme ?? existing[0].documentTheme,
           updatedAt: sql`now()`,
@@ -393,6 +396,7 @@ export default async function handler(req, res) {
         isTemplate: quote.isTemplate ?? false,
         shareToken: quote.shareToken || null,
         isShared: quote.isShared ?? false,
+        sharedAt: quote.sharedAt || null,
         pdfUrl: quote.pdfUrl || null,
         documentTheme: quote.documentTheme || "corporate",
       }).returning();
@@ -479,10 +483,16 @@ export default async function handler(req, res) {
       if (!found || !found.isShared) {
         return json(res, 404, { error: "Preventivo non trovato o non condiviso" });
       }
+      // TTL 30 giorni
+      if (found.sharedAt && Date.now() - new Date(found.sharedAt).getTime() > 30 * 24 * 60 * 60 * 1000) {
+        await db.update(quotesTable).set({ isShared: false, shareToken: null }).where(eq(quotesTable.id, found.id));
+        return json(res, 404, { error: "Link scaduto" });
+      }
       return json(res, 200, {
         id: found.id, title: found.title, client: found.client, date: found.date,
         intro: found.intro, color: found.color, vat: found.vat, status: found.status,
-        owner: found.owner, options: found.options, clauses: found.clauses,
+        owner: found.owner, options: typeof found.options === 'string' ? JSON.parse(found.options) : found.options,
+        clauses: typeof found.clauses === 'string' ? JSON.parse(found.clauses) : found.clauses,
         pdfUrl: found.pdfUrl, documentTheme: found.documentTheme,
       });
     }

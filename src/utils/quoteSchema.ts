@@ -201,6 +201,7 @@ export const quoteSchema = z.object({
   uiPreferences: uiPreferencesSchema,
   shareToken: z.string().optional(),
   isShared: z.boolean().optional(),
+  sharedAt: z.string().optional(),
 });
 
 export type PremiumQuote = z.infer<typeof quoteSchema>;
@@ -432,6 +433,7 @@ interface LegacyQuote {
   profession?: string;
   shareToken?: string;
   isShared?: boolean;
+  sharedAt?: string;
   _premium?: Record<string, unknown>;
 }
 
@@ -584,6 +586,7 @@ export function migrateFromLegacy(legacy: LegacyQuote): PremiumQuote {
     },
     shareToken: legacy.shareToken,
     isShared: legacy.isShared,
+    sharedAt: legacy.sharedAt,
   };
 }
 
@@ -621,6 +624,7 @@ export function toLegacyFormat(quote: PremiumQuote): LegacyQuote {
     profession: (quote as any).profession,
     shareToken: (quote as any).shareToken,
     isShared: (quote as any).isShared,
+    sharedAt: (quote as any).sharedAt,
     _premium: quote as unknown as Record<string, unknown>,
   };
 }
