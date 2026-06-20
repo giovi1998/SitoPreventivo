@@ -21,6 +21,7 @@ import ToastContainer from './src/components/ToastContainer';
 import ConfirmModal from './src/components/ConfirmModal';
 import OnboardingModal from './src/components/OnboardingModal';
 import dataService from './src/utils/dataService';
+import quoteAdapter from './src/utils/quoteAdapter';
 import { DEFAULT_TEMPLATES } from './src/utils/defaultTemplates';
 
 export const AppContext = createContext<any>(null);
@@ -177,9 +178,15 @@ export default function App() {
   useEffect(() => {
     if (user?.email) {
       dataService.getUserSettings(user.email).then((settings: any) => {
+        if (settings?.error) {
+          console.error('[Onboarding] Failed to load settings:', settings.error);
+          addToast('error', 'Errore caricamento impostazioni utente');
+          setShowOnboarding(true);
+          return;
+        }
         const requiredFields = ['displayName', 'companyName', 'profession', 'defaultColor', 'defaultVat', 'documentTheme'];
-        const isComplete = requiredFields.every(f => settings[f] != null && settings[f] !== '');
-        
+        const isComplete = settings && requiredFields.every(f => settings[f] != null && settings[f] !== '');
+
         if (!isComplete) {
           setShowOnboarding(true);
         } else {
@@ -187,13 +194,22 @@ export default function App() {
           if (settings.defaultVat) setQuote((c) => ({ ...c, options: c.options.map((o) => ({ ...o, items: o.items.map((i) => ({ ...i, tax: { ...i.tax, rate: settings.defaultVat } })) })) }));
           if (settings.documentTheme) setDocumentTheme(settings.documentTheme);
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error('[Onboarding] Exception loading settings:', err);
+        addToast('error', 'Errore caricamento impostazioni utente');
+        setShowOnboarding(true);
+      });
     }
   }, [user?.email]);
 
   const handleOnboardingComplete = async (settings: any) => {
     if (user?.email) {
-      await dataService.saveUserSettings(user.email, { ...settings, documentTheme });
+      const result = await dataService.saveUserSettings(user.email, { ...settings, documentTheme });
+      if (result?.error) {
+        console.error('[Onboarding] Failed to save settings:', result.error);
+        addToast('error', 'Errore salvataggio impostazioni: ' + result.error);
+        return;
+      }
       if (settings.defaultColor) {
         setQuote((c) => ({ ...c, uiPreferences: { ...c.uiPreferences, accentColor: settings.defaultColor } }));
       }
@@ -399,17 +415,64 @@ export default function App() {
     setQuote((c) => ({ ...c, legalClauses: c.legalClauses.filter((cl) => cl.id !== id) }));
   };
 
-  const toggleShare = (enabled: boolean) => {
+  const generateAndUploadPdf = async (quoteToExport: PremiumQuote, theme: DocumentTemplateId) => {
+    const { generatePDFBlob } = await import('./src/utils/generatePDF');
+    const pdfBytes = await generatePDFBlob(quoteToExport, theme);
+    const filename = `${quoteToExport.quoteId || quoteToExport.project?.title || 'preventivo'}_${quoteToExport.client?.name || 'preventivo'}.pdf`;
+
+    const bytes = new Uint8Array(pdfBytes);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    const base64 = btoa(binary);
+    return await dataService.uploadPdf(filename, base64);
+  };
+
+  const toggleShare = async (enabled: boolean) => {
     if (enabled) {
       const token = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       setQuote((c) => ({ ...c, shareToken: token, isShared: true }));
+
       if (user?.email && quote.quoteId) {
-        dataService.saveQuote(user.email, { ...quote, shareToken: token, isShared: true });
+        const updated = { ...quote, shareToken: token, isShared: true };
+        const legacy = quoteAdapter.toApi(updated);
+        const saveResult = await dataService.saveQuote(user.email, legacy);
+        if (saveResult?.error) {
+          addToast('error', 'Errore salvataggio condivisione: ' + saveResult.error);
+          return;
+        }
+
+        // Genera e carica PDF automaticamente
+        setPdfLoading(true);
+        try {
+          const { url: blobUrl, error: uploadErr } = await generateAndUploadPdf(updated, documentTheme);
+          if (uploadErr || !blobUrl) {
+            addToast('error', uploadErr || 'Errore upload PDF');
+            return;
+          }
+          const withPdf = { ...updated, pdfUrl: blobUrl };
+          const legacyWithPdf = quoteAdapter.toApi(withPdf);
+          const pdfSaveResult = await dataService.saveQuote(user.email, legacyWithPdf);
+          if (pdfSaveResult?.error) {
+            addToast('error', 'Errore salvataggio PDF: ' + pdfSaveResult.error);
+            return;
+          }
+          setQuote((c) => ({ ...c, shareToken: token, isShared: true, pdfUrl: blobUrl }));
+          addToast('success', 'Link di condivisione e PDF creati');
+        } catch (err: any) {
+          addToast('error', err.message || 'Errore generazione PDF');
+        } finally {
+          setPdfLoading(false);
+        }
       }
     } else {
       setQuote((c) => ({ ...c, shareToken: undefined, isShared: false }));
       if (user?.email && quote.quoteId) {
-        dataService.saveQuote(user.email, { ...quote, shareToken: undefined, isShared: false });
+        const legacy = quoteAdapter.toApi({ ...quote, shareToken: undefined, isShared: false });
+        dataService.saveQuote(user.email, legacy);
       }
     }
   };
@@ -448,11 +511,13 @@ export default function App() {
   const exportPDF = async () => {
     setPdfLoading(true);
     const { error } = await tryCatch(async () => {
+      const { url: blobUrl, error: uploadErr } = await generateAndUploadPdf(quote, documentTheme);
+      if (uploadErr) throw new Error(uploadErr);
+
+      // Download locale
       const { generatePDFBlob } = await import('./src/utils/generatePDF');
       const pdfBytes = await generatePDFBlob(quote, documentTheme);
       const filename = `${quote.quoteId || quote.project?.title || 'preventivo'}_${quote.client?.name || 'preventivo'}.pdf`;
-
-      // 1. Download locale
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -461,22 +526,13 @@ export default function App() {
       a.click();
       URL.revokeObjectURL(url);
 
-      // 2. Upload su Vercel Blob + salva URL nel DB
+      // Salva URL nel DB in formato legacy
       if (user?.email) {
-        const bytes = new Uint8Array(pdfBytes);
-        let binary = '';
-        const chunkSize = 8192;
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          const chunk = bytes.subarray(i, i + chunkSize);
-          binary += String.fromCharCode(...chunk);
-        }
-        const base64 = btoa(binary);
-        const { url: blobUrl, error: uploadErr } = await dataService.uploadPdf(filename, base64);
-        if (!uploadErr && blobUrl) {
-          const updatedQuote = { ...quote, pdfUrl: blobUrl, documentTheme };
-          await dataService.saveQuote(user.email, updatedQuote);
-          setQuote(updatedQuote);
-        }
+        const updatedQuote = { ...quote, pdfUrl: blobUrl, documentTheme };
+        const legacy = quoteAdapter.toApi(updatedQuote);
+        const saveResult = await dataService.saveQuote(user.email, legacy);
+        if (saveResult?.error) throw new Error(saveResult.error);
+        setQuote(updatedQuote);
       }
     }, 'Errore esportazione PDF');
     if (error) { addToast('error', error); } else { addToast('success', 'PDF esportato e salvato'); }

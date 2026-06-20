@@ -384,7 +384,7 @@ const dataService = {
       return lsGet(`userSettings_${email}`) || { userEmail: email, onboardingDone: false };
     }
     const result = await api('GET', `/user-settings?email=${encodeURIComponent(email)}`);
-    if (result.error) return { userEmail: email, onboardingDone: false };
+    if (result.error) return { error: result.error, userEmail: email, onboardingDone: false };
     return result;
   },
 
