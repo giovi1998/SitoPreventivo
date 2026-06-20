@@ -103,8 +103,6 @@ const QuoteBodySchema = z.object({
     options: z.array(z.any()).optional(),
     clauses: z.array(z.any()).optional(),
     isTemplate: z.boolean().optional(),
-    shareToken: z.string().optional(),
-    isShared: z.boolean().optional(),
     pdfUrl: z.string().optional(),
     documentTheme: z.string().optional(),
   }),
@@ -375,8 +373,6 @@ export default async function handler(req, res) {
           options: quote.options || [],
           clauses: quote.clauses || [],
           isTemplate: quote.isTemplate ?? existing[0].isTemplate ?? false,
-          shareToken: quote.shareToken ?? existing[0].shareToken,
-          isShared: quote.isShared ?? existing[0].isShared ?? false,
           pdfUrl: quote.pdfUrl ?? existing[0].pdfUrl,
           documentTheme: quote.documentTheme ?? existing[0].documentTheme,
           updatedAt: sql`now()`,
@@ -391,8 +387,6 @@ export default async function handler(req, res) {
         options: quote.options || [],
         clauses: quote.clauses || [],
         isTemplate: quote.isTemplate ?? false,
-        shareToken: quote.shareToken || null,
-        isShared: quote.isShared ?? false,
         pdfUrl: quote.pdfUrl || null,
         documentTheme: quote.documentTheme || "corporate",
       }).returning();
@@ -470,21 +464,6 @@ export default async function handler(req, res) {
         .where(and(eq(quotesTable.userEmail, userEmail), eq(quotesTable.isTemplate, true)))
         .orderBy(sql`created_at DESC`);
       return json(res, 200, list);
-    }
-
-    // ─── PUBLIC QUOTE (no auth) ─────────────────────
-    if (path.startsWith("/quotes/public/") && method === "GET") {
-      const token = path.replace("/quotes/public/", "");
-      const [found] = await db.select().from(quotesTable).where(eq(quotesTable.shareToken, token));
-      if (!found || !found.isShared) {
-        return json(res, 404, { error: "Preventivo non trovato o non condiviso" });
-      }
-      return json(res, 200, {
-        id: found.id, title: found.title, client: found.client, date: found.date,
-        intro: found.intro, color: found.color, vat: found.vat, status: found.status,
-        owner: found.owner, options: found.options, clauses: found.clauses,
-        pdfUrl: found.pdfUrl, documentTheme: found.documentTheme,
-      });
     }
 
     // ─── USER SETTINGS ──────────────────────────────

@@ -49,7 +49,6 @@ npm run db:migrate   # Apply migrations to Neon
 PDF generation happens entirely in the browser via `pdfmake` (in `src/utils/generatePDF.ts`). No server upload, no Vercel Blob, no `BLOB_READ_WRITE_TOKEN` needed. This keeps the app free-tier friendly.
 
 - `App.tsx` `exportPDF()` → download locale
-- `src/pages/PublicQuoteView.tsx` `downloadPdf()` → visitatore del link pubblico genera e scarica il PDF on-demand
 
 ## API Schema Duplication
 

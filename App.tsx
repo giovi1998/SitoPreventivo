@@ -415,35 +415,6 @@ export default function App() {
     setQuote((c) => ({ ...c, legalClauses: c.legalClauses.filter((cl) => cl.id !== id) }));
   };
 
-  const toggleShare = async (enabled: boolean) => {
-    if (enabled) {
-      const token = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      setQuote((c) => ({ ...c, shareToken: token, isShared: true }));
-
-      if (user?.email && quote.quoteId) {
-        const updated = { ...quote, shareToken: token, isShared: true };
-        const legacy = quoteAdapter.toApi(updated);
-        const saveResult = await dataService.saveQuote(user.email, legacy);
-        if (saveResult?.error) {
-          addToast('error', 'Errore salvataggio condivisione: ' + saveResult.error);
-          return;
-        }
-        addToast('success', 'Link di condivisione creato');
-      }
-    } else {
-      setQuote((c) => ({ ...c, shareToken: undefined, isShared: false }));
-      if (user?.email && quote.quoteId) {
-        const legacy = quoteAdapter.toApi({ ...quote, shareToken: undefined, isShared: false });
-        dataService.saveQuote(user.email, legacy);
-      }
-    }
-  };
-
-  const shareInfo = quote.shareToken && quote.isShared ? {
-    link: `${window.location.origin}/preventivo/${quote.shareToken}`,
-    token: quote.shareToken,
-  } : null;
-
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!e.ctrlKey) return;
@@ -557,8 +528,6 @@ export default function App() {
             onResetChat={resetChat}
             isDirty={isDirty}
             saveQuote={() => saveCurrentQuote()}
-            shareInfo={shareInfo}
-            toggleShare={toggleShare}
             documentTheme={documentTheme}
             onSave={saveQuote}
             onExportPDF={exportPDF}

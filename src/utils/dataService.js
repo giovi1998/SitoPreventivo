@@ -355,19 +355,6 @@ const dataService = {
     return { quotes: Array.isArray(result) ? result : [] };
   },
 
-  // ─── PUBLIC QUOTE (no auth) ─────────────────────
-  async getPublicQuote(shareToken) {
-    if (IS_LOCAL) {
-      const all = lsGet('precisionQuote_quotes') || [];
-      const found = all.find(q => q.shareToken === shareToken && q.isShared);
-      if (!found) return { error: 'Preventivo non trovato o non condiviso' };
-      return { quote: found };
-    }
-    const result = await api('GET', `/quotes/public/${shareToken}`);
-    if (result.error) return { error: result.error };
-    return { quote: result };
-  },
-
   // ─── USER SETTINGS ──────────────────────────────
   async getUserSettings(email) {
     if (IS_LOCAL) {

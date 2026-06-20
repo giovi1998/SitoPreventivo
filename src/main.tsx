@@ -4,7 +4,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import App, { AuthProvider, AuthContext } from '../App';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
-import PublicQuoteView from './pages/PublicQuoteView';
 import NotFoundPage from './pages/NotFoundPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -19,7 +18,6 @@ function AppWrapper() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/preventivo/:shareToken" element={<PublicQuoteView />} />
           <Route path="/app" element={
             <ProtectedRoute>
               <App />

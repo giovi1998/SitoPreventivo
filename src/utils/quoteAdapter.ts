@@ -2,8 +2,6 @@ import type { PremiumQuote } from './quoteSchema';
 import { toLegacyFormat, migrateFromLegacy } from './quoteSchema';
 
 export interface QuoteMeta {
-  shareToken?: string;
-  isShared?: boolean;
   isTemplate?: boolean;
   isGlobal?: boolean;
 }

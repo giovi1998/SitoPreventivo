@@ -89,7 +89,6 @@ export default function HomePage({ user }: HomePageProps) {
               <li>AI DeepSeek (con chiave API)</li>
               <li>Collection e stati</li>
               <li>Nessun limite di utenti</li>
-              <li>Condivisione link pubblico</li>
             </ul>
             {user ? (
               <Link to="/app" className="home-cta-secondary">Vai all'App</Link>

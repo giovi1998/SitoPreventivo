@@ -199,8 +199,6 @@ export const quoteSchema = z.object({
   notes: notesSchema,
   attachments: z.array(attachmentSchema).default([]),
   uiPreferences: uiPreferencesSchema,
-  shareToken: z.string().optional(),
-  isShared: z.boolean().optional(),
 });
 
 export type PremiumQuote = z.infer<typeof quoteSchema>;
@@ -430,8 +428,6 @@ interface LegacyQuote {
   isTemplate?: boolean;
   isGlobal?: boolean;
   profession?: string;
-  shareToken?: string;
-  isShared?: boolean;
   _premium?: Record<string, unknown>;
 }
 
@@ -582,8 +578,6 @@ export function migrateFromLegacy(legacy: LegacyQuote): PremiumQuote {
       showTotalsPerOption: true,
       showGlobalTotals: true,
     },
-    shareToken: legacy.shareToken,
-    isShared: legacy.isShared,
   };
 }
 
@@ -619,8 +613,6 @@ export function toLegacyFormat(quote: PremiumQuote): LegacyQuote {
     })),
     isGlobal: (quote as any).isGlobal,
     profession: (quote as any).profession,
-    shareToken: (quote as any).shareToken,
-    isShared: (quote as any).isShared,
     _premium: quote as unknown as Record<string, unknown>,
   };
 }

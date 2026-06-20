@@ -86,8 +86,6 @@ interface EditorViewProps {
   onResetChat: () => void;
   isDirty: boolean;
   saveQuote: () => void;
-  shareInfo: { link: string; token: string } | null;
-  toggleShare: (enabled: boolean) => void;
   documentTheme?: DocumentTemplateId;
   onSave: () => void;
   onExportPDF: () => void;
@@ -103,14 +101,13 @@ export default function EditorView({
   quote, aiText, setAiText, patch, updateOption, addOption, removeOption,
   updateOptions, updateClause, addClause, removeClause, onRunAI, aiModel, onAiModelChange,
   previewRef, aiLogs, isProcessing, availableModels, onResetChat,
-  isDirty, saveQuote, shareInfo, toggleShare, documentTheme = 'corporate',
+  isDirty, saveQuote, documentTheme = 'corporate',
   onSave, onExportPDF, onExportDOCX, onImportPDF, onSaveAsTemplate,
   lastSaveTime, pdfLoading, docxLoading,
 }: EditorViewProps) {
   const [showAi, setShowAi] = React.useState(true);
   const [showManual, setShowManual] = React.useState(true);
   const [mobileTab, setMobileTab] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -132,15 +129,6 @@ export default function EditorView({
     const newIndex = quote.options.findIndex((o) => o.id === over.id);
     if (oldIndex !== -1 && newIndex !== -1) {
       updateOptions(arrayMove(quote.options, oldIndex, newIndex));
-    }
-  };
-
-  const copyShareLink = () => {
-    if (shareInfo?.link) {
-      navigator.clipboard.writeText(shareInfo.link).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
     }
   };
 
@@ -287,22 +275,6 @@ export default function EditorView({
             <button className="btn-remove" onClick={() => removeClause(clause.id)}>Rimuovi</button>
           </div>
         ))}
-      </Section>
-      <Section title="Condivisione">
-        <div className="share-section">
-          <label className="checkbox-label" style={{ marginBottom: '12px' }}>
-            <input type="checkbox" checked={!!shareInfo} onChange={(e) => toggleShare(e.target.checked)} />
-            Condividi link pubblico
-          </label>
-          {shareInfo?.link && (
-            <div className="share-link-row">
-              <input type="text" readOnly value={shareInfo.link} style={{ flex: 1, fontSize: '.8rem', fontFamily: 'monospace' }} onClick={(e) => (e.target as HTMLInputElement).select()} />
-              <button onClick={copyShareLink} style={{ padding: '8px 14px', fontSize: '.8rem', whiteSpace: 'nowrap' }}>
-                {copied ? 'Copiato!' : 'Copia'}
-              </button>
-            </div>
-          )}
-        </div>
       </Section>
     </section>
   );
