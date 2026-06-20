@@ -41,9 +41,15 @@ npm run db:migrate   # Apply migrations to Neon
 | `DEEPSEEK_API_KEY` | Vercel (Production+Preview) | AI chat (server-side only) |
 | `ADMIN_PASSWORD` | Vercel (Production+Preview) | Admin login (admin@gmail.com) |
 | `VITE_ADMIN_PASSWORD` | .env (local only) | Admin login in dev |
-| `BLOB_READ_WRITE_TOKEN` | Vercel | PDF upload to Vercel Blob |
 
 **Never expose `DEEPSEEK_API_KEY` to the browser.** The frontend calls the serverless function proxy, which holds the key server-side.
+
+### PDF Generation — Client-Side Only
+
+PDF generation happens entirely in the browser via `pdfmake` (in `src/utils/generatePDF.ts`). No server upload, no Vercel Blob, no `BLOB_READ_WRITE_TOKEN` needed. This keeps the app free-tier friendly.
+
+- `App.tsx` `exportPDF()` → download locale
+- `src/pages/PublicQuoteView.tsx` `downloadPdf()` → visitatore del link pubblico genera e scarica il PDF on-demand
 
 ## API Schema Duplication
 
@@ -77,6 +83,16 @@ npm run db:migrate   # Apply migrations to Neon
 | `git tag -d` | Deletes local tags |
 
 Always run `git status` before any git operation. See `.agents/guardrails/git-guardrails.md` for full details.
+
+### Additional Push / Deploy Rules
+
+1. **Explicit confirmation required**: never run `git push` unless the user has clearly said to push/deploy. "Analyze" or "fix" does **not** imply push.
+2. **Do not change `vercel.json` rewrites** without explicitly testing `/api` routes (auth, register, upload-pdf, public quote) afterwards. The current rewrite is:
+   ```json
+   { "source": "/api/(.*)", "destination": "/api" }
+   ```
+   This routes every `/api/*` request to the single serverless function `api/index.ts`. Do **not** change it to `/api/$1` — it breaks the monolithic function.
+3. **Before pushing features that require Vercel env vars** (DEEPSEEK_API_KEY, DATABASE_URL, ADMIN_PASSWORD), confirm the variables are set in the Vercel dashboard. Missing env vars cause 503/500 errors in production. `BLOB_READ_WRITE_TOKEN` is no longer used (PDF generation is fully client-side).
 
 ## Skills & Guardrails Location
 

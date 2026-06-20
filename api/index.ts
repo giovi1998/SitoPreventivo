@@ -527,28 +527,6 @@ export default async function handler(req, res) {
       return json(res, 201, created);
     }
 
-    // ─── UPLOAD PDF TO VERCEL BLOB ──────────────────
-    if (path === "/upload-pdf" && method === "POST") {
-      const { filename, data } = body;
-      if (!filename || !data) return json(res, 400, { error: "filename e data (base64) richiesti" });
-
-      const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-      if (!blobToken) return json(res, 503, { error: "BLOB_READ_WRITE_TOKEN non configurato su Vercel" });
-
-      try {
-        const { put } = await import("@vercel/blob");
-        const buffer = Buffer.from(data, "base64");
-        const result = await put(filename, buffer, {
-          access: "public",
-          contentType: "application/pdf",
-        });
-        return json(res, 200, { url: result.url });
-      } catch (err: any) {
-        console.error("[BLOB] Upload error:", err?.message || err);
-        return json(res, 500, { error: `Upload fallito: ${err?.message || "errore sconosciuto"}` });
-      }
-    }
-
     return json(res, 404, { error: "Endpoint non trovato" });
   } catch (err) {
     console.error(`[API] ${req.method} ${req.url} error:`, err?.stack || err?.message || err);

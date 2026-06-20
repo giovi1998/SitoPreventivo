@@ -4,7 +4,6 @@ import { toLegacyFormat, migrateFromLegacy } from './quoteSchema';
 export interface QuoteMeta {
   shareToken?: string;
   isShared?: boolean;
-  pdfUrl?: string;
   isTemplate?: boolean;
   isGlobal?: boolean;
 }

@@ -415,22 +415,6 @@ export default function App() {
     setQuote((c) => ({ ...c, legalClauses: c.legalClauses.filter((cl) => cl.id !== id) }));
   };
 
-  const generateAndUploadPdf = async (quoteToExport: PremiumQuote, theme: DocumentTemplateId) => {
-    const { generatePDFBlob } = await import('./src/utils/generatePDF');
-    const pdfBytes = await generatePDFBlob(quoteToExport, theme);
-    const filename = `${quoteToExport.quoteId || quoteToExport.project?.title || 'preventivo'}_${quoteToExport.client?.name || 'preventivo'}.pdf`;
-
-    const bytes = new Uint8Array(pdfBytes);
-    let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      binary += String.fromCharCode(...chunk);
-    }
-    const base64 = btoa(binary);
-    return await dataService.uploadPdf(filename, base64);
-  };
-
   const toggleShare = async (enabled: boolean) => {
     if (enabled) {
       const token = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -444,29 +428,7 @@ export default function App() {
           addToast('error', 'Errore salvataggio condivisione: ' + saveResult.error);
           return;
         }
-
-        // Genera e carica PDF automaticamente
-        setPdfLoading(true);
-        try {
-          const { url: blobUrl, error: uploadErr } = await generateAndUploadPdf(updated, documentTheme);
-          if (uploadErr || !blobUrl) {
-            addToast('error', uploadErr || 'Errore upload PDF');
-            return;
-          }
-          const withPdf = { ...updated, pdfUrl: blobUrl };
-          const legacyWithPdf = quoteAdapter.toApi(withPdf);
-          const pdfSaveResult = await dataService.saveQuote(user.email, legacyWithPdf);
-          if (pdfSaveResult?.error) {
-            addToast('error', 'Errore salvataggio PDF: ' + pdfSaveResult.error);
-            return;
-          }
-          setQuote((c) => ({ ...c, shareToken: token, isShared: true, pdfUrl: blobUrl }));
-          addToast('success', 'Link di condivisione e PDF creati');
-        } catch (err: any) {
-          addToast('error', err.message || 'Errore generazione PDF');
-        } finally {
-          setPdfLoading(false);
-        }
+        addToast('success', 'Link di condivisione creato');
       }
     } else {
       setQuote((c) => ({ ...c, shareToken: undefined, isShared: false }));
@@ -511,10 +473,6 @@ export default function App() {
   const exportPDF = async () => {
     setPdfLoading(true);
     const { error } = await tryCatch(async () => {
-      const { url: blobUrl, error: uploadErr } = await generateAndUploadPdf(quote, documentTheme);
-      if (uploadErr) throw new Error(uploadErr);
-
-      // Download locale
       const { generatePDFBlob } = await import('./src/utils/generatePDF');
       const pdfBytes = await generatePDFBlob(quote, documentTheme);
       const filename = `${quote.quoteId || quote.project?.title || 'preventivo'}_${quote.client?.name || 'preventivo'}.pdf`;
@@ -525,17 +483,8 @@ export default function App() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-
-      // Salva URL nel DB in formato legacy
-      if (user?.email) {
-        const updatedQuote = { ...quote, pdfUrl: blobUrl, documentTheme };
-        const legacy = quoteAdapter.toApi(updatedQuote);
-        const saveResult = await dataService.saveQuote(user.email, legacy);
-        if (saveResult?.error) throw new Error(saveResult.error);
-        setQuote(updatedQuote);
-      }
     }, 'Errore esportazione PDF');
-    if (error) { addToast('error', error); } else { addToast('success', 'PDF esportato e salvato'); }
+    if (error) { addToast('error', error); } else { addToast('success', 'PDF scaricato'); }
     setPdfLoading(false);
   };
 
