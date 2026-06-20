@@ -34,6 +34,8 @@ const quotesTable = pgTable("quotes", {
   isTemplate: boolean("is_template").default(false),
   shareToken: varchar("share_token", { length: 255 }),
   isShared: boolean("is_shared").default(false),
+  pdfUrl: text("pdf_url"),
+  documentTheme: varchar("document_theme", { length: 50 }).default("corporate"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -42,6 +44,7 @@ const userSettingsTable = pgTable("user_settings", {
   userEmail: varchar("user_email", { length: 255 }).primaryKey().references(() => usersTable.email),
   displayName: varchar("display_name", { length: 255 }),
   companyName: varchar("company_name", { length: 255 }),
+  profession: varchar("profession", { length: 100 }),
   defaultColor: varchar("default_color", { length: 50 }),
   defaultVat: integer("default_vat").default(22),
   logoUrl: text("logo_url"),
@@ -101,6 +104,8 @@ const QuoteBodySchema = z.object({
     isTemplate: z.boolean().optional(),
     shareToken: z.string().optional(),
     isShared: z.boolean().optional(),
+    pdfUrl: z.string().optional(),
+    documentTheme: z.string().optional(),
   }),
 });
 
@@ -108,6 +113,7 @@ const UserSettingsSchema = z.object({
   email: z.string().email('Email non valida'),
   displayName: z.string().optional(),
   companyName: z.string().optional(),
+  profession: z.string().optional(),
   defaultColor: z.string().optional(),
   defaultVat: z.number().optional(),
   logoUrl: z.string().optional(),
@@ -369,6 +375,8 @@ export default async function handler(req, res) {
           isTemplate: quote.isTemplate ?? existing[0].isTemplate ?? false,
           shareToken: quote.shareToken ?? existing[0].shareToken,
           isShared: quote.isShared ?? existing[0].isShared ?? false,
+          pdfUrl: quote.pdfUrl ?? existing[0].pdfUrl,
+          documentTheme: quote.documentTheme ?? existing[0].documentTheme,
           updatedAt: sql`now()`,
         }).where(eq(quotesTable.id, quote.id)).returning();
         return json(res, 200, updated);
@@ -383,6 +391,8 @@ export default async function handler(req, res) {
         isTemplate: quote.isTemplate ?? false,
         shareToken: quote.shareToken || null,
         isShared: quote.isShared ?? false,
+        pdfUrl: quote.pdfUrl || null,
+        documentTheme: quote.documentTheme || "corporate",
       }).returning();
       return json(res, 201, saved);
     }
@@ -471,6 +481,7 @@ export default async function handler(req, res) {
         id: found.id, title: found.title, client: found.client, date: found.date,
         intro: found.intro, color: found.color, vat: found.vat, status: found.status,
         owner: found.owner, options: found.options, clauses: found.clauses,
+        pdfUrl: found.pdfUrl, documentTheme: found.documentTheme,
       });
     }
 
@@ -491,6 +502,7 @@ export default async function handler(req, res) {
         const [updated] = await db.update(userSettingsTable).set({
           ...(settings.displayName !== undefined && { displayName: settings.displayName }),
           ...(settings.companyName !== undefined && { companyName: settings.companyName }),
+          ...(settings.profession !== undefined && { profession: settings.profession }),
           ...(settings.defaultColor !== undefined && { defaultColor: settings.defaultColor }),
           ...(settings.defaultVat !== undefined && { defaultVat: settings.defaultVat }),
           ...(settings.logoUrl !== undefined && { logoUrl: settings.logoUrl }),
@@ -502,12 +514,35 @@ export default async function handler(req, res) {
         userEmail: email,
         displayName: settings.displayName,
         companyName: settings.companyName,
+        profession: settings.profession,
         defaultColor: settings.defaultColor,
         defaultVat: settings.defaultVat,
         logoUrl: settings.logoUrl,
         onboardingDone: settings.onboardingDone ?? false,
       }).returning();
       return json(res, 201, created);
+    }
+
+    // ─── UPLOAD PDF TO VERCEL BLOB ──────────────────
+    if (path === "/upload-pdf" && method === "POST") {
+      const { filename, data } = body;
+      if (!filename || !data) return json(res, 400, { error: "filename e data (base64) richiesti" });
+
+      const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+      if (!blobToken) return json(res, 503, { error: "BLOB_READ_WRITE_TOKEN non configurato su Vercel" });
+
+      try {
+        const { put } = await import("@vercel/blob");
+        const buffer = Buffer.from(data, "base64");
+        const result = await put(filename, buffer, {
+          access: "public",
+          contentType: "application/pdf",
+        });
+        return json(res, 200, { url: result.url });
+      } catch (err: any) {
+        console.error("[BLOB] Upload error:", err?.message || err);
+        return json(res, 500, { error: `Upload fallito: ${err?.message || "errore sconosciuto"}` });
+      }
     }
 
     return json(res, 404, { error: "Endpoint non trovato" });

@@ -155,6 +155,16 @@ const dataService = {
     return { success: true, ...quote };
   },
 
+  // ─── UPLOAD PDF ─────────────────────────────────
+  async uploadPdf(filename, base64Data) {
+    if (IS_LOCAL) {
+      return { url: '' };
+    }
+    const result = await api('POST', '/upload-pdf', { filename, data: base64Data }, { timeoutMs: 30000 });
+    if (result.error) return { error: result.error };
+    return { url: result.url };
+  },
+
   // ─── DELETE QUOTE ───────────────────────────────
   async deleteQuote(quoteId, email) {
     if (IS_LOCAL) {

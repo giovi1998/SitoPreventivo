@@ -19,6 +19,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@neondatabase/serverless": "^1.1.0",
+    "@vercel/blob": "^2.4.1",
     "bcryptjs": "^3.0.3",
     "docx": "^9.7.1",
     "drizzle-orm": "^1.0.0-beta.22",

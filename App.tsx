@@ -448,10 +448,38 @@ export default function App() {
   const exportPDF = async () => {
     setPdfLoading(true);
     const { error } = await tryCatch(async () => {
-      const { default: generatePDF } = await import('./src/utils/generatePDF');
-      generatePDF(quote, documentTheme);
+      const { generatePDFBlob } = await import('./src/utils/generatePDF');
+      const pdfBytes = await generatePDFBlob(quote, documentTheme);
+      const filename = `${quote.quoteId || quote.project?.title || 'preventivo'}_${quote.client?.name || 'preventivo'}.pdf`;
+
+      // 1. Download locale
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      // 2. Upload su Vercel Blob + salva URL nel DB
+      if (user?.email) {
+        const bytes = new Uint8Array(pdfBytes);
+        let binary = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          const chunk = bytes.subarray(i, i + chunkSize);
+          binary += String.fromCharCode(...chunk);
+        }
+        const base64 = btoa(binary);
+        const { url: blobUrl, error: uploadErr } = await dataService.uploadPdf(filename, base64);
+        if (!uploadErr && blobUrl) {
+          const updatedQuote = { ...quote, pdfUrl: blobUrl, documentTheme };
+          await dataService.saveQuote(user.email, updatedQuote);
+          setQuote(updatedQuote);
+        }
+      }
     }, 'Errore esportazione PDF');
-    if (error) { addToast('error', error); } else { addToast('success', 'PDF esportato'); }
+    if (error) { addToast('error', error); } else { addToast('success', 'PDF esportato e salvato'); }
     setPdfLoading(false);
   };
 

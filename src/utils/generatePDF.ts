@@ -12,7 +12,7 @@ if (pdfFonts.pdfMake) {
 const money = (v: number) =>
   new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Number(v || 0));
 
-export default function generatePDF(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate') {
+function buildDocDefinition(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate') {
   const theme = getPdfMakeStyle(themeId);
   const accent = quote.uiPreferences?.accentColor || '#01696F';
   const opts = quote.options || [];
@@ -224,5 +224,15 @@ export default function generatePDF(quote: PremiumQuote, themeId: DocumentTempla
     },
   };
 
-  pdfMake.createPdf(docDefinition).download(`${quote.quoteId}_${quote.client?.name || 'preventivo'}.pdf`);
+  return docDefinition;
+}
+
+export function generatePDFBlob(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate'): Promise<Uint8Array> {
+  const docDefinition = buildDocDefinition(quote, themeId);
+  return pdfMake.createPdf(docDefinition).getBuffer();
+}
+
+export default function generatePDF(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate') {
+  const docDefinition = buildDocDefinition(quote, themeId);
+  pdfMake.createPdf(docDefinition).download(`${quote.quoteId || quote.project?.title || 'preventivo'}_${quote.client?.name || 'preventivo'}.pdf`);
 }

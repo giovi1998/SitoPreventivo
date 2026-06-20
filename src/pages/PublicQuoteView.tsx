@@ -48,6 +48,15 @@ export default function PublicQuoteView() {
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <p style={{ fontSize: '.75rem', textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--muted)', fontWeight: 800, margin: '0 0 4px' }}>Preventivo condiviso</p>
           <h1 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, color: 'var(--ink)' }}>{quote.title}</h1>
+          {quote.pdfUrl && (
+            <a href={quote.pdfUrl} target="_blank" rel="noopener noreferrer" style={{
+              display: 'inline-block', marginTop: '12px', padding: '10px 20px',
+              background: quote.color || 'var(--accent)', color: '#fff',
+              borderRadius: '8px', textDecoration: 'none', fontWeight: 700, fontSize: '.85rem',
+            }}>
+              Scarica PDF
+            </a>
+          )}
         </div>
         <div style={{ background: '#fff', borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,.06)', overflow: 'hidden' }}>
           <DocumentPreview quote={quote} />

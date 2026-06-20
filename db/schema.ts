@@ -28,6 +28,8 @@ export const quotes = pgTable("quotes", {
   isTemplate: boolean("is_template").default(false),
   shareToken: varchar("share_token", { length: 255 }),
   isShared: boolean("is_shared").default(false),
+  pdfUrl: text("pdf_url"),
+  documentTheme: varchar("document_theme", { length: 50 }).default("corporate"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -36,6 +38,7 @@ export const userSettings = pgTable("user_settings", {
   userEmail: varchar("user_email", { length: 255 }).primaryKey().references(() => users.email),
   displayName: varchar("display_name", { length: 255 }),
   companyName: varchar("company_name", { length: 255 }),
+  profession: varchar("profession", { length: 100 }),
   defaultColor: varchar("default_color", { length: 50 }),
   defaultVat: integer("default_vat").default(22),
   logoUrl: text("logo_url"),
