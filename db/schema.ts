@@ -28,7 +28,6 @@ export const quotes = pgTable("quotes", {
   isTemplate: boolean("is_template").default(false),
   shareToken: varchar("share_token", { length: 255 }),
   isShared: boolean("is_shared").default(false),
-  sharedAt: timestamp("shared_at"),
   pdfUrl: text("pdf_url"),
   documentTheme: varchar("document_theme", { length: 50 }).default("corporate"),
   createdAt: timestamp("created_at").defaultNow(),

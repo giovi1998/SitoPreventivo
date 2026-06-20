@@ -404,16 +404,16 @@ export default function App() {
   const toggleShare = (enabled: boolean) => {
     if (enabled) {
       const token = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      setQuote((c) => ({ ...c, shareToken: token, isShared: true, sharedAt: new Date().toISOString() }));
+      setQuote((c) => ({ ...c, shareToken: token, isShared: true }));
       if (user?.email && quote.quoteId) {
-        const updated: PremiumQuote = { ...quote, shareToken: token, isShared: true, sharedAt: new Date().toISOString() };
+        const updated: PremiumQuote = { ...quote, shareToken: token, isShared: true };
         const legacy = toLegacyFormat(updated);
         dataService.saveQuote(user.email, legacy);
       }
     } else {
-      setQuote((c) => ({ ...c, shareToken: undefined, isShared: false, sharedAt: undefined }));
+      setQuote((c) => ({ ...c, shareToken: undefined, isShared: false }));
       if (user?.email && quote.quoteId) {
-        const updated: PremiumQuote = { ...quote, shareToken: undefined, isShared: false, sharedAt: undefined };
+        const updated: PremiumQuote = { ...quote, shareToken: undefined, isShared: false };
         const legacy = toLegacyFormat(updated);
         dataService.saveQuote(user.email, legacy);
       }

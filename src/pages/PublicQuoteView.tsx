@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import DocumentPreview from '../components/DocumentPreview';
 import dataService from '../utils/dataService';
-import { migrateFromLegacy } from '../utils/quoteSchema';
 
 export default function PublicQuoteView() {
   const { shareToken } = useParams();
@@ -14,7 +13,7 @@ export default function PublicQuoteView() {
     setLoading(true);
     dataService.getPublicQuote(shareToken).then(({ quote: q, error: err }: any) => {
       if (err) setError(err);
-      else setQuote(migrateFromLegacy(q));
+      else setQuote(q);
       setLoading(false);
     });
   }, [shareToken]);

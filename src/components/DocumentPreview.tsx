@@ -17,7 +17,7 @@ const renderTextWithCallouts = (text: string) => {
       const content = part.replace(/\[\/?INFO\]/g, '').trim();
       return <div key={i} className="doc-callout-info"><strong>✅ Nota:</strong> {content}</div>;
     }
-    if (!part || !part.trim()) return null;
+    if (!part.trim()) return null;
     return (
       <div key={i}>
         {part.split('\n').map((line, j) => line.trim() ? <p key={`${i}-${j}`}>{line}</p> : null)}
@@ -156,7 +156,7 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
             {quote.legalClauses.map((clause) => (
               <div key={clause.id} className="doc-clause">
                 <p><strong>{clause.title}</strong></p>
-                    {renderTextWithCallouts(clause.body || '')}
+                {renderTextWithCallouts(clause.body)}
               </div>
             ))}
           </div>
@@ -170,7 +170,7 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
                 <thead>
                   <tr>
                     <th>Caratteristica</th>
-                    {opts.map((o) => <th key={o.id}>{o.label?.split('—')[0]?.trim() || ''}</th>)}
+                    {opts.map((o) => <th key={o.id}>{o.label.split('—')[0].trim()}</th>)}
                   </tr>
                 </thead>
                 <tbody>
