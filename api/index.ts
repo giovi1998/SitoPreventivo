@@ -48,6 +48,7 @@ const userSettingsTable = pgTable("user_settings", {
   defaultColor: varchar("default_color", { length: 50 }),
   defaultVat: integer("default_vat").default(22),
   logoUrl: text("logo_url"),
+  documentTheme: varchar("document_theme", { length: 50 }).default("corporate"),
   onboardingDone: boolean("onboarding_done").default(false),
 });
 
@@ -118,6 +119,7 @@ const UserSettingsSchema = z.object({
   defaultVat: z.number().optional(),
   logoUrl: z.string().optional(),
   onboardingDone: z.boolean().optional(),
+  documentTheme: z.string().optional(),
 });
 
 const TokenLimitSchema = z.object({
@@ -507,6 +509,7 @@ export default async function handler(req, res) {
           ...(settings.defaultVat !== undefined && { defaultVat: settings.defaultVat }),
           ...(settings.logoUrl !== undefined && { logoUrl: settings.logoUrl }),
           ...(settings.onboardingDone !== undefined && { onboardingDone: settings.onboardingDone }),
+          ...(settings.documentTheme !== undefined && { documentTheme: settings.documentTheme }),
         }).where(eq(userSettingsTable.userEmail, email)).returning();
         return json(res, 200, updated);
       }
@@ -518,6 +521,7 @@ export default async function handler(req, res) {
         defaultColor: settings.defaultColor,
         defaultVat: settings.defaultVat,
         logoUrl: settings.logoUrl,
+        documentTheme: settings.documentTheme ?? "corporate",
         onboardingDone: settings.onboardingDone ?? false,
       }).returning();
       return json(res, 201, created);
