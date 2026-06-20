@@ -180,14 +180,16 @@ export default function App() {
         const requiredFields = ['displayName', 'companyName', 'profession', 'defaultColor', 'defaultVat', 'documentTheme'];
         const isComplete = requiredFields.every(f => settings[f] != null && settings[f] !== '');
         
-        if (!isComplete) {
-          setShowOnboarding(true);
-        } else {
+        if (settings.onboardingDone === true && isComplete) {
           if (settings.defaultColor) setQuote((c) => ({ ...c, uiPreferences: { ...c.uiPreferences, accentColor: settings.defaultColor } }));
           if (settings.defaultVat) setQuote((c) => ({ ...c, options: c.options.map((o) => ({ ...o, items: o.items.map((i) => ({ ...i, tax: { ...i.tax, rate: settings.defaultVat } })) })) }));
           if (settings.documentTheme) setDocumentTheme(settings.documentTheme);
+        } else {
+          setShowOnboarding(true);
         }
-      }).catch(() => {});
+      }).catch(() => {
+        setShowOnboarding(true);
+      });
     }
   }, [user?.email]);
 
@@ -404,12 +406,16 @@ export default function App() {
       const token = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       setQuote((c) => ({ ...c, shareToken: token, isShared: true }));
       if (user?.email && quote.quoteId) {
-        dataService.saveQuote(user.email, { ...quote, shareToken: token, isShared: true });
+        const updated: PremiumQuote = { ...quote, shareToken: token, isShared: true };
+        const legacy = toLegacyFormat(updated);
+        dataService.saveQuote(user.email, legacy);
       }
     } else {
       setQuote((c) => ({ ...c, shareToken: undefined, isShared: false }));
       if (user?.email && quote.quoteId) {
-        dataService.saveQuote(user.email, { ...quote, shareToken: undefined, isShared: false });
+        const updated: PremiumQuote = { ...quote, shareToken: undefined, isShared: false };
+        const legacy = toLegacyFormat(updated);
+        dataService.saveQuote(user.email, legacy);
       }
     }
   };

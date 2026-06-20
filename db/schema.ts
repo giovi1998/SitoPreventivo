@@ -42,5 +42,6 @@ export const userSettings = pgTable("user_settings", {
   defaultColor: varchar("default_color", { length: 50 }),
   defaultVat: integer("default_vat").default(22),
   logoUrl: text("logo_url"),
+  documentTheme: varchar("document_theme", { length: 50 }).default("corporate"),
   onboardingDone: boolean("onboarding_done").default(false),
 });
