@@ -47,24 +47,7 @@ npm run db:migrate   # Apply migrations to Neon
 
 ## API Schema Duplication
 
-`api/index.ts` inlines the Drizzle schema for Vercel compatibility. **Any change to `db/schema.ts` must be mirrored** in the corresponding table definition + handler in `api/index.ts`.
-
-### ⚠️ Schema Change Checklist
-
-When adding/modifying a column in any table:
-
-| Step | Local | Production |
-|------|-------|------------|
-| 1. Update `db/schema.ts` | ✅ Always | ✅ Same |
-| 2. Update inlined schema + handler in `api/index.ts` | ✅ Always | ✅ Same |
-| 3. Generate migration | `npm run db:generate` (needs DATABASE_URL in .env) | 🔄 Auto via build |
-| 4. Apply migration | `npm run db:migrate` (needs DATABASE_URL in .env) | 🔄 `vercel.json` runs `db:migrate` on build |
-| 5. Run typecheck + tests | `npm run typecheck && npm run test` | ❌ Not needed |
-| 6. Add note to AGENTS.md about the change for future agents | ✅ Recommended | ✅ Recommended |
-
-- **Local dev**: localStorage is used, so schema changes don't affect local data. But run `db:generate` + `db:migrate` before deploy to keep migrations in sync.
-- **Production**: Vercel build runs `db:migrate` automatically. No data loss for existing rows — new columns use their `default()` value.
-- **No `DATABASE_URL` locally?** You can still develop and commit — migrations will be generated on deploy. Just ensure the schema + API are consistent.
+`api/index.ts` inlines the Drizzle schema for Vercel compatibility. If you modify `db/schema.ts`, you must also update the corresponding tables in `api/index.ts` (lines 9-52).
 
 ## Admin User
 
@@ -77,13 +60,6 @@ When adding/modifying a column in any table:
 - Framework: Vitest + React Testing Library + jsdom
 - Run single test: `npx vitest run path/to/file.test.ts`
 - No test database needed — local tests use localStorage path
-
-**Required**: Always run `npm run test` (and `npm run typecheck`) after making changes. No code should be committed or deployed if any test fails. The UI onboarding check condition is:
-```ts
-if (settings.onboardingDone === true && isComplete) // skip onboarding
-else // show onboarding
-```
-Both conditions (`onboardingDone` flag + all required fields present) must be true to skip onboarding.
 
 ## Git Guardrails
 
