@@ -1,6 +1,6 @@
-import type { VercelRequest, VercelResponse } from './lib/types';
-import { addCorsHeaders, errorResponse } from './lib/response';
-import { dispatch } from './lib/router';
+import type { VercelRequest, VercelResponse } from '../server/lib/types';
+import { addCorsHeaders, errorResponse } from '../server/lib/response';
+import { dispatch } from '../server/lib/router';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const { pathname } = new URL(req.url, 'http://localhost');

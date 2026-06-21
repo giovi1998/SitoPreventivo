@@ -30,7 +30,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 - **Database**: Drizzle ORM → Neon Postgres
 - **Storage split**: `localhost` = localStorage, production = API + Postgres. Detection is automatic via `IS_LOCAL` in `src/utils/dataService.js`
 - **Auth**: bcrypt + localStorage (dev) / Drizzle + Neon (prod). Admin: `admin@gmail.com` validated against `ADMIN_PASSWORD` env var, never saved to DB.
-- **Observability**: Server logs via `api/lib/logger.ts` (JSON in prod, colored in dev). Client logs via `src/utils/logger.ts` + `/api/logs` endpoint (Vercel logs). Zero external services.
+- **Observability**: Server logs via `server/lib/logger.ts` (JSON in prod, colored in dev). Client logs via `src/utils/logger.ts` + `/api/logs` endpoint (Vercel logs). Zero external services.
 
 ## Key Files
 
@@ -38,8 +38,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 |------|------|
 | `App.tsx` (root, not src/) | Main app: AuthProvider, state, AI, PDF export |
 | `api/index.ts` | Entire REST API (users, quotes, AI proxy, upload, logs) |
-| `api/lib/logger.ts` | Server-side structured logger (JSON in prod) |
-| `api/ai/chat/stream.ts` | ⚠️ DEPRECATED — never invoked, see Vercel routing below |
+| `server/lib/logger.ts` | Server-side structured logger (JSON in prod) |
 | `db/schema.ts` | Drizzle schema (users, quotes, user_settings) |
 | `src/utils/dataService.js` | Data layer — routes to API or localStorage |
 | `src/utils/logger.ts` | Client-side logger (sendBeacon → /api/logs) |
@@ -80,7 +79,7 @@ PDF generation happens entirely in the browser via `pdfmake` (in `src/utils/gene
 
 This routes **every** `/api/*` request to the single serverless function `api/index.ts`. Consequences:
 
-1. **The file `api/ai/chat/stream.ts` is never invoked** — requests to `/api/ai/chat/stream` reach `api/index.ts` instead. The stream logic lives inside `api/index.ts` at the `/ai/chat/stream` route. Do not "fix" this by creating a new serverless function — the monolith is intentional.
+1. **Do not add `.ts` files inside `api/`** other than `api/index.ts` — Vercel Hobby plan limits to 12 serverless functions, and each `.ts` in `api/` counts as one. Keep utilities in `server/lib/`, schemas in `server/lib/`, etc.
 2. **Do not change** the destination to `/api/$1` — it breaks the monolithic pattern.
 3. If a future change splits the API into multiple functions, **update `vercel.json` rewrites accordingly** and add explicit tests for every route.
 
@@ -147,7 +146,7 @@ Chiavi attuali (senza prefisso, da versionare in prossima migrazione):
 
 ## Logging
 
-- **Server** (`api/lib/logger.ts`): JSON strutturato in production, colorato in dev. Sostituisce tutti i `console.error` esistenti.
+- **Server** (`server/lib/logger.ts`): JSON strutturato in production, colorato in dev. Sostituisce tutti i `console.error` esistenti.
 - **Client** (`src/utils/logger.ts`): usa `sendBeacon` (no blocking) per inviare eventi a `/api/logs` → Vercel logs.
 - I client log in production sono filtrati: solo `warn`/`error` arrivano al server.
 
@@ -175,7 +174,7 @@ Always run `git status` before any git operation. See `.agents/guardrails/git-gu
    ```json
    { "source": "/api/(.*)", "destination": "/api" }
    ```
-   This routes every `/api/*` request to the single serverless function `api/index.ts`. Do **not** change it to `/api/$1` — it breaks the monolithic function.
+    This routes every `/api/*` request to the single serverless function `api/index.ts`. Do **not** change it to `/api/$1` — it breaks the monolithic function. Add new server-side code under `server/lib/` (not `api/`) to keep the Vercel Hobby 12-function limit.
 3. **Before pushing features that require Vercel env vars** (DEEPSEEK_API_KEY, DATABASE_URL, ADMIN_PASSWORD, ALLOWED_ORIGIN), confirm the variables are set in the Vercel dashboard. Missing env vars cause 503/500 errors in production. `BLOB_READ_WRITE_TOKEN` is no longer used (PDF generation is fully client-side).
 
 ## Active Skills
@@ -229,6 +228,6 @@ Queste skill vengono caricate automaticamente. Quando modifichi il codice riferi
 |------|----------|
 | `.agents/skills/` | Installed agent skills (10 attive) |
 | `.agents/guardrails/` | Git safety rules and block scripts |
-| `api/lib/` | Server-side utilities (logger) |
+| `server/lib/` | Server-side utilities (auth, logger, rateLimit, response, router, schema, types) |
 | `src/utils/` | Client-side utilities (logger, errors) |
 
