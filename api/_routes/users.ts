@@ -1,13 +1,13 @@
-import type { RouteHandler } from '../lib/types';
-import { json } from '../lib/response';
-import { db, usersTable } from '../lib/schema';
+import type { RouteHandler } from '../_lib/types';
+import { json } from '../_lib/response';
+import { db, usersTable } from '../_lib/schema';
 import { eq, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { safeCompare, getClientIp } from '../lib/auth';
-import { checkRateLimit, recordRateAttempt } from '../lib/rateLimit';
-import { ADMIN_EMAIL } from '../lib/response';
-import { log } from '../lib/logger';
+import { safeCompare, getClientIp } from '../_lib/auth';
+import { checkRateLimit, recordRateAttempt } from '../_lib/rateLimit';
+import { ADMIN_EMAIL } from '../_lib/response';
+import { log } from '../_lib/logger';
 
 const passwordSchema = z.string()
   .min(12, 'Password: minimo 12 caratteri')

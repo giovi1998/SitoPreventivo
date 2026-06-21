@@ -1,8 +1,8 @@
-import type { RouteHandler } from '../lib/types';
-import { json } from '../lib/response';
-import { log } from '../lib/logger';
-import { checkRateLimit } from '../lib/rateLimit';
-import { getClientIp } from '../lib/auth';
+import type { RouteHandler } from '../_lib/types';
+import { json } from '../_lib/response';
+import { log } from '../_lib/logger';
+import { checkRateLimit } from '../_lib/rateLimit';
+import { getClientIp } from '../_lib/auth';
 
 const MAX_LOG_MSG = 2000;
 const VALID_LEVELS = new Set(['debug', 'info', 'warn', 'error']);

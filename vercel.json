@@ -2,11 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run db:migrate && npm run build",
   "outputDirectory": "dist",
-  "functions": {
-    "api/**/*.ts": {
-      "includeFiles": "server/**"
-    }
-  },
   "rewrites": [
     { "source": "/api/users/(.*)", "destination": "/api/users" },
     { "source": "/api/quotes/(.*)", "destination": "/api/quotes" },

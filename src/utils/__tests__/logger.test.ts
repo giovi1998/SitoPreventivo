@@ -25,7 +25,7 @@ describe('server logger', () => {
   it('includes msg and meta in dev (non-JSON)', async () => {
     process.env.VERCEL_ENV = 'development';
     vi.resetModules();
-    const { log } = await import('../../../server/lib/logger');
+    const { log } = await import('../../../api/_lib/logger');
     log.info('test message', { user: 'a@b.com', count: 3 });
     expect(infoSpy).toHaveBeenCalledTimes(1);
     const arg = infoSpy.mock.calls[0][0] as string;
@@ -36,7 +36,7 @@ describe('server logger', () => {
   it('emits single-line JSON in production', async () => {
     process.env.VERCEL_ENV = 'production';
     vi.resetModules();
-    const { log } = await import('../../../server/lib/logger');
+    const { log } = await import('../../../api/_lib/logger');
     log.warn('something', { route: '/users', code: 401 });
     expect(warnSpy).toHaveBeenCalledTimes(1);
     const arg = warnSpy.mock.calls[0][0] as string;
@@ -52,7 +52,7 @@ describe('server logger', () => {
   it('respects log levels', async () => {
     process.env.VERCEL_ENV = 'development';
     vi.resetModules();
-    const { log } = await import('../../../server/lib/logger');
+    const { log } = await import('../../../api/_lib/logger');
     log.debug('dbg');
     log.error('err', { stack: 'x' });
     expect(debugSpy).toHaveBeenCalledTimes(1);
@@ -62,7 +62,7 @@ describe('server logger', () => {
   it('omits meta block when not provided', async () => {
     process.env.VERCEL_ENV = 'production';
     vi.resetModules();
-    const { log } = await import('../../../server/lib/logger');
+    const { log } = await import('../../../api/_lib/logger');
     log.info('plain');
     const parsed = JSON.parse(infoSpy.mock.calls[0][0] as string);
     expect(parsed.msg).toBe('plain');

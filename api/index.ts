@@ -1,5 +1,5 @@
-import type { VercelRequest, VercelResponse } from '../server/lib/types';
-import { addCorsHeaders, errorResponse } from '../server/lib/response';
+import type { VercelRequest, VercelResponse } from './_lib/types';
+import { addCorsHeaders, errorResponse } from './_lib/response';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   addCorsHeaders(req, res);

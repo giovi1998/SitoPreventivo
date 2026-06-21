@@ -1,10 +1,10 @@
 import type { RouteHandler, VercelRequest, VercelResponse } from './types';
 import { json } from './response';
-import { handleHealth } from '../routes/health';
-import { handleUsers } from '../routes/users';
-import { handleQuotes } from '../routes/quotes';
-import { handleAI } from '../routes/ai';
-import { handleUserSettings } from '../routes/userSettings';
+import { handleHealth } from '../_routes/health';
+import { handleUsers } from '../_routes/users';
+import { handleQuotes } from '../_routes/quotes';
+import { handleAI } from '../_routes/ai';
+import { handleUserSettings } from '../_routes/userSettings';
 
 export const routes: Array<{ prefix: string; handler: RouteHandler }> = [
   { prefix: '/ping', handler: handleHealth },

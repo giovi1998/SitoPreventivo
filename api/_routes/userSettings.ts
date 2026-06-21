@@ -1,6 +1,6 @@
-import type { RouteHandler } from '../lib/types';
-import { json } from '../lib/response';
-import { db, userSettingsTable } from '../lib/schema';
+import type { RouteHandler } from '../_lib/types';
+import { json } from '../_lib/response';
+import { db, userSettingsTable } from '../_lib/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 

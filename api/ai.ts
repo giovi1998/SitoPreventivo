@@ -1,5 +1,5 @@
-import { withApiHandler } from '../server/lib/handler';
-import { handleAI } from '../server/routes/ai';
+import { withApiHandler } from './_lib/handler';
+import { handleAI } from './_routes/ai';
 
 export default withApiHandler(handleAI);
 

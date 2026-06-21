@@ -1,9 +1,9 @@
-import type { RouteHandler } from '../lib/types';
-import { json } from '../lib/response';
-import { db, quotesTable } from '../lib/schema';
+import type { RouteHandler } from '../_lib/types';
+import { json } from '../_lib/response';
+import { db, quotesTable } from '../_lib/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { ADMIN_EMAIL } from '../lib/response';
+import { ADMIN_EMAIL } from '../_lib/response';
 
 const QuoteBodySchema = z.object({
   email: z.string().email('Email non valida'),

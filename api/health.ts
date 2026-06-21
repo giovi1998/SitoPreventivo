@@ -1,5 +1,5 @@
-import { withApiHandler } from '../server/lib/handler';
-import { handleHealth } from '../server/routes/health';
+import { withApiHandler } from './_lib/handler';
+import { handleHealth } from './_routes/health';
 
 export default withApiHandler(handleHealth);
 

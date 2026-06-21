@@ -1,5 +1,5 @@
-import { withApiHandler } from '../server/lib/handler';
-import { handleUsers } from '../server/routes/users';
+import { withApiHandler } from './_lib/handler';
+import { handleUsers } from './_routes/users';
 
 export default withApiHandler(handleUsers);
 

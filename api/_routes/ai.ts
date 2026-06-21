@@ -1,8 +1,8 @@
-import type { RouteHandler } from '../lib/types';
-import { json, addCorsHeaders } from '../lib/response';
-import { log } from '../lib/logger';
-import { checkRateLimit } from '../lib/rateLimit';
-import { getClientIp } from '../lib/auth';
+import type { RouteHandler } from '../_lib/types';
+import { json, addCorsHeaders } from '../_lib/response';
+import { log } from '../_lib/logger';
+import { checkRateLimit } from '../_lib/rateLimit';
+import { getClientIp } from '../_lib/auth';
 
 export const handleAI: RouteHandler = async (path, method, req, res, body) => {
   if (path === '/admin/deepseek-status' && method === 'GET') {

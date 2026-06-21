@@ -1,47 +1,47 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../../server/routes/users', () => ({
+vi.mock('../../api/_routes/users', () => ({
   handleUsers: vi.fn(async (_p, _m, _req, res) => {
     res.statusCode = 200;
     res.end(JSON.stringify({ source: 'users-handler' }));
   }),
 }));
-vi.mock('../../server/routes/quotes', () => ({
+vi.mock('../../api/_routes/quotes', () => ({
   handleQuotes: vi.fn(async (_p, _m, _req, res) => {
     res.statusCode = 200;
     res.end(JSON.stringify({ source: 'quotes-handler' }));
   }),
 }));
-vi.mock('../../server/routes/ai', () => ({
+vi.mock('../../api/_routes/ai', () => ({
   handleAI: vi.fn(async (_p, _m, _req, res) => {
     res.statusCode = 200;
     res.end(JSON.stringify({ source: 'ai-handler' }));
   }),
 }));
-vi.mock('../../server/routes/userSettings', () => ({
+vi.mock('../../api/_routes/userSettings', () => ({
   handleUserSettings: vi.fn(async (_p, _m, _req, res) => {
     res.statusCode = 200;
     res.end(JSON.stringify({ source: 'user-settings-handler' }));
   }),
 }));
-vi.mock('../../server/routes/health', () => ({
+vi.mock('../../api/_routes/health', () => ({
   handleHealth: vi.fn(async (_p, _m, _req, res) => {
     res.statusCode = 200;
     res.end(JSON.stringify({ source: 'health-handler' }));
   }),
 }));
 
-import usersHandler from '../users';
-import quotesHandler from '../quotes';
-import aiHandler from '../ai';
-import userSettingsHandler from '../user-settings';
-import healthHandler from '../health';
-import indexHandler from '../index';
-import { handleUsers } from '../../server/routes/users';
-import { handleQuotes } from '../../server/routes/quotes';
-import { handleAI } from '../../server/routes/ai';
-import { handleUserSettings } from '../../server/routes/userSettings';
-import { handleHealth } from '../../server/routes/health';
+import usersHandler from '../../api/users';
+import quotesHandler from '../../api/quotes';
+import aiHandler from '../../api/ai';
+import userSettingsHandler from '../../api/user-settings';
+import healthHandler from '../../api/health';
+import indexHandler from '../../api/index';
+import { handleUsers } from '../../api/_routes/users';
+import { handleQuotes } from '../../api/_routes/quotes';
+import { handleAI } from '../../api/_routes/ai';
+import { handleUserSettings } from '../../api/_routes/userSettings';
+import { handleHealth } from '../../api/_routes/health';
 
 function createMockReqRes(url: string, method: string = 'GET', body?: unknown) {
   const headers: Record<string, string> = {};
