@@ -2,8 +2,20 @@ import { useState, useRef, useCallback } from 'react';
 import type { PremiumQuote } from '../utils/quoteSchema';
 import type { AIStreamChunk, AILogEntry, ProcessResult } from '../ai/types';
 import { AIOrchestrator } from '../ai/index';
-import { StreamBuffer, summarizeMergeChanges, describeAIError } from '../ai/eventLog';
+import {
+  StreamBuffer,
+  summarizeMergeChanges,
+  describeAIError,
+  createStreamEntry,
+  createEntry,
+  createErrorEntry,
+  createSuccessEntry,
+  createToolEntry,
+  createInfoEntry,
+} from '../ai/eventLog';
+import { formatToolCall, formatToolResult } from '../ai/toolLabels';
 import dataService from '../utils/dataService';
+import { logger } from '../utils/logger';
 
 interface UseAIReturn {
   processPrompt: (
@@ -12,6 +24,7 @@ interface UseAIReturn {
     options?: {
       modelId?: string;
       onProgress?: (msg: string) => void;
+      onStream?: (chunk: AIStreamChunk) => void;
     }
   ) => Promise<ProcessResult>;
   resetChat: () => void;
@@ -19,17 +32,19 @@ interface UseAIReturn {
   isProcessing: boolean;
   sessionId: string | null;
   availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
-  addLog: (type: AILogEntry['type'], msg: string) => void;
+  addLog: (entry: AILogEntry) => void;
 }
+
+const MAX_LOG_ENTRIES = 40;
 
 function parseResultChanges(changes: string[]): {
   toolCount: number;
   mergeChanges: string[];
-  errorKind: 'empty' | 'not_json' | 'invalid_json' | null;
+  errorKind: 'empty' | 'not_json' | 'invalid_json' | 'followup_not_json' | 'followup_failed' | null;
 } {
   let toolCount = 0;
   const mergeChanges: string[] = [];
-  let errorKind: 'empty' | 'not_json' | 'invalid_json' | null = null;
+  let errorKind: 'empty' | 'not_json' | 'invalid_json' | 'followup_not_json' | 'followup_failed' | null = null;
 
   for (const c of changes) {
     if (c.startsWith('tool:')) {
@@ -40,6 +55,10 @@ function parseResultChanges(changes: string[]): {
       errorKind = 'not_json';
     } else if (c === 'error:invalid_json') {
       errorKind = 'invalid_json';
+    } else if (c === 'error:followup_not_json') {
+      errorKind = 'followup_not_json';
+    } else if (c.startsWith('error:followup_failed')) {
+      errorKind = 'followup_failed';
     } else {
       mergeChanges.push(c);
     }
@@ -60,6 +79,10 @@ export function useAI(userEmail?: string): UseAIReturn {
   const orchestratorRef = useRef<AIOrchestrator | null>(null);
   const streamBufferRef = useRef(new StreamBuffer());
   const startedToolsRef = useRef<Set<string>>(new Set());
+  const toolStartRef = useRef<Map<string, number>>(new Map());
+  const streamEntryIdRef = useRef<string | null>(null);
+  const streamStartRef = useRef<number>(0);
+  const lastCharCountRef = useRef<number>(0);
 
   const getOrchestrator = useCallback(() => {
     if (!orchestratorRef.current) {
@@ -68,11 +91,12 @@ export function useAI(userEmail?: string): UseAIReturn {
     return orchestratorRef.current;
   }, []);
 
-  const addLog = useCallback((type: AILogEntry['type'], msg: string) => {
-    setAiLogs((prev) => {
-      const entry: AILogEntry = { type, msg, time: new Date().toLocaleTimeString('it-IT') };
-      return [...prev.slice(-19), entry];
-    });
+  const addLog = useCallback((entry: AILogEntry) => {
+    setAiLogs((prev) => [...prev.slice(-(MAX_LOG_ENTRIES - 1)), entry]);
+  }, []);
+
+  const updateLog = useCallback((id: string, patch: Partial<AILogEntry>) => {
+    setAiLogs((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
   }, []);
 
   const processPrompt = useCallback(
@@ -82,10 +106,11 @@ export function useAI(userEmail?: string): UseAIReturn {
       options?: {
         modelId?: string;
         onProgress?: (msg: string) => void;
+        onStream?: (chunk: AIStreamChunk) => void;
       }
     ): Promise<ProcessResult> => {
       if (!prompt.trim() && !options?.modelId) {
-        throw new Error('Inserisci un prompt per l\'AI.');
+        throw new Error("Inserisci un prompt per l'AI.");
       }
 
       setIsProcessing(true);
@@ -95,7 +120,7 @@ export function useAI(userEmail?: string): UseAIReturn {
           const profile = await dataService.getUserProfile(userEmail);
           if (profile.error) throw new Error(profile.error);
           if (profile.tokensUsed >= profile.tokenLimit) {
-            throw new Error('Limite token AI raggiunto. Contatta l\'amministratore.');
+            throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
           }
         } catch (err: any) {
           setIsProcessing(false);
@@ -103,9 +128,12 @@ export function useAI(userEmail?: string): UseAIReturn {
         }
       }
 
-      addLog('info', '→ Invio richiesta...');
+      addLog(createInfoEntry('📤 Invio richiesta...'));
       streamBufferRef.current.clear();
       startedToolsRef.current = new Set();
+      toolStartRef.current = new Map();
+      streamEntryIdRef.current = null;
+      lastCharCountRef.current = 0;
 
       try {
         const orchestrator = getOrchestrator();
@@ -116,31 +144,47 @@ export function useAI(userEmail?: string): UseAIReturn {
           onStream: (chunk: AIStreamChunk) => {
             if (chunk.type === 'content' && chunk.content) {
               streamBufferRef.current.append(chunk.content);
+
+              if (!streamEntryIdRef.current) {
+                const entry = createStreamEntry();
+                streamEntryIdRef.current = entry.id;
+                streamStartRef.current = Date.now();
+                addLog(entry);
+              }
+
+              const id = streamEntryIdRef.current;
+              const total = streamBufferRef.current.getRaw().length;
+              if (id && total - lastCharCountRef.current >= 80) {
+                lastCharCountRef.current = total;
+                const elapsed = ((Date.now() - streamStartRef.current) / 1000).toFixed(1);
+                updateLog(id, { msg: `Generazione in corso... ${total} caratteri · ${elapsed}s` });
+              }
               return;
             }
             if (chunk.type === 'tool_call' && chunk.toolCall) {
               const { id, function: fn } = chunk.toolCall;
               if (!startedToolsRef.current.has(id)) {
                 startedToolsRef.current.add(id);
-                addLog('tool', `⚙ ${fn.name} — avviato`);
+                toolStartRef.current.set(id, Date.now());
+                addLog(createToolEntry(`⚙ ${formatToolCall(fn.name, safeJson(fn.arguments))} — avviato`));
               }
               return;
             }
             if (chunk.type === 'error' && chunk.error) {
-              addLog('error', chunk.error);
+              addLog(createErrorEntry(chunk.error));
             }
           },
           onToolStart: (toolCallId, name) => {
             if (!startedToolsRef.current.has(toolCallId)) {
               startedToolsRef.current.add(toolCallId);
-              addLog('tool', `⚙ ${name} — avviato`);
+              toolStartRef.current.set(toolCallId, Date.now());
+              addLog(createToolEntry(`⚙ ${name} — avviato`));
             }
           },
-          onToolComplete: (_toolCallId, name, toolResult) => {
-            if (toolResult) {
-              addLog('info', toolResult);
-            }
-            addLog('tool', `⚙ ${name} — completato`);
+          onToolComplete: (toolCallId, name, toolResult) => {
+            const start = toolStartRef.current.get(toolCallId);
+            const durationMs = start ? Date.now() - start : undefined;
+            addLog(createToolEntry(`⚙ ${formatToolResult(toolResult, name)} — fatto`, durationMs));
           },
         });
 
@@ -150,43 +194,60 @@ export function useAI(userEmail?: string): UseAIReturn {
           dataService.trackTokens(userEmail, result.response.usage.totalTokens);
         }
 
+        const streamId = streamEntryIdRef.current;
+        if (streamId) {
+          const elapsed = ((Date.now() - streamStartRef.current) / 1000).toFixed(1);
+          const tokens = result.response.usage?.totalTokens ?? 0;
+          updateLog(streamId, {
+            status: 'done',
+            msg: `✅ Risposta ricevuta — ${tokens.toLocaleString('it-IT')} token · ${elapsed}s`,
+            detail: result.rawResponse,
+          });
+        }
+
         const { toolCount, mergeChanges, errorKind } = parseResultChanges(result.changes);
         const hasModifications = toolCount > 0 || mergeChanges.length > 0;
 
         if (errorKind) {
-          addLog('error', describeAIError(errorKind));
+          addLog(createErrorEntry(describeAIError(errorKind)));
         }
 
         if (mergeChanges.length > 0) {
-          addLog('success', summarizeMergeChanges(mergeChanges));
+          addLog(createSuccessEntry(summarizeMergeChanges(mergeChanges)));
         }
 
         if (!hasModifications && !errorKind) {
-          // Fallback: se il preventivo effettivamente è cambiato ma le modifiche non sono state tracciate
           const quoteChanged = result.quote && JSON.stringify(result.quote) !== JSON.stringify(quote);
-          addLog('info', quoteChanged ? 'Modifiche applicate (riepilogo non disponibile)' : 'Nessuna modifica applicata');
+          addLog(createInfoEntry(quoteChanged ? 'Modifiche applicate (riepilogo non disponibile)' : 'Nessuna modifica applicata'));
         }
 
         return result;
       } catch (err: any) {
+        const msg = err.message || 'Errore AI';
         const hint =
-          err.message?.includes('402')
+          msg.includes('402')
             ? 'Credito DeepSeek esaurito.'
-            : err.message?.includes('401')
+            : msg.includes('401')
             ? 'Chiave API DeepSeek non valida.'
-            : err.message?.includes('429')
+            : msg.includes('429')
             ? 'Troppe richieste. Attendi e riprova.'
-            : err.message?.includes('fetch') || err.message?.includes('NetworkError')
+            : msg.includes('fetch') || msg.includes('NetworkError')
             ? 'Connessione fallita.'
             : null;
 
-        addLog('error', hint || err.message);
-        throw new Error(hint || err.message);
+        const streamId = streamEntryIdRef.current;
+        if (streamId) {
+          updateLog(streamId, { status: 'error', msg: '❌ Generazione fallita', detail: msg });
+        }
+        logger.error('AI processPrompt failed', { route: 'useAI', err: msg });
+        addLog(createErrorEntry(hint || msg));
+        throw new Error(hint || msg);
       } finally {
         setIsProcessing(false);
+        streamEntryIdRef.current = null;
       }
     },
-    [userEmail, addLog, getOrchestrator]
+    [userEmail, addLog, getOrchestrator, updateLog]
   );
 
   const resetChat = useCallback(() => {
@@ -195,6 +256,7 @@ export function useAI(userEmail?: string): UseAIReturn {
     setSessionId(null);
     setAiLogs([]);
     streamBufferRef.current.clear();
+    streamEntryIdRef.current = null;
   }, [getOrchestrator]);
 
   return {
@@ -206,4 +268,14 @@ export function useAI(userEmail?: string): UseAIReturn {
     availableModels,
     addLog,
   };
+}
+
+function safeJson(s: string | undefined): Record<string, unknown> {
+  if (!s) return {};
+  try {
+    const parsed = JSON.parse(s);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
 }

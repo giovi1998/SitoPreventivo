@@ -69,12 +69,16 @@ export interface ChatSession {
   updatedAt: string;
 }
 
-export type AILogEntryType = 'info' | 'success' | 'error' | 'tool';
+export type AILogEntryType = 'info' | 'success' | 'error' | 'tool' | 'stream' | 'result';
 
 export interface AILogEntry {
+  id: string;
   type: AILogEntryType;
   msg: string;
   time: string;
+  status?: 'pending' | 'done' | 'error';
+  durationMs?: number;
+  detail?: string;
 }
 
 export interface ProcessResult {

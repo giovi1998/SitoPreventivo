@@ -157,15 +157,17 @@ export class AIOrchestrator {
     let aiResponse: AIResponse;
     let streamedContent = '';
     const streamedToolCalls = new Map<string, AIToolCall>();
+    let streamedUsage: AIResponse['usage'] | undefined;
 
-    // Stream solo se servono tool e il provider supporta streaming.
-    // Per edit testuali (wantsTools === false) usa chat sincrona con json_object.
-    const canStream = wantsTools && options?.onStream && provider.supportsStreaming;
+    // Stream sempre se il provider supporta streaming e l'hook ha passato onStream.
+    // Questo dà feedback real-time all'utente sia per le risposte testuali che per i tool.
+    const canStream = !!options?.onStream && provider.supportsStreaming;
 
     if (canStream) {
       for await (const chunk of provider.stream(session.messages, {
         tools: toolsDefs,
-        temperature: 0.7,
+        temperature: wantsTools ? 0.7 : 0.2,
+        responseFormat: wantsTools ? undefined : { type: 'json_object' },
       })) {
         options.onStream!(chunk);
 
@@ -173,6 +175,8 @@ export class AIOrchestrator {
           streamedContent += chunk.content || '';
         } else if (chunk.type === 'tool_call' && chunk.toolCall) {
           streamedToolCalls.set(chunk.toolCall.id, chunk.toolCall);
+        } else if (chunk.type === 'done' && chunk.usage) {
+          streamedUsage = chunk.usage;
         } else if (chunk.type === 'error') {
           throw new Error(chunk.error);
         }
@@ -182,6 +186,7 @@ export class AIOrchestrator {
       aiResponse = {
         content: streamedContent || null,
         toolCalls: toolCallsList.length > 0 ? toolCallsList : undefined,
+        usage: streamedUsage,
       };
     } else {
       aiResponse = await provider.chat(session.messages, {
@@ -229,6 +234,44 @@ export class AIOrchestrator {
           changes.push(`tool:${toolCall.function.name}`);
         }
         currentQuote = result.quote as PremiumQuote;
+      }
+
+      // ─── MULTI-TURN OBBLIGATORIO ───────────────────
+      // L'AI riceve i risultati dei tool eseguiti e genera la sintesi finale.
+      // Usa json_object (non tool calling) per evitare loop infiniti.
+      try {
+        const followUp = await provider.chat(session.messages, {
+          temperature: 0.4,
+          responseFormat: { type: 'json_object' },
+        });
+
+        if (followUp.usage) {
+          const prev = aiResponse.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+          aiResponse.usage = {
+            promptTokens: prev.promptTokens + followUp.usage.promptTokens,
+            completionTokens: prev.completionTokens + followUp.usage.completionTokens,
+            totalTokens: prev.totalTokens + followUp.usage.totalTokens,
+          };
+        }
+
+        if (followUp.content) {
+          chatStore.addMessage(this.activeSessionId!, {
+            role: 'assistant',
+            content: followUp.content,
+          });
+
+          const cleanJson = sanitizeAIResponse(followUp.content);
+          try {
+            const modified = JSON.parse(cleanJson);
+            const { quote: merged, changes: mergeChanges } = mergeAIResponse(currentQuote, modified);
+            currentQuote = merged;
+            changes.push(...mergeChanges);
+          } catch {
+            changes.push('error:followup_not_json');
+          }
+        }
+      } catch (err) {
+        changes.push(`error:followup_failed:${(err as Error).message?.slice(0, 100) || 'unknown'}`);
       }
 
       if (!currentQuote.updatedAt || currentQuote.updatedAt === quote.updatedAt) {

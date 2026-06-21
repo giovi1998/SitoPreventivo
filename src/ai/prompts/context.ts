@@ -37,7 +37,7 @@ function compactOptions(options: QuoteOption[]): CompactOption[] {
   }));
 }
 
-function detectRelevantFields(prompt: string): Set<string> {
+export function detectRelevantFields(prompt: string): Set<string> {
   const lower = prompt.toLowerCase();
   const fields = new Set<string>();
 

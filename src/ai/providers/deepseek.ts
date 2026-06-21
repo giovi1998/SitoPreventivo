@@ -158,6 +158,7 @@ export class DeepSeekProvider extends BaseAIProvider {
     };
 
     try {
+      let finalUsage: AIStreamChunk['usage'] | undefined;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -173,13 +174,21 @@ export class DeepSeekProvider extends BaseAIProvider {
           const data = trimmed.slice(5).trim();
           if (data === '[DONE]') {
             yield* flushToolCalls();
-            yield { type: 'done' };
+            yield { type: 'done', usage: finalUsage };
             return;
           }
 
           try {
             const parsed = JSON.parse(data);
             const delta = parsed.choices?.[0]?.delta;
+
+            if (parsed.usage) {
+              finalUsage = {
+                promptTokens: parsed.usage.prompt_tokens ?? 0,
+                completionTokens: parsed.usage.completion_tokens ?? 0,
+                totalTokens: parsed.usage.total_tokens ?? 0,
+              };
+            }
 
             if (!delta) continue;
 
@@ -210,7 +219,7 @@ export class DeepSeekProvider extends BaseAIProvider {
       }
 
       yield* flushToolCalls();
-      yield { type: 'done' };
+      yield { type: 'done', usage: finalUsage };
     } catch (err) {
       yield { type: 'error', error: err instanceof Error ? err.message : 'Errore stream' };
     }
