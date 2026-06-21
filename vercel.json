@@ -3,6 +3,13 @@
   "buildCommand": "npm run db:migrate && npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/api/users/(.*)", "destination": "/api/users" },
+    { "source": "/api/quotes/(.*)", "destination": "/api/quotes" },
+    { "source": "/api/ai/(.*)", "destination": "/api/ai" },
+    { "source": "/api/admin/(.*)", "destination": "/api/ai" },
+    { "source": "/api/user-settings/(.*)", "destination": "/api/user-settings" },
+    { "source": "/api/ping", "destination": "/api/health" },
+    { "source": "/api/logs", "destination": "/api/health" },
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

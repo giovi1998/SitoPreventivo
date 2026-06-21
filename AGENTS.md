@@ -37,8 +37,11 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | File | Role |
 |------|------|
 | `App.tsx` (root, not src/) | Main app: AuthProvider, state, AI, PDF export |
-| `api/index.ts` | Entire REST API (users, quotes, AI proxy, upload, logs) |
+| `api/index.ts` | 404 catch-all (only hit if no specific rewrite matched) |
+| `api/{health,users,quotes,ai,user-settings}.ts` | Per-route Vercel function wrappers (5 functions) |
+| `server/lib/handler.ts` | `withApiHandler` helper shared by all Vercel functions |
 | `server/lib/logger.ts` | Server-side structured logger (JSON in prod) |
+| `server/routes/` | Route handler logic (one file per route group) |
 | `db/schema.ts` | Drizzle schema (users, quotes, user_settings) |
 | `src/utils/dataService.js` | Data layer — routes to API or localStorage |
 | `src/utils/logger.ts` | Client-side logger (sendBeacon → /api/logs) |
@@ -79,9 +82,9 @@ PDF generation happens entirely in the browser via `pdfmake` (in `src/utils/gene
 
 This routes **every** `/api/*` request to the single serverless function `api/index.ts`. Consequences:
 
-1. **Do not add `.ts` files inside `api/`** other than `api/index.ts` — Vercel Hobby plan limits to 12 serverless functions, and each `.ts` in `api/` counts as one. Keep utilities in `server/lib/`, schemas in `server/lib/`, etc.
-2. **Do not change** the destination to `/api/$1` — it breaks the monolithic pattern.
-3. If a future change splits the API into multiple functions, **update `vercel.json` rewrites accordingly** and add explicit tests for every route.
+1. **Do not add `.ts` files inside `api/`** that are not Vercel functions — Vercel Hobby plan limits to 12 serverless functions, and each `.ts` in `api/` counts as one. Current count: 6 (`api/{index,health,users,quotes,ai,user-settings}.ts`). Keep utilities in `server/lib/`, schemas in `server/lib/`, route handler logic in `server/routes/`.
+2. **Do not change the order of rewrites in `vercel.json`** — the most specific patterns (`/api/users/...`, `/api/quotes/...`, etc.) must come **before** the catch-all `/api/(.*) -> /api`.
+3. Each Vercel function is a 6-line wrapper: `import { withApiHandler } from '../server/lib/handler'; import { handleXxx } from '../server/routes/xxx'; export default withApiHandler(handleXxx);`. The actual logic lives in `server/routes/` and is testable in isolation.
 
 ## Streaming AI
 
@@ -174,7 +177,7 @@ Always run `git status` before any git operation. See `.agents/guardrails/git-gu
    ```json
    { "source": "/api/(.*)", "destination": "/api" }
    ```
-    This routes every `/api/*` request to the single serverless function `api/index.ts`. Do **not** change it to `/api/$1` — it breaks the monolithic function. Add new server-side code under `server/lib/` (not `api/`) to keep the Vercel Hobby 12-function limit.
+    This routes `/api/<route>/...` to the corresponding Vercel function (`api/users.ts`, `api/quotes.ts`, `api/ai.ts`, `api/health.ts`, `api/user-settings.ts`). Anything else under `/api/*` falls through to `api/index.ts` (404 catch-all). Do **not** change the order of rewrites — specific patterns must come before the catch-all.
 3. **Before pushing features that require Vercel env vars** (DEEPSEEK_API_KEY, DATABASE_URL, ADMIN_PASSWORD, ALLOWED_ORIGIN), confirm the variables are set in the Vercel dashboard. Missing env vars cause 503/500 errors in production. `BLOB_READ_WRITE_TOKEN` is no longer used (PDF generation is fully client-side).
 
 ## Active Skills
