@@ -1,4 +1,11 @@
 // @ts-nocheck
+// ⚠️ QUESTO FILE NON VIENE MAI INVOCATO.
+// vercel.json instrada /api/* verso api/index.ts (la funzione monolitica),
+// quindi anche se il path è /api/ai/chat/stream la richiesta finisce
+// nell'handler api/index.ts che ha la rotta /ai/chat/stream.
+// Questo file resta come documentazione di riferimento. Se un futuro
+// deploy separa gli endpoint, ripristinarlo aggiungendo un rewrite
+// specifico in vercel.json.
 export default async function handler(req, res) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
 
