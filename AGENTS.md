@@ -30,18 +30,14 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 - **Database**: Drizzle ORM → Neon Postgres
 - **Storage split**: `localhost` = localStorage, production = API + Postgres. Detection is automatic via `IS_LOCAL` in `src/utils/dataService.js`
 - **Auth**: bcrypt + localStorage (dev) / Drizzle + Neon (prod). Admin: `admin@gmail.com` validated against `ADMIN_PASSWORD` env var, never saved to DB.
-- **Observability**: Server logs via `api/_lib/logger.ts` (JSON in prod, colored in dev). Client logs via `src/utils/logger.ts` + `/api/logs` endpoint (Vercel logs). Zero external services.
+- **Observability**: Server logs via `console.*` in `api/index.ts` (JSON in prod tramite wrapper). Client logs via `src/utils/logger.ts` + `/api/logs` endpoint (Vercel logs). Zero external services.
 
 ## Key Files
 
 | File | Role |
 |------|------|
 | `App.tsx` (root, not src/) | Main app: AuthProvider, state, AI, PDF export |
-| `api/index.ts` | 404 catch-all (only hit if no specific rewrite matched) |
-| `api/{health,users,quotes,ai,user-settings}.ts` | Per-route Vercel function wrappers (5 functions) |
-| `api/_lib/handler.ts` | `withApiHandler` helper shared by all Vercel functions |
-| `api/_lib/logger.ts` | Server-side structured logger (JSON in prod) |
-| `api/_routes/` | Route handler logic (one file per route group) |
+| `api/index.ts` | Single Vercel serverless function — entire REST API (monolith, intentional) |
 | `db/schema.ts` | Drizzle schema (users, quotes, user_settings) |
 | `src/utils/dataService.js` | Data layer — routes to API or localStorage |
 | `src/utils/logger.ts` | Client-side logger (sendBeacon → /api/logs) |
@@ -75,16 +71,27 @@ PDF generation happens entirely in the browser via `pdfmake` (in `src/utils/gene
 
 ## Vercel Routing — CRITICAL
 
-`vercel.json` has this rewrite:
-```json
-{ "source": "/api/(.*)", "destination": "/api" }
-```
+`api/index.ts` is the **only** Vercel serverless function. It handles every `/api/*` request via internal routing. This is a deliberate monolith (see "Lessons learned" below).
 
-This routes **every** `/api/*` request to the single serverless function `api/index.ts`. Consequences:
+**DO NOT**:
+- Split `api/index.ts` into multiple files. Vercel's `_` prefix (`api/_lib/`, `api/_routes/`) is **NOT** the shared-code trick it appears to be — files starting with `_` are excluded from **both** the serverless-function count AND the function bundle, so any function in `api/` that imports from `api/_*/...` crashes at runtime with `ERR_MODULE_NOT_FOUND` ("Cannot find module '/var/task/api/_lib/handler'"). This was the bug from commit `036ae25` that broke production for hours.
+- Add other `.ts` files directly in `api/`. Each one counts toward the Hobby plan's 12-function limit.
+- Use `vercel.json` `functions.includeFiles` to copy `*.ts` from outside `api/`. Vercel copies the files as static assets but does not transpile them, so Node ESM still can't resolve them.
+- Use `vercel.json` rewrites to split the API into multiple functions. With the monolith, no `/api/*` rewrites are needed — the single `api/index.ts` handles everything.
 
-1. **Shared server code lives under `api/_lib/` and `api/_routes/`.** Folders starting with an underscore are excluded by Vercel from the serverless-function count (Hobby plan limit: 12) but are still bundled with each function. Keep utilities in `api/_lib/`, route handler logic in `api/_routes/`. Do **not** put shared code outside `api/` (it won't be transpiled and Node will throw `ERR_MODULE_NOT_FOUND` at runtime).
-2. **Do not change the order of rewrites in `vercel.json`** — the most specific patterns (`/api/users/...`, `/api/quotes/...`, etc.) must come **before** the catch-all `/api/(.*) -> /api`.
-3. Each Vercel function is a 6-line wrapper: `import { withApiHandler } from './_lib/handler'; import { handleXxx } from './_routes/xxx'; export default withApiHandler(handleXxx);`. The actual logic lives in `api/_routes/` and is testable in isolation.
+**DO**:
+- Keep all server-side logic inline in `api/index.ts`. The file is intentionally large (~750 lines). Modularity is achieved through internal `handleXxx` functions and helper utilities defined at the top of the file.
+- If you need to share types or pure functions with the client, put them in `src/` and have `api/index.ts` import from there. The `src/` directory is bundled correctly.
+
+## Lessons learned — Vercel function bundling (read before splitting)
+
+Three commits attempted to split the API into multiple Vercel functions; all three broke production. The root cause was the same each time:
+
+1. `f004e5e` (split into `api/lib/` + `api/routes/`): exceeded 12-function limit. Vercel counted every `.ts` in `api/` as a function.
+2. `036ae25` (moved shared code to `api/_lib/` + `api/_routes/` with underscore prefix): underscore prefix excludes files from BOTH the count and the bundle. The functions couldn't import the shared code → `ERR_MODULE_NOT_FOUND` at runtime.
+3. `5e2971f` (tried `vercel.json` `functions.includeFiles`): copies the files but doesn't transpile them. Still `ERR_MODULE_NOT_FOUND`.
+
+**Conclusion**: on the Vercel Hobby plan, a single monolith function is the only safe option for a Node API of this size. Future investigation of `drizzle-orm/neon-serverless` (WebSocket driver) is still pending — see "Backend" section above.
 
 ## Streaming AI
 
@@ -149,7 +156,7 @@ Chiavi attuali (senza prefisso, da versionare in prossima migrazione):
 
 ## Logging
 
-- **Server** (`api/_lib/logger.ts`): JSON strutturato in production, colorato in dev. Sostituisce tutti i `console.error` esistenti.
+- **Server** (inline in `api/index.ts`): JSON strutturato in production tramite `console.error/info/etc`. Sostituisce tutti i `console.error` esistenti.
 - **Client** (`src/utils/logger.ts`): usa `sendBeacon` (no blocking) per inviare eventi a `/api/logs` → Vercel logs.
 - I client log in production sono filtrati: solo `warn`/`error` arrivano al server.
 
@@ -173,11 +180,11 @@ Always run `git status` before any git operation. See `.agents/guardrails/git-gu
 ### Additional Push / Deploy Rules
 
 1. **Explicit confirmation required**: never run `git push` unless the user has clearly said to push/deploy. "Analyze" or "fix" does **not** imply push.
-2. **Do not change `vercel.json` rewrites** without explicitly testing `/api` routes (auth, register, upload-pdf, public quote) afterwards. The current rewrite is:
+2. **Do not change `vercel.json` rewrites** without explicitly testing `/api` routes (auth, register, upload-pdf, public quote) afterwards. The current rewrite is the SPA fallback only:
    ```json
-   { "source": "/api/(.*)", "destination": "/api" }
+   { "source": "/(.*)", "destination": "/index.html" }
    ```
-    This routes `/api/<route>/...` to the corresponding Vercel function (`api/users.ts`, `api/quotes.ts`, `api/ai.ts`, `api/health.ts`, `api/user-settings.ts`). Anything else under `/api/*` falls through to `api/index.ts` (404 catch-all). Do **not** change the order of rewrites — specific patterns must come before the catch-all. Shared code is co-located under `api/_lib/` and `api/_routes/` (underscore prefix = not counted as Vercel functions).
+    The `/api/*` path is served directly by the single `api/index.ts` function. Do **not** add per-route `/api/*` rewrites — they break the monolithic function and cause `ERR_MODULE_NOT_FOUND` on shared imports.
 3. **Before pushing features that require Vercel env vars** (DEEPSEEK_API_KEY, DATABASE_URL, ADMIN_PASSWORD, ALLOWED_ORIGIN), confirm the variables are set in the Vercel dashboard. Missing env vars cause 503/500 errors in production. `BLOB_READ_WRITE_TOKEN` is no longer used (PDF generation is fully client-side).
 
 ## Active Skills
@@ -231,6 +238,6 @@ Queste skill vengono caricate automaticamente. Quando modifichi il codice riferi
 |------|----------|
 | `.agents/skills/` | Installed agent skills (10 attive) |
 | `.agents/guardrails/` | Git safety rules and block scripts |
-| `api/_lib/`, `api/_routes/` | Server-side shared code (underscore prefix = not counted as functions) |
+| `api/index.ts` | Single Vercel serverless function — entire REST API (monolith) |
 | `src/utils/` | Client-side utilities (logger, errors) |
 
