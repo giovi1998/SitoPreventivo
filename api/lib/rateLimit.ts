@@ -35,5 +35,4 @@ export function recordRateAttempt(ip: string, success: boolean, scope: string = 
   }
 }
 
-export type { rateLimitStore as _rateLimitStore };
 export const _rateLimitStore = rateLimitStore;
