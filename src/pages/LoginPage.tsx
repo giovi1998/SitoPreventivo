@@ -32,7 +32,7 @@ export default function LoginPage() {
       return;
     }
 
-    const result = isRegister ? await register(email, password, username, gender) : await login(email, password);
+    const result = (isRegister ? await register(email, password, username, gender) : await login(email, password)) as { success?: boolean; error?: string };
     if (result.success) {
       navigate('/app', { replace: true });
     } else {
