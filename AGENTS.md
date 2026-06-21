@@ -85,13 +85,25 @@ PDF generation happens entirely in the browser via `pdfmake` (in `src/utils/gene
 
 ## Lessons learned — Vercel function bundling (read before splitting)
 
-Three commits attempted to split the API into multiple Vercel functions; all three broke production. The root cause was the same each time:
+Four commits attempted to refactor the API structure; all four broke production. The root causes were different each time. Read all four before touching `api/`.
 
 1. `f004e5e` (split into `api/lib/` + `api/routes/`): exceeded 12-function limit. Vercel counted every `.ts` in `api/` as a function.
 2. `036ae25` (moved shared code to `api/_lib/` + `api/_routes/` with underscore prefix): underscore prefix excludes files from BOTH the count and the bundle. The functions couldn't import the shared code → `ERR_MODULE_NOT_FOUND` at runtime.
 3. `5e2971f` (tried `vercel.json` `functions.includeFiles`): copies the files but doesn't transpile them. Still `ERR_MODULE_NOT_FOUND`.
+4. `05b17e6` (rollback to single monolith): removed the `{"source": "/api/(.*)", "destination": "/api"}` rewrite from `vercel.json` along with the multi-function split. Without it, Vercel fell through to the SPA catch-all `/(.*) -> /index.html` and returned **405 Method Not Allowed** for every POST to `/api/*` (because `/index.html` is a static asset that doesn't accept POST). The monolith function was unreachable.
 
-**Conclusion**: on the Vercel Hobby plan, a single monolith function is the only safe option for a Node API of this size. Future investigation of `drizzle-orm/neon-serverless` (WebSocket driver) is still pending — see "Backend" section above.
+**Conclusion**: on the Vercel Hobby plan, a single monolith function is the only safe option for a Node API of this size. **Always keep** the following in `vercel.json`:
+
+```json
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
+```
+
+The order is **critical**: `/api/(.*) -> /api` MUST come **before** the SPA catch-all. Vercel evaluates rewrites top-to-bottom and uses the first match. There is a regression test in `src/__tests__/vercelConfig.test.ts` that asserts both the presence and the order of these rewrites. Future investigation of `drizzle-orm/neon-serverless` (WebSocket driver) is still pending — see "Backend" section above.
 
 ## Streaming AI
 
