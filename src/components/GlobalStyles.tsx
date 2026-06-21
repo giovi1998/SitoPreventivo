@@ -1,6 +1,6 @@
 export default function GlobalStyles() {
   return <style>{`
-    :root{
+    :root{color-scheme:light dark;
       --accent:#0B57D0;
       --sidebar:#082033;
       --canvas:#F6F8FC;
@@ -123,7 +123,27 @@ export default function GlobalStyles() {
     .enter-anim-delay-3{animation-delay:.15s}
 
     /* ─── APP SHELL ─────────────────────────────────── */
-    .app-shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+    .app-shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh;transition:grid-template-columns .2s ease}
+    .app-shell.sidebar-collapsed{grid-template-columns:64px 1fr}
+    .sidebar-collapse-btn{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;margin:4px 0 0;background:transparent;border:0;border-radius:8px;color:var(--muted);font-size:.78rem;font-weight:600;cursor:pointer;transition:background .15s,color .15s;touch-action:manipulation}
+    .sidebar-collapse-btn:hover{background:rgba(255,255,255,.04);color:var(--text)}
+    .sidebar-collapse-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    .sidebar-collapse-btn svg{flex-shrink:0}
+    .app-shell.sidebar-collapsed .nav-label{display:none}
+    .app-shell.sidebar-collapsed .brand{justify-content:center}
+    .app-shell.sidebar-collapsed .brand > div{display:none}
+    .app-shell.sidebar-collapsed nav button{justify-content:center;padding:10px}
+    .app-shell.sidebar-collapsed nav button svg{margin:0}
+    .app-shell.sidebar-collapsed .sidebar-collapse-btn{justify-content:center;padding:10px}
+    .app-shell.sidebar-collapsed .sidebar-collapse-btn svg{margin:0}
+    .app-shell.sidebar-collapsed .side-user{justify-content:center}
+    .app-shell.sidebar-collapsed .side-avatar{margin:0}
+    .app-shell.sidebar-collapsed .side-card{background:transparent;border:0;padding:0}
+    .app-shell.sidebar-collapsed .side-card a,.app-shell.sidebar-collapsed .side-card .logout-btn{justify-content:center}
+    .app-shell.sidebar-collapsed .side-card a span,.app-shell.sidebar-collapsed .side-card .logout-btn span{display:none}
+    .app-shell.sidebar-collapsed .logout-btn-icon{width:auto;padding:8px}
+    .logout-btn-icon{display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid rgba(255,255,255,.12);color:#fff;padding:8px;border-radius:8px;cursor:pointer;width:100%;margin-top:8px}
+    .logout-btn-icon:hover{background:rgba(255,255,255,.06)}
 
     /* ─── SIDEBAR ───────────────────────────────────── */
     .sidebar{background:radial-gradient(circle at 10% 0%,rgba(255,255,255,.12),transparent 40%),linear-gradient(180deg,#0a1929 0%,#082033 100%);color:#fff;padding:24px 20px;display:flex;flex-direction:column;gap:24px;border-right:1px solid rgba(255,255,255,.06)}
@@ -149,12 +169,24 @@ export default function GlobalStyles() {
 
     /* ─── WORKSPACE / TOPBAR ────────────────────────── */
     .workspace{display:flex;flex-direction:column;min-height:100vh}
-    .topbar{height:68px;border-bottom:1px solid var(--line);background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:5}
+    .topbar{height:68px;border-bottom:1px solid var(--line);background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 28px;position:sticky;top:0;z-index:5;overflow:hidden}
     [data-theme="dark"] .topbar{background:rgba(15,17,23,.85);border-bottom-color:var(--line)}
     .topbar p{margin:0;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:var(--weight-extrabold)}
     .topbar h1{margin:0;font-size:1.25rem;font-weight:var(--weight-black);letter-spacing:-.03em}
     .top-actions{display:flex;gap:8px}
     .top-actions button{display:flex;align-items:center;gap:7px;font-size:.85rem;padding:9px 16px;border-radius:10px;font-weight:var(--weight-bold)}
+    .editor-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .action-group{display:flex;gap:6px;align-items:center}
+    .theme-pills{display:flex;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px}
+    [data-theme="dark"] .theme-pills{background:rgba(255,255,255,.04)}
+    .theme-pill{font-size:.68rem !important;font-weight:var(--weight-extrabold) !important;padding:5px 10px !important;border-radius:6px !important;background:transparent !important;border:0 !important;color:var(--muted) !important;text-transform:uppercase;letter-spacing:.05em}
+    .theme-pill:hover{color:var(--ink) !important}
+    .theme-pill.active{background:var(--accent) !important;color:#fff !important}
+    .save-status-dirty{color:var(--amber);font-size:.72rem;font-weight:600}
+    .save-status-saved{color:var(--green);font-size:.72rem;font-weight:600}
+    @media(max-width:1180px){.btn-label{display:none}.action-group button{padding:9px 10px}}
+    @media(max-width:1024px){.save-status{display:none}}
+    @media(max-width:900px){.theme-pills{display:none}}
     .top-actions button svg{flex-shrink:0}
     .top-btn-save{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
     .top-btn-save:hover{border-color:var(--accent);color:var(--accent)}
@@ -165,6 +197,14 @@ export default function GlobalStyles() {
 
     /* ─── EDITOR GRID ───────────────────────────────── */
     .editor-grid{display:flex;flex:1;overflow:hidden;min-height:0}
+    .editor-grid.focus-mode .ai-col,
+    .editor-grid.focus-mode .manual-col{width:0 !important;overflow:hidden;padding:0;border:0}
+    .editor-grid.focus-mode .editor-mobile-actions,
+    .editor-grid.focus-mode .editor-mobile-bar{display:none}
+    .focus-toggle{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);font-size:.78rem;font-weight:600;cursor:pointer}
+    .focus-toggle:hover{border-color:var(--accent);color:var(--accent)}
+    .preview-toolbar{display:flex;justify-content:flex-end;padding:0 0 8px 0}
+    .preview-focus .preview-toolbar{padding:0 0 12px 0}
     .editor-col{width:380px;flex-shrink:0;position:relative;transition:width .25s ease;overflow:hidden}
     .editor-col.collapsed{width:34px;overflow:visible}
     .panel{overflow-y:auto;padding:24px;border-right:1px solid var(--line);height:100%;min-width:0;background:var(--surface)}
@@ -213,6 +253,8 @@ export default function GlobalStyles() {
     .collapsible-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;user-select:none;transition:background var(--transition-fast);gap:8px}
     .collapsible-head:hover{background:var(--surface-sun)}
     .collapsible-head span{font-size:.82rem;font-weight:var(--weight-bold);color:var(--ink)}
+    .collapsible-title{display:flex;align-items:center;gap:8px;min-width:0}
+    .collapsible-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;background:var(--accent);color:#fff;font-size:.68rem;font-weight:700;border-radius:10px;line-height:1}
     .collapsible-head-right{display:flex;align-items:center;gap:6px}
     .collapsible-chevron{transition:transform var(--transition-base);color:var(--muted);flex-shrink:0}
     .collapsible.open .collapsible-chevron{transform:rotate(180deg)}
