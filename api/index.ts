@@ -501,6 +501,9 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
   if (path === '/user-settings' && method === 'GET') {
     const email = searchParams.get('email');
     if (!email) return json(req, res, 400, { error: 'Email richiesta' });
+    if (email === ADMIN_EMAIL) {
+      return json(req, res, 200, { userEmail: ADMIN_EMAIL, onboardingDone: true });
+    }
     const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
     return json(req, res, 200, settings || { userEmail: email, onboardingDone: false });
   }
@@ -509,6 +512,9 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
     const v = validate(UserSettingsSchema, body);
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, ...settings } = v.data;
+    if (email === ADMIN_EMAIL) {
+      return json(req, res, 200, { success: true, userEmail: ADMIN_EMAIL, ...settings });
+    }
     const existing = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
     if (existing.length > 0) {
       const [updated] = await db.update(userSettingsTable).set({
