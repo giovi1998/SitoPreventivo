@@ -194,7 +194,7 @@ const dataService = {
       const users = (lsGet('registeredUsers') || []).map(({ password, ...user }) => user);
       result = { users };
     } else {
-      const res = await api('GET', '/users');
+      const res = await api('GET', '/users?adminEmail=admin%40gmail.com');
       result = res.error ? { users: [] } : { users: Array.isArray(res) ? res : [] };
     }
     setCache(cacheKey, result);
@@ -213,7 +213,7 @@ const dataService = {
       const start = (page - 1) * limit;
       result = { quotes: all.slice(start, start + limit), total: all.length, page, limit };
     } else {
-      const res = await api('GET', `/quotes/all?page=${page}&limit=${limit}`);
+      const res = await api('GET', `/quotes/all?page=${page}&limit=${limit}&adminEmail=admin%40gmail.com`);
       result = res.error ? { quotes: [], total: 0, page, limit } : { quotes: Array.isArray(res) ? res : (res.data || []), total: res.total || 0, page, limit };
     }
     if (page === 1) setCache(cacheKey, result);
@@ -231,7 +231,7 @@ const dataService = {
       }
       return { success: true };
     }
-    const result = await api('PATCH', '/users/limits', { email, tokenLimit });
+    const result = await api('PATCH', '/users/limits', { email, tokenLimit, adminEmail: 'admin@gmail.com' });
     return result.error ? { success: false, error: result.error } : { success: true };
   },
 

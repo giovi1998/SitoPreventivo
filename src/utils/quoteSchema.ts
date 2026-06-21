@@ -251,7 +251,7 @@ export function calculateOptionSummary(items: QuoteItem[]): {
   return { subtotalNet, discountsTotal, taxTotal, totalNet, totalGross };
 }
 
-export function calculateGlobalTotals(options: QuoteOption[], selectedOptionIds: string[]): globalTotalsSchema._type {
+export function calculateGlobalTotals(options: QuoteOption[], selectedOptionIds: string[]): z.infer<typeof globalTotalsSchema> {
   const selected = options.filter((o) => selectedOptionIds.includes(o.id));
   const subtotalNet = selected.reduce((s, o) => s + o.summary.subtotalNet, 0);
   const discountsTotal = selected.reduce((s, o) => s + o.summary.discountsTotal, 0);

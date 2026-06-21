@@ -80,7 +80,7 @@ describe('quoteSchema', () => {
   it('migrateFromLegacy converts costs correctly', () => {
     const legacy = {
       options: [
-        { id: 'o1', title: 'Base', oneTimeCost: 1500, monthlyCost: 100, includesMaintenance: true },
+        { id: 'o1', title: 'Base', description: 'Piano base con manutenzione', oneTimeCost: 1500, monthlyCost: 100, includesMaintenance: true },
       ],
     };
     const q = migrateFromLegacy(legacy);
