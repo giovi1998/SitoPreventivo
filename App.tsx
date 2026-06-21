@@ -177,6 +177,7 @@ export default function App() {
 
   useEffect(() => {
     if (user?.email) {
+      if (user.email === 'admin@gmail.com') return; // admin: skip onboarding (no DB row, no FK)
       dataService.getUserSettings(user.email).then((settings: any) => {
         if (settings?.error) {
           console.error('[Onboarding] Failed to load settings:', settings.error);
@@ -204,6 +205,10 @@ export default function App() {
 
   const handleOnboardingComplete = async (settings: any) => {
     if (user?.email) {
+      if (user.email === 'admin@gmail.com') {
+        setShowOnboarding(false);
+        return;
+      }
       const result = await dataService.saveUserSettings(user.email, { ...settings, documentTheme });
       if (result?.error) {
         console.error('[Onboarding] Failed to save settings:', result.error);

@@ -358,6 +358,9 @@ const dataService = {
   // ─── USER SETTINGS ──────────────────────────────
   async getUserSettings(email) {
     if (IS_LOCAL) {
+      if (email === 'admin@gmail.com') {
+        return { userEmail: email, onboardingDone: true };
+      }
       return lsGet(`userSettings_${email}`) || { userEmail: email, onboardingDone: false };
     }
     const result = await api('GET', `/user-settings?email=${encodeURIComponent(email)}`);

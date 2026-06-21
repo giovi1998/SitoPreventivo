@@ -1,13 +1,15 @@
 import type { PremiumQuote } from '../utils/quoteSchema';
-import { recalculateQuote } from '../utils/quoteSchema';
+import { recalculateQuote, quoteSchema } from '../utils/quoteSchema';
 import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall, ProcessResult } from './types';
 import { providerRegistry } from './providers/registry';
 import { ToolRegistry } from './tools/registry';
+import { getToolDefinition } from './tools/definitions';
 import type { ToolResult } from '../utils/quoteTools';
 import { chatStore } from './chat/store';
 import { buildSystemPrompt } from './prompts/system';
 import { buildAIContext } from './prompts/context';
 import { mergeAIResponse } from './merge';
+import { needsAnalysis } from './promptUtils';
 
 import {
   applyDiscount,
@@ -40,6 +42,46 @@ function sanitizeAIResponse(raw: string): string {
     s = s.slice(firstBrace, lastBrace + 1);
   }
   return s;
+}
+
+/**
+ * Validate a tool's arguments against the JSON schema declared in
+ * TOOL_DEFINITIONS. Returns the parsed args if valid, or null if invalid
+ * (or the tool is not registered).
+ *
+ * The AI sometimes returns malformed arguments (missing required fields,
+ * wrong types, etc.). Without this check, the tool would receive a
+ * partial object and the resulting calculation would silently produce
+ * NaN or stale data, corrupting the quote. Better to skip the tool
+ * and surface an error to the user.
+ */
+function validateToolArgs(name: string, rawArgs: string): { ok: true; args: Record<string, unknown> } | { ok: false; error: string } {
+  const def = getToolDefinition(name);
+  if (!def) return { ok: false, error: `Tool non registrato: ${name}` };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawArgs);
+  } catch {
+    return { ok: false, error: `args non è JSON valido: ${rawArgs.slice(0, 100)}` };
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, error: `args deve essere un oggetto, ricevuto: ${typeof parsed}` };
+  }
+  const args = parsed as Record<string, unknown>;
+
+  const params = def.function.parameters as { required?: string[]; properties?: Record<string, { type?: string; enum?: unknown[] }> } | undefined;
+  const required = params?.required ?? [];
+  for (const key of required) {
+    if (!(key in args)) {
+      return { ok: false, error: `manca campo required: ${key}` };
+    }
+    const v = args[key];
+    if (v === undefined || v === null) {
+      return { ok: false, error: `campo required null/undefined: ${key}` };
+    }
+  }
+  return { ok: true, args };
 }
 
 export class AIOrchestrator {
@@ -151,7 +193,8 @@ export class AIOrchestrator {
     };
     chatStore.addMessage(this.activeSessionId, userMsg);
 
-    const wantsTools = needsTools(prompt);
+    const wantsAnalysis = needsAnalysis(prompt);
+    const wantsTools = !wantsAnalysis && needsTools(prompt);
     let toolsDefs = (provider.supportsTools && wantsTools) ? this.toolRegistry.getDefinitions() : undefined;
 
     let aiResponse: AIResponse;
@@ -167,7 +210,7 @@ export class AIOrchestrator {
       for await (const chunk of provider.stream(session.messages, {
         tools: toolsDefs,
         temperature: wantsTools ? 0.7 : 0.2,
-        responseFormat: wantsTools ? undefined : { type: 'json_object' },
+        responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
       })) {
         options.onStream!(chunk);
 
@@ -192,11 +235,30 @@ export class AIOrchestrator {
       aiResponse = await provider.chat(session.messages, {
         tools: toolsDefs,
         temperature: wantsTools ? 0.7 : 0.2,
-        responseFormat: wantsTools ? undefined : { type: 'json_object' },
+        responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
       });
     }
 
     let currentQuote = { ...quote };
+
+    // ─── MODALITÀ ANALISI ─────────────────────────────────
+    // Se l'utente ha chiesto suggerimenti/analisi (parole chiave in
+    // promptUtils.needsAnalysis), NON eseguiamo tool e NON applichiamo
+    // merge. La risposta AI è solo testo libero. Il client la mostra
+    // all'utente come suggerimento, non come modifica del preventivo.
+    if (wantsAnalysis) {
+      chatStore.addMessage(this.activeSessionId!, {
+        role: 'assistant',
+        content: aiResponse.content || '',
+      });
+      return {
+        quote: currentQuote, // nessuna modifica
+        response: aiResponse,
+        sessionId: this.activeSessionId!,
+        changes: [], // nessuna modifica applicata
+        rawResponse: aiResponse.content || undefined,
+      };
+    }
 
     if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
       chatStore.addMessage(this.activeSessionId!, {
@@ -208,16 +270,23 @@ export class AIOrchestrator {
       for (const toolCall of aiResponse.toolCalls) {
         options?.onToolStart?.(toolCall.id, toolCall.function.name);
 
-        let args: Record<string, unknown>;
-        try {
-          args = JSON.parse(toolCall.function.arguments);
-        } catch {
-          args = {};
+        const validated = validateToolArgs(toolCall.function.name, toolCall.function.arguments);
+        if (!validated.ok) {
+          // args malformati: logga e skip. Il quote non viene corrotto.
+          changes.push(`error:invalid_args:${toolCall.function.name}:${validated.error}`);
+          chatStore.addMessage(this.activeSessionId!, {
+            role: 'tool',
+            content: `Argomenti non validi: ${validated.error}`,
+            name: toolCall.function.name,
+            toolCallId: toolCall.id,
+          });
+          options?.onToolComplete?.(toolCall.id, toolCall.function.name, `Error: ${validated.error}`);
+          continue;
         }
 
         const result: ToolResult = this.toolRegistry.execute(
           toolCall.function.name,
-          args,
+          validated.args,
           currentQuote
         );
 
@@ -263,9 +332,14 @@ export class AIOrchestrator {
           const cleanJson = sanitizeAIResponse(followUp.content);
           try {
             const modified = JSON.parse(cleanJson);
-            const { quote: merged, changes: mergeChanges } = mergeAIResponse(currentQuote, modified);
-            currentQuote = merged;
-            changes.push(...mergeChanges);
+            const validation = quoteSchema.partial().safeParse(modified);
+            if (!validation.success) {
+              changes.push(`error:invalid_quote_followup:${validation.error.issues.length}`);
+            } else {
+              const { quote: merged, changes: mergeChanges } = mergeAIResponse(currentQuote, modified);
+              currentQuote = merged;
+              changes.push(...mergeChanges);
+            }
           } catch {
             changes.push('error:followup_not_json');
           }
@@ -296,9 +370,14 @@ export class AIOrchestrator {
       const cleanJson = sanitizeAIResponse(aiResponse.content);
       try {
         const modified = JSON.parse(cleanJson);
-        const { quote: merged, changes: mergeChanges } = mergeAIResponse(currentQuote, modified);
-        currentQuote = merged;
-        changes.push(...mergeChanges);
+        const validation = quoteSchema.partial().safeParse(modified);
+        if (!validation.success) {
+          changes.push(`error:invalid_quote:${validation.error.issues.length}`);
+        } else {
+          const { quote: merged, changes: mergeChanges } = mergeAIResponse(currentQuote, modified);
+          currentQuote = merged;
+          changes.push(...mergeChanges);
+        }
       } catch {
         changes.push(`error:not_json`);
       }
