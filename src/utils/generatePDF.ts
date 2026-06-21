@@ -3,11 +3,7 @@ import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { PremiumQuote, DocumentTemplateId } from './quoteSchema';
 import { getPdfMakeStyle } from './documentThemes';
 
-if (pdfFonts.pdfMake) {
-  pdfMake.vfs = pdfFonts.pdfMake.vfs;
-} else {
-  pdfMake.vfs = pdfFonts.vfs || pdfFonts;
-}
+pdfMake.vfs = pdfFonts;
 
 const money = (v: number) =>
   new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Number(v || 0));
@@ -75,7 +71,7 @@ function buildDocDefinition(quote: PremiumQuote, themeId: DocumentTemplateId = '
       const costHeader = ['Voce', 'Q.tà', 'Prezzo', 'Totale'].map((h) => ({
         text: h, style: 'tableHeader', alignment: (h === 'Voce' ? 'left' : 'right') as any,
       }));
-      const costRows = [costHeader];
+      const costRows: any[][] = [costHeader];
       items.forEach((item) => {
         costRows.push([
           { text: item.label },
@@ -94,7 +90,7 @@ function buildDocDefinition(quote: PremiumQuote, themeId: DocumentTemplateId = '
       const sumHeader = ['Voce', 'Imponibile', `IVA ${vat}%`, 'Totale IVA inclusa'].map((h) => ({
         text: h, style: 'tableHeader', alignment: (h === 'Voce' ? 'left' : 'right') as any,
       }));
-      const sumRows = [sumHeader];
+      const sumRows: any[][] = [sumHeader];
       items.forEach((item) => {
         sumRows.push([
           { text: item.label },
@@ -166,7 +162,7 @@ function buildDocDefinition(quote: PremiumQuote, themeId: DocumentTemplateId = '
       ...opts.map((o) => ({ text: o.label.split('—')[0].trim(), style: 'tableHeader' })),
     ];
 
-    const compRows = [
+    const compRows: any[][] = [
       compHeader,
       [
         { text: 'Totale NET', bold: true },
