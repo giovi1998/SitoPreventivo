@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useContext } from 'react';
-import { AppContext } from '../../App';
+import { AppContext } from '../contexts';
 import Icon from './Icon';
 
 interface Quote {
@@ -25,17 +25,18 @@ function money(value: number) {
   return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Number(value || 0));
 }
 
-function parseDate(d: string) {
-  if (!d) return new Date(0);
+function parseDate(d: string | undefined | null): number {
+  if (!d) return 0;
   const parts = d.split(' ');
   if (parts.length === 3) {
     const months: Record<string, number> = { gennaio:0, febbraio:1, marzo:2, aprile:3, maggio:4, giugno:5, luglio:6, agosto:7, settembre:8, ottobre:9, novembre:10, dicembre:11 };
     const day = parseInt(parts[0], 10);
     const month = months[parts[1]?.toLowerCase()];
     const year = parseInt(parts[2], 10);
-    if (month !== undefined) return new Date(year, month, day);
+    if (month !== undefined) return new Date(year, month, day).getTime();
   }
-  return new Date(d) || new Date(0);
+  const parsed = new Date(d).getTime();
+  return isNaN(parsed) ? 0 : parsed;
 }
 
 function exportCSV(quotes: Quote[]) {
@@ -68,8 +69,8 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   const [statusFilter, setStatusFilter] = useState('TUTTI');
   const [sort, setSort] = useState('date-desc');
 
-  const templates = useMemo(() => quotes.filter(q => q.isTemplate), [quotes]);
-  const normalQuotes = useMemo(() => quotes.filter(q => !q.isTemplate), [quotes]);
+  const templates = useMemo(() => (quotes as any[]).filter((q: any) => q.isTemplate), [quotes]);
+  const normalQuotes = useMemo(() => (quotes as any[]).filter((q: any) => !q.isTemplate), [quotes]);
 
   const displayed = activeTab === 'templates' ? templates : normalQuotes;
 
@@ -77,12 +78,12 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
     let list = [...displayed];
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(item => `${item.title} ${item.client} ${item.id}`.toLowerCase().includes(q));
+      list = list.filter((item: any) => `${item.title} ${item.client} ${item.id}`.toLowerCase().includes(q));
     }
     if (activeTab === 'quotes' && statusFilter !== 'TUTTI') {
-      list = list.filter(item => (item.status || 'BOZZA').toUpperCase() === statusFilter);
+      list = list.filter((item: any) => (item.status || 'BOZZA').toUpperCase() === statusFilter);
     }
-    list.sort((a, b) => {
+    list.sort((a: any, b: any) => {
       if (sort === 'date-asc') return parseDate(a.date!) - parseDate(b.date!);
       if (sort === 'date-desc') return parseDate(b.date!) - parseDate(a.date!);
       if (sort === 'name-asc') return (a.title || '').localeCompare(b.title || '');
@@ -127,7 +128,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
               : 'I preventivi salvati appariranno qui.'}
           </p>
           <button
-            onClick={() => setView('editor')}
+            onClick={() => setView?.('editor')}
             style={{
               padding: '12px 24px', borderRadius: '12px', background: 'var(--accent)',
               color: '#fff', fontWeight: 700, fontSize: '.9rem', border: 'none',
@@ -229,9 +230,9 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                       </button>
                     ) : (
                       <>
-                        <button onClick={() => openQuote(item)}><Icon name="edit" />Modifica</button>
-                        <button onClick={() => duplicate(item)}><Icon name="copy" />Duplica</button>
-                        <button onClick={() => onDeleteRequest && onDeleteRequest(item)}><Icon name="trash" />Elimina</button>
+                        <button onClick={() => openQuote?.(item)}><Icon name="edit" />Modifica</button>
+                        <button onClick={() => duplicate?.(item)}><Icon name="copy" />Duplica</button>
+                        <button onClick={() => onDeleteRequest?.(item)}><Icon name="trash" />Elimina</button>
                       </>
                     )}
                   </div>
