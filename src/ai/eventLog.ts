@@ -58,7 +58,7 @@ export function summarizeMergeChanges(changes: string[]): string {
 }
 
 /** Human-readable error without raw AI payload (rules 5–7). */
-export function describeAIError(kind: 'empty' | 'not_json' | 'invalid_json' | 'followup_not_json' | 'followup_failed'): string {
+export function describeAIError(kind: 'empty' | 'not_json' | 'invalid_json' | 'followup_not_json' | 'followup_failed' | 'invalid_quote' | 'other_error'): string {
   switch (kind) {
     case 'empty':
       return "⚠ L'AI non ha restituito contenuto. Riprova con una richiesta più specifica.";
@@ -66,10 +66,14 @@ export function describeAIError(kind: 'empty' | 'not_json' | 'invalid_json' | 'f
       return "⚠ L'AI ha risposto a testo libero invece di applicare modifiche. Riprova.";
     case 'invalid_json':
       return "⚠ Risposta AI non valida. Le modifiche potrebbero non essere state applicate.";
+    case 'invalid_quote':
+      return "⚠ Il preventivo restituito dall'AI non è valido. Riprova con un prompt più specifico.";
     case 'followup_not_json':
       return '⚠ La sintesi AI non è in formato valido. Le modifiche dei tool sono state applicate.';
     case 'followup_failed':
       return '⚠ Sintesi AI fallita. Le modifiche dei tool sono state applicate.';
+    case 'other_error':
+      return "⚠ Errore durante l'elaborazione AI. Riprova.";
   }
 }
 

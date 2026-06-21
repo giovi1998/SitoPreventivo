@@ -89,7 +89,7 @@ interface EditorViewProps {
   availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
   onResetChat: () => void;
   isDirty: boolean;
-  saveQuote: () => void;
+  saveQuote: (opts?: { title?: string; silent?: boolean } | string) => void;
   documentTheme?: DocumentTemplateId;
   onSave: () => void;
   onExportPDF: () => void;
@@ -118,11 +118,26 @@ export default function EditorView({
 
   const saveRef = React.useRef(saveQuote);
   const dirtyRef = React.useRef(isDirty);
+  const processingRef = React.useRef(isProcessing);
+  const cooldownRef = React.useRef(0);
+  const prevProcessingRef = React.useRef(isProcessing);
   saveRef.current = saveQuote;
   dirtyRef.current = isDirty;
+  processingRef.current = isProcessing;
+
+  React.useEffect(() => {
+    if (prevProcessingRef.current && !isProcessing) {
+      cooldownRef.current = Date.now() + 5000;
+    }
+    prevProcessingRef.current = isProcessing;
+  }, [isProcessing]);
+
   React.useEffect(() => {
     const timer = setInterval(() => {
-      if (dirtyRef.current) saveRef.current();
+      if (!dirtyRef.current) return;
+      if (processingRef.current) return;
+      if (Date.now() < cooldownRef.current) return;
+      saveRef.current({ silent: true });
     }, 30000);
     return () => clearInterval(timer);
   }, []);

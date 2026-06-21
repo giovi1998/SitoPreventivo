@@ -1,5 +1,6 @@
 import type { PremiumQuote } from '../utils/quoteSchema';
-import { recalculateQuote, quoteSchema } from '../utils/quoteSchema';
+import { recalculateQuote } from '../utils/quoteSchema';
+import { aiInputQuoteSchema } from './aiQuoteInputSchema';
 import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall, ProcessResult } from './types';
 import { providerRegistry } from './providers/registry';
 import { ToolRegistry } from './tools/registry';
@@ -22,15 +23,19 @@ import {
   roundPrices,
   calculateAnnualCost,
   checkConsistency,
+  splitQuoteByOption,
+  mergeOptions,
   validateQuoteTool,
-  generateSummary,
 } from '../utils/quoteTools';
 
-function needsTools(prompt: string): boolean {
+export function needsTools(prompt: string): boolean {
   const lower = prompt.toLowerCase();
   const numericKeywords = ['sconto', 'discount', 'margine', 'margin', 'arrotonda', 'round',
     'ricalcola', 'recalculate', 'riordina', 'reorder', 'duplica', 'duplicate',
-    'annuale', 'annual', 'unisci', 'merge'];
+    'annuale', 'annual', 'unisci', 'merge',
+    'rimuovi', 'remove', 'vuot', 'zero', 'empty',
+    'verific', 'verify', 'consisten', 'coeren', 'check',
+    'lascia solo', 'mantieni solo', 'split', 'togli opzion'];
   return numericKeywords.some(kw => lower.includes(kw));
 }
 
@@ -70,7 +75,10 @@ function validateToolArgs(name: string, rawArgs: string): { ok: true; args: Reco
   }
   const args = parsed as Record<string, unknown>;
 
-  const params = def.function.parameters as { required?: string[]; properties?: Record<string, { type?: string; enum?: unknown[] }> } | undefined;
+  const params = def.function.parameters as {
+    required?: string[];
+    properties?: Record<string, { type?: string; enum?: unknown[]; minimum?: number; min?: number }>;
+  } | undefined;
   const required = params?.required ?? [];
   for (const key of required) {
     if (!(key in args)) {
@@ -79,6 +87,31 @@ function validateToolArgs(name: string, rawArgs: string): { ok: true; args: Reco
     const v = args[key];
     if (v === undefined || v === null) {
       return { ok: false, error: `campo required null/undefined: ${key}` };
+    }
+  }
+
+  // Validate type/enum for all provided args (bug #3)
+  const properties = params?.properties ?? {};
+  for (const [key, value] of Object.entries(args)) {
+    const schema = properties[key];
+    if (!schema) continue;
+    if (schema.type === 'string' && typeof value !== 'string') {
+      return { ok: false, error: `campo ${key}: expected string, got ${typeof value}` };
+    }
+    if (schema.type === 'number' && typeof value !== 'number') {
+      return { ok: false, error: `campo ${key}: expected number, got ${typeof value}` };
+    }
+    if (schema.type === 'boolean' && typeof value !== 'boolean') {
+      return { ok: false, error: `campo ${key}: expected boolean, got ${typeof value}` };
+    }
+    if (schema.enum && !schema.enum.includes(value)) {
+      return { ok: false, error: `campo ${key}: valore "${String(value)}" non valido, ammessi: ${schema.enum.join(', ')}` };
+    }
+    if (schema.type === 'number') {
+      const min = schema.minimum ?? schema.min;
+      if (min !== undefined && typeof value === 'number' && value < min) {
+        return { ok: false, error: `campo ${key}: valore ${value} minore del minimo ${min}` };
+      }
     }
   }
   return { ok: true, args };
@@ -105,6 +138,14 @@ export class AIOrchestrator {
 
     registry.register('duplicate_option', (args, quote) => {
       return duplicateOption(quote, args.optionId as string);
+    });
+
+    registry.register('split_quote', (args, quote) => {
+      return splitQuoteByOption(quote, args.optionIds as string[]);
+    });
+
+    registry.register('merge_options', (args, quote) => {
+      return mergeOptions(quote, args.optionIds as string[]);
     });
 
     registry.register('recalculate_totals', (_args, quote) => {
@@ -308,7 +349,19 @@ export class AIOrchestrator {
       // ─── MULTI-TURN OBBLIGATORIO ───────────────────
       // L'AI riceve i risultati dei tool eseguiti e genera la sintesi finale.
       // Usa json_object (non tool calling) per evitare loop infiniti.
+      //
+      // IMPORTANTE: aggiungiamo un messaggio user con lo stato POST-TOOL del
+      // preventivo, così l'AI genera il JSON finale basandosi sullo stato
+      // aggiornato (con sconti/margini/arrotondamenti già applicati).
+      // Senza questo, l'AI userebbe il quote originale visto nel primo
+      // messaggio user e revertirebbe le modifiche dei tool (bug #2).
       try {
+        const { payload: postToolPayload } = buildAIContext(currentQuote, prompt);
+        chatStore.addMessage(this.activeSessionId!, {
+          role: 'user',
+          content: `Preventivo AGGIORNATO dopo l'esecuzione dei tool (usa QUESTO stato come base, non il precedente):\n${JSON.stringify(postToolPayload)}\n\nGenera il JSON finale del preventivo. Mantieni le modifiche applicate dai tool (sconti, prezzi, ecc.) e applica solo eventuali modifiche testuali aggiuntive richieste dal prompt originale.`,
+        });
+
         const followUp = await provider.chat(session.messages, {
           temperature: 0.4,
           responseFormat: { type: 'json_object' },
@@ -332,11 +385,11 @@ export class AIOrchestrator {
           const cleanJson = sanitizeAIResponse(followUp.content);
           try {
             const modified = JSON.parse(cleanJson);
-            const validation = quoteSchema.partial().safeParse(modified);
+            const validation = aiInputQuoteSchema.safeParse(modified);
             if (!validation.success) {
               changes.push(`error:invalid_quote_followup:${validation.error.issues.length}`);
             } else {
-              const { quote: merged, changes: mergeChanges } = mergeAIResponse(currentQuote, modified);
+              const { quote: merged, changes: mergeChanges } = mergeAIResponse(currentQuote, modified, { preserveNumeric: true });
               currentQuote = merged;
               changes.push(...mergeChanges);
             }
@@ -346,6 +399,16 @@ export class AIOrchestrator {
         }
       } catch (err) {
         changes.push(`error:followup_failed:${(err as Error).message?.slice(0, 100) || 'unknown'}`);
+      }
+
+      if (changes.length === 0) {
+        return {
+          quote,
+          response: aiResponse,
+          sessionId: this.activeSessionId!,
+          changes,
+          rawResponse: aiResponse.content || undefined,
+        };
       }
 
       if (!currentQuote.updatedAt || currentQuote.updatedAt === quote.updatedAt) {
@@ -370,7 +433,7 @@ export class AIOrchestrator {
       const cleanJson = sanitizeAIResponse(aiResponse.content);
       try {
         const modified = JSON.parse(cleanJson);
-        const validation = quoteSchema.partial().safeParse(modified);
+        const validation = aiInputQuoteSchema.safeParse(modified);
         if (!validation.success) {
           changes.push(`error:invalid_quote:${validation.error.issues.length}`);
         } else {
@@ -385,7 +448,10 @@ export class AIOrchestrator {
       changes.push(`error:empty`);
     }
 
-    if (!currentQuote.updatedAt || currentQuote.updatedAt === quote.updatedAt) {
+    // Bug #14: only bump updatedAt if there were actual modifications.
+    // Filter out error entries — they don't count as real changes.
+    const hasRealChanges = changes.some((c) => !c.startsWith('error:'));
+    if (hasRealChanges && (!currentQuote.updatedAt || currentQuote.updatedAt === quote.updatedAt)) {
       currentQuote = { ...currentQuote, updatedAt: new Date().toISOString() };
     }
 

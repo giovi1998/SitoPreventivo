@@ -8,6 +8,12 @@ import {
   splitQuoteByOption,
   mergeOptions,
   validateQuoteTool,
+  reorderOptions,
+  removeEmptyItems,
+  mergeDuplicateItems,
+  roundPrices,
+  calculateAnnualCost,
+  checkConsistency,
 } from '../quoteTools';
 import { createEmptyQuote, addEmptyOption, addEmptyItem } from '../quoteSchema';
 
@@ -95,5 +101,116 @@ describe('quoteTools', () => {
     });
     const result = adjustMargin(withOpt, 30);
     expect(result.changes).toContain('30%');
+  });
+
+  it('reorderOptions preserves isDefault (bug #6)', () => {
+    const q = createEmptyQuote();
+    let updated = addEmptyOption(q);
+    updated = addEmptyOption(updated);
+    updated = addEmptyOption(updated);
+    // Set 2nd option as default, 1st and 3rd as not default
+    updated.options[0].isDefault = false;
+    updated.options[1].isDefault = true;
+    updated.options[2].isDefault = false;
+    updated.globalTotals.optionsSelected = [updated.options[1].id];
+
+    const result = reorderOptions(updated, 'price_asc');
+    // The 2nd option should still be default after reorder
+    const defaultOpt = result.quote.options.find((o) => o.isDefault);
+    expect(defaultOpt?.id).toBe(updated.options[1].id);
+    // optionsSelected should preserve original selection
+    expect(result.quote.globalTotals.optionsSelected).toContain(updated.options[1].id);
+  });
+
+  it('removeEmptyItems removes items with zero quantity or price', () => {
+    const q = createEmptyQuote();
+    const withOpt = addEmptyOption(q);
+    withOpt.options[0].items.push({
+      id: 'empty1', label: 'Zero qty', description: '', category: 'service', unit: 'fixed',
+      quantity: 0, unitPrice: 100, discount: { type: 'none', value: 0 },
+      tax: { type: 'vat', rate: 22 }, total: { net: 0, tax: 0, gross: 0 },
+    });
+    withOpt.options[0].items.push({
+      id: 'empty2', label: 'Zero price', description: '', category: 'service', unit: 'fixed',
+      quantity: 1, unitPrice: 0, discount: { type: 'none', value: 0 },
+      tax: { type: 'vat', rate: 22 }, total: { net: 0, tax: 0, gross: 0 },
+    });
+    const result = removeEmptyItems(withOpt);
+    expect(result.changes).toContain('Rimossi');
+    expect(result.quote.options[0].items.length).toBeLessThan(withOpt.options[0].items.length);
+  });
+
+  it('mergeDuplicateItems does NOT merge items with different tax rates (bug #11)', () => {
+    const q = createEmptyQuote();
+    const withOpt = addEmptyOption(q);
+    withOpt.options[0].items.push({
+      id: 'i1', label: 'Service', description: '', category: 'service', unit: 'fixed',
+      quantity: 1, unitPrice: 100, discount: { type: 'none', value: 0 },
+      tax: { type: 'vat', rate: 22 }, total: { net: 100, tax: 22, gross: 122 },
+    });
+    withOpt.options[0].items.push({
+      id: 'i2', label: 'Service', description: '', category: 'service', unit: 'fixed',
+      quantity: 1, unitPrice: 100, discount: { type: 'none', value: 0 },
+      tax: { type: 'vat', rate: 4 }, total: { net: 100, tax: 4, gross: 104 },
+    });
+    const result = mergeDuplicateItems(withOpt);
+    // Should NOT merge because tax rates differ
+    expect(result.quote.options[0].items.length).toBe(2);
+  });
+
+  it('roundPrices with nearest=0 is a no-op (bug #9)', () => {
+    const q = createEmptyQuote();
+    const withOpt = addEmptyOption(q);
+    withOpt.options[0].items.push({
+      id: 'i1', label: 'Service', description: '', category: 'service', unit: 'fixed',
+      quantity: 1, unitPrice: 123, discount: { type: 'none', value: 0 },
+      tax: { type: 'vat', rate: 22 }, total: { net: 123, tax: 27.06, gross: 150.06 },
+    });
+    const result = roundPrices(withOpt, 0);
+    // nearest=0 should not change prices (no NaN, no crash)
+    expect(result.quote.options[0].items[0].unitPrice).toBe(123);
+  });
+
+  it('calculateAnnualCost is idempotent (bug #10)', () => {
+    const q = createEmptyQuote();
+    const withOpt = addEmptyOption(q);
+    withOpt.options[0].items.push({
+      id: 'monthly', label: 'Manutenzione', description: '', category: 'service', unit: 'month',
+      quantity: 1, unitPrice: 50, discount: { type: 'none', value: 0 },
+      tax: { type: 'vat', rate: 22 }, total: { net: 50, tax: 11, gross: 61 },
+    });
+    const first = calculateAnnualCost(withOpt);
+    const second = calculateAnnualCost(first.quote);
+    // Second call should NOT add another annual row
+    const annualItems = second.quote.options[0].items.filter((i) => i.label.includes('12 mesi'));
+    expect(annualItems.length).toBe(1);
+  });
+
+  it('adjustMargin with >=100% is clamped (bug #8)', () => {
+    const q = createEmptyQuote();
+    const withOpt = addEmptyOption(q);
+    withOpt.options[0].items.push({
+      id: 'i1', label: 'Service', description: '', category: 'service', unit: 'fixed',
+      quantity: 1, unitPrice: 100, discount: { type: 'none', value: 0 },
+      tax: { type: 'vat', rate: 22 }, total: { net: 100, tax: 22, gross: 122 },
+    });
+    const result = adjustMargin(withOpt, 150);
+    // Should not produce NaN or Infinity
+    const price = result.quote.options[0].items[0].unitPrice;
+    expect(Number.isFinite(price)).toBe(true);
+    expect(Number.isNaN(price)).toBe(false);
+  });
+
+  it('checkConsistency detects inconsistent totals', () => {
+    const q = createEmptyQuote();
+    const withOpt = addEmptyOption(q);
+    withOpt.options[0].items.push({
+      id: 'i1', label: 'Service', description: '', category: 'service', unit: 'fixed',
+      quantity: 1, unitPrice: 100, discount: { type: 'none', value: 0 },
+      tax: { type: 'vat', rate: 22 },
+      total: { net: 999, tax: 22, gross: 122 },  // inconsistent net
+    });
+    const result = checkConsistency(withOpt);
+    expect(result.changes).toContain('incoerenze');
   });
 });

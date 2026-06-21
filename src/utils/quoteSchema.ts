@@ -271,9 +271,8 @@ export function calculateGlobalTotals(options: QuoteOption[], selectedOptionIds:
 }
 
 export function recalculateQuote(quote: PremiumQuote): PremiumQuote {
-  const options = quote.options.map((opt) => ({
-    ...opt,
-    items: opt.items.map((item) => ({
+  const options = quote.options.map((opt) => {
+    const items = opt.items.map((item) => ({
       ...item,
       total: calculateItemTotal(
         item.quantity,
@@ -282,9 +281,13 @@ export function recalculateQuote(quote: PremiumQuote): PremiumQuote {
         item.discount.value,
         item.tax.rate
       ),
-    })),
-    summary: calculateOptionSummary(opt.items),
-  }));
+    }));
+    return {
+      ...opt,
+      items,
+      summary: calculateOptionSummary(items),
+    };
+  });
   const globalTotals = calculateGlobalTotals(options, quote.globalTotals.optionsSelected);
   return { ...quote, options, globalTotals, updatedAt: new Date().toISOString() };
 }

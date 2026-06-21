@@ -6,7 +6,21 @@ export interface MergeResult {
   changes: string[];
 }
 
-export function mergeAIResponse(currentQuote: PremiumQuote, modified: Record<string, unknown>): MergeResult {
+export interface MergeOptions {
+  /**
+   * When true, preserve numeric fields (discount, unitPrice, quantity, tax,
+   * total) from the current quote, ignoring values from the AI response.
+   * Used for the follow-up merge after tool execution, so the AI cannot
+   * revert tool-applied changes (bug #2).
+   */
+  preserveNumeric?: boolean;
+}
+
+export function mergeAIResponse(
+  currentQuote: PremiumQuote,
+  modified: Record<string, unknown>,
+  opts: MergeOptions = {},
+): MergeResult {
   const updated = { ...currentQuote };
   const changes: string[] = [];
 
@@ -126,15 +140,37 @@ export function mergeAIResponse(currentQuote: PremiumQuote, modified: Record<str
             items: mo.items
               ? (mo.items as Record<string, unknown>[]).map((mi) => {
                   const ei = ex.items.find((e) => e.id === mi.id);
-                  return ei
-                    ? {
-                        ...ei,
-                        ...mi,
-                        discount: mi.discount || ei.discount,
-                        tax: mi.tax || ei.tax,
-                        total: ei.total,
-                      }
-                    : (mi as any);
+                  if (!ei) {
+                    return {
+                      id: mi.id as string,
+                      label: (mi.label as string) || 'senza nome',
+                      description: (mi.description as string) || '',
+                      category: (mi.category as any) || 'service',
+                      unit: (mi.unit as any) || 'fixed',
+                      quantity: typeof mi.quantity === 'number' ? mi.quantity : 1,
+                      unitPrice: typeof mi.unitPrice === 'number' ? mi.unitPrice : 0,
+                      discount: (mi.discount as any) || { type: 'none', value: 0 },
+                      tax: (mi.tax as any) || { type: 'vat', rate: 22 },
+                    } as any;
+                  }
+                  if (opts.preserveNumeric) {
+                    return {
+                      ...ei,
+                      ...mi,
+                      discount: ei.discount,
+                      tax: ei.tax,
+                      unitPrice: ei.unitPrice,
+                      quantity: ei.quantity,
+                      total: ei.total,
+                    };
+                  }
+                  return {
+                    ...ei,
+                    ...mi,
+                    discount: mi.discount || ei.discount,
+                    tax: mi.tax || ei.tax,
+                    total: ei.total,
+                  };
                 })
               : ex.items,
           };
@@ -159,17 +195,21 @@ export function mergeAIResponse(currentQuote: PremiumQuote, modified: Record<str
     }
 
     for (const mc of clauses) {
+      // Accept "content" as alias of "body" (AI often uses "content")
+      const body = (mc.body ?? mc.content) as string | undefined;
       const existing = currentQuote.legalClauses.find((cl) => cl.id === mc.id);
       if (existing) {
         if (mc.title && mc.title !== existing.title) changes.push(`Clausola: titolo → "${mc.title}"`);
-        if (mc.body && mc.body !== existing.body) changes.push(`Clausola "${existing.title || mc.title}": testo modificato`);
+        if (body && body !== existing.body) changes.push(`Clausola "${existing.title || mc.title}": testo modificato`);
       } else {
         changes.push(`Nuova clausola: "${(mc.title as string) || 'senza titolo'}"`);
       }
     }
     updated.legalClauses = clauses.map((mc) => {
+      const body = (mc.body ?? mc.content) as string | undefined;
+      const normalized = body !== undefined ? { ...mc, body } : mc;
       const existing = currentQuote.legalClauses.find((cl) => cl.id === mc.id);
-      return existing ? { ...existing, ...mc } : (mc as any);
+      return existing ? { ...existing, ...normalized } : (normalized as any);
     });
   }
 
@@ -207,16 +247,22 @@ export function mergeAIResponse(currentQuote: PremiumQuote, modified: Record<str
     if (ui.showGlobalTotals !== undefined) updated.uiPreferences.showGlobalTotals = ui.showGlobalTotals as boolean;
   }
 
-  if (modified.notes && typeof modified.notes === 'object') {
-    const n = modified.notes as Record<string, unknown>;
+  if (modified.notes !== undefined) {
     updated.notes = { ...updated.notes };
-    if (n.internal !== undefined) {
-      updated.notes.internal = n.internal as string;
-      changes.push(`Note interne modificate`);
-    }
-    if (n.clientVisible !== undefined) {
-      updated.notes.clientVisible = n.clientVisible as string;
-      changes.push(`Note cliente modificate`);
+    if (typeof modified.notes === 'string') {
+      // AI often sends notes as a plain string — treat as clientVisible
+      updated.notes.clientVisible = modified.notes;
+      changes.push('Note cliente modificate');
+    } else {
+      const n = modified.notes as Record<string, unknown>;
+      if (n.internal !== undefined) {
+        updated.notes.internal = n.internal as string;
+        changes.push('Note interne modificate');
+      }
+      if (n.clientVisible !== undefined) {
+        updated.notes.clientVisible = n.clientVisible as string;
+        changes.push('Note cliente modificate');
+      }
     }
   }
 

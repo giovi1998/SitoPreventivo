@@ -9,9 +9,9 @@ const TOAST_COLORS: Record<string, { bg: string; icon: string }> = {
 
 function Toast({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: string) => void }) {
   useEffect(() => {
-    const timer = setTimeout(() => onDismiss(toast.id), 3000);
+    const timer = setTimeout(() => onDismiss(toast.id), toast.durationMs ?? 3000);
     return () => clearTimeout(timer);
-  }, [toast.id, onDismiss]);
+  }, [toast.id, toast.durationMs, onDismiss]);
 
   const c = TOAST_COLORS[toast.type] || TOAST_COLORS.success;
   return (

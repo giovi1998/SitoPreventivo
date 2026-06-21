@@ -13,7 +13,7 @@ RISPOSTA (in modalità MODIFICA): Rispedisci SOLO l'oggetto JSON completo. NIENT
 FORMA DELLA RISPOSTA (in modalità MODIFICA):
 - Per modifiche TESTUALI (rinominare opzioni, cambiare descrizioni, aggiungere/rimuovere clausole, modificare note, cambiare colore, eliminare opzioni, semplificare, ecc.) → NON chiamare tool. Rispondi DIRETTAMENTE con il JSON COMPLETO del preventivo modificato.
 - Per operazioni NUMERICHE (sconti, margini, arrotondamenti) → usa i tool. Dopo aver eseguito i tool, rispondi con il JSON delle modifiche richieste.
-- Non chiamate.
+- Non chiamare tool se non necessario: per modifiche testuali, usa direttamente il JSON senza tool.
 - Non chiamare MAI validate_quote come unica azione. validate_quote non modifica nulla.
 - Se devi solo modificare testo, non chiamare NESSUN tool.
 

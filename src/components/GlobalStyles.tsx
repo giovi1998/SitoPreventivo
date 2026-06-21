@@ -184,6 +184,9 @@ export default function GlobalStyles() {
     .theme-pill.active{background:var(--accent) !important;color:#fff !important}
     .save-status-dirty{color:var(--amber);font-size:.72rem;font-weight:600}
     .save-status-saved{color:var(--green);font-size:.72rem;font-weight:600}
+    .save-status-processing{color:var(--accent);font-size:.72rem;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+    .spinner-mini{display:inline-block;width:12px;height:12px;border:2px solid color-mix(in srgb,var(--accent) 30%,transparent);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
     @media(max-width:1180px){.btn-label{display:none}.action-group button{padding:9px 10px}}
     @media(max-width:1024px){.save-status{display:none}}
     @media(max-width:900px){.theme-pills{display:none}}

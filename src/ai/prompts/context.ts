@@ -44,7 +44,7 @@ export function detectRelevantFields(prompt: string): Set<string> {
   const rules: [string, string[]][] = [
     ['project', ['titolo', 'title', 'progetto', 'project', 'nome del progetto']],
     ['client', ['cliente', 'client', 'nominativo', 'azienda']],
-    ['issuer', ['emittente', 'issuer', 'mittente', 'vostro']],
+    ['issuer', ['emittente', 'issuer', 'mittente', 'vostro', 'partita iva', 'piva', 'codice fiscale', 'fattura']],
     ['options', ['opzione', 'option', 'prezzo', 'prezzo', 'costo', 'opzioni']],
     ['legalClauses', ['clausol', 'clause', 'condizioni', 'legale', 'faq']],
     ['paymentTerms', ['pagamento', 'payment', 'iban', 'bic', 'acconto', 'saldo', 'tranche', 'scadenze']],
@@ -101,22 +101,4 @@ export function buildAIContext(quote: PremiumQuote, userPrompt: string): AIConte
     : ['options', 'project', 'client', 'legalClauses', 'paymentTerms', 'uiPreferences', 'notes'];
 
   return { payload, relevantFields };
-}
-
-export function detectToolIntent(prompt: string): string | null {
-  const lower = prompt.toLowerCase();
-
-  if (lower.includes('sconto') || lower.includes('discount')) return 'apply_discount';
-  if (lower.includes('margine') || lower.includes('margin')) return 'adjust_margin';
-  if (lower.includes('duplica') || lower.includes('duplicate') || lower.includes('copia')) return 'duplicate_option';
-  if (lower.includes('ricalcola') || lower.includes('recalculate')) return 'recalculate_totals';
-  if (lower.includes('riordina') || lower.includes('reorder') || lower.includes('ordina')) return 'reorder_options';
-  if (lower.includes('rimuovi') && (lower.includes('vuot') || lower.includes('zero'))) return 'remove_empty_items';
-  if (lower.includes('unisci') && (lower.includes('duplicat') || lower.includes('doppie'))) return 'merge_duplicate_items';
-  if (lower.includes('arrotonda') || lower.includes('round')) return 'round_prices';
-  if (lower.includes('annuale') || lower.includes('annual') || lower.includes('yearly')) return 'calculate_annual_cost';
-  if (lower.includes('verific') || lower.includes('consist') || lower.includes('coeren')) return 'check_consistency';
-  if (lower.includes('valida') || lower.includes('validat') || lower.includes('controlla')) return 'validate_quote';
-
-  return null;
 }

@@ -23,6 +23,8 @@ import OnboardingModal from './src/components/OnboardingModal';
 import dataService from './src/utils/dataService';
 import quoteAdapter from './src/utils/quoteAdapter';
 import { DEFAULT_TEMPLATES } from './src/utils/defaultTemplates';
+import { summarizeMergeChanges, buildErrorSuggestion } from './src/utils/mergeSummary';
+import { needsAnalysis } from './src/ai/promptUtils';
 import { AppContext, AuthContext } from './src/contexts';
 export { AppContext, AuthContext };
 export type { AuthUser } from './src/contexts';
@@ -269,18 +271,32 @@ export default function App() {
       setQuote(result.quote as PremiumQuote);
       markDirty();
 
-      addToast('success', `AI: ${mode === "custom" ? "prompt applicato" : mode} con successo`);
+      const { count, summary } = summarizeMergeChanges(result.changes);
+      if (count > 0) {
+        addToast('success', `AI: ${summary}`, 5000);
+      } else {
+        const wasAnalysis = needsAnalysis(userPrompt);
+        addToast(
+          'info',
+          wasAnalysis
+            ? 'AI: nessuna modifica applicata — vedi log per la risposta testuale'
+            : 'AI: nessuna modifica riconosciuta dal prompt. Riformula più specificamente?',
+          5000
+        );
+      }
     } catch (err: any) {
-      addToast('error', err.message);
+      const suggestion = buildErrorSuggestion(err.message || '');
+      addToast('error', suggestion, 5000);
     }
   };
 
   const saveQuote = () => setShowSaveDialog(true);
 
-  const saveCurrentQuote = (title?: string) => {
-    const saved = title
-      ? { ...quote, project: { ...quote.project, title } }
-      : { ...quote, project: { ...quote.project, title: `${quote.project.title} (auto)` } };
+  const saveCurrentQuote = (optsOrTitle?: { title?: string; silent?: boolean } | string) => {
+    const opts = typeof optsOrTitle === 'string' ? { title: optsOrTitle } : (optsOrTitle || {});
+    const title = opts.title
+      ?? (opts.silent ? quote.project.title : `${quote.project.title} (auto)`);
+    const saved = { ...quote, project: { ...quote.project, title } };
     const legacy = toLegacyFormat(saved);
     setQuotes((c: any[]) => {
       const updated = [legacy, ...c.filter((qq: any) => qq.id !== saved.quoteId)];
@@ -502,6 +518,7 @@ export default function App() {
           onImportPDF={() => setShowPdfImport(true)}
           lastSaveTime={lastSaveTime}
           isDirty={isDirty}
+          isProcessing={isProcessing}
           pdfLoading={pdfLoading}
           docxLoading={docxLoading}
           onSaveAsTemplate={saveAsTemplate}
@@ -534,7 +551,7 @@ export default function App() {
             availableModels={availableModels}
             onResetChat={resetChat}
             isDirty={isDirty}
-            saveQuote={() => saveCurrentQuote()}
+            saveQuote={saveCurrentQuote}
             documentTheme={documentTheme}
             onSave={saveQuote}
             onExportPDF={exportPDF}

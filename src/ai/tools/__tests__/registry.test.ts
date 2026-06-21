@@ -35,4 +35,15 @@ describe('TOOL_DEFINITIONS', () => {
       expect(def.function.parameters).toBeDefined();
     }
   });
+
+  it('does NOT expose validate_quote (executor is deliberately excluded, bug #1)', () => {
+    const names = getToolNames();
+    expect(names).not.toContain('validate_quote');
+  });
+
+  it('exposes split_quote and merge_options (new tools for Phase 8)', () => {
+    const names = getToolNames();
+    expect(names).toContain('split_quote');
+    expect(names).toContain('merge_options');
+  });
 });

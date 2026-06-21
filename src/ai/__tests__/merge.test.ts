@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mergeAIResponse } from '../merge';
-import { createEmptyQuote, addEmptyOption } from '../../utils/quoteSchema';
+import { createEmptyQuote, addEmptyOption, addEmptyItem } from '../../utils/quoteSchema';
 
 describe('mergeAIResponse', () => {
   it('returns same quote with empty changes when no modifications', () => {
@@ -84,5 +84,51 @@ describe('mergeAIResponse', () => {
     const q = createEmptyQuote();
     const result = mergeAIResponse(q, { uiPreferences: { accentColor: '#FF0000' } });
     expect(result.quote.uiPreferences.accentColor).toBe('#FF0000');
+  });
+
+  it('new AI item without quantity/unitPrice gets safe defaults (bug #7: NaN)', () => {
+    const withOpt = addEmptyOption(createEmptyQuote());
+    const base = addEmptyItem(withOpt, withOpt.options[0].id);
+    const optId = base.options[0].id;
+    const result = mergeAIResponse(base, {
+      options: [
+        {
+          id: optId,
+          label: base.options[0].label,
+          description: base.options[0].description,
+          isDefault: true,
+          selectionType: 'single',
+          items: [
+            ...base.options[0].items.map((i) => ({ id: i.id, label: i.label })),
+            { id: 'new-item', label: 'Nuova voce' },
+          ],
+        },
+      ],
+    });
+    const newItem = result.quote.options[0].items.find((i) => i.id === 'new-item');
+    expect(newItem).toBeDefined();
+    expect(newItem!.quantity).toBe(1);
+    expect(newItem!.unitPrice).toBe(0);
+    expect(Number.isNaN(newItem!.total.net)).toBe(false);
+    expect(Number.isNaN(newItem!.total.gross)).toBe(false);
+  });
+
+  it('merges legalClauses with "content" field (AI variant of "body")', () => {
+    const q = createEmptyQuote();
+    const result = mergeAIResponse(q, {
+      legalClauses: [
+        { id: 'cl-1', title: 'Condizioni Generali', content: 'Testo della clausola' },
+      ],
+    });
+    expect(result.quote.legalClauses[0].title).toBe('Condizioni Generali');
+    expect(result.quote.legalClauses[0].body).toBe('Testo della clausola');
+  });
+
+  it('merges notes as plain string (AI variant)', () => {
+    const q = createEmptyQuote();
+    const result = mergeAIResponse(q, {
+      notes: 'I prezzi non includono l\'IVA',
+    });
+    expect(result.quote.notes.clientVisible).toBe('I prezzi non includono l\'IVA');
   });
 });

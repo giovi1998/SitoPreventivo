@@ -39,4 +39,20 @@ describe('useToast', () => {
     expect(result.current.toasts).toHaveLength(2);
     expect(result.current.toasts[0].id).not.toBe(result.current.toasts[1].id);
   });
+
+  it('defaults durationMs to 3000 when not provided', () => {
+    const { result } = renderHook(() => useToast());
+    act(() => {
+      result.current.addToast('success', 'default');
+    });
+    expect(result.current.toasts[0].durationMs).toBe(3000);
+  });
+
+  it('accepts explicit durationMs (Test 20 / AC-017)', () => {
+    const { result } = renderHook(() => useToast());
+    act(() => {
+      result.current.addToast('success', 'long', 5000);
+    });
+    expect(result.current.toasts[0].durationMs).toBe(5000);
+  });
 });

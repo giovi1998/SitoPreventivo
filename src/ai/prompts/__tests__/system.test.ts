@@ -20,4 +20,9 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('paymentTerms');
     expect(p).toContain('uiPreferences');
   });
+  it('prompt does NOT contain typos (bug fix: "Non chiamate." truncated, "univa azione")', () => {
+    const p = buildSystemPrompt(true);
+    expect(p).not.toContain('Non chiamate.');
+    expect(p).not.toContain('univa azione');
+  });
 });

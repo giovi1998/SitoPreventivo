@@ -40,11 +40,11 @@ const MAX_LOG_ENTRIES = 40;
 function parseResultChanges(changes: string[]): {
   toolCount: number;
   mergeChanges: string[];
-  errorKind: 'empty' | 'not_json' | 'invalid_json' | 'followup_not_json' | 'followup_failed' | null;
+  errorKind: 'empty' | 'not_json' | 'invalid_json' | 'followup_not_json' | 'followup_failed' | 'invalid_quote' | 'other_error' | null;
 } {
   let toolCount = 0;
   const mergeChanges: string[] = [];
-  let errorKind: 'empty' | 'not_json' | 'invalid_json' | 'followup_not_json' | 'followup_failed' | null = null;
+  let errorKind: 'empty' | 'not_json' | 'invalid_json' | 'followup_not_json' | 'followup_failed' | 'invalid_quote' | 'other_error' | null = null;
 
   for (const c of changes) {
     if (c.startsWith('tool:')) {
@@ -59,6 +59,10 @@ function parseResultChanges(changes: string[]): {
       errorKind = 'followup_not_json';
     } else if (c.startsWith('error:followup_failed')) {
       errorKind = 'followup_failed';
+    } else if (c.startsWith('error:invalid_quote')) {
+      errorKind = 'invalid_quote';
+    } else if (c.startsWith('error:')) {
+      errorKind = 'other_error';
     } else {
       mergeChanges.push(c);
     }
@@ -128,7 +132,8 @@ export function useAI(userEmail?: string): UseAIReturn {
         }
       }
 
-      addLog(createInfoEntry('📤 Invio richiesta...'));
+      const promptPreview = prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt;
+      addLog(createEntry('info', `📤 Invio richiesta: "${promptPreview}"`, { detail: prompt }));
       streamBufferRef.current.clear();
       startedToolsRef.current = new Set();
       toolStartRef.current = new Map();
@@ -213,7 +218,11 @@ export function useAI(userEmail?: string): UseAIReturn {
         }
 
         if (mergeChanges.length > 0) {
-          addLog(createSuccessEntry(summarizeMergeChanges(mergeChanges)));
+          const changeList = mergeChanges.map((c) => `• ${c}`).join('\n');
+          addLog(createSuccessEntry(
+            `${mergeChanges.length} modifica${mergeChanges.length > 1 ? 'e' : ''} applicata${mergeChanges.length > 1 ? 'e' : ''}`,
+            changeList
+          ));
         }
 
         if (!hasModifications && !errorKind) {

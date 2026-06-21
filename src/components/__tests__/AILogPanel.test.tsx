@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import AILogPanel from '../AILogPanel';
 import type { AILogEntry } from '../../ai/types';
@@ -114,5 +114,35 @@ describe('AILogPanel', () => {
   it('has role="log" for accessibility', () => {
     render(<AILogPanel logs={[]} isProcessing={false} />);
     expect(screen.getByRole('log')).toBeInTheDocument();
+  });
+
+  it('copy includes the detail field when present (complete log)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const logs = [
+      makeEntry({ msg: 'Invio richiesta', detail: 'prompt completo qui' }),
+      makeEntry({ msg: 'Risposta ricevuta' }),
+      makeEntry({ type: 'success', msg: '1 modifica applicata', detail: '• Titolo: "X"' }),
+    ];
+    render(<AILogPanel logs={logs} isProcessing={false} />);
+    fireEvent.click(screen.getByLabelText('Copia log'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain('Invio richiesta');
+    expect(copied).toContain('prompt completo qui');
+    expect(copied).toContain('1 modifica applicata');
+    expect(copied).toContain('• Titolo: "X"');
+  });
+
+  it('copy works for entries without detail (backward compat)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const logs = [makeEntry({ msg: 'no detail', detail: undefined })];
+    render(<AILogPanel logs={logs} isProcessing={false} />);
+    fireEvent.click(screen.getByLabelText('Copia log'));
+    await new Promise((r) => setTimeout(r, 0));
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain('no detail');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectRelevantFields, buildAIContext, detectToolIntent } from '../context';
+import { detectRelevantFields, buildAIContext } from '../context';
 
 describe('detectRelevantFields', () => {
   it('detects project field for title keywords', () => {
@@ -28,6 +28,12 @@ describe('detectRelevantFields', () => {
   });
   it('returns empty for unrelated prompt', () => {
     expect(detectRelevantFields('Ciao come stai?').size).toBe(0);
+  });
+  it('detects issuer for "partita iva" (bug fix: missing keyword)', () => {
+    expect(detectRelevantFields('Cambia la partita iva')).toContain('issuer');
+  });
+  it('detects issuer for "codice fiscale"', () => {
+    expect(detectRelevantFields('Aggiorna codice fiscale')).toContain('issuer');
   });
 });
 
@@ -60,23 +66,5 @@ describe('buildAIContext', () => {
   it('always includes options in payload', () => {
     const result = buildAIContext(baseQuote, 'qualsiasi cosa');
     expect(result.payload.options).toBeDefined();
-  });
-});
-
-describe('detectToolIntent', () => {
-  it('detects sconto → apply_discount', () => {
-    expect(detectToolIntent('Applica sconto 10%')).toBe('apply_discount');
-  });
-  it('detects margine → adjust_margin', () => {
-    expect(detectToolIntent('Ricalcola margine 30%')).toBe('adjust_margin');
-  });
-  it('detects duplica → duplicate_option', () => {
-    expect(detectToolIntent('Duplica opzione 1')).toBe('duplicate_option');
-  });
-  it('detects ricalcola → recalculate_totals', () => {
-    expect(detectToolIntent('Ricalcola totali')).toBe('recalculate_totals');
-  });
-  it('returns null for unrelated prompt', () => {
-    expect(detectToolIntent('ciao')).toBeNull();
   });
 });

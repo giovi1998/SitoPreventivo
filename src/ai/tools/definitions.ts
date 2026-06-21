@@ -69,6 +69,42 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'split_quote',
+      description: 'Mantiene solo le opzioni specificate, rimuovendo tutte le altre dal preventivo',
+      parameters: {
+        type: 'object',
+        properties: {
+          optionIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array di ID delle opzioni da mantenere (almeno uno)',
+          },
+        },
+        required: ['optionIds'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'merge_options',
+      description: 'Unisce due o più opzioni in una sola opzione con tutti gli items combinati',
+      parameters: {
+        type: 'object',
+        properties: {
+          optionIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array di ID delle opzioni da unire (almeno 2)',
+          },
+        },
+        required: ['optionIds'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'recalculate_totals',
       description: 'Ricalcola tutti i totali (netto, IVA, lordo) per ogni opzione e per il preventivo globale',
       parameters: {
@@ -154,18 +190,6 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: 'check_consistency',
       description: 'Verifica che tutti i totali siano coerenti e li ricalcola se necessario',
-      parameters: {
-        type: 'object',
-        properties: {},
-        required: [],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'validate_quote',
-      description: 'Valida l\'intero preventivo contro lo schema, segnalando eventuali errori strutturali',
       parameters: {
         type: 'object',
         properties: {},

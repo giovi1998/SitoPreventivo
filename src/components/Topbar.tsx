@@ -12,6 +12,7 @@ interface TopbarProps {
   onImportPDF?: () => void;
   lastSaveTime: Date | null;
   isDirty: boolean;
+  isProcessing?: boolean;
   pdfLoading: boolean;
   docxLoading?: boolean;
   onSaveAsTemplate?: () => void;
@@ -29,6 +30,7 @@ export default function Topbar({
   onImportPDF,
   lastSaveTime,
   isDirty,
+  isProcessing = false,
   pdfLoading,
   docxLoading,
   onSaveAsTemplate,
@@ -59,7 +61,12 @@ export default function Topbar({
         {view === 'editor' && (
           <div className="editor-actions">
             <div className="save-status">
-              {isDirty ? (
+              {isProcessing ? (
+                <span className="save-status-processing">
+                  <span className="spinner-mini" aria-hidden="true" />
+                  AI in corso, salvataggio sospeso
+                </span>
+              ) : isDirty ? (
                 <span className="save-status-dirty">● Non salvato</span>
               ) : lastSaveTime ? (
                 <span className="save-status-saved">● Salvato {formatTime(lastSaveTime)}</span>

@@ -34,7 +34,11 @@ export default function AILogPanel({ logs, isProcessing }: AILogPanelProps): Rea
 
   const handleCopy = React.useCallback(async () => {
     const text = logs
-      .map((l) => `[${l.time}] ${TYPE_ICONS[l.type]} ${l.msg}${l.durationMs ? ` (${l.durationMs}ms)` : ''}`)
+      .map((l) => {
+        let line = `[${l.time}] ${TYPE_ICONS[l.type]} ${l.msg}${l.durationMs ? ` (${l.durationMs}ms)` : ''}`;
+        if (l.detail) line += `\n  ${l.detail.split('\n').join('\n  ')}`;
+        return line;
+      })
       .join('\n');
     try {
       await navigator.clipboard.writeText(text);
