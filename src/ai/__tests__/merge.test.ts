@@ -10,6 +10,23 @@ describe('mergeAIResponse', () => {
     expect(result.quote.quoteId).toBe(q.quoteId);
   });
 
+  it('does NOT update updatedAt when there are no changes (regression for "Modifiche applicate" false positive)', () => {
+    const q = createEmptyQuote();
+    const originalUpdatedAt = q.updatedAt;
+    const result = mergeAIResponse(q, {});
+    expect(result.changes).toHaveLength(0);
+    expect(result.quote.updatedAt).toBe(originalUpdatedAt);
+  });
+
+  it('does update updatedAt when there ARE changes', () => {
+    const q = createEmptyQuote();
+    const originalUpdatedAt = new Date(Date.now() - 1000).toISOString();
+    const q2 = { ...q, updatedAt: originalUpdatedAt };
+    const result = mergeAIResponse(q2, { project: { title: 'Nuovo' } });
+    expect(result.changes.length).toBeGreaterThan(0);
+    expect(result.quote.updatedAt).not.toBe(originalUpdatedAt);
+  });
+
   it('updates project title', () => {
     const q = createEmptyQuote();
     const result = mergeAIResponse(q, { project: { title: 'Nuovo Titolo' } });

@@ -235,6 +235,8 @@ export function mergeAIResponse(currentQuote: PremiumQuote, modified: Record<str
     updated.locale = modified.locale as string;
   }
 
-  updated.updatedAt = new Date().toISOString();
+  if (changes.length > 0) {
+    updated.updatedAt = new Date().toISOString();
+  }
   return { quote: updated, changes };
 }

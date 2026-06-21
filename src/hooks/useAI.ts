@@ -217,8 +217,12 @@ export function useAI(userEmail?: string): UseAIReturn {
         }
 
         if (!hasModifications && !errorKind) {
-          const quoteChanged = result.quote && JSON.stringify(result.quote) !== JSON.stringify(quote);
-          addLog(createInfoEntry(quoteChanged ? 'Modifiche applicate (riepilogo non disponibile)' : 'Nessuna modifica applicata'));
+          const aiText = (result.rawResponse || '').trim();
+          if (aiText) {
+            addLog(createInfoEntry(aiText));
+          } else {
+            addLog(createInfoEntry('Nessuna modifica applicata'));
+          }
         }
 
         return result;
