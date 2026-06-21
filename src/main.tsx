@@ -15,7 +15,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AppWrapper() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/app" element={

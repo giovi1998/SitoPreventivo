@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { useContext, useState, useEffect, useRef, useCallback } from 'react';
 import GlobalStyles from './src/components/GlobalStyles';
 import Layout from './src/components/Layout';
 import Topbar from './src/components/Topbar';
@@ -23,9 +23,9 @@ import OnboardingModal from './src/components/OnboardingModal';
 import dataService from './src/utils/dataService';
 import quoteAdapter from './src/utils/quoteAdapter';
 import { DEFAULT_TEMPLATES } from './src/utils/defaultTemplates';
-
-export const AppContext = createContext<any>(null);
-export const AuthContext = createContext<any>(null);
+import { AppContext, AuthContext } from './src/contexts';
+export { AppContext, AuthContext };
+export type { AuthUser } from './src/contexts';
 
 function generateId() {
   const year = new Date().getFullYear();
@@ -34,10 +34,10 @@ function generateId() {
 }
 
 const STARTER_OPTIONS_LEGACY = [
-  { id: 1, title: "OPZIONE 1 — Sito Vetrina WordPress · Con Manutenzione", description: "Sito vetrina professionale realizzato con WordPress.", oneTimeCost: 750, monthlyCost: 50, includesMaintenance: true },
-  { id: 2, title: "OPZIONE 2 — Sito Vetrina WordPress · Senza Manutenzione", description: "Stessa realizzazione dell'Opzione 1.", oneTimeCost: 950, monthlyCost: 0, includesMaintenance: false },
-  { id: 3, title: "OPZIONE 3 — Sito Vetrina su Misura · Con Manutenzione", description: "Sito sviluppato su misura in HTML, CSS e JavaScript.", oneTimeCost: 550, monthlyCost: 50, includesMaintenance: true },
-  { id: 4, title: "OPZIONE 4 — Sito Vetrina su Misura · Senza Manutenzione", description: "Stessa realizzazione dell'Opzione 3.", oneTimeCost: 700, monthlyCost: 0, includesMaintenance: false },
+  { id: 'opt-1', title: "OPZIONE 1 — Sito Vetrina WordPress · Con Manutenzione", description: "Sito vetrina professionale realizzato con WordPress.", oneTimeCost: 750, monthlyCost: 50, includesMaintenance: true },
+  { id: 'opt-2', title: "OPZIONE 2 — Sito Vetrina WordPress · Senza Manutenzione", description: "Stessa realizzazione dell'Opzione 1.", oneTimeCost: 950, monthlyCost: 0, includesMaintenance: false },
+  { id: 'opt-3', title: "OPZIONE 3 — Sito Vetrina su Misura · Con Manutenzione", description: "Sito sviluppato su misura in HTML, CSS e JavaScript.", oneTimeCost: 550, monthlyCost: 50, includesMaintenance: true },
+  { id: 'opt-4', title: "OPZIONE 4 — Sito Vetrina su Misura · Senza Manutenzione", description: "Stessa realizzazione dell'Opzione 3.", oneTimeCost: 700, monthlyCost: 0, includesMaintenance: false },
 ];
 
 const STARTER_CLAUSES_LEGACY = [
@@ -258,6 +258,7 @@ export default function App() {
       const result = await processPrompt(quote, userPrompt, {
         modelId: aiModel,
         onProgress: () => {},
+        onStream: () => {},
       });
 
       setQuote(result.quote as PremiumQuote);
@@ -447,7 +448,8 @@ export default function App() {
       const { generatePDFBlob } = await import('./src/utils/generatePDF');
       const pdfBytes = await generatePDFBlob(quote, documentTheme);
       const filename = `${quote.quoteId || quote.project?.title || 'preventivo'}_${quote.client?.name || 'preventivo'}.pdf`;
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const arrayBuffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength) as ArrayBuffer;
+      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
