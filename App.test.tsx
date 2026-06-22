@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import React from 'react';
-import { AuthContext } from './src/contexts';
+import React, { useContext } from 'react';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { AuthContext, AppContext } from './src/contexts';
 
 const mocks = vi.hoisted(() => ({
   processPrompt: vi.fn(),
@@ -40,19 +41,20 @@ vi.mock('./src/utils/dataService', () => ({
   },
 }));
 
-vi.mock('./src/components/EditorView', () => ({
-  default: (props: any) => (
+function EditorTestStub() {
+  const ctx = useContext(AppContext) as any;
+  return (
     <div>
       <input
         data-testid="ai-text-input"
-        value={props.aiText}
-        onChange={(e: any) => props.setAiText(e.target.value)}
+        value={ctx.aiText}
+        onChange={(e: any) => ctx.setAiText(e.target.value)}
       />
-      <button data-testid="run-ai-custom" onClick={() => props.onRunAI('custom')}>custom</button>
-      <button data-testid="run-ai-premium" onClick={() => props.onRunAI('premium')}>premium</button>
+      <button data-testid="run-ai-custom" onClick={() => ctx.runAI('custom')}>custom</button>
+      <button data-testid="run-ai-premium" onClick={() => ctx.runAI('premium')}>premium</button>
     </div>
-  ),
-}));
+  );
+}
 
 vi.mock('./src/components/Layout', () => ({ default: ({ children }: any) => <div>{children}</div> }));
 vi.mock('./src/components/Topbar', () => ({ default: () => <div data-testid="topbar" /> }));
@@ -78,7 +80,13 @@ async function renderApp() {
   const App = (await import('./App')).default;
   return render(
     <AuthContext.Provider value={authValue as any}>
-      <App />
+      <MemoryRouter initialEntries={['/app/editor']}>
+        <Routes>
+          <Route path="/app" element={<App />}>
+            <Route path="editor" element={<EditorTestStub />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
     </AuthContext.Provider>
   );
 }
