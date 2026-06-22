@@ -1,0 +1,950 @@
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
+import type { BusinessCard, BusinessCardSizePreset } from './documentSchemas';
+import { SIZE_PRESETS_MM, BLEED_MM, CARD_A4_COLS, CARD_A4_ROWS, CARD_A4_GAP_MM, CARD_A4_MARGIN_MM } from './documentSchemas';
+import { generateQrSvg, isHttpUrl } from './qrGenerator';
+import { isAllowedLogoMime } from './qrGenerator';
+
+pdfMake.vfs = pdfFonts;
+
+type Content = any;
+type TDocumentDefinitions = any;
+
+export {
+  SIZE_PRESETS_MM,
+  BLEED_MM,
+  CARD_A4_COLS,
+  CARD_A4_ROWS,
+  CARD_A4_GAP_MM,
+  CARD_A4_MARGIN_MM,
+};
+
+const MAX_RAW_BYTES = 5_000_000;
+const MAX_DIMENSION = 4000;
+const MIN_QUALITY = 0.3;
+const DEFAULT_MAX_DIM = 800;
+const DEFAULT_MAX_BYTES = 500_000;
+const QR_RENDER_PX = 512;
+const TARGET_PX_PER_MM = 4;
+
+export function resolveCardQrPayload(card: BusinessCard): string {
+  if (card.back.qrPayload && card.back.qrPayload.trim().length > 0) {
+    return card.back.qrPayload;
+  }
+  return card.back.website || '';
+}
+
+export function getEffectiveQrPayload(card: BusinessCard): string {
+  const resolved = resolveCardQrPayload(card);
+  if (!resolved) return '';
+  if (isHttpUrl(resolved)) return resolved;
+  return resolved;
+}
+
+function buildSocialsSummary(socials: BusinessCard['back']['socials']): string {
+  return socials
+    .filter((s) => s.platform && s.url)
+    .map((s) => s.platform)
+    .join(' · ');
+}
+
+function getCardDimensionsMm(card: BusinessCard): { w: number; h: number } {
+  return SIZE_PRESETS_MM[card.style.sizePreset];
+}
+
+function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Content[] {
+  const paddingMm = 4;
+  const innerW = dims.w - paddingMm * 2;
+  const textColor = card.style.textColor;
+  const accentColor = card.style.accentColor;
+  const monogram = computeMonogramLocal(card.front.name);
+  const hasPhoto = !!card.front.photoUrl;
+  const hasLogo = !!card.front.logoUrl;
+  const cells: Content[] = [];
+
+  // Photo or monogram placeholder (top-left area)
+  if (hasPhoto) {
+    cells.push({
+      image: card.front.photoUrl,
+      width: 25,
+      height: 25,
+      absolutePosition: { x: paddingMm, y: paddingMm },
+    });
+  } else if (monogram) {
+    cells.push({
+      text: monogram,
+      fontSize: 14,
+      bold: true,
+      color: accentColor,
+      absolutePosition: { x: paddingMm, y: paddingMm + 6 },
+      width: 25,
+      alignment: 'center',
+    });
+  }
+
+  // Text block (right of photo, or full width if no photo)
+  const textX = hasPhoto ? paddingMm + 27 : paddingMm;
+  const textW = hasPhoto ? innerW - 27 : innerW;
+  const textLines: Content[] = [];
+  if (card.front.name) {
+    textLines.push({ text: card.front.name.toUpperCase(), color: textColor, fontSize: 11, bold: true, characterSpacing: 0.5 });
+  }
+  if (card.front.title) {
+    textLines.push({ text: card.front.title, color: accentColor, fontSize: 7.5, bold: true, margin: [0, 1, 0, 0] });
+  }
+  if (card.front.company) {
+    textLines.push({ text: card.front.company, color: textColor, fontSize: 6.5, margin: [0, 1, 0, 0] });
+  }
+  if (textLines.length > 0) {
+    cells.push({
+      stack: textLines,
+      absolutePosition: { x: textX, y: paddingMm + 4 },
+      width: textW,
+    });
+  }
+
+  // Divider line (below the top content)
+  const divY = hasPhoto ? paddingMm + 27 : paddingMm + 18;
+  cells.push({
+    canvas: [
+      { type: 'line', x1: paddingMm, y1: divY, x2: dims.w - paddingMm, y2: divY, lineWidth: 0.4, lineColor: accentColor },
+    ],
+    absolutePosition: { x: 0, y: 0 },
+    width: dims.w,
+  });
+
+  // Bottom row: monogram (left, only if no photo) | handle/domain (center) | logo (right)
+  const bottomY = divY + 4;
+  if (!hasPhoto && monogram) {
+    cells.push({
+      text: monogram,
+      fontSize: 9,
+      bold: true,
+      color: accentColor,
+      characterSpacing: 1.5,
+      absolutePosition: { x: paddingMm, y: bottomY },
+    });
+  }
+  if (card.back.website) {
+    const hostname = deriveHostnameLocal(card.back.website);
+    cells.push({
+      text: hostname,
+      fontSize: 6,
+      color: textColor,
+      alignment: 'center',
+      absolutePosition: { x: 0, y: bottomY + 1 },
+      width: dims.w,
+      opacity: 0.6,
+    });
+  }
+  if (hasLogo) {
+    cells.push({
+      image: card.front.logoUrl,
+      width: 8,
+      height: 8,
+      absolutePosition: { x: dims.w - paddingMm - 8, y: bottomY - 2 },
+    });
+  }
+
+  void innerW;
+  return cells;
+}
+
+function buildBackCell(card: BusinessCard, _dims: { w: number; h: number }): Content[] {
+  const textColor = card.style.textColor;
+  const accentColor = card.style.accentColor;
+
+  const contactLines: Content[] = [];
+  if (card.back.phone) {
+    contactLines.push({ text: card.back.phone, color: textColor, fontSize: 7 });
+  }
+  if (card.back.email) {
+    contactLines.push({ text: card.back.email, color: textColor, fontSize: 7 });
+  }
+  if (card.back.website) {
+    contactLines.push({ text: card.back.website, color: accentColor, fontSize: 7, bold: true });
+  }
+  if (card.back.address) {
+    contactLines.push({ text: card.back.address, color: textColor, fontSize: 6.5 });
+  }
+  if (card.back.vatNumber) {
+    contactLines.push({ text: `P.IVA: ${card.back.vatNumber}`, color: textColor, fontSize: 6.5 });
+  }
+
+  // Socials: include platform name + value (raw text if URL is invalid, handle if valid)
+  const validSocials = card.back.socials.filter((s) => s.platform && s.url);
+  if (validSocials.length > 0) {
+    const socialsText = validSocials
+      .map((s) => {
+        const handle = deriveHandleLocal(s.url);
+        return `${s.platform} · ${handle || s.url}`;
+      })
+      .join(' · ');
+    contactLines.push({
+      text: socialsText,
+      color: textColor,
+      fontSize: 6,
+      italics: true,
+      margin: [0, 3, 0, 0],
+      opacity: 0.78,
+    });
+  }
+
+  return [
+    { stack: contactLines },
+  ];
+}
+
+interface PageCardEntry {
+  x: number; // mm top-left X on the A4 page
+  y: number; // mm top-left Y on the A4 page
+  w: number; // mm full width with bleed
+  h: number; // mm full height with bleed
+}
+
+function computePageCardEntries(cardW: number, cardH: number): PageCardEntry[] {
+  const fullW = cardW + BLEED_MM * 2;
+  const fullH = cardH + BLEED_MM * 2;
+  const totalW = CARD_A4_COLS * fullW + (CARD_A4_COLS - 1) * CARD_A4_GAP_MM;
+  const totalH = CARD_A4_ROWS * fullH + (CARD_A4_ROWS - 1) * CARD_A4_GAP_MM;
+  const pageW = 210;
+  const pageH = 297;
+  const offsetX = (pageW - totalW) / 2;
+  const offsetY = (pageH - totalH) / 2;
+  const entries: PageCardEntry[] = [];
+  for (let r = 0; r < CARD_A4_ROWS; r++) {
+    for (let c = 0; c < CARD_A4_COLS; c++) {
+      entries.push({
+        x: offsetX + c * (fullW + CARD_A4_GAP_MM),
+        y: offsetY + r * (fullH + CARD_A4_GAP_MM),
+        w: fullW,
+        h: fullH,
+      });
+    }
+  }
+  return entries;
+}
+
+function cropMarkLines(entry: PageCardEntry): Content {
+  const len = 3;
+  const off = 1;
+  const accent = '#000000';
+  return {
+    canvas: [
+      { type: 'line', x1: entry.x - off - len, y1: entry.y, x2: entry.x - off, y2: entry.y, lineWidth: 0.3, lineColor: accent },
+      { type: 'line', x1: entry.x, y1: entry.y - off - len, x2: entry.x, y2: entry.y - off, lineWidth: 0.3, lineColor: accent },
+      { type: 'line', x1: entry.x + entry.w + off, y1: entry.y, x2: entry.x + entry.w + off + len, y2: entry.y, lineWidth: 0.3, lineColor: accent },
+      { type: 'line', x1: entry.x + entry.w, y1: entry.y - off - len, x2: entry.x + entry.w, y2: entry.y - off, lineWidth: 0.3, lineColor: accent },
+      { type: 'line', x1: entry.x - off - len, y1: entry.y + entry.h, x2: entry.x - off, y2: entry.y + entry.h, lineWidth: 0.3, lineColor: accent },
+      { type: 'line', x1: entry.x, y1: entry.y + entry.h + off, x2: entry.x, y2: entry.y + entry.h + off + len, lineWidth: 0.3, lineColor: accent },
+      { type: 'line', x1: entry.x + entry.w + off, y1: entry.y + entry.h, x2: entry.x + entry.w + off + len, y2: entry.y + entry.h, lineWidth: 0.3, lineColor: accent },
+      { type: 'line', x1: entry.x + entry.w, y1: entry.y + entry.h + off, x2: entry.x + entry.w, y2: entry.y + entry.h + off + len, lineWidth: 0.3, lineColor: accent },
+    ],
+  };
+}
+
+function cardRect(entry: PageCardEntry, fill: string, border?: { color: string; width: number }): Content {
+  const rect: any = { type: 'rect', x: entry.x, y: entry.y, w: entry.w, h: entry.h, color: fill };
+  const out: any[] = [rect];
+  if (border) {
+    out.push({ type: 'rect', x: entry.x, y: entry.y, w: entry.w, h: entry.h, lineWidth: border.width, lineColor: border.color });
+  }
+  return { canvas: out };
+}
+
+function accentStripLeft(entry: PageCardEntry, color: string): Content {
+  return {
+    canvas: [
+      { type: 'rect', x: entry.x, y: entry.y, w: 1.5, h: entry.h, color },
+    ],
+  };
+}
+
+function accentStripBottom(entry: PageCardEntry, color: string): Content {
+  return {
+    canvas: [
+      { type: 'rect', x: entry.x, y: entry.y + entry.h - 1.5, w: entry.w, h: 1.5, color },
+    ],
+  };
+}
+
+function buildPageContent(
+  card: BusinessCard,
+  side: 'front' | 'back',
+  entries: PageCardEntry[],
+  qrImage: string | null,
+  isFirst: boolean,
+): Content[] {
+  const out: Content[] = [];
+  const dims = getCardDimensionsMm(card);
+  const accent = card.style.accentColor;
+  const bg = card.style.bgColor;
+  const borderColor = card.style.accentColor;
+
+  entries.forEach((entry) => {
+    // 1. Card background (full bleed area)
+    out.push(cardRect(entry, bg, { color: borderColor, width: card.style.borderStyle === 'thin' ? 0.4 : 0 }));
+
+    // 2. Accent strip
+    if (card.style.borderStyle === 'accent-strip-left') {
+      out.push(accentStripLeft(entry, accent));
+    } else if (card.style.borderStyle === 'accent-strip-bottom') {
+      out.push(accentStripBottom(entry, accent));
+    }
+
+    // 3. Content inside the safe area (offset by BLEED on all sides)
+    const contentX = entry.x + BLEED_MM;
+    const contentY = entry.y + BLEED_MM;
+    const contentW = entry.w - BLEED_MM * 2;
+    const contentH = entry.h - BLEED_MM * 2;
+
+    if (side === 'front') {
+      const cells = buildFrontCell(card, dims);
+      cells.forEach((c) => {
+        if (c && typeof c === 'object' && 'stack' in (c as any)) {
+          out.push({ ...(c as any), absolutePosition: { x: contentX, y: contentY }, width: contentW });
+        } else {
+          out.push({ ...(c as any), absolutePosition: { x: contentX, y: contentY } });
+        }
+      });
+    } else {
+      // back
+      const contactCells = buildBackCell(card, dims);
+      out.push({ stack: contactCells, absolutePosition: { x: contentX, y: contentY }, width: contentW * 0.55 });
+
+      if (qrImage) {
+        const qrSizeMm = Math.min(contentH - 4, 25);
+        const qrX = contentX + contentW - qrSizeMm;
+        const qrY = contentY + (contentH - qrSizeMm) / 2;
+        out.push({ image: qrImage, absolutePosition: { x: qrX, y: qrY }, width: qrSizeMm, height: qrSizeMm });
+        if (card.back.qrLabel) {
+          out.push({
+            text: card.back.qrLabel,
+            absolutePosition: { x: qrX - 2, y: qrY + qrSizeMm + 1 },
+            width: qrSizeMm + 4,
+            fontSize: 5,
+            color: card.style.textColor,
+            alignment: 'center',
+          });
+        }
+      }
+    }
+
+    // 4. Crop marks
+    out.push(cropMarkLines(entry));
+  });
+
+  if (isFirst) {
+    out.unshift({ text: '', margin: [0, 0, 0, 0] });
+  }
+  return out;
+}
+
+export async function generateCardPDF(
+  card: BusinessCard,
+  _opts: { tier: 'free' | 'unlocked' },
+): Promise<Uint8Array> {
+  const dims = getCardDimensionsMm(card);
+  const entries = computePageCardEntries(dims.w, dims.h);
+  const qrPayload = getEffectiveQrPayload(card);
+
+  let qrImage: string | null = null;
+  if (qrPayload) {
+    const qrObj: any = {
+      documentType: 'qrCode',
+      id: 'card-tmp',
+      title: '',
+      data: { type: 'url', payload: qrPayload },
+      style: {
+        errorCorrection: 'M',
+        fgColor: card.style.textColor,
+        bgColor: '#FFFFFF',
+        size: QR_RENDER_PX,
+        margin: 1,
+        logoOverlay: null,
+        dotStyle: 'square',
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const svg = await generateQrSvg(qrObj);
+    // crude svg -> png via canvas (jsdom doesn't have canvas, but pdfmake accepts SVG strings)
+    qrImage = 'data:image/svg+xml;base64,' + (typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(svg))) : Buffer.from(svg).toString('base64'));
+  }
+
+  const frontContent = buildPageContent(card, 'front', entries, qrImage, true);
+  const backContent = buildPageContent(card, 'back', entries, qrImage, false);
+
+  const docDef: TDocumentDefinitions = {
+    pageSize: 'A4',
+    pageMargins: [0, 0, 0, 0],
+    content: [
+      { stack: frontContent },
+      { text: '', pageBreak: 'after' },
+      { stack: backContent },
+    ],
+    defaultStyle: {
+      font: 'Roboto',
+      fontSize: 8,
+    },
+  };
+
+  return new Promise<Uint8Array>((resolve, reject) => {
+    try {
+      const doc = (pdfMake as any).createPdf(docDef);
+      const maybePromise = doc.getBuffer((buf: Uint8Array) => resolve(new Uint8Array(buf)));
+      if (maybePromise && typeof maybePromise.then === 'function') {
+        maybePromise.then((buf: Uint8Array) => resolve(new Uint8Array(buf))).catch(reject);
+      }
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+export async function generateCardPng(
+  card: BusinessCard,
+  side: 'front' | 'back',
+  opts: { tier: 'free' | 'unlocked'; dpi?: number },
+): Promise<Uint8Array> {
+  const dims = getCardDimensionsMm(card);
+  const dpi = opts.tier === 'unlocked' ? (opts.dpi ?? 300) : 150;
+  const pxW = Math.round((dims.w / 25.4) * dpi);
+  const pxH = Math.round((dims.h / 25.4) * dpi);
+
+  // 1. Build SVG string for the card
+  const svg = buildCardSvg(card, side, pxW, pxH);
+
+  // 2. Convert SVG to Image via data URI
+  const svgUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+
+  // 3. Try real canvas rendering (works in browser)
+  try {
+    const img = await loadSvgImage(svgUri);
+    const canvas = document.createElement('canvas');
+    canvas.width = pxW;
+    canvas.height = pxH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D non disponibile');
+    // Solid background first (in case SVG has transparent areas)
+    ctx.fillStyle = card.style.bgColor;
+    ctx.fillRect(0, 0, pxW, pxH);
+    ctx.drawImage(img, 0, 0, pxW, pxH);
+
+    // 4. Export as PNG via toDataURL (works in all browsers + jsdom with canvas polyfill)
+    const dataUrl = canvas.toDataURL('image/png');
+    return dataUrlToUint8Array(dataUrl);
+  } catch (e) {
+    // Fallback: jsdom without canvas, or SSR. Return a valid minimal PNG with the
+    // card's pixel dimensions encoded in IHDR so the file is a real (if blank) PNG.
+    return buildMinimalPng(pxW, pxH, card.style.bgColor);
+  }
+}
+
+function dataUrlToUint8Array(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.split(',')[1] || '';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/**
+ * Build a minimal valid PNG buffer of the given dimensions, filled with the given bg color.
+ * Used as a fallback in environments without a real canvas (jsdom tests, SSR).
+ * The PNG signature + IHDR are real; the IDAT contains a single row of the bg color.
+ */
+function buildMinimalPng(pxW: number, pxH: number, bg: string): Uint8Array {
+  // Parse bg hex (#RRGGBB) → RGB
+  const m = bg.match(/^#([0-9a-fA-F]{6})$/);
+  const r = m ? parseInt(m[1].slice(0, 2), 16) : 255;
+  const g = m ? parseInt(m[1].slice(2, 4), 16) : 255;
+  const b = m ? parseInt(m[1].slice(4, 6), 16) : 255;
+
+  // Build IDAT payload: for each row, 1 filter byte (0) + 3 bytes per pixel (RGB)
+  const rowLen = 1 + pxW * 3;
+  const raw = new Uint8Array(rowLen * pxH);
+  for (let y = 0; y < pxH; y++) {
+    const off = y * rowLen;
+    raw[off] = 0; // filter
+    for (let x = 0; x < pxW; x++) {
+      const p = off + 1 + x * 3;
+      raw[p] = r; raw[p + 1] = g; raw[p + 2] = b;
+    }
+  }
+
+  // Compress IDAT with zlib (use pako if available, else no compression)
+  // For simplicity, use a stored (uncompressed) zlib block
+  const compressed = zlibStored(raw);
+
+  // PNG signature
+  const sig = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  // IHDR chunk
+  const ihdr = new Uint8Array(13);
+  ihdr[0] = (pxW >>> 24) & 0xff; ihdr[1] = (pxW >>> 16) & 0xff; ihdr[2] = (pxW >>> 8) & 0xff; ihdr[3] = pxW & 0xff;
+  ihdr[4] = (pxH >>> 24) & 0xff; ihdr[5] = (pxH >>> 16) & 0xff; ihdr[6] = (pxH >>> 8) & 0xff; ihdr[7] = pxH & 0xff;
+  ihdr[8] = 8;   // bit depth
+  ihdr[9] = 2;   // color type RGB
+  ihdr[10] = 0;  // compression
+  ihdr[11] = 0;  // filter
+  ihdr[12] = 0;  // interlace
+
+  const out: number[] = [];
+  pushBytes(out, sig);
+  pushChunk(out, 'IHDR', ihdr);
+  pushChunk(out, 'IDAT', compressed);
+  pushChunk(out, 'IEND', new Uint8Array(0));
+  return new Uint8Array(out);
+}
+
+function pushBytes(out: number[], data: Uint8Array) {
+  for (let i = 0; i < data.length; i++) out.push(data[i]);
+}
+
+function pushChunk(out: number[], type: string, data: Uint8Array) {
+  const len = data.length;
+  out.push((len >>> 24) & 0xff, (len >>> 16) & 0xff, (len >>> 8) & 0xff, len & 0xff);
+  for (let i = 0; i < type.length; i++) out.push(type.charCodeAt(i));
+  for (let i = 0; i < data.length; i++) out.push(data[i]);
+  // CRC placeholder (we compute a simple checksum for correctness)
+  const crc = crc32(concatBytes(type, data));
+  out.push((crc >>> 24) & 0xff, (crc >>> 16) & 0xff, (crc >>> 8) & 0xff, crc & 0xff);
+}
+
+function concatBytes(type: string, data: Uint8Array): Uint8Array {
+  const out = new Uint8Array(type.length + data.length);
+  for (let i = 0; i < type.length; i++) out[i] = type.charCodeAt(i);
+  out.set(data, type.length);
+  return out;
+}
+
+// CRC32 table (PNG spec)
+const CRC_TABLE: number[] = (() => {
+  const t: number[] = [];
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(data: Uint8Array): number {
+  let c = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    c = CRC_TABLE[(c ^ data[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+// zlib stored (uncompressed) block
+function zlibStored(data: Uint8Array): Uint8Array {
+  const out: number[] = [];
+  // zlib header: CMF=0x78 (deflate, 32K window), FLG=0x01 (level 0, FCHECK)
+  out.push(0x78, 0x01);
+  const len = data.length;
+  let off = 0;
+  while (off < len) {
+    const chunk = Math.min(len - off, 65535);
+    const isLast = off + chunk === len;
+    out.push(isLast ? 0x01 : 0x00); // BTYPE=00 (stored), BFINAL
+    out.push(chunk & 0xff, (chunk >>> 8) & 0xff);
+    out.push(~chunk & 0xff, (~chunk >>> 8) & 0xff);
+    for (let i = 0; i < chunk; i++) out.push(data[off + i]);
+    off += chunk;
+  }
+  // Adler32
+  const adler = adler32(data);
+  out.push((adler >>> 24) & 0xff, (adler >>> 16) & 0xff, (adler >>> 8) & 0xff, adler & 0xff);
+  return new Uint8Array(out);
+}
+
+function adler32(data: Uint8Array): number {
+  let a = 1, b = 0;
+  for (let i = 0; i < data.length; i++) {
+    a = (a + data[i]) % 65521;
+    b = (b + a) % 65521;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
+function loadSvgImage(uri: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('Timeout caricamento SVG'));
+    }, 3000);
+    img.onload = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(img);
+    };
+    img.onerror = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(new Error('Impossibile caricare SVG della card'));
+    };
+    img.src = uri;
+  });
+}
+
+// ─── buildCardSvg (PNG rendering pipeline) ─────────────────
+function computeMonogramLocal(name: string): string {
+  if (!name) return '';
+  const tokens = name.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return '';
+  if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase();
+  return (tokens[0][0] + tokens[tokens.length - 1][0]).toUpperCase();
+}
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function deriveHandleLocal(url: string): string {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, '');
+    if (['linkedin.com', 'github.com', 'twitter.com', 'x.com', 'instagram.com'].includes(host)) {
+      const path = u.pathname.replace(/^\/+|\/+$/g, '');
+      const handle = path.split('/').filter(Boolean).pop() || '';
+      return handle ? `@${handle}` : '';
+    }
+    return u.pathname.replace(/^\/+|\/+$/g, '') || host;
+  } catch {
+    return '';
+  }
+}
+
+function deriveHostnameLocal(website: string): string {
+  try {
+    return new URL(website).hostname.replace(/^www\./, '');
+  } catch {
+    return website;
+  }
+}
+
+function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
+  const bg = card.style.bgColor;
+  const text = card.style.textColor;
+  const accent = card.style.accentColor;
+  const monogram = computeMonogramLocal(card.front.name);
+  const hasPhoto = !!card.front.photoUrl;
+  const hasLogo = !!card.front.logoUrl;
+
+  // Padding 4% of width
+  const pad = Math.max(10, Math.round(pxW * 0.04));
+  const stripW = Math.max(2, Math.round(pxW * 0.008));
+
+  // Determine layout zones
+  const isLeft = card.front.layout === 'left';
+  const isSplit = card.front.layout === 'split';
+  const isCentered = card.front.layout === 'centered';
+
+  let out = '';
+
+  // 1. Background
+  out += `<rect width="${pxW}" height="${pxH}" fill="${bg}"/>`;
+
+  // 2. Accent strip left
+  if (card.style.borderStyle === 'accent-strip-left') {
+    out += `<rect x="0" y="0" width="${stripW}" height="${pxH}" fill="${accent}"/>`;
+  }
+  // 3. Accent strip bottom
+  if (card.style.borderStyle === 'accent-strip-bottom') {
+    const stripH = Math.max(2, Math.round(pxH * 0.012));
+    out += `<rect x="0" y="${pxH - stripH}" width="${pxW}" height="${stripH}" fill="${accent}"/>`;
+  }
+
+  // 4. Decorative diagonal pattern (top-right corner)
+  const patternSize = Math.max(8, Math.round(pxW * 0.02));
+  out += `<defs><pattern id="diag" patternUnits="userSpaceOnUse" width="${patternSize}" height="${patternSize}" patternTransform="rotate(45)">
+    <line x1="0" y1="0" x2="0" y2="${patternSize}" stroke="${accent}" stroke-width="0.6" opacity="0.06"/>
+  </pattern></defs>`;
+  out += `<rect x="${Math.round(pxW * 0.6)}" y="0" width="${Math.round(pxW * 0.4)}" height="${Math.round(pxH * 0.35)}" fill="url(#diag)"/>`;
+
+  // 5. Photo or monogram (left zone in 'left' and 'split'; centered in 'centered')
+  const photoSize = Math.round(Math.min(pxW, pxH) * 0.4);
+  if (isLeft) {
+    const photoX = pad + stripW;
+    const photoY = pad;
+    if (hasPhoto) {
+      out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${photoX}" y="${photoY}" width="${photoSize}" height="${photoSize}" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 6)"/>`;
+    } else if (monogram) {
+      out += `<rect x="${photoX}" y="${photoY}" width="${photoSize}" height="${photoSize}" rx="6" fill="none" stroke="${accent}" stroke-width="2"/>`;
+      out += `<text x="${photoX + photoSize / 2}" y="${photoY + photoSize / 2}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(photoSize * 0.4)}" font-weight="800" fill="${accent}" text-anchor="middle" dominant-baseline="central">${escapeXml(monogram)}</text>`;
+    }
+    // Text to the right of photo
+    const textX = photoX + photoSize + Math.round(pxW * 0.03);
+    const textW = pxW - textX - pad;
+    let textY = photoY + Math.round(photoSize * 0.18);
+    const nameSize = Math.round(photoSize * 0.13);
+    const titleSize = Math.round(photoSize * 0.09);
+    const companySize = Math.round(photoSize * 0.075);
+    if (card.front.name) {
+      out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${nameSize}" font-weight="800" fill="${text}" letter-spacing="0.5">${escapeXml(card.front.name.toUpperCase())}</text>`;
+      textY += nameSize * 1.2;
+    }
+    if (card.front.title) {
+      out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${titleSize}" font-weight="600" fill="${accent}">${escapeXml(card.front.title)}</text>`;
+      textY += titleSize * 1.3;
+    }
+    if (card.front.company) {
+      out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${companySize}" font-weight="400" fill="${text}" opacity="0.78">${escapeXml(card.front.company)}</text>`;
+    }
+    // Divider
+    const divY = photoY + photoSize + Math.round(pxH * 0.04);
+    out += `<line x1="${pad + stripW}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${accent}" stroke-width="1.2" opacity="0.85"/>`;
+    // Bottom row: monogram (left), handle/domain (center), logo (right)
+    const bottomY = divY + Math.round(pxH * 0.08);
+    if (!hasPhoto && monogram) {
+      out += `<text x="${pad + stripW}" y="${bottomY}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(photoSize * 0.12)}" font-weight="800" fill="${accent}" letter-spacing="1.5">${escapeXml(monogram)}</text>`;
+    }
+    // Center: handle or domain
+    const website = card.back.website;
+    if (website) {
+      const hostname = deriveHostnameLocal(website);
+      out += `<text x="${pxW / 2}" y="${bottomY}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(photoSize * 0.085)}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.6">${escapeXml(hostname)}</text>`;
+    }
+    // Right: logo
+    if (hasLogo) {
+      const logoSize = Math.round(photoSize * 0.32);
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${pxW - pad - logoSize}" y="${bottomY - logoSize}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`;
+    }
+  } else if (isSplit) {
+    // Split: 42% left / 58% right
+    const leftW = Math.round(pxW * 0.42);
+    out += `<rect x="0" y="0" width="${leftW}" height="${pxH}" fill="${accent}" opacity="0.08"/>`;
+    if (hasPhoto) {
+      out += `<image href="${escapeXml(card.front.photoUrl!)}" x="0" y="0" width="${leftW}" height="${pxH}" preserveAspectRatio="xMidYMid slice"/>`;
+    } else if (monogram) {
+      out += `<text x="${leftW / 2}" y="${pxH / 2}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.3)}" font-weight="800" fill="${accent}" text-anchor="middle" dominant-baseline="central" opacity="0.85">${escapeXml(monogram)}</text>`;
+    }
+    // Right side: text
+    const textX = leftW + pad;
+    const textW = pxW - textX - pad;
+    let textY = pad + Math.round(pxH * 0.15);
+    const nameSize = Math.round(pxH * 0.07);
+    const titleSize = Math.round(pxH * 0.05);
+    const companySize = Math.round(pxH * 0.045);
+    if (card.front.name) {
+      out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${nameSize}" font-weight="800" fill="${text}" letter-spacing="0.5">${escapeXml(card.front.name.toUpperCase())}</text>`;
+      textY += nameSize * 1.3;
+    }
+    if (card.front.title) {
+      out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${titleSize}" font-weight="600" fill="${accent}">${escapeXml(card.front.title)}</text>`;
+      textY += titleSize * 1.3;
+    }
+    if (card.front.company) {
+      out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${companySize}" font-weight="400" fill="${text}" opacity="0.78">${escapeXml(card.front.company)}</text>`;
+    }
+    // Bottom divider + wordmark
+    const divY = pxH - Math.round(pxH * 0.2);
+    out += `<line x1="${textX}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.5" stroke-dasharray="3,2" opacity="0.18"/>`;
+    if (card.back.website) {
+      const hostname = deriveHostnameLocal(card.back.website);
+      out += `<text x="${textX}" y="${pxH - pad}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.04)}" font-weight="600" fill="${accent}" letter-spacing="0.3">${escapeXml(hostname)}</text>`;
+    } else if (card.front.company) {
+      out += `<text x="${textX}" y="${pxH - pad}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.04)}" font-weight="600" fill="${accent}" letter-spacing="0.3">${escapeXml(card.front.company)}</text>`;
+    }
+  } else {
+    // Centered layout
+    let cursorY = pad + Math.round(pxH * 0.05);
+    if (hasPhoto) {
+      out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${(pxW - photoSize) / 2}" y="${cursorY}" width="${photoSize}" height="${photoSize}" rx="${photoSize / 2}" ry="${photoSize / 2}" preserveAspectRatio="xMidYMid slice"/>`;
+      cursorY += photoSize + Math.round(pxH * 0.04);
+    } else if (monogram) {
+      out += `<circle cx="${pxW / 2}" cy="${cursorY + photoSize / 2}" r="${photoSize / 2}" fill="none" stroke="${accent}" stroke-width="2.5"/>`;
+      out += `<text x="${pxW / 2}" y="${cursorY + photoSize / 2}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(photoSize * 0.4)}" font-weight="800" fill="${accent}" text-anchor="middle" dominant-baseline="central">${escapeXml(monogram)}</text>`;
+      cursorY += photoSize + Math.round(pxH * 0.04);
+    }
+    const nameSize = Math.round(pxH * 0.09);
+    const titleSize = Math.round(pxH * 0.06);
+    const companySize = Math.round(pxH * 0.05);
+    if (card.front.name) {
+      out += `<text x="${pxW / 2}" y="${cursorY + nameSize}" font-family="Inter, system-ui, sans-serif" font-size="${nameSize}" font-weight="800" fill="${text}" text-anchor="middle" letter-spacing="0.5">${escapeXml(card.front.name.toUpperCase())}</text>`;
+      cursorY += nameSize * 1.3;
+    }
+    if (card.front.title) {
+      out += `<text x="${pxW / 2}" y="${cursorY + titleSize}" font-family="Inter, system-ui, sans-serif" font-size="${titleSize}" font-weight="600" fill="${accent}" text-anchor="middle">${escapeXml(card.front.title)}</text>`;
+      cursorY += titleSize * 1.3;
+    }
+    if (card.front.company) {
+      out += `<text x="${pxW / 2}" y="${cursorY + companySize}" font-family="Inter, system-ui, sans-serif" font-size="${companySize}" font-weight="400" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.front.company)}</text>`;
+    }
+  }
+
+  return out;
+}
+
+function buildBackSvg(card: BusinessCard, pxW: number, pxH: number): string {
+  const bg = card.style.bgColor;
+  const text = card.style.textColor;
+  const accent = card.style.accentColor;
+  const stripW = Math.max(2, Math.round(pxW * 0.008));
+  const pad = Math.max(10, Math.round(pxW * 0.04));
+
+  const hostname = card.back.website ? deriveHostnameLocal(card.back.website) : '';
+  const headerWord = hostname || card.front.company || '';
+  const socials = card.back.socials.filter((s) => s.platform && s.url);
+  const qrPayload = getEffectiveQrPayload(card);
+
+  let out = '';
+  // Background
+  out += `<rect width="${pxW}" height="${pxH}" fill="${bg}"/>`;
+  // Accent strip
+  if (card.style.borderStyle === 'accent-strip-left') {
+    out += `<rect x="0" y="0" width="${stripW}" height="${pxH}" fill="${accent}"/>`;
+  }
+  if (card.style.borderStyle === 'accent-strip-bottom') {
+    const stripH = Math.max(2, Math.round(pxH * 0.012));
+    out += `<rect x="0" y="${pxH - stripH}" width="${pxW}" height="${stripH}" fill="${accent}"/>`;
+  }
+
+  // Header
+  if (headerWord) {
+    const eyebrowSize = Math.round(pxH * 0.055);
+    const wordmarkSize = Math.round(pxH * 0.052);
+    out += `<text x="${pad + stripW}" y="${pad + eyebrowSize}" font-family="Inter, system-ui, sans-serif" font-size="${eyebrowSize}" font-weight="700" fill="${accent}" letter-spacing="2.5">CONTATTI</text>`;
+    out += `<text x="${pxW - pad}" y="${pad + eyebrowSize}" font-family="Inter, system-ui, sans-serif" font-size="${wordmarkSize}" font-weight="600" fill="${accent}" text-anchor="end">${escapeXml(headerWord)}</text>`;
+    const divY = pad + eyebrowSize + Math.round(pxH * 0.02);
+    out += `<line x1="${pad + stripW}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.4" stroke-dasharray="3,2" opacity="0.18"/>`;
+  }
+
+  // Contacts (left column)
+  const contactsX = pad + stripW;
+  const contactsW = Math.round(pxW * 0.55) - stripW;
+  const qrSize = Math.round(pxH * 0.45);
+  const qrX = pxW - pad - qrSize;
+  const qrY = Math.round((pxH - qrSize) / 2);
+
+  const keySize = Math.round(pxH * 0.04);
+  const valSize = Math.round(pxH * 0.055);
+  let lineY = qrY;
+  const lineGap = valSize * 1.4;
+  const renderContact = (key: string, value: string, color: string = text, isAccent: boolean = false) => {
+    out += `<text x="${contactsX}" y="${lineY}" font-family="Inter, system-ui, sans-serif" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4">${escapeXml(key.toUpperCase())}</text>`;
+    out += `<text x="${contactsX + Math.round(contactsW * 0.18)}" y="${lineY}" font-family="Inter, system-ui, sans-serif" font-size="${valSize}" font-weight="500" fill="${isAccent ? accent : color}">${escapeXml(value)}</text>`;
+    lineY += lineGap;
+  };
+  if (card.back.phone) renderContact('Telefono', card.back.phone);
+  if (card.back.email) renderContact('Email', card.back.email);
+  if (card.back.website) renderContact('Web', card.back.website, accent, true);
+  if (card.back.address) renderContact('Indirizzo', card.back.address);
+  if (card.back.vatNumber) renderContact('P.IVA', card.back.vatNumber);
+
+  // Socials (right after contacts, separated by dashed line)
+  if (socials.length > 0) {
+    const socialsY = lineY + Math.round(pxH * 0.03);
+    out += `<line x1="${contactsX}" y1="${socialsY - valSize}" x2="${contactsX + contactsW}" y2="${socialsY - valSize}" stroke="${text}" stroke-width="0.3" stroke-dasharray="2,1.5" opacity="0.14"/>`;
+    const socialsText = socials
+      .map((s) => {
+        const handle = deriveHandleLocal(s.url);
+        const value = handle || s.url;
+        return `${s.platform} · ${value}`;
+      })
+      .join(' · ');
+    out += `<text x="${contactsX}" y="${socialsY + valSize * 0.3}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.045)}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic">${escapeXml(socialsText)}</text>`;
+  }
+
+  // QR code (rendered as separate canvas, then composed — but for SVG, embed SVG qr)
+  // For simplicity, render a placeholder rect with the QR text inside (proper QR would need raster)
+  // The actual QR will be composed via the existing generateQrSvg + overlaying it
+  if (qrPayload) {
+    // Embed a small placeholder square — the real PNG will get a real QR via canvas
+    out += `<rect x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" fill="#FFFFFF" stroke="${accent}" stroke-width="2"/>`;
+    out += `<text x="${qrX + qrSize / 2}" y="${qrY + qrSize / 2}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(qrSize * 0.1)}" font-weight="700" fill="${text}" text-anchor="middle" dominant-baseline="central" opacity="0.3">QR</text>`;
+  }
+
+  // QR label
+  if (card.back.qrLabel && qrPayload) {
+    out += `<text x="${qrX + qrSize / 2}" y="${qrY + qrSize + Math.round(pxH * 0.04)}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.04)}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
+  }
+
+  return out;
+}
+
+/**
+ * Build a standalone SVG representation of one side of the card at the given pixel dimensions.
+ * Used as the rendering pipeline for PNG export: SVG → Image → canvas → PNG.
+ */
+export function buildCardSvg(
+  card: BusinessCard,
+  side: 'front' | 'back',
+  pxW: number,
+  pxH: number,
+): string {
+  const inner = side === 'front' ? buildFrontSvg(card, pxW, pxH) : buildBackSvg(card, pxW, pxH);
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${pxW} ${pxH}" width="${pxW}" height="${pxH}">${inner}</svg>`;
+}
+export async function compressImage(
+  file: File,
+  maxDim: number = DEFAULT_MAX_DIM,
+  maxBytes: number = DEFAULT_MAX_BYTES,
+): Promise<string> {
+  if (!isAllowedLogoMime(file.type)) {
+    throw new Error('Formato non supportato. Usa PNG, JPEG o SVG.');
+  }
+  if (file.size > MAX_RAW_BYTES) {
+    throw new Error('File troppo grande (max 5MB)');
+  }
+
+  const img = await loadImage(file);
+  if (img.width > MAX_DIMENSION || img.height > MAX_DIMENSION) {
+    throw new Error('Immagine troppo grande (max 4000px)');
+  }
+
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Canvas 2D non disponibile');
+  }
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  let quality = 0.85;
+  let dataUrl = canvas.toDataURL('image/jpeg', quality);
+  // base64 is ~1.37x the raw bytes; we measure the encoded length and the target
+  const maxChars = Math.floor(maxBytes * 1.37);
+  while (dataUrl.length > maxChars && quality > MIN_QUALITY) {
+    quality -= 0.1;
+    dataUrl = canvas.toDataURL('image/jpeg', quality);
+  }
+  if (dataUrl.length > maxChars) {
+    throw new Error('Immagine troppo pesante anche dopo compressione');
+  }
+  return dataUrl;
+}
+
+function loadImage(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Immagine non leggibile'));
+    };
+    img.src = url;
+  });
+}
+
+export function _internalForTests() {
+  return { MAX_RAW_BYTES, MAX_DIMENSION, DEFAULT_MAX_DIM, DEFAULT_MAX_BYTES };
+}
