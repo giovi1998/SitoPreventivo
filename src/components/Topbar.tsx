@@ -47,7 +47,11 @@ export default function Topbar({
     editor: { kicker: 'Editor operativo', title: 'Editor preventivo' },
     admin: { kicker: 'Pannello di controllo', title: 'Admin' },
     settings: { kicker: 'Gestione credenziali', title: 'Impostazioni' },
-    collection: { kicker: 'Raccolta preventivi', title: 'Collection' },
+    collection: { kicker: 'Raccolta documenti', title: 'Collection' },
+    card: { kicker: 'Bigliettino da visita', title: 'Bigliettini' },
+    qr: { kicker: 'Generatore QR Code', title: 'QR Code' },
+    flyer: { kicker: 'Volantino / Locandina', title: 'Volantini' },
+    logo: { kicker: 'Logo Builder', title: 'Logo' },
   };
   const current = titles[view] || titles.collection;
 

@@ -70,4 +70,28 @@ describe('Topbar save-status during AI processing', () => {
     expect(screen.getByText(/Non salvato/)).toBeInTheDocument();
     expect(screen.queryByText('AI in corso, salvataggio sospeso')).not.toBeInTheDocument();
   });
+
+  it('shows "Bigliettini" title when view=card (not "Collection")', () => {
+    render(<Topbar {...baseProps} view="card" isDirty={false} />);
+    expect(screen.getByRole('heading', { name: 'Bigliettini' })).toBeInTheDocument();
+    expect(screen.getByText('Bigliettino da visita')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Collection' })).not.toBeInTheDocument();
+  });
+
+  it('shows "QR Code" title when view=qr', () => {
+    render(<Topbar {...baseProps} view="qr" isDirty={false} />);
+    expect(screen.getByRole('heading', { name: 'QR Code' })).toBeInTheDocument();
+    expect(screen.getByText('Generatore QR Code')).toBeInTheDocument();
+  });
+
+  it('shows "Collection" title when view=collection', () => {
+    render(<Topbar {...baseProps} view="collection" isDirty={false} />);
+    expect(screen.getByRole('heading', { name: 'Collection' })).toBeInTheDocument();
+    expect(screen.getByText('Raccolta documenti')).toBeInTheDocument();
+  });
+
+  it('falls back to Collection title for unknown view', () => {
+    render(<Topbar {...baseProps} view="unknown-thing" isDirty={false} />);
+    expect(screen.getByRole('heading', { name: 'Collection' })).toBeInTheDocument();
+  });
 });
