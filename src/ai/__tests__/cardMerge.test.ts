@@ -135,4 +135,226 @@ describe('mergeCardAIResponse', () => {
     expect(merged.grid?.elements.photo).toEqual({ x: 0, y: 0, w: 2, h: 2 });
     expect(changes.some((c) => c.includes('photo'))).toBe(true);
   });
+
+  it('merges grid.elements.logo position (Phase 2.1: logo is grid-editable)', () => {
+    const card = createEmptyCard();
+    const { card: merged, changes } = mergeCardAIResponse(card, {
+      grid: {
+        elements: {
+          logo: { x: 2, y: 3, w: 1, h: 1 },
+        },
+      },
+    });
+    expect(merged.grid?.elements.logo).toEqual({ x: 2, y: 3, w: 1, h: 1 });
+    expect(changes.some((c) => c.includes('logo'))).toBe(true);
+  });
+
+  it('AI grid move that would collide is sanitized to nearest valid position (BLOCK + clamp)', () => {
+    const card = createEmptyCard();
+    card.grid = {
+      cols: 4,
+      rows: 4,
+      elements: {
+        photo: { x: 0, y: 0, w: 1, h: 4 },
+        name: { x: 1, y: 1, w: 3, h: 1 },
+        title: { x: 1, y: 2, w: 3, h: 1 },
+      },
+    };
+    // AI prova a spostare name a x=0 (colliderebbe con photo)
+    const { card: merged } = mergeCardAIResponse(card, {
+      grid: {
+        elements: {
+          name: { x: 0, y: 1, w: 3, h: 1 },
+        },
+      },
+    });
+    // Il merge deve sanitizzare: x resta 1 (no collisione)
+    expect(merged.grid?.elements.name?.x).toBe(1);
+  });
+
+  it('AI grid resize that would collide is sanitized to nearest valid size', () => {
+    const card = createEmptyCard();
+    card.grid = {
+      cols: 4,
+      rows: 4,
+      elements: {
+        photo: { x: 0, y: 0, w: 1, h: 4 },
+        name: { x: 1, y: 0, w: 1, h: 1 },
+        title: { x: 1, y: 1, w: 1, h: 1 },
+      },
+    };
+    // AI prova a ingrandire name a w=3, h=3 (colliderebbe con title)
+    const { card: merged } = mergeCardAIResponse(card, {
+      grid: {
+        elements: {
+          name: { x: 1, y: 0, w: 3, h: 3 },
+        },
+      },
+    });
+    // size sanificata a w=1, h=1 (no collisione)
+    expect(merged.grid?.elements.name?.w).toBe(1);
+    expect(merged.grid?.elements.name?.h).toBe(1);
+  });
+
+  // ─── Bug "Rendi premium" regression (Phase 2.1) ────────────────
+  describe('AI hallucination protection (Phase 2.1)', () => {
+    it('strips unknown fields like "visible" (Zod schema enforcement)', () => {
+      // L'AI spesso inventa campi tipo `visible`, `enabled`, ecc. che non
+      // esistono nello schema. Zod li strippa automaticamente.
+      const card = createGiovanniCardTemplate();
+      const { card: merged } = mergeCardAIResponse(card, {
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            photo: { x: 0, y: 0, w: 1, h: 1, visible: false },
+          } as never,
+        },
+      });
+      // photo NON è stato modificato (visible non è nel GridRect valido)
+      // Inoltre, con `visible: false`, photo non viene toccato perché non
+      // è un campo riconosciuto.
+      const photoEl = merged.grid?.elements.photo;
+      if (photoEl) {
+        expect(photoEl).not.toHaveProperty('visible');
+      }
+    });
+
+    it('does NOT clear back fields with empty string (preserves user data)', () => {
+      const card = createGiovanniCardTemplate();
+      // card.back ha phone/email="XXXXX" e website=URL
+      const { card: merged } = mergeCardAIResponse(card, {
+        back: {
+          phone: '',
+          email: '',
+          website: '',
+          qrPayload: '',
+          qrLabel: '',
+        },
+      });
+      // Nessun campo back deve essere stato sovrascritto
+      expect(merged.back.phone).toBe('XXXXX');
+      expect(merged.back.email).toBe('XXXXX');
+      expect(merged.back.website).toBe('https://webdeveloperca.netlify.app/');
+      expect(merged.back.qrPayload).toBe('https://webdeveloperca.netlify.app/');
+      expect(merged.back.qrLabel).toBe('Scansiona per visitare il mio sito');
+    });
+
+    it('does NOT clear socials with empty array (preserves existing)', () => {
+      const card = createGiovanniCardTemplate();
+      // card.back.socials ha 2 elementi (LinkedIn, GitHub)
+      const { card: merged } = mergeCardAIResponse(card, {
+        back: { socials: [] as never },
+      });
+      expect(merged.back.socials).toHaveLength(2);
+      expect(merged.back.socials[0].platform).toBe('LinkedIn');
+    });
+
+    it('detects AI hallucination: all back elements at (0,0,1,1) is rejected', () => {
+      // Caso reale: AI "Rendi premium" ha inviato TUTTI gli elementi del
+      // back a (0,0,1,1) — segnale di output casuale. Il merge deve
+      // skippare le modifiche grid e preservare la backGrid corrente.
+      const card = createGiovanniCardTemplate();
+      const originalBackGrid = JSON.parse(JSON.stringify(card.backGrid));
+      const { card: merged } = mergeCardAIResponse(card, {
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            qr: { x: 0, y: 0, w: 1, h: 1, visible: false },
+            contacts: { x: 0, y: 0, w: 1, h: 1, visible: false },
+            socials: { x: 0, y: 0, w: 1, h: 1, visible: false },
+          } as never,
+        },
+      });
+      // La backGrid corrente deve essere preservata
+      expect(merged.backGrid).toEqual(originalBackGrid);
+    });
+
+    it('AI cannot clear user-uploaded photoUrl/logoUrl even with empty string', () => {
+      const card = createGiovanniCardTemplate();
+      // card.front.photoUrl = '/giovanni-photo.jpg' (utente)
+      // card.front.logoUrl = data:image/svg+xml... (utente)
+      const { card: merged } = mergeCardAIResponse(card, {
+        front: {
+          photoUrl: '',
+          logoUrl: null,
+        } as never,
+      });
+      expect(merged.front.photoUrl).toBe('/giovanni-photo.jpg');
+      expect(merged.front.logoUrl).toMatch(/^data:image\/svg\+xml/);
+    });
+
+    it('full "Rendi premium" attack vector: AI tries to clear everything', () => {
+      // Caso reale: AI "Rendi premium" con tutti i bug insieme.
+      const card = createGiovanniCardTemplate();
+      const originalCard = JSON.parse(JSON.stringify(card));
+      const { card: merged, changes } = mergeCardAIResponse(card, {
+        front: {
+          name: 'GIOVANNI CIDU',
+          title: 'Web Developer',
+          company: 'HPE CDS',
+          photoUrl: '',
+          logoUrl: '',
+          layout: 'centered',
+        },
+        back: {
+          phone: '',
+          email: '',
+          website: '',
+          address: '',
+          vatNumber: '',
+          socials: [],
+          qrPayload: '',
+          qrLabel: '',
+        },
+        style: {
+          sizePreset: 'eu-85x55',
+          bgColor: '#FFFFFF',
+          textColor: '#1a1a2e',
+          accentColor: '#1e3a5f',
+          fontFamily: 'Inter',
+          borderStyle: 'accent-strip-left',
+        },
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            photo: { x: 0, y: 0, w: 1, h: 1, visible: false },
+            name: { x: 0, y: 0, w: 4, h: 2 },
+            title: { x: 0, y: 2, w: 4, h: 1 },
+            company: { x: 0, y: 3, w: 4, h: 1 },
+            logo: { x: 3, y: 3, w: 1, h: 1, visible: false },
+            qr: { x: 0, y: 0, w: 1, h: 1, visible: false },
+            contacts: { x: 0, y: 0, w: 1, h: 1, visible: false },
+            socials: { x: 0, y: 0, w: 1, h: 1, visible: false },
+          } as never,
+        },
+      });
+      // User data preservato
+      expect(merged.front.photoUrl).toBe('/giovanni-photo.jpg');
+      expect(merged.front.logoUrl).toMatch(/^data:image\/svg\+xml/);
+      expect(merged.back.phone).toBe('XXXXX');
+      expect(merged.back.email).toBe('XXXXX');
+      expect(merged.back.website).toBe('https://webdeveloperca.netlify.app/');
+      expect(merged.back.socials).toHaveLength(2);
+      expect(merged.back.qrPayload).toBe('https://webdeveloperca.netlify.app/');
+      // Modifiche accettate: solo style
+      expect(merged.style.accentColor).toBe('#1e3a5f');
+      expect(merged.style.fontFamily).toBe('Inter');
+      expect(merged.style.borderStyle).toBe('accent-strip-left');
+      // Modifiche accettate: layout (era 'split', AI dice 'centered', ma
+      // poiché l'AI ha cancellato photoUrl, il layout dovrebbe restare 'split'.
+      // Tuttavia la nostra protezione photoUrl non influisce sul layout —
+      // l'AI esplicitamente dice 'centered' e noi lo accettiamo.
+      // NOTA: questo è un trade-off: proteggiamo photoUrl ma non blocchiamo
+      // il layout se l'AI lo cambia esplicitamente. L'utente può riapplicare
+      // il template Giovanni per ripristinare 'split'.
+      expect(merged.front.layout).toBe('centered');
+      // Back grid invariato (hallucination detection)
+      expect(merged.backGrid).toEqual(originalCard.backGrid);
+      // Changes tracciate
+      expect(changes.length).toBeGreaterThan(0);
+    });
+  });
 });
