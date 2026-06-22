@@ -15,6 +15,7 @@ import { tryCatch } from './src/utils/errors';
 const CollectionView = lazy(() => import('./src/components/CollectionView'));
 const AdminDashboard = lazy(() => import('./src/pages/AdminDashboard'));
 const QREditor = lazy(() => import('./src/components/QREditor'));
+const CardEditor = lazy(() => import('./src/components/CardEditor'));
 import SettingsPage from './src/pages/SettingsPage';
 import CollectionViewSkeleton from './src/components/CollectionViewSkeleton';
 import SaveDialog from './src/components/SaveDialog';
@@ -533,6 +534,14 @@ export default function App() {
         ) : view === "qr" ? (
           <Suspense fallback={<div className="view-loading"><div className="spinner" /></div>}>
             <QREditor userEmail={user?.email || ''} />
+          </Suspense>
+        ) : view === "card" ? (
+          <Suspense fallback={<div className="view-loading"><div className="spinner" /></div>}>
+            <CardEditor
+              userEmail={user?.email || ''}
+              documentTheme={documentTheme}
+              tier={user?.role === 'admin' ? 'unlocked' : 'free'}
+            />
           </Suspense>
         ) : view === "editor" ? (
           <EditorView
