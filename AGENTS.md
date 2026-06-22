@@ -50,6 +50,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/utils/cardGenerator.ts` | Card PDF/PNG/SVG export + `buildCardSvg` |
 | `src/utils/qrGenerator.ts` | QR Code SVG/PNG generation (`qrcode` lib) |
 | `src/utils/documentSchemas.ts` | Zod schema: quote, QR, businessCard, cardGrid + presets |
+| `src/utils/gridUtils.ts` | Grid collision helpers (BLOCK su sovrapposizione, edge bounds) |
 | `src/components/CardEditor.tsx` | Editor bigliettini: 3-col desktop / tabs mobile, FAB AI, zoom |
 | `src/components/CardPreview.tsx` | Anteprima card: flexbox + CSS Grid mode (grid-based rendering) |
 | `src/components/QREditor.tsx` | Generatore QR Code (7 tipi, stili, logo overlay) |
@@ -99,6 +100,181 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 - **Export**: SVG (vettoriale), PNG (raster)
 - **Auto-save**: in collection come documento `qrCode`
 - **Validazione**: contrasto fg/bg, PII check (WiFi password non loggata)
+
+## Phase Status & Roadmap
+
+Stato corrente delle fasi di sviluppo (commit di riferimento: `126c9d1`).
+
+| Fase | Stato | Spec | Note |
+|------|-------|------|------|
+| 0 — Auto-save fix | ✅ done | `spec/spec-process-phase0-autosave-fix.md` | — |
+| 1 — QR Code | ✅ done | `spec/spec-tool-phase1-qr-code.md` | — |
+| 2 — Business Card | ✅ done (2.1 polish) | `spec/spec-design-phase2-business-card.md` | AI module incluso, fix 2.1 in [Known Issues — Card](#known-issues--card-module) |
+| 3 — Volantino | ⏭️ **SKIPPED** | `spec/spec-design-phase3-flyer.md` | Vedi nota skip sotto |
+| 4 — Logo SVG Builder | ✅ done | `spec/spec-tool-phase4-logo-builder.md` | v1 senza AI (Replicate deferred a v2/Pro). Tab "AI Generation" disabilitato con messaggio. |
+| 5 — Tier System | ⏳ pending | `spec/spec-data-phase5-tier-system.md` | Da rivalutare post-fase 4 |
+| 6 — Unified Collection | ⏳ pending | `spec/spec-architecture-phase6-unified-collection.md` | — |
+| 7 — Polish | ⏳ pending | `spec/spec-process-phase7-polish.md` | — |
+
+### ⏭️ Skip fase 3 (Volantino)
+
+**Decisione**: la fase 3 (`spec/spec-design-phase3-flyer.md`) viene
+**saltata** e si passa direttamente alla fase 4 (Logo Builder).
+
+**Motivazione** (riassunto della sezione "Rationale & Context" della
+spec fase 4, vedi `spec/spec-tool-phase4-logo-builder.md` §7):
+
+1. **Vercel Hobby = timeout 10s.** L'endpoint AI nuovo
+   `POST /ai/copy-flyer` (richiesto dalla fase 3 per la copy AI del
+   volantino) e Replicate-vector per la fase 4 hanno entrambi latenze
+   incompatibili con il piano Hobby.
+2. **Priorità al logo**: il logo è input di fase 2 (card `front.logoUrl`)
+   e input futuro di fase 3 (quando ripresa). Senza logo builder,
+   l'utente carica SVG custom con qualità incerta.
+3. **Bundle size**: il volantino aggiunge dipendenze pesanti (PDF
+   4 layout A4/A5) il cui valore si realizza solo in flussi
+   commerciali maturi (richiede tier system = fase 5).
+4. **Fase 4 = zero dipendenze AI**: SVG builder templated, output
+   editabile, qualità deterministica, costo AI zero. Si può completare
+   in v1; AI logo (Replicate) è deferred a v2 con Vercel Pro.
+5. **Nessuna regressione**: la fase 3 presuppone dati logo (input
+   visual); partire dal logo significa che, *se* in futuro la fase 3
+   verrà ripresa, troverà il builder già maturo.
+
+**Conseguenze**:
+- Schema `flyerSchema` non viene aggiunto in v1.
+- Endpoint `POST /ai/copy-flyer` non esiste in v1.
+- Voce sidebar "Volantini" non viene aggiunta.
+- Le sezioni delle spec fasi 5/6/7 che si riferiscono al flyer
+  restano valide (estensione futura), ma non bloccanti.
+
+**Quando riprendere la fase 3**: dopo che il logo builder è in
+produzione e l'utente ha loghi reali da inserire nei volantini. La
+spec `spec-design-phase3-flyer.md` va riveduta perché il contesto
+sarà cambiato.
+
+## Logo Builder Module (fase 4, in progress)
+
+- **SVG builder templated**, no AI nella v1. Tab "AI Generation"
+  disabilitato con messaggio esplicito (placeholder per v2 con
+  Replicate).
+- **Icone**: libreria `lucide-react` ^0.395.0, allowlist 48 nomi
+  pre-filtrati (food/tech/fashion/business). Validazione lato
+  generatore (no injection).
+- **4 template per settore**: tech, food, fashion, professionista.
+- **3 layout**: horizontal, vertical, stacked.
+- **Export**: SVG (Blob download), PNG 512/1024/2048 (canvas pipeline).
+- **Sicurezza**: escape XML su `primaryText`/`tagline`, sanitize SVG
+  via `DOMParser`+`XMLSerializer` prima di `dangerouslySetInnerHTML`,
+  regex `#RRGGBB` per i colori.
+- **Pattern riusati**: schema Zod in `documentSchemas.ts`, salvataggio
+  via `dataService.saveDocument` con `documentType='logo'`, lazy-load
+  componente in `App.tsx`.
+
+## Known Issues — Card Module (fase 2)
+
+**Stato (post fase 2.1)**: la maggior parte dei problemi noti è stata
+risolta. Restano aperte due questioni di scope minore (UX mobile +
+persistenza selezione grid). Tutti i bug bloccanti sono chiusi.
+
+### ✅ Risolto in fase 2.1: collision detection BLOCK
+
+Helper `src/utils/gridUtils.ts` con `collides/wouldCollideOnMove/
+wouldCollideOnResize/canMove/canResize/clampMove/clampResize`. Usato da:
+
+- `CardEditor.tsx` (desktop) — `moveSelectedElement` e `resizeSelectedElement`
+  clampano alla posizione valida più vicina; bottoni frecce
+  disabilitati in entrambi i casi (edge + collisione).
+- `MobileGridEditor.tsx` (mobile) — `move()` delega a `clampMove`;
+  frecce popup con `title="Limite (collisione)"` se il blocco è per
+  sovrapposizione, altrimenti "Limite raggiunto".
+- `cardMerge.ts` (AI) — `clampMove`/`clampResize` sanificano la mossa
+  richiesta dall'AI prima di applicarla, così l'AI non può generare
+  grid con elementi sovrapposti. Il system prompt
+  (`src/ai/prompts/cardSystem.ts`) è stato esteso con regole
+  esplicite anti-collisione e la lista elementi aggiornata con `logo`.
+
+25 unit test in `gridUtils.test.ts` + 4 nuovi test in `cardMerge.test.ts`
+(logo merge, AI move→clamp, AI resize→clamp).
+
+### ✅ Risolto in fase 2.1: logo in grid mode
+
+`cardGridSchema.elements` ora include `logo` (opzionale). I tre preset
+hanno una posizione di default sensata:
+
+- `gridPresetLeft`: company ridotto a 2-col, logo a `(3, 2, 1, 2)`.
+- `gridPresetCentered`: company ridotto a 3-col, logo a `(3, 3, 1, 1)`.
+- `gridPresetSplit`: contacts ridotto a 2-col, qr a `(2, 2, 1, 2)`,
+  logo a `(3, 2, 1, 2)`.
+
+`MobileGridEditor.ELEMENT_OPTIONS` ora include `Logo`. `CardEditor`
+dropdown ha `logo` tra le opzioni selezionabili.
+
+### ✅ Risolto in fase 2.1: logo ~30% della card
+
+- CSS (preview/React): `card-logo` 60→100px, `.centered` 76→125px,
+  `.split` 64→110px.
+- Export SVG (`cardGenerator.ts buildFrontSvg`): left
+  `photoSize * 0.32` → `0.48`; split `pxH * 0.12` → `0.20`; centered
+  aggiunto (sotto al company, `pxH * 0.20`).
+- Export PDF (`cardGenerator.ts buildFrontCell`): `Math.min(14, ...)`
+  → `Math.min(25, dims.w * 0.30)`. Logo in mm: ~25mm su 85mm = ~29%.
+- Aggiunto logo al `buildFrontSvg` per layout `centered` (prima
+  mancante anche lì).
+
+### ✅ Risolto in fase 2.1: QR preview/export coerenti
+
+`generateQrSvg` è ora **sincrono** (era `Promise<string>`). La
+`useEffect` async in `CardPreview` rimossa: QR renderizzato
+immediatamente al primo render. Anche il placeholder "QR" è
+migliorato e mostra il QR reale appena la promise risolve (subito,
+in pratica).
+
+### ✅ Risolto in fase 2.1: buildFrontSvg split senza logo
+
+Prima della fase 2.1 il logo **non veniva renderizzato** in split
+layout. Aggiunto `<image>` per il logo a `(textX, logoY)` con size
+proporzionale. Vedi `cardGenerator.ts:761-765` (pxH*0.20).
+
+### ✅ Risolto in fase 2.1: hostname ridondante rimosso dal front
+
+In `buildFrontSvg` (left/centered) e `buildFrontCell` (PDF) il
+`hostname` non viene più mostrato sotto la foto quando è già
+presente il QR code nel retro. Vedi `CardPreview.tsx` WEB row
+condition `card.back.website && !qrPayload`.
+
+### ✅ Risolto in fase 2.1: template Giovanni completo
+
+`createGiovanniCardTemplate()` ora ha:
+
+- `layout: 'split'` (foto a sinistra full-height)
+- `photoUrl: '/giovanni-photo.jpg'` (foto utente in `public/`)
+- `logoUrl: giovanniLogoDataUri()` (SVG trasparente "WebdevCA")
+- `qrPayload: GIOVANNI_PERSONAL_URL` (QR punta al sito)
+- `company: 'HPE CDS'`
+- `grid` preconfigurato con photo a sx full-height e text/logo a dx
+
+### ⏳ Aperto (scope minore, non bloccante)
+
+- **Mobile grid editor — drag-and-drop**: `MobileGridEditor` usa
+  frecce ←↑→↓ + +/−. Su schermi piccoli le 4 direzioni × 2 resize × N
+  elementi diventano molti tap. Valutare drag-and-drop diretto.
+- **Selezione elemento persistente**: `selectedGridElement` è
+  `useState` locale in CardEditor. Cambiare tab (es. AI) e tornare
+  deseleziona. Fix: persistere in `card.selectedGridElement` o alzare
+  a `useState` in AppShell.
+- **CardPreview test su QR jsdom**: `generateQrSvg` non gira in jsdom.
+  I test sul QR verificano solo che il placeholder appaia quando
+  `qrPayload` è vuoto. Fix: mock `qrcode` o `qrGenerator.generateQrSvg`
+  per test deterministici.
+
+### Test coverage del modulo Card
+
+- 4 file di test (`CardEditor`, `CardPreview`, `CardEditorTabs`,
+  `CardAIFab`, `CardAIBottomSheet`, `MobileGridEditor`,
+  `CardPreviewZoomControls`) + 1 nuovo `gridUtils.test.ts` + nuovi
+  test collision in `CardEditor.test.tsx` e `MobileGridEditor.test.tsx`.
+- Totale: ~120 test sul modulo card.
 
 ## Responsive Patterns
 
@@ -232,7 +408,7 @@ Chiavi attuali (senza prefisso, da versionare in prossima migrazione):
 - Framework: Vitest + React Testing Library + jsdom
 - Run single test: `npx vitest run path/to/file.test.ts`
 - No test database needed — local tests use localStorage path
-- Coverage attuale: ~8% (4 file). Target: 60%. Attualmente 671 test su 67 file.
+- Coverage attuale: ~10% (4 file). Target: 60%. Attualmente 844 test su 76 file.
 
 ## Logging
 

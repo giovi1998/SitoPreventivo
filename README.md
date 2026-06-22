@@ -1,6 +1,6 @@
 # PrecisionQuote — Preventivi Web Professionali
 
-App React/Vite per creare preventivi multi-opzione per servizi digitali. Layout PDF professionale con 4 opzioni, IVA, acconto/saldo, clausole e riepilogo comparativo. Integrazione AI DeepSeek per modifiche rapide.
+App React/TypeScript + Vite per creare preventivi multi-opzione per servizi digitali. Layout PDF professionale con 4 opzioni, IVA, acconto/saldo, clausole e riepilogo comparativo. Moduli aggiuntivi: QR Code, Bigliettini da visita, **Logo Builder**. Integrazione AI DeepSeek per modifiche rapide.
 
 ## Requisiti di sistema
 
@@ -46,6 +46,7 @@ Server su `http://localhost:8000`
 | **QR Code Generator** | Crea QR code personalizzati (URL, vCard, WiFi, SMS, email, phone) con stili (square/rounded/dots), logo overlay, export SVG/PNG |
 | **Bigliettini da Visita** | Editor fronte/retro con 3 layout, 3 formati (EU/US/square), grid editor manuale, AI Design Mode, export PDF 10-up/PNG/SVG/JSON |
 | **AI Design Mode (Card)** | 7 quick actions per bigliettini (premium, minimal, compila, palette, stampa, sposta QR, allarga foto) + prompt personalizzato |
+| **Logo Builder** | Generatore di loghi SVG da testo + icona (lucide 48 icone allowlist) + 4 forme + 3 layout. AI disabilitata nella v1 (placeholder per Replicate). Export SVG + PNG 512/1024/2048. Zero costo AI, output editabile in Illustrator/Inkscape. |
 | **Responsive** | Layout adattivo desktop (3-col), tablet e mobile (tab system + FAB AI + zoom preview) |
 
 ## AI Co-Editor (DeepSeek)
@@ -143,6 +144,46 @@ Editor completo per bigliettini da visita professionali con anteprima live front
 - **Editor mobile**: menu popup compatto con frecce in griglia 3×3
 - **Grid overlay**: toggle per visualizzare le linee guida
 
+### Grid editor per lato (Phase 2.1)
+
+A partire dalla fase 2.1, l'editor griglia è **per lato** (Fronte / Retro) — non
+si possono spostare elementi del front nel retro o viceversa.
+
+- **Lato Fronte**: mostra solo `Foto`, `Logo`, `Nome`, `Ruolo`, `Azienda`
+- **Lato Retro**: mostra solo `Contatti`, `QR`, `Social`
+- **Preset Fronte**: Sinistra / Centrato / Diviso
+- **Preset Retro**: "Default retro" (contatti a sx + QR + social a dx)
+- **Spostamenti separati**: `card.grid` per il front, `card.backGrid` per il back
+
+### Collision detection BLOCK (Phase 2.1)
+
+Le mosse sulla grid rispettano sia i bordi sia la **non-sovrapposizione** con
+altri elementi. Se una mossa causerebbe overlap, il bottone si disabilita con
+tooltip "Limite (collisione)". L'helper `src/utils/gridUtils.ts` espone
+`collides / wouldCollideOnMove / wouldCollideOnResize / canMove / canResize /
+clampMove / clampResize` ed è usato anche dal merge AI (l'AI non può generare
+grid con elementi sovrapposti).
+
+### Logo (Phase 2.1)
+
+L'elemento `logo` è ora parte degli elementi della grid (opzionale, 5° elemento
+del front). Size target ~30% della card:
+
+- Preview CSS: 100px (left) / 125px (centered) / 110px (split)
+- Export PDF: `Math.min(25mm, dims.w * 0.30)` ≈ 25mm su 85mm = ~29%
+- Export SVG: `photoSize * 0.48` (left) / `pxH * 0.20` (split) / centered aggiunto
+- Template Giovanni: `logoUrl` = SVG trasparente "WebdevCA" embeddato come data URI
+
+### Griglia OFF = layout classico (Phase 2.1)
+
+Il toggle "Griglia ON/OFF" controlla sia l'overlay sia la modalità di rendering:
+
+- **Griglia OFF** (default) → layout flexbox basato su `front.layout` (split/left/centered)
+- **Griglia ON** → CSS Grid basato su `card.grid` + overlay visivo
+
+Questo evita che il front resti "sminchiato" dopo aver usato l'editor
+griglia e spento l'overlay.
+
 ### AI Design Mode
 
 7 quick actions + prompt personalizzato:
@@ -156,6 +197,23 @@ Editor completo per bigliettini da visita professionali con anteprima live front
 | Ottimizza per stampa | Verifica contrasto, suggerimenti leggibilità (analysis mode) |
 | ← Sposta QR | Sposta il QR a sinistra via grid |
 | ↔ Allarga foto | Aumenta la larghezza della foto via grid |
+
+### Protezione merge AI (Phase 2.1)
+
+Il `mergeCardAIResponse` ora protegge da 4 tipi di hallucination:
+
+1. **Campi inventati** (`visible`, `enabled`, ecc.) → Zod strippa via `businessCardSchema.partial().safeParse()`
+2. **Cancellazione back fields** (es. `phone: ""`) → helper `shouldUpdateString` blocca
+3. **Grid hallucination** (tutti gli elementi a `(0,0,1,1)`) → `isGridHallucinated` rileva e skipppa
+4. **photoUrl/logoUrl clearing** → sempre preservato (mai sovrascritto)
+
+6 nuovi test in `cardMerge.test.ts` (`AI hallucination protection` describe block).
+
+### Template Giovanni
+
+Template preconfigurato con dati reali (foto `public/giovanni-photo.jpg`,
+logo SVG trasparente "WebdevCA" come data URI, company "HPE CDS", QR che punta
+al sito personale, GitHub social, layout split). Da `src/utils/documentSchemas.ts:createGiovanniCardTemplate()`.
 
 ### Export
 
@@ -172,6 +230,64 @@ Editor completo per bigliettini da visita professionali con anteprima live front
 - **Mobile** (<900px): tab system (Anteprima | Modifica | AI) + FAB AI floating
 - **Zoom preview**: controlli −/reset/+ (50%–150%), default 70% mobile / 100% desktop
 - **AI always-accessible**: FAB con badge log non letti → bottom sheet dal basso
+
+## Logo Builder
+
+Generatore di loghi vettoriali componibile. **Nessuna AI nella v1**: l'utente compone il logo da testo + icona + forma + colore + layout. Output SVG pulito e modificabile in Illustrator/Inkscape.
+
+> La fase 3 (Volantino) è stata **skippata** per dare priorità al logo (input di fase 2 `card.front.logoUrl`). Vedi `AGENTS.md` → "Phase Status & Roadmap" e `spec/spec-tool-phase4-logo-builder.md` §7 (Rationale).
+
+### Tipi di icona
+
+| Tipo | Comportamento |
+|------|---------------|
+| **Nessuna** | Solo testo, nessuna icona |
+| **Forma geometrica** | `circle` / `square` / `rounded` / `hex` colorato |
+| **Monogramma** | 1-2 lettere (auto-uppercase) dentro la forma |
+| **Lucide** | Icona reale dalla libreria `lucide-react` (48 nomi allowlist, 5 categorie: food, tech, fashion, business, nature) |
+
+### Layout
+
+| Layout | Composizione |
+|--------|--------------|
+| **Horizontal** | Icona a sinistra, primaryText + tagline a destra (400×160 viewBox) |
+| **Vertical** | Icona in alto centrata, primaryText sotto, tagline sotto (300×300) |
+| **Stacked** | Icona in alto, primaryText sotto, tagline in piccolo sotto (300×320) |
+
+### Template per settore
+
+4 preset pronti all'uso (tech / food / fashion / professionista), ognuno con default colors + iconType + iconShape ottimizzati.
+
+### Sicurezza
+
+- **Escape XML**: `primaryText` e `tagline` passano per `escapeXml()` prima di finire nell'SVG (impedisce XSS via `<script>` injection)
+- **Allowlist icone**: 48 nomi lucide pre-validati, niente injection di nomi arbitrari
+- **Sanitize SVG**: `DOMParser` + `XMLSerializer` rimuovono `<metadata>`, `<desc>`, `<script>`, commenti, `on*` event handlers prima di `dangerouslySetInnerHTML`
+- **Validazione colori**: regex `^#[0-9a-fA-F]{6}$` su `primaryColor` / `secondaryColor`
+
+### Export
+
+| Formato | Descrizione |
+|---------|-------------|
+| **SVG** | Vettoriale, editabile in Illustrator/Inkscape |
+| **PNG 512** | Raster 512×512 (web, social) |
+| **PNG 1024** | Raster 1024×1024 (high-DPI) |
+| **PNG 2048** | Raster 2048×2048 (stampa) |
+
+### AI (placeholder v2)
+
+Il tab "AI Generation" è presente ma **disabilitato** con messaggio:  
+*"AI generation non disponibile nella v1. Configura `REPLICATE_API_TOKEN` su Vercel e upgrada a Pro."*
+
+L'attivazione richiede Vercel Pro (timeout 60s) per Replicate Recraft-V3 ed è deferred alla v2.
+
+### Generazione runtime dei path SVG
+
+I path SVG delle 48 icone sono estratti a build-time da `node_modules/lucide-react/dist/esm/icons/*.js` con lo script `scripts/extract-lucide-paths.mjs` e salvati in `src/utils/lucideIconPaths.ts`. Questo permette di renderizzare l'icona lucide reale nell'SVG esportato senza dipendere da React a runtime. Per rigenerare dopo un upgrade di lucide-react:
+
+```bash
+node scripts/extract-lucide-paths.mjs
+```
 
 ## Architettura Dati
 
@@ -227,9 +343,14 @@ cp .env.example .env
 | `authToken` | Token sessione |
 | `userEmail` | Email utente corrente |
 | `username` | Username |
+| `userRole` | Ruolo utente (admin / user) |
 | `dataRegistrazione` | Data registrazione |
-| `deepseekKey` | API Key DeepSeek (se configurata) |
-| `precisionQuote_quotes` | Preventivi salvati |
+| `deepseekApiKey` | API Key DeepSeek (solo dev) |
+| `precisionQuote_quotes:v1` | Preventivi salvati |
+| `precisionQuote_documents:v1` | Documenti unificati (QR, card, logo) |
+| `userSettings_<email>` | Impostazioni utente (default color, VAT, theme) |
+| `theme` | Tema corrente (light / dark) |
+| `documentTheme` | Tema documento (minimal / corporate / creative) |
 
 ## Schema Database (Postgres)
 
@@ -313,61 +434,94 @@ Dopo il deploy, vai su **Vercel Dashboard → Settings → Environment Variables
 
 ```
 SitoPreventivo/
-├── App.jsx                    # AuthProvider, state, AI, PDF export
+├── App.tsx                    # AuthProvider, AuthContext, AppShell re-export
 ├── index.html
-├── package.json               # react, react-router-dom, pdfmake, drizzle
-├── vite.config.js             # Porta 8000, React plugin
+├── package.json               # react, react-router-dom, pdfmake, lucide-react, drizzle, zod
+├── tsconfig.json              # TypeScript strict mode
+├── vite.config.ts             # Porta 8000, React plugin
 ├── vercel.json                # SPA rewrites + API routing
-├── REQUIREMENTS.md            # Prerequisiti dettagliati
+├── AGENTS.md                  # Convenzioni progetto, regole test, lezioni apprese
+├── spec/                      # Specifiche di fase
+│   ├── spec-process-phase0-autosave-fix.md
+│   ├── spec-tool-phase1-qr-code.md
+│   ├── spec-design-phase2-business-card.md
+│   ├── spec-tool-phase4-logo-builder.md  # ← fase corrente
+│   └── ...
 ├── drizzle.config.ts          # Drizzle ORM config
 ├── drizzle/                   # Migrazioni database
 ├── api/
-│   └── index.js               # Vercel Serverless Function (REST API)
+│   └── index.ts               # Vercel Serverless Function (REST API monolith)
 ├── db/
 │   ├── schema.ts              # Schema Postgres (users + quotes + user_settings)
 │   └── index.ts               # Drizzle client (Neon)
 ├── src/
-│   ├── main.tsx               # BrowserRouter + ProtectedRoute
+│   ├── main.tsx               # BrowserRouter + Routes (multipage)
+│   ├── contexts/
+│   │   └── index.ts           # AuthContext + AppContext
+│   ├── hooks/
+│   │   ├── useAI.ts           # Hook AI per preventivi (streaming, token)
+│   │   ├── useAICard.ts       # Hook AI per card (no tools, JSON round-trip)
+│   │   ├── useCardAIFloating.tsx # Provider + hook stato AI panel mobile
+│   │   ├── useCardPreviewZoom.ts # Hook zoom anteprima (50-150%)
+│   │   ├── useMediaQuery.ts   # Hook responsive
+│   │   ├── useRouteView.ts    # Bridge hook pathname ↔ view
+│   │   └── useToast.ts        # Toast notifications
 │   ├── pages/
-│   │   ├── HomePage.jsx       # Landing page pubblica
-│   │   ├── LoginPage.jsx      # Login/registrazione con sesso
-│   │   ├── AdminDashboard.jsx # Gestione utenti, token, chiave AI
-│   │   └── NotFoundPage.jsx   # 404 animato
+│   │   ├── HomePage.tsx       # Landing page pubblica
+│   │   ├── LoginPage.tsx      # Login/registrazione
+│   │   ├── SettingsPage.tsx   # Cambio password, tema, ecc.
+│   │   ├── AdminDashboard.tsx # Gestione utenti/token/chiave AI
+│   │   ├── NotFoundPage.tsx   # 404
+│   │   └── app/               # Page wrappers protetti da /app
+│   │       ├── EditorPage.tsx
+│   │       ├── CollectionPage.tsx
+│   │       ├── QrPage.tsx
+│   │       ├── CardPage.tsx
+│   │       ├── LogoPage.tsx   # ← fase 4
+│   │       ├── SettingsRoute.tsx
+│   │       └── AdminPage.tsx
 │   ├── components/
-│   │   ├── DocumentPreview.jsx # Layout PDF preview
-│   │   ├── EditorView.jsx     # AI panel + controlli (sezioni collassabili)
-│   │   ├── QREditor.tsx       # Generatore QR Code (URL, vCard, WiFi, SMS)
-│   │   ├── CardEditor.tsx     # Editor bigliettini (3-col desktop, tabs mobile)
+│   │   ├── AppShell.tsx       # Global state shell (Outlet)
+│   │   ├── Layout.tsx         # Sidebar (Loghi, QR Code, Bigliettini, Editor, Collection, Settings, Admin)
+│   │   ├── Topbar.tsx         # Salva/Esporta per view corrente
+│   │   ├── EditorView.tsx     # AI panel + controlli
+│   │   ├── QREditor.tsx       # Generatore QR Code
+│   │   ├── CardEditor.tsx     # Editor bigliettini
 │   │   ├── CardPreview.tsx    # Anteprima card (flexbox + CSS Grid mode)
 │   │   ├── CardEditorTabs.tsx # Tab system per mobile
-│   │   ├── MobileGridEditor.tsx # Grid editor mobile (popup frecce)
+│   │   ├── MobileGridEditor.tsx # Grid editor mobile
 │   │   ├── CardAIFab.tsx      # FAB AI floating (mobile)
-│   │   ├── CardAIBottomSheet.tsx # Bottom sheet AI panel (mobile)
-│   │   ├── CardPreviewZoomControls.tsx # Controlli zoom anteprima
-│   │   ├── CollectionView.jsx # Griglia preventivi + stato
-│   │   ├── SaveDialog.jsx     # Modale per nome personalizzato
-│   │   ├── Layout.jsx         # Sidebar con icone
-│   │   ├── Topbar.jsx         # Salva/Esporta (solo editor)
-│   │   ├── GlobalStyles.jsx   # Tutti i CSS
-│   │   └── Icon.jsx           # Icone SVG
-│   ├── hooks/
-│   │   ├── useAICard.ts       # Hook AI per card (streaming, token, error recovery)
-│   │   ├── useMediaQuery.ts   # Hook responsive (breakpoint detection)
-│   │   ├── useCardAIFloating.tsx # Provider + hook stato AI panel mobile
-│   │   └── useCardPreviewZoom.ts # Hook zoom anteprima (50-150%)
+│   │   ├── CardAIBottomSheet.tsx # Bottom sheet AI panel
+│   │   ├── CardPreviewZoomControls.tsx
+│   │   ├── LogoEditor.tsx     # ← fase 4: Logo Builder (tabs Builder + AI)
+│   │   ├── BuilderPanel.tsx   # ← fase 4: form + lucide picker + live preview
+│   │   ├── CollectionView.tsx # Griglia preventivi
+│   │   ├── SaveDialog.tsx     # Modale nome personalizzato
+│   │   ├── GlobalStyles.tsx   # Tutti i CSS
+│   │   └── ...                # altri
 │   ├── ai/
-│   │   ├── cardOrchestrator.ts # AI orchestrator per card (no tools)
-│   │   ├── cardMerge.ts       # Merge risposta AI → card (grid, style, text)
-│   │   ├── aiCardInputSchema.ts # Zod schema input AI card
+│   │   ├── promptUtils.ts     # AI helpers
+│   │   ├── cardOrchestrator.ts # AI orchestrator per card
+│   │   ├── cardMerge.ts       # Merge risposta AI → card
+│   │   ├── aiCardInputSchema.ts
 │   │   └── prompts/
-│   │       ├── cardSystem.ts  # System prompt AI card
-│   │       └── cardContext.ts # Context builder AI card
+│   │       ├── system.ts
+│   │       ├── cardSystem.ts
+│   │       └── cardContext.ts
 │   └── utils/
 │       ├── dataService.js     # API produzione / localStorage locale
 │       ├── generatePDF.ts     # PDF preventivi con pdfmake
 │       ├── cardGenerator.ts   # PDF/PNG/SVG export bigliettini
 │       ├── qrGenerator.ts     # QR Code SVG/PNG generation
-│       └── documentSchemas.ts # Zod schema (quote, QR, card, grid presets)
+│       ├── logoGenerator.ts   # ← fase 4: SVG builder + sanitize + export PNG
+│       ├── lucideIconPaths.ts # ← fase 4: path SVG icone lucide (auto-generato)
+│       ├── documentSchemas.ts # Zod schema (quote, QR, card, logo, grid presets)
+│       ├── documentThemes.ts
+│       ├── quoteSchema.ts
+│       ├── quoteTools.ts
+│       └── logger.ts          # Client logger (sendBeacon → /api/logs)
+└── scripts/
+    └── extract-lucide-paths.mjs # ← fase 4: estrae path SVG da lucide-react
 ```
 
 ## Sviluppo
@@ -376,4 +530,20 @@ SitoPreventivo/
 npm run dev        # Dev server su :8000
 npm run build      # Build produzione in /dist
 npm run preview    # Preview del build
+npm run test       # Vitest (76 file, 850+ test)
+npm run typecheck  # tsc --noEmit
 ```
+
+## Roadmap
+
+| Fase | Stato | Descrizione |
+|------|-------|-------------|
+| 0 — Auto-save fix | ✅ | Reset timer su modifiche quote |
+| 1 — QR Code | ✅ | 7 tipi, stili, logo overlay, export SVG/PNG |
+| 2 — Bigliettini | ✅ | 3 layout, 3 formati, AI Design Mode, grid editor |
+| 2.1 — Card polish | ✅ | Collision detection BLOCK, logo in grid (~30%), backGrid separato, showGrid toggle, AI merge protection, template Giovanni con foto+logo trasparente |
+| 3 — Volantino | ⏭️ **skipped** | Rimandato per prioritizzare il Logo Builder (vedi AGENTS.md) |
+| 4 — **Logo Builder** | ✅ | SVG builder templated, 48 icone lucide, 4 template settore, 3 layout, export SVG + PNG 512/1024/2048 |
+| 5 — Tier System | ⏳ pending | Watermark free, unlock code |
+| 6 — Unified Collection | ⏳ pending | Visualizzazione documenti misti (preventivi, QR, card, logo) |
+| 7 — Polish | ⏳ pending | Ottimizzazioni finali |
