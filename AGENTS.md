@@ -36,7 +36,12 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 
 | File | Role |
 |------|------|
-| `App.tsx` (root, not src/) | Main app: AuthProvider, state, AI, PDF export |
+| `App.tsx` (root, not src/) | Thin re-export of `AppShell` (default) + `AuthProvider`/`AuthContext` (named) |
+| `src/main.tsx` | React Router setup: `/login`, `/` (HomePage), `/app/*` (6 child routes), `*` (404) |
+| `src/components/AppShell.tsx` | Global state shell (quote, AI, toasts, exports, theme) — renders `<Outlet/>` |
+| `src/components/AdminRoute.tsx` | Guard: `user.role === 'admin'` required, else `navigate('/app/editor')` |
+| `src/hooks/useRouteView.ts` | Bridge hook: `pathname ↔ view` (editor\|collection\|qr\|card\|settings\|admin), `setView` calls `navigate()` |
+| `src/pages/app/*` | Thin page wrappers (Editor/Collection/Qr/Card/Settings/Admin) — read state from `AppContext` |
 | `api/index.ts` | Single Vercel serverless function — entire REST API (monolith, intentional) |
 | `db/schema.ts` | Drizzle schema (users, quotes, user_settings) |
 | `src/utils/dataService.js` | Data layer — routes to API or localStorage |
@@ -54,6 +59,26 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/ai/cardMerge.ts` | Merge risposta AI → card (grid, style, text, photo-preserv) |
 | `vite.config.js` | Port 8000, SPA fallback for /app route |
 | `vercel.json` | Build runs `db:migrate` before `build` |
+
+## App Routes
+
+Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`; child pages read from `AppContext`.
+
+| Path | Component | Guard |
+|------|-----------|-------|
+| `/login` | `LoginPage` | — |
+| `/` | `HomePage` | — |
+| `/app` → `/app/editor` (redirect) | `EditorPage` → `EditorView` | login |
+| `/app/collection` | `CollectionPage` → `CollectionView` | login |
+| `/app/qr` | `QrPage` → `QREditor` (lazy) | login |
+| `/app/card` | `CardPage` → `CardEditor` (lazy) | login |
+| `/app/settings` | `SettingsRoute` → `SettingsPage` | login |
+| `/app/admin` | `AdminPage` → `AdminDashboard` (lazy) | `user.role==='admin'` (via `AdminRoute`) |
+| `*` | `NotFoundPage` | — |
+
+- `Layout`/`Topbar` still receive `view: string` (back-compat with existing tests).
+- `CollectionView.openQuote()` calls `setView('editor')` from `AppContext` → `navigate('/app/editor')`.
+- All `/app/*` child routes are served by the SPA catch-all in `vercel.json`; no extra rewrites needed.
 
 ## Business Card Module
 
@@ -272,6 +297,7 @@ Queste skill vengono caricate automaticamente. Quando modifichi il codice riferi
 - **Auth**: verificata in ogni handler, non solo middleware
 - **Rate-limit**: scope dedicato per categoria (`login`, `ai`, `tokens`, `logs`)
 - **Admin endpoints**: `adminEmail=admin@gmail.com` sempre richiesto
+- **`adminEmail` transport**: **query string** per GET (`?adminEmail=...`), **body** per PATCH/POST. Non mischiare — vedi `api/__tests__/users.test.ts` (regression per bug 51d84a5: `GET /users` leggeva da body mentre il client mandava query string, risultato tabella admin vuota in prod).
 - **Idempotenza**: GET, PUT, DELETE idempotenti; POST no
 
 ## OWASP Top 10 (stato corrente)
