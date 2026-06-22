@@ -6,6 +6,7 @@ export const ROUTE_PATHS: Record<string, string> = {
   collection: '/app/collection',
   qr: '/app/qr',
   card: '/app/card',
+  logo: '/app/logo',
   settings: '/app/settings',
   admin: '/app/admin',
 };

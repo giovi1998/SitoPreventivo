@@ -69,23 +69,21 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate }: QRE
   );
 
   useEffect(() => {
-    let cancelled = false;
     const renderId = ++previewRenderIdRef.current;
     setPreviewError(null);
-    generateQrSvg(debouncedQr)
-      .then((svg) => {
-        if (cancelled || renderId !== previewRenderIdRef.current) return;
-        setSvgPreview(svg);
-      })
-      .catch((err) => {
-        if (cancelled || renderId !== previewRenderIdRef.current) return;
-        const message = err instanceof Error ? err.message : 'Anteprima non disponibile';
-        setPreviewError(message);
-        setSvgPreview('');
-      });
-    return () => {
-      cancelled = true;
-    };
+    // generateQrSvg è sincrono: la libreria qrcode espone QRCode.create()
+    // sincrono, quindi la promise era solo overhead. Sincronizzando qui
+    // evito un frame di placeholder vuoto al primo render del QR.
+    try {
+      const svg = generateQrSvg(debouncedQr);
+      if (renderId !== previewRenderIdRef.current) return;
+      setSvgPreview(svg);
+    } catch (err) {
+      if (renderId !== previewRenderIdRef.current) return;
+      const message = err instanceof Error ? err.message : 'Anteprima non disponibile';
+      setPreviewError(message);
+      setSvgPreview('');
+    }
   }, [debouncedQr]);
 
   useEffect(() => {
@@ -186,10 +184,10 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate }: QRE
     }
   }, [qr, addToast]);
 
-  const exportSvg = useCallback(async () => {
+  const exportSvg = useCallback(() => {
     setExporting('svg');
     try {
-      const svg = await generateQrSvg(qr);
+      const svg = generateQrSvg(qr);
       const blob = new Blob([svg], { type: 'image/svg+xml' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

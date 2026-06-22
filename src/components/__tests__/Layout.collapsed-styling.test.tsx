@@ -102,15 +102,23 @@ describe('Layout and Topbar CSS regression', () => {
       path.resolve(__dirname, '..', 'GlobalStyles.tsx'),
       'utf-8'
     );
-    expect(file).toMatch(/\.app-shell\.sidebar-collapsed\s+\.side-card\{background:transparent;border:0;padding:0\}/);
+    expect(file).toMatch(/\.app-shell\.sidebar-collapsed\s+\.side-card\{background:transparent;border:0;padding:0[^}]*\}/);
   });
 
-  it('GlobalStyles.tsx removes width:100% from .logout-btn-icon in collapsed state', () => {
+  it('GlobalStyles.tsx makes .logout-btn-icon a 36x36 square in collapsed state (matches avatar)', () => {
     const file = fs.readFileSync(
       path.resolve(__dirname, '..', 'GlobalStyles.tsx'),
       'utf-8'
     );
-    expect(file).toMatch(/\.app-shell\.sidebar-collapsed\s+\.logout-btn-icon\{width:auto;padding:8px\}/);
+    expect(file).toMatch(/\.app-shell\.sidebar-collapsed\s+\.logout-btn-icon\{width:36px;height:36px/);
+  });
+
+  it('GlobalStyles.tsx pushes nav to fill space so side-card sticks to bottom in collapsed state', () => {
+    const file = fs.readFileSync(
+      path.resolve(__dirname, '..', 'GlobalStyles.tsx'),
+      'utf-8'
+    );
+    expect(file).toMatch(/\.app-shell\.sidebar-collapsed\s+nav\{margin-bottom:auto\}/);
   });
 
   it('GlobalStyles.tsx topbar has overflow:hidden to prevent button truncation', () => {

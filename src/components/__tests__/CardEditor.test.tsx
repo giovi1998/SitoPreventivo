@@ -442,6 +442,35 @@ describe('CardEditor', () => {
       const plus = screen.getByRole('button', { name: /Aumenta larghezza/i });
       fireEvent.click(plus);
     });
+
+    it('disables move buttons at grid boundary (Phase 2.1 visual feedback)', () => {
+      renderEditor();
+      // Seleziona photo (è all'inizio del preset left: x=0)
+      const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(nameSelect, { target: { value: 'photo' } });
+      // x=0 → canMoveLeft = false
+      const leftBtn = screen.getByRole('button', { name: /Sposta a sinistra/i }) as HTMLButtonElement;
+      expect(leftBtn).toBeDisabled();
+      expect(leftBtn.title).toMatch(/Limite raggiunto/);
+    });
+
+    it('disables grow buttons when at right/bottom edge (Phase 2.1)', () => {
+      renderEditor();
+      // Seleziona photo del preset left: photo at x=0, w=1, h=4 in 4×4 grid
+      // → canGrowH = false (y=0, h=4, rows=4)
+      const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(nameSelect, { target: { value: 'photo' } });
+      const growH = screen.getByRole('button', { name: /Aumenta altezza/i }) as HTMLButtonElement;
+      expect(growH).toBeDisabled();
+      expect(growH.title).toMatch(/Limite raggiunto/);
+    });
+
+    it('logo is selectable in grid editor (Phase 2.1)', () => {
+      renderEditor();
+      const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      const options = Array.from(nameSelect.querySelectorAll('option')).map((o) => o.value);
+      expect(options).toContain('logo');
+    });
   });
 
   // ─── Responsive + AI mobile ───────────────────────────────
@@ -609,6 +638,44 @@ describe('CardEditor', () => {
       renderEditor();
       expect(screen.queryByTestId('mobile-save-btn')).not.toBeInTheDocument();
       expect(screen.queryByTestId('mobile-export-btn')).not.toBeInTheDocument();
+    });
+
+    it('grid editor on desktop: element cannot move into another (BLOCK collision)', () => {
+      setDesktop();
+      const card = createEmptyCard();
+      card.grid = {
+        cols: 4,
+        rows: 4,
+        elements: {
+          photo: { x: 0, y: 0, w: 1, h: 4 },
+          name: { x: 1, y: 0, w: 3, h: 1 },
+          title: { x: 1, y: 1, w: 3, h: 1 },
+        },
+      };
+      renderEditor(card);
+      const select = screen.getByLabelText(/Elemento selezionato/i);
+      fireEvent.change(select, { target: { value: 'name' } });
+      const moveLeft = screen.getByRole('button', { name: /Sposta a sinistra/i });
+      expect(moveLeft).toBeDisabled();
+    });
+
+    it('grid editor on desktop: cannot grow into another element (BLOCK)', () => {
+      setDesktop();
+      const card = createEmptyCard();
+      card.grid = {
+        cols: 4,
+        rows: 4,
+        elements: {
+          photo: { x: 0, y: 0, w: 1, h: 4 },
+          name: { x: 1, y: 0, w: 1, h: 1 },
+          title: { x: 1, y: 1, w: 1, h: 1 },
+        },
+      };
+      renderEditor(card);
+      const select = screen.getByLabelText(/Elemento selezionato/i);
+      fireEvent.change(select, { target: { value: 'name' } });
+      const growH = screen.getByRole('button', { name: /Aumenta altezza/i });
+      expect(growH).toBeDisabled();
     });
   });
 });

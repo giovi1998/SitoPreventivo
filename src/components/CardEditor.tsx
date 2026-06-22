@@ -13,7 +13,8 @@ import type {
   BusinessCardSizePreset,
   CardGrid,
 } from '../utils/documentSchemas';
-import { createEmptyCard, createGiovanniCardTemplate, gridPresetLeft, gridPresetCentered, gridPresetSplit } from '../utils/documentSchemas';
+import { createEmptyCard, createGiovanniCardTemplate, gridPresetLeft, gridPresetCentered, gridPresetSplit, gridPresetBackDefault } from '../utils/documentSchemas';
+import { clampMove, clampResize, wouldCollideOnMove, wouldCollideOnResize } from '../utils/gridUtils';
 import { compressImage, generateCardPDF, generateCardPng, buildCardSvg } from '../utils/cardGenerator';
 import { isAllowedLogoMime, isHttpUrl } from '../utils/qrGenerator';
 import dataService from '../utils/dataService';
@@ -125,54 +126,99 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
   // ─── B2: Grid editor state ─────────────────────────────────
   const [selectedGridElement, setSelectedGridElement] = useState<keyof CardGrid['elements'] | ''>('');
   const [gridPresetChoice, setGridPresetChoice] = useState<'left' | 'centered' | 'split'>('left');
+  // Phase 2.1: il grid editor è per lato (front o back). Non si possono
+  // spostare elementi del front nel back e viceversa.
+  const [gridEditorSide, setGridEditorSide] = useState<'front' | 'back'>('front');
 
   const patchGrid = useCallback((grid: CardGrid) => {
-    setCard((prev) => ({ ...prev, grid, updatedAt: new Date().toISOString() }));
-  }, []);
+    setCard((prev) => {
+      if (gridEditorSide === 'back') {
+        return { ...prev, backGrid: grid, updatedAt: new Date().toISOString() };
+      }
+      return { ...prev, grid, updatedAt: new Date().toISOString() };
+    });
+  }, [gridEditorSide]);
 
   const applyGridPreset = useCallback((preset: 'left' | 'centered' | 'split') => {
+    if (gridEditorSide === 'back') {
+      patchGrid(gridPresetBackDefault());
+      return;
+    }
     if (preset === 'left') patchGrid(gridPresetLeft());
     else if (preset === 'centered') patchGrid(gridPresetCentered());
     else patchGrid(gridPresetSplit());
-  }, [patchGrid]);
+  }, [patchGrid, gridEditorSide]);
 
   const moveSelectedElement = useCallback((dx: number, dy: number) => {
     if (!selectedGridElement) return;
     setCard((prev) => {
-      const current = prev.grid ?? gridPresetLeft();
+      const isBack = gridEditorSide === 'back';
+      const current = isBack
+        ? (prev.backGrid ?? gridPresetBackDefault())
+        : (prev.grid ?? gridPresetLeft());
       const el = current.elements[selectedGridElement];
       if (!el) return prev;
-      const newX = Math.max(0, Math.min(current.cols - el.w, el.x + dx));
-      const newY = Math.max(0, Math.min(current.rows - el.h, el.y + dy));
+      const { x: newX, y: newY } = clampMove(current, selectedGridElement, dx, dy);
+      if (newX === el.x && newY === el.y) return prev;
+      const newGrid = {
+        ...current,
+        elements: { ...current.elements, [selectedGridElement]: { ...el, x: newX, y: newY } },
+      };
       return {
         ...prev,
-        grid: {
-          ...current,
-          elements: { ...current.elements, [selectedGridElement]: { ...el, x: newX, y: newY } },
-        },
+        [isBack ? 'backGrid' : 'grid']: newGrid,
         updatedAt: new Date().toISOString(),
       };
     });
-  }, [selectedGridElement]);
+  }, [selectedGridElement, gridEditorSide]);
 
   const resizeSelectedElement = useCallback((dw: number, dh: number) => {
     if (!selectedGridElement) return;
     setCard((prev) => {
-      const current = prev.grid ?? gridPresetLeft();
+      const isBack = gridEditorSide === 'back';
+      const current = isBack
+        ? (prev.backGrid ?? gridPresetBackDefault())
+        : (prev.grid ?? gridPresetLeft());
       const el = current.elements[selectedGridElement];
       if (!el) return prev;
-      const newW = Math.max(1, Math.min(current.cols - el.x, el.w + dw));
-      const newH = Math.max(1, Math.min(current.rows - el.y, el.h + dh));
+      const next = clampResize(current, selectedGridElement, dw, dh);
+      if (next.w === el.w && next.h === el.h) return prev;
+      const newGrid = {
+        ...current,
+        elements: { ...current.elements, [selectedGridElement]: { ...el, w: next.w, h: next.h } },
+      };
       return {
         ...prev,
-        grid: {
-          ...current,
-          elements: { ...current.elements, [selectedGridElement]: { ...el, w: newW, h: newH } },
-        },
+        [isBack ? 'backGrid' : 'grid']: newGrid,
         updatedAt: new Date().toISOString(),
       };
     });
-  }, [selectedGridElement]);
+  }, [selectedGridElement, gridEditorSide]);
+
+  // Bounds helpers: Phase 2.1 fix — i bottoni resize/move devono essere
+  // disabilitati quando l'azione porterebbe fuori dalla grid o in
+  // collisione con un altro elemento. Senza questo feedback l'utente
+  // clicca +↔ e non succede nulla (UX brutto).
+  const activeGrid = gridEditorSide === 'back' ? card.backGrid : card.grid;
+  const bounds = useMemo(() => {
+    if (!selectedGridElement || !activeGrid) return null;
+    const el = activeGrid.elements[selectedGridElement as keyof typeof activeGrid.elements];
+    if (!el) return null;
+    return {
+      cols: activeGrid.cols,
+      rows: activeGrid.rows,
+      el,
+    };
+  }, [selectedGridElement, activeGrid]);
+
+  const canMoveLeft = !!bounds && bounds.el.x > 0 && !wouldCollideOnMove(bounds as unknown as CardGrid, selectedGridElement as string, -1, 0);
+  const canMoveUp = !!bounds && bounds.el.y > 0 && !wouldCollideOnMove(bounds as unknown as CardGrid, selectedGridElement as string, 0, -1);
+  const canMoveRight = !!bounds && bounds.el.x + bounds.el.w < bounds.cols && !wouldCollideOnMove(bounds as unknown as CardGrid, selectedGridElement as string, 1, 0);
+  const canMoveDown = !!bounds && bounds.el.y + bounds.el.h < bounds.rows && !wouldCollideOnMove(bounds as unknown as CardGrid, selectedGridElement as string, 0, 1);
+  const canShrinkW = !!bounds && bounds.el.w > 1;
+  const canGrowW = !!bounds && bounds.el.x + bounds.el.w < bounds.cols && !wouldCollideOnResize(bounds as unknown as CardGrid, selectedGridElement as string, 1, 0);
+  const canShrinkH = !!bounds && bounds.el.h > 1;
+  const canGrowH = !!bounds && bounds.el.y + bounds.el.h < bounds.rows && !wouldCollideOnResize(bounds as unknown as CardGrid, selectedGridElement as string, 0, 1);
 
   const patchTitle = useCallback((title: string) => {
     setCard((prev) => ({ ...prev, title, updatedAt: new Date().toISOString() }));
@@ -556,8 +602,9 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
                     </div>
                   </div>
                   <MobileGridEditor
-                    grid={card.grid ?? gridPresetLeft()}
+                    grid={card.backGrid ?? gridPresetBackDefault()}
                     onChange={(g) => patchGrid(g)}
+                    side="back"
                   />
                 </div>
               ),
@@ -981,9 +1028,24 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
             </div>
           </div>
 
-          {/* B2: Grid editor manuale */}
+          {/* B2: Grid editor manuale — Phase 2.1: per lato (front/back) */}
           <div className="card-grid-editor" data-testid="card-grid-editor">
             <div className="card-grid-editor-title">Sposta elementi sulla griglia</div>
+            <label className="card-field">
+              <span>Lato</span>
+              <select
+                value={gridEditorSide}
+                onChange={(e) => {
+                  setGridEditorSide(e.target.value as 'front' | 'back');
+                  setSelectedGridElement('');
+                }}
+                aria-label="Lato griglia"
+                data-testid="grid-editor-side"
+              >
+                <option value="front">Fronte (foto, nome, ruolo, azienda, logo)</option>
+                <option value="back">Retro (contatti, QR, social)</option>
+              </select>
+            </label>
             <label className="card-field">
               <span>Elemento selezionato</span>
               <select
@@ -992,13 +1054,21 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
                 aria-label="Elemento selezionato"
               >
                 <option value="">—</option>
-                <option value="photo">Foto</option>
-                <option value="name">Nome</option>
-                <option value="title">Ruolo</option>
-                <option value="company">Azienda</option>
-                <option value="contacts">Contatti</option>
-                <option value="qr">QR</option>
-                <option value="socials">Social</option>
+                {gridEditorSide === 'front' ? (
+                  <>
+                    <option value="photo">Foto</option>
+                    <option value="logo">Logo</option>
+                    <option value="name">Nome</option>
+                    <option value="title">Ruolo</option>
+                    <option value="company">Azienda</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="contacts">Contatti</option>
+                    <option value="qr">QR</option>
+                    <option value="socials">Social</option>
+                  </>
+                )}
               </select>
             </label>
             <label className="card-field">
@@ -1012,22 +1082,28 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
                 }}
                 aria-label="Preset griglia"
               >
-                <option value="left">Sinistra (foto a sx)</option>
-                <option value="centered">Centrato</option>
-                <option value="split">Diviso (contatti + QR)</option>
+                {gridEditorSide === 'front' ? (
+                  <>
+                    <option value="left">Sinistra (foto a sx)</option>
+                    <option value="centered">Centrato</option>
+                    <option value="split">Diviso (testo + logo)</option>
+                  </>
+                ) : (
+                  <option value="split">Default retro (contatti + QR)</option>
+                )}
               </select>
             </label>
             <div className="card-grid-arrows" role="group" aria-label="Sposta elemento">
-              <button type="button" onClick={() => moveSelectedElement(-1, 0)} disabled={!selectedGridElement} aria-label="Sposta a sinistra" title="Sposta a sinistra"><span aria-hidden="true">←</span></button>
-              <button type="button" onClick={() => moveSelectedElement(0, -1)} disabled={!selectedGridElement} aria-label="Sposta su" title="Sposta su"><span aria-hidden="true">↑</span></button>
-              <button type="button" onClick={() => moveSelectedElement(0, 1)} disabled={!selectedGridElement} aria-label="Sposta giù" title="Sposta giù"><span aria-hidden="true">↓</span></button>
-              <button type="button" onClick={() => moveSelectedElement(1, 0)} disabled={!selectedGridElement} aria-label="Sposta a destra" title="Sposta a destra"><span aria-hidden="true">→</span></button>
+              <button type="button" onClick={() => moveSelectedElement(-1, 0)} disabled={!canMoveLeft} aria-label="Sposta a sinistra" title={canMoveLeft ? 'Sposta a sinistra' : 'Limite raggiunto (colonna 0)'}><span aria-hidden="true">←</span></button>
+              <button type="button" onClick={() => moveSelectedElement(0, -1)} disabled={!canMoveUp} aria-label="Sposta su" title={canMoveUp ? 'Sposta su' : 'Limite raggiunto (riga 0)'}><span aria-hidden="true">↑</span></button>
+              <button type="button" onClick={() => moveSelectedElement(0, 1)} disabled={!canMoveDown} aria-label="Sposta giù" title={canMoveDown ? 'Sposta giù' : 'Limite raggiunto (ultima riga)'}><span aria-hidden="true">↓</span></button>
+              <button type="button" onClick={() => moveSelectedElement(1, 0)} disabled={!canMoveRight} aria-label="Sposta a destra" title={canMoveRight ? 'Sposta a destra' : 'Limite raggiunto (ultima colonna)'}><span aria-hidden="true">→</span></button>
             </div>
             <div className="card-grid-resize" role="group" aria-label="Ridimensiona elemento">
-              <button type="button" onClick={() => resizeSelectedElement(-1, 0)} disabled={!selectedGridElement} aria-label="Riduci larghezza" title="Riduci larghezza"><span aria-hidden="true">−↔</span></button>
-              <button type="button" onClick={() => resizeSelectedElement(1, 0)} disabled={!selectedGridElement} aria-label="Aumenta larghezza" title="Aumenta larghezza"><span aria-hidden="true">+↔</span></button>
-              <button type="button" onClick={() => resizeSelectedElement(0, -1)} disabled={!selectedGridElement} aria-label="Riduci altezza" title="Riduci altezza"><span aria-hidden="true">−↕</span></button>
-              <button type="button" onClick={() => resizeSelectedElement(0, 1)} disabled={!selectedGridElement} aria-label="Aumenta altezza" title="Aumenta altezza"><span aria-hidden="true">+↕</span></button>
+              <button type="button" onClick={() => resizeSelectedElement(-1, 0)} disabled={!canShrinkW} aria-label="Riduci larghezza" title={canShrinkW ? 'Riduci larghezza' : 'Limite raggiunto (larghezza minima 1)'}><span aria-hidden="true">−↔</span></button>
+              <button type="button" onClick={() => resizeSelectedElement(1, 0)} disabled={!canGrowW} aria-label="Aumenta larghezza" title={canGrowW ? 'Aumenta larghezza' : 'Limite raggiunto (bordo destro della griglia)'}><span aria-hidden="true">+↔</span></button>
+              <button type="button" onClick={() => resizeSelectedElement(0, -1)} disabled={!canShrinkH} aria-label="Riduci altezza" title={canShrinkH ? 'Riduci altezza' : 'Limite raggiunto (altezza minima 1)'}><span aria-hidden="true">−↕</span></button>
+              <button type="button" onClick={() => resizeSelectedElement(0, 1)} disabled={!canGrowH} aria-label="Aumenta altezza" title={canGrowH ? 'Aumenta altezza' : 'Limite raggiunto (bordo inferiore della griglia)'}><span aria-hidden="true">+↕</span></button>
             </div>
           </div>
         </section>

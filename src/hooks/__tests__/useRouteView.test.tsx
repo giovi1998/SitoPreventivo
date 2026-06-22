@@ -86,9 +86,10 @@ describe('useRouteView', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/app/admin');
   });
 
-  it('exposes ROUTE_PATHS map with all 6 view keys', () => {
-    expect(Object.keys(ROUTE_PATHS).sort()).toEqual(['admin', 'card', 'collection', 'editor', 'qr', 'settings']);
+  it('exposes ROUTE_PATHS map with all 7 view keys', () => {
+    expect(Object.keys(ROUTE_PATHS).sort()).toEqual(['admin', 'card', 'collection', 'editor', 'logo', 'qr', 'settings']);
     expect(ROUTE_PATHS.editor).toBe('/app/editor');
     expect(ROUTE_PATHS.admin).toBe('/app/admin');
+    expect(ROUTE_PATHS.logo).toBe('/app/logo');
   });
 });

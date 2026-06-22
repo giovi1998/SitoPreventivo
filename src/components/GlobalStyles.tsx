@@ -136,12 +136,13 @@ export default function GlobalStyles() {
     .app-shell.sidebar-collapsed nav button svg{margin:0}
     .app-shell.sidebar-collapsed .sidebar-collapse-btn{justify-content:center;padding:10px}
     .app-shell.sidebar-collapsed .sidebar-collapse-btn svg{margin:0}
-    .app-shell.sidebar-collapsed .side-user{justify-content:center}
+    .app-shell.sidebar-collapsed .side-user{justify-content:center;margin-bottom:6px}
     .app-shell.sidebar-collapsed .side-avatar{margin:0}
-    .app-shell.sidebar-collapsed .side-card{background:transparent;border:0;padding:0}
+    .app-shell.sidebar-collapsed .side-card{background:transparent;border:0;padding:0;gap:0;display:flex;flex-direction:column;align-items:center}
     .app-shell.sidebar-collapsed .side-card a,.app-shell.sidebar-collapsed .side-card .logout-btn{justify-content:center}
     .app-shell.sidebar-collapsed .side-card a span,.app-shell.sidebar-collapsed .side-card .logout-btn span{display:none}
-    .app-shell.sidebar-collapsed .logout-btn-icon{width:auto;padding:8px}
+    .app-shell.sidebar-collapsed .logout-btn-icon{width:36px;height:36px;padding:0;margin-top:6px;border-radius:10px;display:grid;place-items:center}
+    .app-shell.sidebar-collapsed nav{margin-bottom:auto}
     .logout-btn-icon{display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid rgba(255,255,255,.12);color:#fff;padding:8px;border-radius:8px;cursor:pointer;width:100%;margin-top:8px}
     .logout-btn-icon:hover{background:rgba(255,255,255,.06)}
 

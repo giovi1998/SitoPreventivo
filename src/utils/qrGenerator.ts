@@ -111,7 +111,7 @@ function injectLogoOverlay(svg: string, matrix: { data: boolean[][]; size: numbe
   return svg.replace(/<\/svg>/, `${logoBg}${logo}</svg>`);
 }
 
-export async function generateQrSvg(qr: QRCodeType): Promise<string> {
+export function generateQrSvg(qr: QRCodeType): string {
   const payload = buildQrPayload(qr.data);
   if (!payload) {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"></svg>`;

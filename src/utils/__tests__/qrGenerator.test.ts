@@ -112,9 +112,9 @@ describe('qrGenerator - validateQrContrast', () => {
 });
 
 describe('qrGenerator - SVG/PNG generation', () => {
-  it('generateQrSvg returns valid SVG with viewBox', async () => {
+  it('generateQrSvg returns valid SVG with viewBox (synchronous)', () => {
     const qr = baseQr();
-    const svg = await generateQrSvg(qr);
+    const svg = generateQrSvg(qr);
     expect(svg).toContain('<svg');
     expect(svg).toContain('viewBox=');
     expect(svg).toContain('</svg>');
@@ -132,64 +132,66 @@ describe('qrGenerator - SVG/PNG generation', () => {
     expect(bytes[3]).toBe(0x47);
   });
 
-  it('generateQrSvg respects fgColor', async () => {
+  it('generateQrSvg respects fgColor', () => {
     const qr = { ...baseQr(), style: { ...baseQr().style, fgColor: '#ff0000' } };
-    const svg = await generateQrSvg(qr);
+    const svg = generateQrSvg(qr);
     expect(svg.toLowerCase()).toContain('#ff0000');
   });
 
-  it('generateQrSvg with logoOverlay injects an <image> tag', async () => {
+  it('generateQrSvg with logoOverlay injects an <image> tag', () => {
     const qr = { ...baseQr(), style: { ...baseQr().style, logoOverlay: 'data:image/png;base64,AAAA' } };
-    const svg = await generateQrSvg(qr);
+    const svg = generateQrSvg(qr);
     expect(svg).toContain('<image');
   });
 });
 
 describe('qrGenerator - dotStyle rendering', () => {
-  it('square style emits <rect> modules without rx', async () => {
+  it('square style emits <rect> modules without rx', () => {
     const qr = { ...baseQr(), style: { ...baseQr().style, dotStyle: 'square' as const } };
-    const svg = await generateQrSvg(qr);
+    const svg = generateQrSvg(qr);
     expect(svg).toContain('<rect');
     expect(svg).not.toContain('<circle');
     expect(svg).not.toContain('rx=');
   });
 
-  it('rounded style emits <rect> with rx/ry', async () => {
+  it('rounded style emits <rect> with rx/ry', () => {
     const qr = { ...baseQr(), style: { ...baseQr().style, dotStyle: 'rounded' as const } };
-    const svg = await generateQrSvg(qr);
+    const svg = generateQrSvg(qr);
     expect(svg).toContain('<rect');
     expect(svg).toContain('rx="0.35"');
     expect(svg).not.toContain('<circle');
   });
 
-  it('dots style emits <circle> modules', async () => {
+  it('dots style emits <circle> modules', () => {
     const qr = { ...baseQr(), style: { ...baseQr().style, dotStyle: 'dots' as const } };
-    const svg = await generateQrSvg(qr);
+    const svg = generateQrSvg(qr);
     expect(svg).toContain('<circle');
     const circles = svg.match(/<circle/g) || [];
     expect(circles.length).toBeGreaterThan(0);
   });
 
-  it('different dotStyles produce structurally different SVG', async () => {
+  it('different dotStyles produce structurally different SVG', () => {
     const base = baseQr();
     const square = { ...base, style: { ...base.style, dotStyle: 'square' as const } };
     const rounded = { ...base, style: { ...base.style, dotStyle: 'rounded' as const } };
     const dots = { ...base, style: { ...base.style, dotStyle: 'dots' as const } };
-    const [s1, s2, s3] = await Promise.all([generateQrSvg(square), generateQrSvg(rounded), generateQrSvg(dots)]);
+    const s1 = generateQrSvg(square);
+    const s2 = generateQrSvg(rounded);
+    const s3 = generateQrSvg(dots);
     expect(s1).not.toBe(s2);
     expect(s2).not.toBe(s3);
     expect(s1).not.toBe(s3);
   });
 
-  it('respects fgColor on rendered modules', async () => {
+  it('respects fgColor on rendered modules', () => {
     const qr = { ...baseQr(), style: { ...baseQr().style, fgColor: '#ff00ff' } };
-    const svg = await generateQrSvg(qr);
+    const svg = generateQrSvg(qr);
     expect(svg.toLowerCase()).toContain('#ff00ff');
   });
 
-  it('emits empty SVG for empty payload', async () => {
+  it('emits empty SVG for empty payload', () => {
     const qr = createEmptyQrCode();
-    const svg = await generateQrSvg(qr);
+    const svg = generateQrSvg(qr);
     expect(svg).toContain('<svg');
     expect(svg).toContain('</svg>');
   });
