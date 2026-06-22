@@ -603,3 +603,7 @@ Prima di considerare la fase 4 completata, verificare:
 Dopo il completamento della fase 4, procedere con
 `spec/spec-data-phase5-tier-system.md` (Tier system free+watermark+unlock
 code).
+
+## Note: Logo nelle card
+
+I logo creati nel logo builder possono essere usati come ront.logoUrl nelle card. Pattern: il logo builder genera un''immagine base64 che l''utente carica nel card editor tramite il file input esistente. In futuro, un dropdown ''Usa logo salvato'' puo riusare dataService.getDocuments(email, ''logo'').

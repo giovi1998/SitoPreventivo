@@ -574,3 +574,13 @@ Prima di considerare la fase 3 completata, verificare:
 Dopo il completamento della fase 3, procedere con
 `spec/spec-tool-phase4-logo-builder.md` (Logo SVG builder, no AI nella
 v1).
+
+## Note: AI per flyer
+
+L''AI per il flyer puo riusare lo stesso pattern di cardOrchestrator (modulo dedicato, no tools, JSON round-trip). File suggeriti:
+- src/ai/prompts/flyerSystem.ts
+- src/ai/flyerOrchestrator.ts
+- src/hooks/useAIFlyer.ts
+
+Riusa: providerRegistry, chatStore, sanitizeAIResponse, 
+eedsAnalysis, StreamBuffer, dataService.trackTokens.

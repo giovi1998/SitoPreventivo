@@ -43,8 +43,10 @@ Server su `http://localhost:8000`
 | **Clausole** | Sezione personalizzabile con condizioni generali |
 | **10 colori brand** | Palette di colori per personalizzare il documento |
 | **Collection** | Salva, duplica, elimina preventivi, cambia stato (BOZZA/INVIATO/ACCETTATO/RIFIUTATO) |
-| **Autenticazione** | Login/registrazione con localStorage |
-| **Responsive** | Layout adattivo desktop, tablet, mobile |
+| **QR Code Generator** | Crea QR code personalizzati (URL, vCard, WiFi, SMS, email, phone) con stili (square/rounded/dots), logo overlay, export SVG/PNG |
+| **Bigliettini da Visita** | Editor fronte/retro con 3 layout, 3 formati (EU/US/square), grid editor manuale, AI Design Mode, export PDF 10-up/PNG/SVG/JSON |
+| **AI Design Mode (Card)** | 7 quick actions per bigliettini (premium, minimal, compila, palette, stampa, sposta QR, allarga foto) + prompt personalizzato |
+| **Responsive** | Layout adattivo desktop (3-col), tablet e mobile (tab system + FAB AI + zoom preview) |
 
 ## AI Co-Editor (DeepSeek)
 
@@ -85,6 +87,91 @@ Il PDF è generato con **pdfmake** (nessun canvas, page break intelligenti):
 4. **Clausole e condizioni generali** (nuova pagina)
 5. **Riepilogo comparativo** (nuova pagina)
 6. **Footer**: Validità 30 giorni
+
+## QR Code Generator
+
+Generatore di QR Code personalizzati con anteprima live e salvataggio in collection.
+
+### Tipi supportati
+
+| Tipo | Payload |
+|------|---------|
+| URL | Link web (https://...) |
+| Testo | Testo libero |
+| Email | `mailto:` |
+| Telefono | `tel:` |
+| vCard | Contatto (nome, organizzazione, ruolo, telefono, email) |
+| WiFi | `WIFI:S:...;T:...;P:...;H:...;` |
+| SMS | `SMSTO:` |
+
+### Stili
+
+- **Dot style**: `square` (predefinito), `rounded` (moduli arrotondati), `dots` (punti)
+- **Error correction**: L (7%), M (15%), Q (25%), H (30%)
+- **Logo overlay**: immagine base64 opzionale centrata sul QR (max 20% area)
+- **Colori**: foreground e background personalizzabili con validazione contrasto
+
+### Export
+
+- **SVG**: vettoriale, editabile in Illustrator/Inkscape
+- **PNG**: raster ad alta risoluzione (256px)
+- **Salvataggio**: in collection come documento `qrCode`
+
+## Bigliettini da Visita
+
+Editor completo per bigliettini da visita professionali con anteprima live fronte/retro.
+
+### Formati
+
+| Preset | Dimensioni | Standard |
+|--------|-----------|----------|
+| EU 85×55 | 85×55 mm | Europeo |
+| US 89×51 | 89×51 mm | Americano |
+| Square 65×65 | 65×65 mm | Quadrato |
+
+### Layout fronte
+
+- **Centrato**: foto in alto, nome/titolo/azienda centrati
+- **Sinistra**: foto a sinistra, testo a destra, divisore accent
+- **Split**: foto full-height a sinistra, testo a destra
+
+### Grid editor
+
+- **Sistema a griglia** (4×4 di default, espandibile 2×2 → 8×8)
+- **Preset**: Sinistra (foto a sx), Centrato, Diviso (contatti + QR)
+- **Editor manuale**: seleziona elemento → frecce ←↑→↓ per spostare, +/− per ridimensionare
+- **Editor mobile**: menu popup compatto con frecce in griglia 3×3
+- **Grid overlay**: toggle per visualizzare le linee guida
+
+### AI Design Mode
+
+7 quick actions + prompt personalizzato:
+
+| Azione | Effetto |
+|--------|---------|
+| Rendi premium | Accent sofisticato (navy/bordeaux/teal), layout split, font Inter |
+| Minimal | Rimuove campi vuoti, accent neutro #333 |
+| Compila da nome | Genera titolo professionale dal nome |
+| Cambia palette | Palette predefinite coerenti (teal, navy, bordeaux, monochrome) |
+| Ottimizza per stampa | Verifica contrasto, suggerimenti leggibilità (analysis mode) |
+| ← Sposta QR | Sposta il QR a sinistra via grid |
+| ↔ Allarga foto | Aumenta la larghezza della foto via grid |
+
+### Export
+
+| Formato | Descrizione |
+|---------|-------------|
+| **PDF 10-up** | A4 con 10 bigliettini (5×2), pronto per tipografia |
+| **PNG fronte/retro** | Immagine raster ad alta risoluzione |
+| **SVG fronte/retro** | Vettoriale editabile |
+| **JSON** | Backup completo dati card |
+
+### Responsive
+
+- **Desktop** (≥900px): layout 3-col (form | preview | AI panel)
+- **Mobile** (<900px): tab system (Anteprima | Modifica | AI) + FAB AI floating
+- **Zoom preview**: controlli −/reset/+ (50%–150%), default 70% mobile / 100% desktop
+- **AI always-accessible**: FAB con badge log non letti → bottom sheet dal basso
 
 ## Architettura Dati
 
@@ -249,15 +336,38 @@ SitoPreventivo/
 │   ├── components/
 │   │   ├── DocumentPreview.jsx # Layout PDF preview
 │   │   ├── EditorView.jsx     # AI panel + controlli (sezioni collassabili)
+│   │   ├── QREditor.tsx       # Generatore QR Code (URL, vCard, WiFi, SMS)
+│   │   ├── CardEditor.tsx     # Editor bigliettini (3-col desktop, tabs mobile)
+│   │   ├── CardPreview.tsx    # Anteprima card (flexbox + CSS Grid mode)
+│   │   ├── CardEditorTabs.tsx # Tab system per mobile
+│   │   ├── MobileGridEditor.tsx # Grid editor mobile (popup frecce)
+│   │   ├── CardAIFab.tsx      # FAB AI floating (mobile)
+│   │   ├── CardAIBottomSheet.tsx # Bottom sheet AI panel (mobile)
+│   │   ├── CardPreviewZoomControls.tsx # Controlli zoom anteprima
 │   │   ├── CollectionView.jsx # Griglia preventivi + stato
 │   │   ├── SaveDialog.jsx     # Modale per nome personalizzato
 │   │   ├── Layout.jsx         # Sidebar con icone
 │   │   ├── Topbar.jsx         # Salva/Esporta (solo editor)
 │   │   ├── GlobalStyles.jsx   # Tutti i CSS
 │   │   └── Icon.jsx           # Icone SVG
+│   ├── hooks/
+│   │   ├── useAICard.ts       # Hook AI per card (streaming, token, error recovery)
+│   │   ├── useMediaQuery.ts   # Hook responsive (breakpoint detection)
+│   │   ├── useCardAIFloating.tsx # Provider + hook stato AI panel mobile
+│   │   └── useCardPreviewZoom.ts # Hook zoom anteprima (50-150%)
+│   ├── ai/
+│   │   ├── cardOrchestrator.ts # AI orchestrator per card (no tools)
+│   │   ├── cardMerge.ts       # Merge risposta AI → card (grid, style, text)
+│   │   ├── aiCardInputSchema.ts # Zod schema input AI card
+│   │   └── prompts/
+│   │       ├── cardSystem.ts  # System prompt AI card
+│   │       └── cardContext.ts # Context builder AI card
 │   └── utils/
 │       ├── dataService.js     # API produzione / localStorage locale
-│       └── generatePDF.ts     # PDF con pdfmake
+│       ├── generatePDF.ts     # PDF preventivi con pdfmake
+│       ├── cardGenerator.ts   # PDF/PNG/SVG export bigliettini
+│       ├── qrGenerator.ts     # QR Code SVG/PNG generation
+│       └── documentSchemas.ts # Zod schema (quote, QR, card, grid presets)
 ```
 
 ## Sviluppo

@@ -41,9 +41,51 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `db/schema.ts` | Drizzle schema (users, quotes, user_settings) |
 | `src/utils/dataService.js` | Data layer — routes to API or localStorage |
 | `src/utils/logger.ts` | Client-side logger (sendBeacon → /api/logs) |
-| `src/utils/generatePDF.ts` | PDF generation with pdfmake |
+| `src/utils/generatePDF.ts` | PDF generation with pdfmake (preventivi) |
+| `src/utils/cardGenerator.ts` | Card PDF/PNG/SVG export + `buildCardSvg` |
+| `src/utils/qrGenerator.ts` | QR Code SVG/PNG generation (`qrcode` lib) |
+| `src/utils/documentSchemas.ts` | Zod schema: quote, QR, businessCard, cardGrid + presets |
+| `src/components/CardEditor.tsx` | Editor bigliettini: 3-col desktop / tabs mobile, FAB AI, zoom |
+| `src/components/CardPreview.tsx` | Anteprima card: flexbox + CSS Grid mode (grid-based rendering) |
+| `src/components/QREditor.tsx` | Generatore QR Code (7 tipi, stili, logo overlay) |
+| `src/hooks/useAICard.ts` | Hook AI card (streaming, token tracking, error recovery) |
+| `src/hooks/useMediaQuery.ts` | Hook responsive (breakpoint detection via matchMedia) |
+| `src/ai/cardOrchestrator.ts` | AI orchestrator card (no tools, JSON round-trip) |
+| `src/ai/cardMerge.ts` | Merge risposta AI → card (grid, style, text, photo-preserv) |
 | `vite.config.js` | Port 8000, SPA fallback for /app route |
 | `vercel.json` | Build runs `db:migrate` before `build` |
+
+## Business Card Module
+
+- **AI = Option B (dedicated module)**, not generic refactor — zero risk to quote AI
+- **No new API endpoints** — reuses `providerRegistry` DeepSeek, same `/api/ai/chat`
+- **Card AI has NO tools** (no prices/discounts) — simpler than quote AI
+- **Grid-based rendering**: `CardPreview` renders via CSS Grid when `card.grid` is set. Each element (photo, name, title, company, qr, contacts, socials) gets `gridColumn`/`gridRow` based on `grid.elements[key]`. Moving an element in the grid **visually moves it** in the preview.
+- **`cardMerge.ts`** handles grid merging: never overwrites `photoUrl`/`logoUrl` (base64 user-uploaded)
+- **Grid presets**: `gridPresetLeft()`, `gridPresetCentered()`, `gridPresetSplit()` in `documentSchemas.ts`
+- **Export**: PDF 10-up (tipografia), PNG (raster), SVG (vettoriale), JSON (backup). All client-side via `pdfmake` + canvas pipeline.
+- **`buildCardSvg`** is the rendering pipeline: SVG → Image → canvas → PNG. `buildMinimalPng` fallback for jsdom.
+
+## QR Code Module
+
+- **7 tipi**: URL, text, email, phone, vCard, WiFi, SMS
+- **Stili**: square, rounded, dots — via `qrcode` lib
+- **Logo overlay**: base64 opzionale, max 20% area QR
+- **Export**: SVG (vettoriale), PNG (raster)
+- **Auto-save**: in collection come documento `qrCode`
+- **Validazione**: contrasto fg/bg, PII check (WiFi password non loggata)
+
+## Responsive Patterns
+
+- **`useMediaQuery(query)`**: hook React, ritorna `boolean`, listener su `change` event, cleanup su unmount, fallback SSR
+- **Conditional render, NOT CSS hide**: il 3-col desktop NON è nel DOM quando mobile (evita duplicati)
+- **Tab system** (`CardEditorTabs`): 3 tab (Anteprima, Modifica, AI) su mobile (<900px)
+- **FAB AI** (`CardAIFab`): bottone floating 56px, sempre visibile in mobile, badge con log count
+- **Bottom sheet** (`CardAIBottomSheet`): drawer dal basso 85vh, ESC + backdrop chiudono, `role=dialog`
+- **`useCardAIFloating`**: Context provider con stato `isOpen`/`hasUnread`, azioni `open`/`close`/`toggle`/`pushLog`
+- **Zoom preview** (`useCardPreviewZoom`): range 50-150%, step 10%, default 70% mobile / 100% desktop
+- **Mobile grid editor** (`MobileGridEditor`): select elemento + popup frecce 3×3 (non drag-and-drop, più accessibile)
+- **iOS auto-zoom prevention**: `font-size: 16px` su tutti gli input in mobile
 
 ## Environment Variables
 
@@ -154,6 +196,7 @@ Vedi `.agents/skills/vercel-react-best-practices/rules/client-localstorage-schem
 
 Chiavi attuali (senza prefisso, da versionare in prossima migrazione):
 - `precisionQuote_quotes` — array preventivi legacy
+- `precisionQuote_documents` — documenti unificati (preventivi, QR, card, flyer, logo)
 - `registeredUsers` — array utenti
 - `userSettings_<email>` — impostazioni utente
 - `deepseekApiKey` — chiave DeepSeek (solo dev)
@@ -164,7 +207,7 @@ Chiavi attuali (senza prefisso, da versionare in prossima migrazione):
 - Framework: Vitest + React Testing Library + jsdom
 - Run single test: `npx vitest run path/to/file.test.ts`
 - No test database needed — local tests use localStorage path
-- Coverage attuale: ~8% (4 file). Target: 60%.
+- Coverage attuale: ~8% (4 file). Target: 60%. Attualmente 671 test su 67 file.
 
 ## Logging
 

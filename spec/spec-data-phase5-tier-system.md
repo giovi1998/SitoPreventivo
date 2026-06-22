@@ -796,3 +796,11 @@ Prima di considerare la fase 5 completata, verificare:
 Dopo il completamento della fase 5, procedere con
 `spec/spec-architecture-phase6-unified-collection.md` (CollectionView
 unificata + migration preventivi esistenti).
+
+## Note: AI card tier
+
+L''AI per card rispetta il tier system:
+- **Free**: limite prompt/giorno (stesso rate-limit dell''AI quote)
+- **Unlocked**: illimitato
+
+Token tracking riusa dataService.trackTokens(email, tokens). Il watermark PDF per free tier e nella fase 5 (questa spec).

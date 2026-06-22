@@ -646,3 +646,7 @@ Prima di considerare la fase 6 completata, verificare:
 Dopo il completamento della fase 6, procedere con
 `spec/spec-process-phase7-polish.md` (Onboarding, HomePage, docs
 update).
+
+## Note: AI-generated cards
+
+Le card create o modificate con AI appaiono in Collection come le altre. Il campo 	itle puo includere il suffisso ''(AI)'' se l''utente vuole tracciare le modifiche AI. Questo e opzionale e non modificato dall''AI automaticamente.

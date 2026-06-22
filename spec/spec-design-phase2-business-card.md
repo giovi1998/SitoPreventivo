@@ -620,3 +620,96 @@ Prima di considerare la fase 2 completata, verificare:
 
 Dopo il completamento della fase 2, procedere con
 `spec/spec-design-phase3-flyer.md` (Volantino).
+
+## 12. AI Integration (Aggiunta post-spec originale)
+
+L''AI per i bigliettini usa un **modulo dedicato** (non l''orchestratore quote), con lo stesso provider DeepSeek e la stessa chiave API. Nessun nuovo endpoint API.
+
+### File AI card
+
+| File | Ruolo |
+|------|-------|
+| src/ai/prompts/cardSystem.ts | System prompt card-specific (no preventivi) |
+| src/ai/prompts/cardContext.ts | detectCardRelevantFields + uildCardAIContext |
+| src/ai/aiCardInputSchema.ts | Zod per validare JSON AI card |
+| src/ai/cardMerge.ts | Deep-merge card con track changes |
+| src/ai/cardOrchestrator.ts | CardAIOrchestrator (no tools, no multi-turn) |
+| src/hooks/useAICard.ts | Hook con streaming log + token tracking |
+
+### Quick Actions (REQ-012)
+
+5 quick action buttons nell''AI panel del CardEditor:
+
+| Action | Prompt | Cosa fa |
+|--------|--------|---------|
+| Rendi premium | Accent sofisticato + layout split/centered + font Inter | Cambia style + layout |
+| Minimal | Rimuovi social vuoti + accent neutro + layout left | Pulisce + neutralizza |
+| Compila da nome | Genera titolo + azienda + social placeholder | AI genera contenuti |
+| Cambia palette | 4 palette predefinite (teal/navy/bordeaux/monochrome) | Cambia 3 colori |
+| Ottimizza per stampa | Analysis mode (testo libero) | Suggerimenti, no merge |
+
+### REQ-013: No tools
+L''AI card non usa tools (la card non ha prezzi/sconti). Solo JSON round-trip o analysis mode.
+
+### REQ-014: Streaming
+Lo streaming funziona per tutte le risposte AI card. Log panel riusa AILogPanel component.
+
+### Token tracking
+Riusa dataService.trackTokens(email, tokens). Admin ha token illimitati.
+
+## 13. Responsive Layout & AI Always-Accessible (mobile/tablet/desktop)
+
+L'editor card supporta 3 breakpoint con layout adattivo. L'AI è sempre accessibile indipendentemente dal viewport.
+
+### REQ-015: Breakpoint detection
+- Desktop (>= 900px): layout 3-col (form | preview | AI panel laterale)
+- Mobile (< 900px): tab system (Anteprima | Modifica | AI) + FAB AI floating
+- Rilevamento via hook `useMediaQuery('(max-width: 900px)')`
+
+### REQ-016: Tab system (mobile)
+- Componente `<CardEditorTabs>` con header a tab orizzontali, content solo del tab attivo
+- 3 tab: Anteprima, Modifica, AI
+- Tab attivo evidenziato con `background: var(--accent)`
+
+### REQ-017: FAB AI (mobile only)
+- Bottone circolare 56px floating in basso a destra, sempre visibile in mobile
+- Icona sparkles, badge con `cardAiLogs.length` se > 0 (max "99+")
+- Tap → apre bottom sheet con pannello AI completo
+- `aria-label` dinamico: "Apri pannello AI (N log non letti)"
+
+### REQ-018: Bottom sheet AI
+- Componente `<CardAIBottomSheet>` con backdrop scuro + contenitore 85vh dal basso
+- Animazione slideUp 200ms
+- ESC + click backdrop chiudono
+- `role="dialog"`, `aria-modal="true"`
+
+### REQ-019: Mobile grid editor
+- Componente `<MobileGridEditor>` con select elemento + select preset + bottone "Sposta"
+- Tap "Sposta" apre popup con frecce ←↑→↓ in griglia 3×3
+- Freccia → `onChange(grid)` con x/y aggiornati + chiude popup
+- Bottone "Sposta" disabilitato finché nessun elemento selezionato
+
+### REQ-020: Hook useCardAIFloating
+- Context provider wrappa CardEditor
+- Stato: `isOpen`, `hasUnread`
+- Azioni: `open`, `close`, `toggle`, `pushLog`
+- `hasUnread` true quando arriva log mentre `isOpen=false`
+- `open()` resetta `hasUnread`
+
+### REQ-021: Hook useMediaQuery
+- Singleton hook React, ritorna `boolean`
+- Listener su `change` event di MediaQueryList
+- Cleanup su unmount, fallback SSR false
+
+### File aggiunti/modificati
+- `src/hooks/useMediaQuery.ts` (nuovo)
+- `src/hooks/useCardAIFloating.tsx` (nuovo)
+- `src/components/CardEditorTabs.tsx` (nuovo)
+- `src/components/CardAIFab.tsx` (nuovo)
+- `src/components/CardAIBottomSheet.tsx` (nuovo)
+- `src/components/MobileGridEditor.tsx` (nuovo)
+- `src/components/CardEditor.tsx` (refactor: provider + tabs + FAB)
+- `src/components/CardEditor.css` (+~200 righe responsive)
+
+### Test
+- 5 useCardAIFloating + 3 useMediaQuery + 4 CardAIBottomSheet + 3 CardAIFab + 3 MobileGridEditor + 2 CardEditorTabs + 5 responsive CardEditor = **25 nuovi test**
