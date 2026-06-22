@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import type { BusinessCard, BusinessCardSizePreset, CardGrid } from '../utils/documentSchemas';
 import { resolveCardQrPayload } from '../utils/cardGenerator';
 import { generateQrSvg } from '../utils/qrGenerator';
@@ -58,16 +58,12 @@ function deriveHandle(url: string): string {
 }
 
 function CardPreview({ side, card, showGrid = false }: CardPreviewProps) {
-  const [qrSvg, setQrSvg] = useState<string>('');
-
   const qrPayload = resolveCardQrPayload(card);
 
-  useEffect(() => {
-    if (side !== 'back' || !qrPayload) {
-      setQrSvg('');
-      return;
-    }
-    let cancelled = false;
+  // QR generato sincronamente (la libreria qrcode è sync, niente Promise
+  // inutili). Così il QR è visibile al primo render — coerente con export.
+  const qrSvg = useMemo(() => {
+    if (side !== 'back' || !qrPayload) return '';
     const qrObj: any = {
       documentType: 'qrCode',
       id: 'card-preview',
@@ -85,16 +81,11 @@ function CardPreview({ side, card, showGrid = false }: CardPreviewProps) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    generateQrSvg(qrObj)
-      .then((svg) => {
-        if (!cancelled) setQrSvg(svg);
-      })
-      .catch(() => {
-        if (!cancelled) setQrSvg('');
-      });
-    return () => {
-      cancelled = true;
-    };
+    try {
+      return generateQrSvg(qrObj);
+    } catch {
+      return '';
+    }
   }, [qrPayload, side, card.style.textColor]);
 
   // Grid overlay: 4×4 lines over the card (absolute positioned, pointer-events: none)
@@ -110,12 +101,12 @@ function CardPreview({ side, card, showGrid = false }: CardPreviewProps) {
   ) : null;
 
   if (side === 'front') {
-    return <FrontPreview card={card} gridOverlay={gridOverlay} />;
+    return <FrontPreview card={card} gridOverlay={gridOverlay} showGrid={showGrid} />;
   }
-  return <BackPreview card={card} qrSvg={qrSvg} qrPayload={qrPayload} gridOverlay={gridOverlay} />;
+  return <BackPreview card={card} qrSvg={qrSvg} qrPayload={qrPayload} gridOverlay={gridOverlay} showGrid={showGrid} />;
 }
 
-const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay }: { card: BusinessCard; gridOverlay: React.ReactNode }) {
+const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showGrid }: { card: BusinessCard; gridOverlay: React.ReactNode; showGrid: boolean }) {
   const sizeClass = SIZE_CLASS[card.style.sizePreset];
   const layoutClass = `layout-${card.front.layout}`;
   const borderClass = `border-${card.style.borderStyle}`;
@@ -123,7 +114,13 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay }: { c
   const hasLogo = !!card.front.logoUrl;
   const monogram = useMemo(() => computeMonogram(card.front.name), [card.front.name]);
   const grid = card.grid;
-  const isGridMode = !!grid;
+  // Phase 2.1: il front entra in grid mode SOLO se (a) la grid ha elementi
+  // del front E (b) l'utente ha attivato "Griglia ON" tramite il toggle.
+  // Senza (b), anche se card.grid è settato, renderizziamo in flexbox
+  // (layout classico) — altrimenti il front è "sminchiato" quando l'utente
+  // usa il grid editor e poi spegne l'overlay.
+  const hasFrontElement = !!(grid && (grid.elements.photo || grid.elements.name || grid.elements.title || grid.elements.company || grid.elements.logo));
+  const isGridMode = !!grid && hasFrontElement && showGrid;
 
   const baseStyle: React.CSSProperties = {
     backgroundColor: card.style.bgColor,
@@ -180,6 +177,11 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay }: { c
           {grid!.elements.photo && (
             <div data-testid="grid-el-photo" style={gridPlacement(grid!.elements.photo)}>
               {photoContent}
+            </div>
+          )}
+          {grid!.elements.logo && card.front.logoUrl && (
+            <div data-testid="grid-el-logo" style={{ ...gridPlacement(grid!.elements.logo), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img className="card-logo grid" src={card.front.logoUrl} alt="Logo aziendale" style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain' }} />
             </div>
           )}
           {grid!.elements.name && card.front.name && (
@@ -321,14 +323,18 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay }: { c
   );
 });
 
-const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gridOverlay }: { card: BusinessCard; qrSvg: string; qrPayload: string; gridOverlay: React.ReactNode }) {
+const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gridOverlay, showGrid }: { card: BusinessCard; qrSvg: string; qrPayload: string; gridOverlay: React.ReactNode; showGrid: boolean }) {
   const sizeClass = SIZE_CLASS[card.style.sizePreset];
   const borderClass = `border-${card.style.borderStyle}`;
   const socials = card.back.socials.filter((s) => s.platform && s.url);
   const hostname = card.back.website ? deriveHostname(card.back.website) : '';
   const headerWord = hostname || card.front.company || '';
-  const grid = card.grid;
-  const isGridMode = !!grid;
+  const grid = card.backGrid ?? card.grid;
+  // Phase 2.1: il back entra in grid mode SOLO se (a) la grid ha elementi
+  // del back E (b) l'utente ha attivato "Griglia ON". Stessa logica del
+  // front — rispetta il toggle dell'utente.
+  const hasBackElement = !!(grid && (grid.elements.contacts || grid.elements.qr || grid.elements.socials));
+  const isGridMode = !!grid && hasBackElement && showGrid;
 
   const baseStyle: React.CSSProperties = {
     backgroundColor: card.style.bgColor,
@@ -350,7 +356,13 @@ const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gr
     <>
       {card.back.phone && <div className="card-back-line"><span className="card-back-key">Telefono</span><span className="card-back-val">{card.back.phone}</span></div>}
       {card.back.email && <div className="card-back-line"><span className="card-back-key">Email</span><span className="card-back-val">{card.back.email}</span></div>}
-      {card.back.website && <div className="card-back-line"><span className="card-back-key">Web</span><span className="card-back-val" style={{ color: card.style.accentColor }}>{card.back.website}</span></div>}
+      {/* Phase 2.1: WEB row omessa se QR presente (ridondante — il QR codifica già l'URL) */}
+      {card.back.website && !qrPayload && (
+        <div className="card-back-line">
+          <span className="card-back-key">Web</span>
+          <span className="card-back-val" style={{ color: card.style.accentColor }}>{card.back.website}</span>
+        </div>
+      )}
       {card.back.address && <div className="card-back-line"><span className="card-back-key">Indirizzo</span><span className="card-back-val">{card.back.address}</span></div>}
       {card.back.vatNumber && <div className="card-back-line"><span className="card-back-key">P.IVA</span><span className="card-back-val">{card.back.vatNumber}</span></div>}
     </>
