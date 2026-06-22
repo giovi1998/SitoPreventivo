@@ -7,9 +7,15 @@ import {
   qrDataTypeSchema,
   qrErrorCorrectionSchema,
   qrDotStyleSchema,
+  businessCardSchema,
   createEmptyQrCode,
   createGiovanniQrTemplate,
   createDocumentFromQrCode,
+  createEmptyCard,
+  createGiovanniCardTemplate,
+  gridPresetLeft,
+  gridPresetCentered,
+  gridPresetSplit,
 } from '../documentSchemas';
 
 const GIOVANNI_URL = 'https://webdeveloperca.netlify.app/';
@@ -155,6 +161,197 @@ describe('documentSchemas', () => {
       expect(doc.userEmail).toBe('a@b.com');
       expect(doc.id).toBe(original.id);
       expect(doc.updatedAt >= originalUpdatedAt).toBe(true);
+    });
+  });
+
+  describe('businessCardSchema', () => {
+    const baseCard = {
+      documentType: 'businessCard' as const,
+      id: 'card_1',
+      title: 'Test card',
+      front: {
+        name: 'Mario Rossi',
+        title: 'CEO',
+        company: 'ACME',
+        photoUrl: null,
+        logoUrl: null,
+        layout: 'left' as const,
+      },
+      back: {
+        phone: '+393331234567',
+        email: 'mario@acme.com',
+        website: 'https://acme.com',
+        address: 'Via Roma 1',
+        vatNumber: 'IT01234567890',
+        socials: [{ platform: 'LinkedIn', url: 'https://linkedin.com/in/mario' }],
+        qrPayload: '',
+        qrLabel: 'Scansiona per visitare il sito',
+      },
+      style: {
+        sizePreset: 'eu-85x55' as const,
+        bgColor: '#FFFFFF',
+        textColor: '#1a1a2e',
+        accentColor: '#01696F',
+        fontFamily: 'Inter',
+        borderStyle: 'accent-strip-left' as const,
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('accepts a complete business card (REQs 002, 003, 007)', () => {
+      const r = businessCardSchema.safeParse(baseCard);
+      expect(r.success).toBe(true);
+    });
+
+    it('rejects wrong documentType literal', () => {
+      const r = businessCardSchema.safeParse({ ...baseCard, documentType: 'quote' });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects invalid hex color in style', () => {
+      const r = businessCardSchema.safeParse({ ...baseCard, style: { ...baseCard.style, bgColor: 'red' } });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects unknown front layout', () => {
+      const r = businessCardSchema.safeParse({
+        ...baseCard,
+        front: { ...baseCard.front, layout: 'random' },
+      });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects unknown size preset', () => {
+      const r = businessCardSchema.safeParse({
+        ...baseCard,
+        style: { ...baseCard.style, sizePreset: 'jumbo' },
+      });
+      expect(r.success).toBe(false);
+    });
+
+    it('accepts all 3 size presets', () => {
+      for (const preset of ['eu-85x55', 'us-89x51', 'square-65x65'] as const) {
+        const r = businessCardSchema.safeParse({
+          ...baseCard,
+          style: { ...baseCard.style, sizePreset: preset },
+        });
+        expect(r.success).toBe(true);
+      }
+    });
+
+    it('accepts all 3 front layouts', () => {
+      for (const layout of ['centered', 'left', 'split'] as const) {
+        const r = businessCardSchema.safeParse({
+          ...baseCard,
+          front: { ...baseCard.front, layout },
+        });
+        expect(r.success).toBe(true);
+      }
+    });
+
+    it('accepts all 4 border styles', () => {
+      for (const bs of ['none', 'thin', 'accent-strip-left', 'accent-strip-bottom'] as const) {
+        const r = businessCardSchema.safeParse({
+          ...baseCard,
+          style: { ...baseCard.style, borderStyle: bs },
+        });
+        expect(r.success).toBe(true);
+      }
+    });
+  });
+
+  describe('createEmptyCard', () => {
+    it('returns a valid card with id and timestamps (AC-001)', () => {
+      const card = createEmptyCard();
+      const r = businessCardSchema.safeParse(card);
+      expect(r.success).toBe(true);
+      expect(card.documentType).toBe('businessCard');
+      expect(card.id).toMatch(/^card_/);
+      expect(card.front.layout).toBe('left');
+      expect(card.style.sizePreset).toBe('eu-85x55');
+      expect(card.back.website).toBe('');
+      expect(card.back.qrPayload).toBe('');
+      expect(card.front.photoUrl).toBeNull();
+      expect(card.front.logoUrl).toBeNull();
+    });
+
+    it('generates unique ids', () => {
+      const a = createEmptyCard();
+      const b = createEmptyCard();
+      expect(a.id).not.toBe(b.id);
+    });
+  });
+
+  describe('createGiovanniCardTemplate (AC-002)', () => {
+    it('pre-fills Giovanni URL and XXXXX placeholders', () => {
+      const card = createGiovanniCardTemplate();
+      expect(card.back.website).toBe(GIOVANNI_URL);
+      expect(card.back.phone).toBe('XXXXX');
+      expect(card.back.email).toBe('XXXXX');
+      expect(card.back.qrPayload).toBe('');
+      expect(card.front.name).toContain('GIOVANNI');
+      expect(card.title.toLowerCase()).toContain('giovanni');
+      const r = businessCardSchema.safeParse(card);
+      expect(r.success).toBe(true);
+    });
+
+    it('pre-fills LinkedIn placeholder with "XXXXX" (5 chars, coherent with phone/email)', () => {
+      const card = createGiovanniCardTemplate();
+      expect(card.back.socials).toEqual([{ platform: 'LinkedIn', url: 'XXXXX' }]);
+    });
+  });
+
+  describe('cardGridSchema (B1)', () => {
+    it('validates a grid with cols, rows and elements having x/y/w/h', () => {
+      const grid = {
+        cols: 4,
+        rows: 4,
+        elements: {
+          photo: { x: 0, y: 0, w: 1, h: 1 },
+          name: { x: 1, y: 0, w: 3, h: 1 },
+          title: { x: 1, y: 1, w: 3, h: 1 },
+          qr: { x: 3, y: 2, w: 1, h: 2 },
+          contacts: { x: 0, y: 2, w: 3, h: 2 },
+        },
+      };
+      const r = businessCardSchema.shape.grid?.safeParse(grid);
+      expect(r?.success).toBe(true);
+    });
+
+    it('rejects out-of-range cols (must be 2-8)', () => {
+      const r = businessCardSchema.shape.grid?.safeParse({
+        cols: 12,
+        rows: 4,
+        elements: {},
+      });
+      expect(r?.success).toBe(false);
+    });
+
+    it('is optional on businessCardSchema (default omitted)', () => {
+      const card = createEmptyCard();
+      expect((card as any).grid).toBeUndefined();
+    });
+  });
+
+  describe('gridPresetLeft/Centered/Split (B1)', () => {
+    it('gridPresetLeft puts photo on left col, name+title on right', () => {
+      const g = gridPresetLeft();
+      expect(g.cols).toBe(4);
+      expect(g.rows).toBe(4);
+      expect(g.elements.photo!.x).toBe(0);
+      expect(g.elements.name!.x).toBeGreaterThan(0);
+    });
+
+    it('gridPresetCentered centers name+title, photo on top', () => {
+      const g = gridPresetCentered();
+      expect(g.elements.photo!.y).toBe(0);
+      expect(g.elements.name!.x).toBe(0);
+    });
+
+    it('gridPresetSplit puts contacts on left half, qr on right', () => {
+      const g = gridPresetSplit();
+      expect(g.elements.qr!.x).toBeGreaterThan(g.elements.contacts!.x);
     });
   });
 });

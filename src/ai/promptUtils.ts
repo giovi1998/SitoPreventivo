@@ -14,6 +14,7 @@ const ANALYSIS_KEYWORDS = [
   'analizza', 'analisi', 'esamina', 'valuta',
   'dimmi', 'spiega', 'spiegami', 'perché', 'perche',
   'opinione', 'pensieri', 'parere', 'idea', 'idee',
+  'ottimizza', 'verifica', 'controlla', 'check',
   'what can', 'what would', 'what should', 'how can', 'how should',
   'suggest', 'suggestion', 'recommend', 'analyze', 'explain',
   'opinion', 'thoughts', 'ideas',
