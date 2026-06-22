@@ -1328,22 +1328,22 @@
 }
 
 .card-logo {
-  width: 34px;
-  height: 34px;
+  width: 100px;
+  height: 100px;
   object-fit: contain;
 }
 
 .card-logo.centered {
-  margin-top: 4px;
-  width: 48px;
-  height: 48px;
+  margin-top: 6px;
+  width: 125px;
+  height: 125px;
   align-self: center;
 }
 
 .card-logo.split {
-  margin-top: 4px;
-  width: 36px;
-  height: 36px;
+  margin-top: 6px;
+  width: 110px;
+  height: 110px;
 }
 
 .card-front-footer {

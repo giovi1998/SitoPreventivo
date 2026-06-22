@@ -375,7 +375,8 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
     const svg = buildCardSvg(card, 'back', 1024, 663);
     expect(svg).toContain('+39 333 1234567');
     expect(svg).toContain('mario@acme.com');
-    expect(svg).toContain('https://acme.com');
+    // Nota: la riga WEB è omessa perché il QR codifica già l'URL
+    // (Phase 2.1: ridurre ridondanza). Vedi test "omits the WEB contact row..."
   });
 
   it('includes the QR code SVG on the back when payload is present', () => {
@@ -416,5 +417,78 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
     const svg = buildCardSvg(card, 'front', 1024, 663);
     expect(svg).toContain('<image');
     expect(svg).toContain('data:image/png;base64,AAAA');
+  });
+
+  it('includes the logo image in split layout (Phase 2.1 — logo was missing)', () => {
+    const card = {
+      ...createEmptyCard(),
+      front: {
+        ...createEmptyCard().front,
+        photoUrl: 'data:image/png;base64,AAAA',
+        logoUrl: 'data:image/png;base64,LOGO',
+        layout: 'split' as const,
+      },
+    };
+    const svg = buildCardSvg(card, 'front', 1024, 663);
+    expect(svg).toContain('data:image/png;base64,LOGO');
+    // Logo appare almeno una volta nel SVG (photo + logo sono 2 <image>)
+    const imageCount = (svg.match(/<image /g) || []).length;
+    expect(imageCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('omits the hostname wordmark on the front when back has a QR payload (Phase 2.1 — redundant)', () => {
+    const card = {
+      ...createEmptyCard(),
+      back: { ...createEmptyCard().back, website: 'https://webdeveloperca.netlify.app' },
+      front: {
+        ...createEmptyCard().front,
+        photoUrl: 'data:image/png;base64,AAAA',
+        layout: 'split' as const,
+      },
+    };
+    const svg = buildCardSvg(card, 'front', 1024, 663);
+    // L'hostname non deve apparire sul FRONT (solo sul back, vicino al QR)
+    expect(svg).not.toContain('webdeveloperca.netlify.app');
+  });
+
+  it('omits the WEB contact row on the back when QR payload is present (Phase 2.1 — avoid duplication)', () => {
+    const card = {
+      ...createEmptyCard(),
+      back: { ...createEmptyCard().back, website: 'https://webdeveloperca.netlify.app' },
+    };
+    const svg = buildCardSvg(card, 'back', 1024, 663);
+    // La riga WEB non deve essere renderizzata (il QR codifica già l'URL)
+    // Cerchiamo il pattern "Web" seguito da vicino dal valore del website
+    const webRowRegex = /<text[^>]*>WEB<\/text>[\s\S]{0,500}<text[^>]*>https:\/\/webdeveloperca/;
+    expect(svg).not.toMatch(webRowRegex);
+  });
+
+  it('keeps the WEB row when no QR payload is set (user has no QR — they want the URL visible)', () => {
+    // qrPayload = website (auto-derived). To force "no QR", set website to ''
+    const card = {
+      ...createEmptyCard(),
+      back: {
+        ...createEmptyCard().back,
+        website: '',
+        phone: '+39 333',
+        email: 'a@b.com',
+      },
+    };
+    const svg = buildCardSvg(card, 'back', 1024, 663);
+    // Telefono + email devono essere presenti (WEB no perché website vuoto)
+    expect(svg).toContain('+39 333');
+    expect(svg).toContain('a@b.com');
+  });
+
+  it('embeds a real QR code SVG on the back (no placeholder rect, Phase 2.1)', () => {
+    const card = {
+      ...createEmptyCard(),
+      back: { ...createEmptyCard().back, website: 'https://example.com' },
+    };
+    const svg = buildCardSvg(card, 'back', 1024, 663);
+    // Il QR reale è composto da molti <rect> (moduli). Il placeholder era un
+    // singolo <rect> bianco. Verifichiamo che ci siano molti moduli QR.
+    const rectCount = (svg.match(/<rect /g) || []).length;
+    expect(rectCount).toBeGreaterThan(10);
   });
 });

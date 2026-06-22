@@ -16,6 +16,14 @@ import {
   gridPresetLeft,
   gridPresetCentered,
   gridPresetSplit,
+  logoSchema,
+  logoBuilderSchema,
+  logoIconTypeSchema,
+  logoIconShapeSchema,
+  logoLayoutSchema,
+  createEmptyLogo,
+  createLogoTemplate,
+  LOGO_SECTORS,
 } from '../documentSchemas';
 
 const GIOVANNI_URL = 'https://webdeveloperca.netlify.app/';
@@ -289,16 +297,50 @@ describe('documentSchemas', () => {
       expect(card.back.website).toBe(GIOVANNI_URL);
       expect(card.back.phone).toBe('XXXXX');
       expect(card.back.email).toBe('XXXXX');
-      expect(card.back.qrPayload).toBe('');
+      expect(card.back.qrPayload).toBe(GIOVANNI_URL);
       expect(card.front.name).toContain('GIOVANNI');
+      expect(card.front.layout).toBe('split');
+      expect(card.front.photoUrl).toBe('/giovanni-photo.jpg');
       expect(card.title.toLowerCase()).toContain('giovanni');
       const r = businessCardSchema.safeParse(card);
       expect(r.success).toBe(true);
     });
 
-    it('pre-fills LinkedIn placeholder with "XXXXX" (5 chars, coherent with phone/email)', () => {
+    it('pre-fills company "HPE CDS" on front (Phase 2.1 update)', () => {
       const card = createGiovanniCardTemplate();
-      expect(card.back.socials).toEqual([{ platform: 'LinkedIn', url: 'XXXXX' }]);
+      expect(card.front.company).toBe('HPE CDS');
+    });
+
+    it('includes a transparent SVG logo as data URI (Phase 2.1: logoUrl non null)', () => {
+      const card = createGiovanniCardTemplate();
+      expect(card.front.logoUrl).not.toBeNull();
+      expect(card.front.logoUrl).toMatch(/^data:image\/svg\+xml/);
+      // Il logo è SVG trasparente: non contiene bgcolor= o un <rect> di sfondo
+      expect(card.front.logoUrl).not.toContain('bgcolor');
+    });
+
+    it('logo data URI decodes to valid SVG with viewBox and terminal icon', () => {
+      const card = createGiovanniCardTemplate();
+      const uri = card.front.logoUrl!;
+      // Estrai la parte SVG dalla data URI
+      const svgPart = decodeURIComponent(uri.split(',')[1] || '');
+      expect(svgPart).toContain('<svg');
+      expect(svgPart).toContain('viewBox=');
+      expect(svgPart).toContain('WebdevCA');
+      // Lo sfondo è trasparente: nessun <rect> che copre l'intero viewBox
+      // (il <rect> del badge SVG è 84×84, non copre i 400×160 del viewBox)
+      expect(svgPart).toContain('fill="#01696F"'); // accent color del badge
+    });
+
+    it('pre-fills LinkedIn and GitHub placeholders with "XXXXX" (Phase 2.1: GitHub added)', () => {
+      const card = createGiovanniCardTemplate();
+      const platforms = card.back.socials.map((s) => s.platform);
+      expect(platforms).toContain('LinkedIn');
+      expect(platforms).toContain('GitHub');
+      // Tutti gli url sono placeholder 'XXXXX'
+      card.back.socials.forEach((s) => {
+        expect(s.url).toBe('XXXXX');
+      });
     });
   });
 
@@ -332,6 +374,21 @@ describe('documentSchemas', () => {
       const card = createEmptyCard();
       expect((card as any).grid).toBeUndefined();
     });
+
+    it('logo is a valid grid element (Phase 2.1 — card-logo in grid mode)', () => {
+      const grid = {
+        cols: 4,
+        rows: 4,
+        elements: {
+          photo: { x: 0, y: 0, w: 2, h: 2 },
+          logo: { x: 2, y: 0, w: 2, h: 2 },
+          name: { x: 0, y: 2, w: 4, h: 1 },
+          title: { x: 0, y: 3, w: 4, h: 1 },
+        },
+      };
+      const r = businessCardSchema.shape.grid?.safeParse(grid);
+      expect(r?.success).toBe(true);
+    });
   });
 
   describe('gridPresetLeft/Centered/Split (B1)', () => {
@@ -352,6 +409,128 @@ describe('documentSchemas', () => {
     it('gridPresetSplit puts contacts on left half, qr on right', () => {
       const g = gridPresetSplit();
       expect(g.elements.qr!.x).toBeGreaterThan(g.elements.contacts!.x);
+    });
+
+    it('all presets include a logo element (Phase 2.1: logo is grid-editable)', () => {
+      expect(gridPresetLeft().elements.logo).toBeDefined();
+      expect(gridPresetCentered().elements.logo).toBeDefined();
+      expect(gridPresetSplit().elements.logo).toBeDefined();
+    });
+  });
+
+  describe('logoSchema (Phase 4)', () => {
+    it('accepts a minimal valid logo with defaults applied', () => {
+      const logo = createEmptyLogo();
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(true);
+    });
+
+    it('rejects unknown documentType literal', () => {
+      const logo = { ...createEmptyLogo(), documentType: 'flyer' as const };
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects invalid hex color in builder', () => {
+      const logo = {
+        ...createEmptyLogo(),
+        builder: { ...createEmptyLogo().builder, primaryColor: 'red' },
+      };
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects unknown iconType', () => {
+      const r = logoIconTypeSchema.safeParse('emoji');
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects unknown iconShape', () => {
+      const r = logoIconShapeSchema.safeParse('triangle');
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects unknown layout', () => {
+      const r = logoLayoutSchema.safeParse('diagonal');
+      expect(r.success).toBe(false);
+    });
+
+    it('accepts all 4 iconType values', () => {
+      for (const t of ['none', 'shape', 'monogram', 'lucide'] as const) {
+        expect(logoIconTypeSchema.safeParse(t).success).toBe(true);
+      }
+    });
+
+    it('accepts all 4 iconShape values', () => {
+      for (const s of ['circle', 'square', 'rounded', 'hex'] as const) {
+        expect(logoIconShapeSchema.safeParse(s).success).toBe(true);
+      }
+    });
+
+    it('accepts all 3 layout values', () => {
+      for (const l of ['horizontal', 'vertical', 'stacked'] as const) {
+        expect(logoLayoutSchema.safeParse(l).success).toBe(true);
+      }
+    });
+
+    it('logoBuilderSchema applies sensible defaults', () => {
+      const b = logoBuilderSchema.parse({});
+      expect(b.primaryText).toBe('');
+      expect(b.tagline).toBe('');
+      expect(b.iconType).toBe('none');
+      expect(b.iconShape).toBe('circle');
+      expect(b.primaryColor).toMatch(/^#[0-9a-fA-F]{6}$/);
+      expect(b.secondaryColor).toMatch(/^#[0-9a-fA-F]{6}$/);
+      expect(b.layout).toBe('horizontal');
+    });
+  });
+
+  describe('createEmptyLogo (Phase 4)', () => {
+    it('returns a valid logo with id and timestamps', () => {
+      const logo = createEmptyLogo();
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(true);
+      expect(logo.id).toMatch(/^logo_/);
+      expect(logo.documentType).toBe('logo');
+      expect(logo.source).toBe('builder');
+    });
+
+    it('initializes brief/concepts/selected/edits as AI-dormient placeholders', () => {
+      const logo = createEmptyLogo();
+      expect(logo.brief).toBe('');
+      expect(logo.concepts).toEqual([]);
+      expect(logo.selected).toBe(-1);
+      expect(logo.edits.primaryText).toBe('');
+    });
+
+    it('generates unique ids', () => {
+      const a = createEmptyLogo();
+      const b = createEmptyLogo();
+      expect(a.id).not.toBe(b.id);
+    });
+  });
+
+  describe('createLogoTemplate (Phase 4)', () => {
+    it('exports 4 sectors', () => {
+      expect(LOGO_SECTORS).toEqual(['tech', 'food', 'fashion', 'professionista']);
+    });
+
+    it.each(LOGO_SECTORS)('template %s is a valid logo', (sector) => {
+      const logo = createLogoTemplate(sector);
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(true);
+      expect(logo.builder.primaryText.length).toBeGreaterThan(0);
+      expect(logo.builder.primaryColor).toMatch(/^#[0-9a-fA-F]{6}$/);
+    });
+
+    it('tech template picks a tech-flavored iconType (lucide/monogram)', () => {
+      const logo = createLogoTemplate('tech');
+      expect(['lucide', 'monogram', 'shape', 'none']).toContain(logo.builder.iconType);
+    });
+
+    it('food template picks food-flavored iconType (lucide/monogram)', () => {
+      const logo = createLogoTemplate('food');
+      expect(['lucide', 'monogram', 'shape', 'none']).toContain(logo.builder.iconType);
     });
   });
 });

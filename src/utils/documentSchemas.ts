@@ -114,6 +114,7 @@ export const cardGridSchema = z.object({
     name: cardGridElementSchema.optional(),
     title: cardGridElementSchema.optional(),
     company: cardGridElementSchema.optional(),
+    logo: cardGridElementSchema.optional(),
     qr: cardGridElementSchema.optional(),
     contacts: cardGridElementSchema.optional(),
     socials: cardGridElementSchema.optional(),
@@ -127,9 +128,10 @@ export function gridPresetLeft(): CardGrid {
     rows: 4,
     elements: {
       photo: { x: 0, y: 0, w: 1, h: 4 },
-      name: { x: 1, y: 1, w: 3, h: 1 },
-      title: { x: 1, y: 2, w: 3, h: 1 },
-      company: { x: 1, y: 3, w: 3, h: 1 },
+      name: { x: 1, y: 0, w: 3, h: 1 },
+      title: { x: 1, y: 1, w: 3, h: 1 },
+      company: { x: 1, y: 2, w: 2, h: 1 },
+      logo: { x: 3, y: 2, w: 1, h: 2 },
     },
   };
 }
@@ -142,7 +144,8 @@ export function gridPresetCentered(): CardGrid {
       photo: { x: 1, y: 0, w: 2, h: 1 },
       name: { x: 0, y: 1, w: 4, h: 1 },
       title: { x: 0, y: 2, w: 4, h: 1 },
-      company: { x: 0, y: 3, w: 4, h: 1 },
+      company: { x: 0, y: 3, w: 3, h: 1 },
+      logo: { x: 3, y: 3, w: 1, h: 1 },
     },
   };
 }
@@ -154,8 +157,21 @@ export function gridPresetSplit(): CardGrid {
     elements: {
       name: { x: 0, y: 0, w: 4, h: 1 },
       title: { x: 0, y: 1, w: 4, h: 1 },
-      contacts: { x: 0, y: 2, w: 3, h: 2 },
-      qr: { x: 3, y: 2, w: 1, h: 2 },
+      contacts: { x: 0, y: 2, w: 2, h: 2 },
+      qr: { x: 2, y: 2, w: 1, h: 2 },
+      logo: { x: 3, y: 2, w: 1, h: 2 },
+    },
+  };
+}
+
+export function gridPresetBackDefault(): CardGrid {
+  return {
+    cols: 4,
+    rows: 4,
+    elements: {
+      contacts: { x: 0, y: 0, w: 3, h: 4 },
+      qr: { x: 3, y: 0, w: 1, h: 2 },
+      socials: { x: 3, y: 2, w: 1, h: 2 },
     },
   };
 }
@@ -192,6 +208,7 @@ export const businessCardSchema = z.object({
     borderStyle: businessCardBorderStyleSchema.default('accent-strip-left'),
   }),
   grid: cardGridSchema.optional(),
+  backGrid: cardGridSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -236,6 +253,26 @@ export function createEmptyCard(): BusinessCard {
 
 export const GIOVANNI_PERSONAL_URL = 'https://webdeveloperca.netlify.app/';
 
+// ─── Logo SVG trasparente per Giovanni (generato via builder inline) ───────
+// Lo costruiamo qui (non importando logoGenerator per evitare circular dep).
+// Lo sfondo è trasparente: nessun <rect> di background. I moduli del
+// path lucide "terminal" sono presi da lucideIconPaths.ts (import user zod).
+const GIOVANNI_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 160">
+  <rect x="14" y="38" width="84" height="84" rx="14" fill="#01696F"/>
+  <g transform="translate(14 38) scale(3.5)" stroke="#FFFFFF" stroke-width="0.571" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="m4 17 6-6-6-6"/>
+    <path d="M12 19h6"/>
+  </g>
+  <text x="110" y="78" font-family="Inter, system-ui, sans-serif" font-size="30" font-weight="700" fill="#1a1a2e">WebdevCA</text>
+  <text x="110" y="100" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="400" fill="#01696F" letter-spacing="1">Web Developer</text>
+</svg>`;
+
+function giovanniLogoDataUri(): string {
+  // Data URI con SFONDO TRASPARENTE (niente bgcolor nel SVG)
+  // USIAMO encodeURIComponent per evitare problemi con btoa in SSR
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(GIOVANNI_LOGO_SVG);
+}
+
 export function createGiovanniCardTemplate(): BusinessCard {
   return {
     ...createEmptyCard(),
@@ -244,17 +281,22 @@ export function createGiovanniCardTemplate(): BusinessCard {
       ...createEmptyCard().front,
       name: 'GIOVANNI CIDU',
       title: 'Web Developer',
-      company: '',
-      layout: 'left',
+      company: 'HPE CDS',
+      photoUrl: '/giovanni-photo.jpg',
+      logoUrl: giovanniLogoDataUri(), // Logo SVG trasparente "WebdevCA"
+      layout: 'split',
     },
     back: {
       ...createEmptyCard().back,
       phone: 'XXXXX',
       email: 'XXXXX',
       website: GIOVANNI_PERSONAL_URL,
-      qrPayload: '',
+      qrPayload: GIOVANNI_PERSONAL_URL,
       qrLabel: 'Scansiona per visitare il mio sito',
-      socials: [{ platform: 'LinkedIn', url: 'XXXXX' }],
+      socials: [
+        { platform: 'LinkedIn', url: 'XXXXX' },
+        { platform: 'GitHub', url: 'XXXXX' },
+      ],
     },
     style: {
       ...createEmptyCard().style,
@@ -265,5 +307,178 @@ export function createGiovanniCardTemplate(): BusinessCard {
       fontFamily: 'Inter',
       borderStyle: 'accent-strip-left',
     },
+    grid: {
+      cols: 4,
+      rows: 4,
+      elements: {
+        photo: { x: 0, y: 0, w: 2, h: 4 },
+        name: { x: 2, y: 0, w: 2, h: 1 },
+        title: { x: 2, y: 1, w: 2, h: 1 },
+        company: { x: 2, y: 2, w: 2, h: 1 },
+        logo: { x: 2, y: 3, w: 1, h: 1 },
+      },
+    },
+    backGrid: gridPresetBackDefault(),
+  };
+}
+
+// ─── LOGO (Phase 4) ───────────────────────────────────────
+
+export const logoIconTypeSchema = z.enum(['none', 'shape', 'monogram', 'lucide']);
+export type LogoIconType = z.infer<typeof logoIconTypeSchema>;
+
+export const logoIconShapeSchema = z.enum(['circle', 'square', 'rounded', 'hex']);
+export type LogoIconShape = z.infer<typeof logoIconShapeSchema>;
+
+export const logoLayoutSchema = z.enum(['horizontal', 'vertical', 'stacked']);
+export type LogoLayout = z.infer<typeof logoLayoutSchema>;
+
+export const LOGO_SECTORS = ['tech', 'food', 'fashion', 'professionista'] as const;
+export type LogoSector = (typeof LOGO_SECTORS)[number];
+
+export const logoBuilderSchema = z.object({
+  primaryText: z.string().max(50).default(''),
+  tagline: z.string().max(50).default(''),
+  iconType: logoIconTypeSchema.default('none'),
+  iconGlyph: z.string().max(20).default(''),
+  iconShape: logoIconShapeSchema.default('circle'),
+  primaryColor: hexColorSchema.default('#01696F'),
+  secondaryColor: hexColorSchema.default('#1a1a2e'),
+  fontFamily: z.string().default('Inter'),
+  layout: logoLayoutSchema.default('horizontal'),
+});
+export type LogoBuilder = z.infer<typeof logoBuilderSchema>;
+
+export const logoEditsSchema = z.object({
+  primaryText: z.string().default(''),
+  primaryColor: hexColorSchema.default('#01696F'),
+  secondaryColor: hexColorSchema.default('#1a1a2e'),
+});
+export type LogoEdits = z.infer<typeof logoEditsSchema>;
+
+export const logoSchema = z.object({
+  documentType: z.literal('logo'),
+  id: z.string().min(1),
+  userEmail: z.string().email().optional(),
+  title: z.string().default(''),
+  source: z.enum(['builder', 'ai']).default('builder'),
+  builder: logoBuilderSchema,
+  brief: z.string().default(''),
+  concepts: z.array(z.string()).default([]),
+  selected: z.number().int().min(-1).default(-1),
+  edits: logoEditsSchema.default({
+    primaryText: '',
+    primaryColor: '#01696F',
+    secondaryColor: '#1a1a2e',
+  }),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Logo = z.infer<typeof logoSchema>;
+
+export function createEmptyLogo(): Logo {
+  const now = new Date().toISOString();
+  return {
+    documentType: 'logo',
+    id: `logo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    title: '',
+    source: 'builder',
+    builder: {
+      primaryText: '',
+      tagline: '',
+      iconType: 'none',
+      iconGlyph: '',
+      iconShape: 'circle',
+      primaryColor: '#01696F',
+      secondaryColor: '#1a1a2e',
+      fontFamily: 'Inter',
+      layout: 'horizontal',
+    },
+    brief: '',
+    concepts: [],
+    selected: -1,
+    edits: {
+      primaryText: '',
+      primaryColor: '#01696F',
+      secondaryColor: '#1a1a2e',
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+interface LogoTemplatePreset {
+  primaryText: string;
+  tagline: string;
+  iconType: LogoIconType;
+  iconGlyph: string;
+  iconShape: LogoIconShape;
+  primaryColor: string;
+  secondaryColor: string;
+  layout: LogoLayout;
+}
+
+const LOGO_TEMPLATE_PRESETS: Record<LogoSector, LogoTemplatePreset> = {
+  tech: {
+    primaryText: 'CodeLab',
+    tagline: 'Build better software',
+    iconType: 'lucide',
+    iconGlyph: 'cpu',
+    iconShape: 'rounded',
+    primaryColor: '#01696F',
+    secondaryColor: '#0F172A',
+    layout: 'horizontal',
+  },
+  food: {
+    primaryText: 'Trattoria del Borgo',
+    tagline: 'Cucina di stagione',
+    iconType: 'lucide',
+    iconGlyph: 'utensils',
+    iconShape: 'circle',
+    primaryColor: '#B45309',
+    secondaryColor: '#1F2937',
+    layout: 'stacked',
+  },
+  fashion: {
+    primaryText: 'Atelier',
+    tagline: 'Sartoria su misura',
+    iconType: 'lucide',
+    iconGlyph: 'scissors',
+    iconShape: 'square',
+    primaryColor: '#111827',
+    secondaryColor: '#7C3AED',
+    layout: 'vertical',
+  },
+  professionista: {
+    primaryText: 'Studio Medico',
+    tagline: 'Dott. Rossi',
+    iconType: 'lucide',
+    iconGlyph: 'stethoscope',
+    iconShape: 'rounded',
+    primaryColor: '#0F766E',
+    secondaryColor: '#1F2937',
+    layout: 'horizontal',
+  },
+};
+
+export function createLogoTemplate(sector: LogoSector): Logo {
+  const now = new Date().toISOString();
+  const preset = LOGO_TEMPLATE_PRESETS[sector];
+  return {
+    documentType: 'logo',
+    id: `logo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    title: `Logo ${sector}`,
+    source: 'builder',
+    builder: { ...preset, fontFamily: 'Inter' },
+    brief: '',
+    concepts: [],
+    selected: -1,
+    edits: {
+      primaryText: '',
+      primaryColor: preset.primaryColor,
+      secondaryColor: preset.secondaryColor,
+    },
+    createdAt: now,
+    updatedAt: now,
   };
 }

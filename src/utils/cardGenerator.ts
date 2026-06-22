@@ -138,11 +138,14 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
     });
   }
   if (hasLogo) {
+    // Logo ~30% della larghezza card (es. 25mm su 85mm). Era 14mm — troppo
+    // piccolo per essere leggibile. Vedi AGENTS.md "Known Issues — Card".
+    const logoMm = Math.min(25, dims.w * 0.30);
     cells.push({
       image: card.front.logoUrl,
-      width: 8,
-      height: 8,
-      absolutePosition: { x: dims.w - paddingMm - 8, y: bottomY - 2 },
+      width: logoMm,
+      height: logoMm,
+      absolutePosition: { x: dims.w - paddingMm - logoMm, y: bottomY - 3 },
     });
   }
 
@@ -367,7 +370,7 @@ export async function generateCardPDF(
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const svg = await generateQrSvg(qrObj);
+    const svg = generateQrSvg(qrObj);
     // crude svg -> png via canvas (jsdom doesn't have canvas, but pdfmake accepts SVG strings)
     qrImage = 'data:image/svg+xml;base64,' + (typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(svg))) : Buffer.from(svg).toString('base64'));
   }
@@ -719,7 +722,7 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
     }
     // Right: logo
     if (hasLogo) {
-      const logoSize = Math.round(photoSize * 0.32);
+      const logoSize = Math.round(photoSize * 0.48);
       out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${pxW - pad - logoSize}" y="${bottomY - logoSize}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`;
     }
   } else if (isSplit) {
@@ -734,10 +737,10 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
     // Right side: text
     const textX = leftW + pad;
     const textW = pxW - textX - pad;
-    let textY = pad + Math.round(pxH * 0.15);
-    const nameSize = Math.round(pxH * 0.07);
-    const titleSize = Math.round(pxH * 0.05);
-    const companySize = Math.round(pxH * 0.045);
+    let textY = pad + Math.round(pxH * 0.12);
+    const nameSize = Math.round(pxH * 0.058);
+    const titleSize = Math.round(pxH * 0.042);
+    const companySize = Math.round(pxH * 0.038);
     if (card.front.name) {
       out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${nameSize}" font-weight="800" fill="${text}" letter-spacing="0.5">${escapeXml(card.front.name.toUpperCase())}</text>`;
       textY += nameSize * 1.3;
@@ -749,14 +752,20 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
     if (card.front.company) {
       out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${companySize}" font-weight="400" fill="${text}" opacity="0.78">${escapeXml(card.front.company)}</text>`;
     }
-    // Bottom divider + wordmark
-    const divY = pxH - Math.round(pxH * 0.2);
+    // Divider above bottom row
+    const divY = pxH - Math.round(pxH * 0.18);
     out += `<line x1="${textX}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.5" stroke-dasharray="3,2" opacity="0.18"/>`;
-    if (card.back.website) {
-      const hostname = deriveHostnameLocal(card.back.website);
-      out += `<text x="${textX}" y="${pxH - pad}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.04)}" font-weight="600" fill="${accent}" letter-spacing="0.3">${escapeXml(hostname)}</text>`;
-    } else if (card.front.company) {
-      out += `<text x="${textX}" y="${pxH - pad}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.04)}" font-weight="600" fill="${accent}" letter-spacing="0.3">${escapeXml(card.front.company)}</text>`;
+    // Bottom row: logo (left of bottom) + monogram/handle (right of bottom)
+    // Logo on the LEFT of the bottom row (above the accent area)
+    // (Phase 2.1 fix: logo was missing in split layout)
+    const logoSize = Math.round(pxH * 0.20);
+    const logoY = pxH - pad - logoSize;
+    if (hasLogo) {
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${textX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`;
+    }
+    // Monogram (if no photo) goes right of logo
+    if (!hasPhoto && monogram) {
+      out += `<text x="${textX + logoSize + pad}" y="${pxH - pad}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.07)}" font-weight="800" fill="${accent}" letter-spacing="1.5">${escapeXml(monogram)}</text>`;
     }
   } else {
     // Centered layout
@@ -782,6 +791,12 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
     }
     if (card.front.company) {
       out += `<text x="${pxW / 2}" y="${cursorY + companySize}" font-family="Inter, system-ui, sans-serif" font-size="${companySize}" font-weight="400" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.front.company)}</text>`;
+      cursorY += companySize * 1.4;
+    }
+    // Logo centrato sotto al testo (Phase 2.1 — era mancante in centered)
+    if (hasLogo) {
+      const logoSize = Math.round(pxH * 0.20);
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${(pxW - logoSize) / 2}" y="${cursorY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`;
     }
   }
 
@@ -799,6 +814,7 @@ function buildBackSvg(card: BusinessCard, pxW: number, pxH: number): string {
   const headerWord = hostname || card.front.company || '';
   const socials = card.back.socials.filter((s) => s.platform && s.url);
   const qrPayload = getEffectiveQrPayload(card);
+  const hasQr = !!qrPayload;
 
   let out = '';
   // Background
@@ -822,25 +838,31 @@ function buildBackSvg(card: BusinessCard, pxW: number, pxH: number): string {
     out += `<line x1="${pad + stripW}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.4" stroke-dasharray="3,2" opacity="0.18"/>`;
   }
 
-  // Contacts (left column)
+  // Contacts (left column). Se c'è QR, omettiamo la riga WEB (il QR
+  // codifica già l'URL) e riduciamo la larghezza dei contatti.
   const contactsX = pad + stripW;
-  const contactsW = Math.round(pxW * 0.55) - stripW;
-  const qrSize = Math.round(pxH * 0.45);
-  const qrX = pxW - pad - qrSize;
-  const qrY = Math.round((pxH - qrSize) / 2);
+  const qrSize = hasQr ? Math.round(pxH * 0.35) : 0;
+  const qrX = hasQr ? pxW - pad - qrSize : 0;
+  const qrY = hasQr ? Math.round((pxH - qrSize) / 2) : 0;
+  const contactsW = hasQr
+    ? Math.round(pxW * 0.52) - stripW
+    : pxW - pad * 2 - stripW;
 
-  const keySize = Math.round(pxH * 0.04);
-  const valSize = Math.round(pxH * 0.055);
-  let lineY = qrY;
-  const lineGap = valSize * 1.4;
+  const keySize = Math.round(pxH * 0.034);
+  const valSize = Math.round(pxH * 0.046);
+  let lineY = hasQr ? qrY - Math.round(pxH * 0.02) : pad + Math.round(pxH * 0.08);
+  const lineGap = valSize * 1.35;
   const renderContact = (key: string, value: string, color: string = text, isAccent: boolean = false) => {
     out += `<text x="${contactsX}" y="${lineY}" font-family="Inter, system-ui, sans-serif" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4">${escapeXml(key.toUpperCase())}</text>`;
-    out += `<text x="${contactsX + Math.round(contactsW * 0.18)}" y="${lineY}" font-family="Inter, system-ui, sans-serif" font-size="${valSize}" font-weight="500" fill="${isAccent ? accent : color}">${escapeXml(value)}</text>`;
+    out += `<text x="${contactsX + Math.round(contactsW * 0.22)}" y="${lineY}" font-family="Inter, system-ui, sans-serif" font-size="${valSize}" font-weight="500" fill="${isAccent ? accent : color}">${escapeXml(value)}</text>`;
     lineY += lineGap;
   };
   if (card.back.phone) renderContact('Telefono', card.back.phone);
   if (card.back.email) renderContact('Email', card.back.email);
-  if (card.back.website) renderContact('Web', card.back.website, accent, true);
+  // WEB row omessa se QR presente (il QR codifica già l'URL)
+  if (card.back.website && !hasQr) {
+    renderContact('Web', card.back.website, accent, true);
+  }
   if (card.back.address) renderContact('Indirizzo', card.back.address);
   if (card.back.vatNumber) renderContact('P.IVA', card.back.vatNumber);
 
@@ -855,24 +877,50 @@ function buildBackSvg(card: BusinessCard, pxW: number, pxH: number): string {
         return `${s.platform} · ${value}`;
       })
       .join(' · ');
-    out += `<text x="${contactsX}" y="${socialsY + valSize * 0.3}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.045)}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic">${escapeXml(socialsText)}</text>`;
+    out += `<text x="${contactsX}" y="${socialsY + valSize * 0.3}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.04)}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic">${escapeXml(socialsText)}</text>`;
   }
 
-  // QR code (rendered as separate canvas, then composed — but for SVG, embed SVG qr)
-  // For simplicity, render a placeholder rect with the QR text inside (proper QR would need raster)
-  // The actual QR will be composed via the existing generateQrSvg + overlaying it
-  if (qrPayload) {
-    // Embed a small placeholder square — the real PNG will get a real QR via canvas
+  // QR code reale (Phase 2.1 fix: era un placeholder con scritta "QR")
+  if (hasQr) {
+    const qrObj: any = {
+      documentType: 'qrCode',
+      id: 'card-back',
+      title: '',
+      data: { type: 'url', payload: qrPayload },
+      style: {
+        errorCorrection: 'M',
+        fgColor: '#000000',
+        bgColor: '#FFFFFF',
+        size: qrSize * 2,
+        margin: 1,
+        logoOverlay: null,
+        dotStyle: 'square',
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const qrSvg = generateQrSvg(qrObj);
     out += `<rect x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" fill="#FFFFFF" stroke="${accent}" stroke-width="2"/>`;
-    out += `<text x="${qrX + qrSize / 2}" y="${qrY + qrSize / 2}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(qrSize * 0.1)}" font-weight="700" fill="${text}" text-anchor="middle" dominant-baseline="central" opacity="0.3">QR</text>`;
+    out += `<svg x="${qrX + 4}" y="${qrY + 4}" width="${qrSize - 8}" height="${qrSize - 8}" viewBox="0 0 ${qrSize} ${qrSize}">${extractQrInner(qrSvg)}</svg>`;
   }
 
   // QR label
-  if (card.back.qrLabel && qrPayload) {
-    out += `<text x="${qrX + qrSize / 2}" y="${qrY + qrSize + Math.round(pxH * 0.04)}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.04)}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
+  if (card.back.qrLabel && hasQr) {
+    out += `<text x="${qrX + qrSize / 2}" y="${qrY + qrSize + Math.round(pxH * 0.035)}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.034)}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
   }
 
   return out;
+}
+
+/**
+ * Estrae il contenuto interno (figli di <svg>) da un QR SVG generato.
+ * Lo usiamo per innestare un QR SVG dentro il nostro back SVG mantenendo
+ * solo i moduli (<rect>/<circle>) senza l'<svg> wrapper esterno.
+ */
+function extractQrInner(qrSvg: string): string {
+  const m = qrSvg.match(/<svg[^>]*>([\s\S]*)<\/svg>/);
+  if (!m) return '';
+  return m[1];
 }
 
 /**
