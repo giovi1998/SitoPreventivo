@@ -392,7 +392,8 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
   }
 
   if (path === '/users' && method === 'GET') {
-    const adminEmail = body.adminEmail;
+    const url = new URL(req.url, 'http://localhost');
+    const adminEmail = url.searchParams.get('adminEmail');
     if (adminEmail !== ADMIN_EMAIL) {
       return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
     }
