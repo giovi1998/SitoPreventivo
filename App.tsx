@@ -14,6 +14,7 @@ import { useToast } from './src/hooks/useToast';
 import { tryCatch } from './src/utils/errors';
 const CollectionView = lazy(() => import('./src/components/CollectionView'));
 const AdminDashboard = lazy(() => import('./src/pages/AdminDashboard'));
+const QREditor = lazy(() => import('./src/components/QREditor'));
 import SettingsPage from './src/pages/SettingsPage';
 import CollectionViewSkeleton from './src/components/CollectionViewSkeleton';
 import SaveDialog from './src/components/SaveDialog';
@@ -529,6 +530,10 @@ export default function App() {
         />
         {view === "settings" ? (
           <SettingsPage />
+        ) : view === "qr" ? (
+          <Suspense fallback={<div className="view-loading"><div className="spinner" /></div>}>
+            <QREditor userEmail={user?.email || ''} />
+          </Suspense>
         ) : view === "editor" ? (
           <EditorView
             quote={quote}

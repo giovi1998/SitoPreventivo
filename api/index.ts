@@ -35,9 +35,10 @@ const usersTable = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
-const quotesTable = pgTable('quotes', {
+const documentsTable = pgTable('documents', {
   id: varchar({ length: 50 }).primaryKey(),
   userEmail: varchar('user_email', { length: 255 }).notNull(),
+  documentType: varchar('document_type', { length: 30 }).notNull().default('quote'),
   title: varchar({ length: 255 }),
   client: varchar({ length: 255 }),
   date: varchar({ length: 50 }),
@@ -53,6 +54,7 @@ const quotesTable = pgTable('quotes', {
   isShared: boolean('is_shared').default(false),
   pdfUrl: text('pdf_url'),
   documentTheme: varchar('document_theme', { length: 50 }).default('corporate'),
+  data: jsonb(),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -232,6 +234,38 @@ const QuoteBodySchema = z.object({
     pdfUrl: z.string().optional(),
     documentTheme: z.string().optional(),
   }),
+});
+
+const qrPayloadDataSchema = z.object({
+  type: z.enum(['url', 'text', 'email', 'phone', 'vcard', 'wifi', 'sms']),
+  payload: z.string(),
+});
+
+const qrStyleDataSchema = z.object({
+  errorCorrection: z.enum(['L', 'M', 'Q', 'H']).optional(),
+  fgColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  bgColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  size: z.number().min(128).max(2048).optional(),
+  margin: z.number().min(0).max(16).optional(),
+  logoOverlay: z.string().nullable().optional(),
+  dotStyle: z.enum(['square', 'rounded', 'dots']).optional(),
+});
+
+const qrDocumentSchema = z.object({
+  id: z.string().min(1),
+  documentType: z.literal('qrCode'),
+  title: z.string().default(''),
+  data: qrPayloadDataSchema,
+  style: qrStyleDataSchema.optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+const DocumentBodySchema = z.object({
+  email: z.string().email('Email non valida'),
+  document: z.discriminatedUnion('documentType', [
+    qrDocumentSchema,
+  ]),
 });
 
 const UserSettingsSchema = z.object({
@@ -419,7 +453,7 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
   if (path === '/quotes' && method === 'GET') {
     const userEmail = searchParams.get('email');
     if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
-    const list = await db.select().from(quotesTable).where(eq(quotesTable.userEmail, userEmail)).orderBy(sql`created_at DESC`);
+    const list = await db.select().from(documentsTable).where(eq(documentsTable.userEmail, userEmail)).orderBy(sql`created_at DESC`);
     return json(req, res, 200, list);
   }
 
@@ -427,7 +461,7 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
     if (searchParams.get('adminEmail') !== ADMIN_EMAIL) {
       return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
     }
-    const list = await db.select().from(quotesTable).orderBy(sql`created_at DESC`);
+    const list = await db.select().from(documentsTable).orderBy(sql`created_at DESC`);
     return json(req, res, 200, list);
   }
 
@@ -436,12 +470,13 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, quote } = v.data;
 
-    const existing = await db.select().from(quotesTable).where(eq(quotesTable.id, quote.id));
+    const existing = await db.select().from(documentsTable).where(eq(documentsTable.id, quote.id));
     if (existing.length > 0) {
       if (existing[0].userEmail !== email) {
         return json(req, res, 403, { error: 'Non autorizzato' });
       }
-      const [updated] = await db.update(quotesTable).set({
+      const [updated] = await db.update(documentsTable).set({
+        documentType: existing[0].documentType || 'quote',
         title: quote.title, client: quote.client, date: quote.date,
         intro: quote.intro, color: quote.color, vat: quote.vat,
         status: quote.status || 'BOZZA', owner: quote.owner,
@@ -451,12 +486,13 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
         pdfUrl: quote.pdfUrl ?? existing[0].pdfUrl,
         documentTheme: quote.documentTheme ?? existing[0].documentTheme,
         updatedAt: sql`now()`,
-      }).where(eq(quotesTable.id, quote.id)).returning();
+      }).where(eq(documentsTable.id, quote.id)).returning();
       return json(req, res, 200, updated);
     }
 
-    const [saved] = await db.insert(quotesTable).values({
-      id: quote.id, userEmail: email, title: quote.title, client: quote.client,
+    const [saved] = await db.insert(documentsTable).values({
+      id: quote.id, userEmail: email, documentType: 'quote',
+      title: quote.title, client: quote.client,
       date: quote.date, intro: quote.intro, color: quote.color, vat: quote.vat,
       status: quote.status || 'BOZZA', owner: quote.owner,
       options: quote.options || [],
@@ -473,25 +509,91 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
     const email = body.email || searchParams.get('email');
     if (!email) return json(req, res, 400, { error: 'Email richiesta' });
 
-    const [existing] = await db.select().from(quotesTable).where(eq(quotesTable.id, quoteId));
+    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, quoteId));
     if (!existing) return json(req, res, 404, { error: 'Preventivo non trovato' });
     if (existing.userEmail !== email) {
       return json(req, res, 403, { error: 'Non autorizzato' });
     }
-    await db.delete(quotesTable).where(eq(quotesTable.id, quoteId));
+    await db.delete(documentsTable).where(eq(documentsTable.id, quoteId));
     return json(req, res, 200, { success: true });
   }
 
   if (path === '/quotes/templates' && method === 'GET') {
     const userEmail = searchParams.get('email');
     if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
-    const list = await db.select().from(quotesTable)
-      .where(and(eq(quotesTable.userEmail, userEmail), eq(quotesTable.isTemplate, true)))
+    const list = await db.select().from(documentsTable)
+      .where(and(eq(documentsTable.userEmail, userEmail), eq(documentsTable.isTemplate, true)))
       .orderBy(sql`created_at DESC`);
     return json(req, res, 200, list);
   }
 
   return json(req, res, 404, { error: 'Endpoint quotes non trovato' });
+};
+
+const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
+  const url = new URL(req.url, 'http://localhost');
+  const searchParams = url.searchParams;
+
+  if (path === '/documents' && method === 'GET') {
+    const userEmail = searchParams.get('email');
+    if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
+    const type = searchParams.get('type');
+    const all = await db.select().from(documentsTable)
+      .where(eq(documentsTable.userEmail, userEmail))
+      .orderBy(sql`updated_at DESC`);
+    const filtered = type ? all.filter((d) => d.documentType === type) : all;
+    return json(req, res, 200, filtered);
+  }
+
+  if (path === '/documents' && method === 'POST') {
+    const v = validate(DocumentBodySchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, document } = v.data;
+
+    if (document.documentType === 'qrCode') {
+      const qr = document;
+      const existing = await db.select().from(documentsTable).where(eq(documentsTable.id, qr.id));
+      if (existing.length > 0) {
+        if (existing[0].userEmail !== email) {
+          return json(req, res, 403, { error: 'Non autorizzato' });
+        }
+        const [updated] = await db.update(documentsTable).set({
+          documentType: 'qrCode',
+          title: qr.title,
+          data: qr.data as never,
+          updatedAt: sql`now()`,
+        }).where(eq(documentsTable.id, qr.id)).returning();
+        return json(req, res, 200, updated);
+      }
+      const [saved] = await db.insert(documentsTable).values({
+        id: qr.id,
+        userEmail: email,
+        documentType: 'qrCode',
+        title: qr.title,
+        data: qr.data as never,
+        isTemplate: false,
+      }).returning();
+      return json(req, res, 201, saved);
+    }
+
+    return json(req, res, 400, { error: 'Tipo documento non supportato' });
+  }
+
+  if (path.startsWith('/documents/') && method === 'DELETE') {
+    const documentId = path.replace('/documents/', '');
+    const email = body.email || searchParams.get('email');
+    if (!email) return json(req, res, 400, { error: 'Email richiesta' });
+
+    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, documentId));
+    if (!existing) return json(req, res, 404, { error: 'Documento non trovato' });
+    if (existing.userEmail !== email) {
+      return json(req, res, 403, { error: 'Non autorizzato' });
+    }
+    await db.delete(documentsTable).where(eq(documentsTable.id, documentId));
+    return json(req, res, 200, { success: true });
+  }
+
+  return json(req, res, 404, { error: 'Endpoint documents non trovato' });
 };
 
 const handleUserSettings: RouteHandler = async (path, method, req, res, body) => {
@@ -687,6 +789,7 @@ const routes: Array<{ prefix: string; handler: RouteHandler }> = [
   { prefix: '/logs', handler: handleHealth },
   { prefix: '/users', handler: handleUsers },
   { prefix: '/quotes', handler: handleQuotes },
+  { prefix: '/documents', handler: handleDocuments },
   { prefix: '/ai', handler: handleAI },
   { prefix: '/user-settings', handler: handleUserSettings },
   { prefix: '/admin', handler: handleAI },

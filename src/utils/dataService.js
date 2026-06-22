@@ -167,6 +167,49 @@ const dataService = {
     return { success: true };
   },
 
+  // ─── DOCUMENTS (QR, card, flyer, logo) ───────
+  async saveDocument(email, document) {
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_documents:v1') || [];
+      const ownerEmail = email || document.userEmail;
+      const owned = all.filter(d => d.userEmail === ownerEmail);
+      const others = all.filter(d => d.userEmail !== ownerEmail);
+      const updated = [document, ...owned.filter(d => d.id !== document.id), ...others];
+      lsSet('precisionQuote_documents:v1', updated);
+      return { success: true, data: document };
+    }
+    const result = await api('POST', '/documents', { email, document });
+    if (result.error) return { success: false, error: result.error };
+    return { success: true, data: result.data || result };
+  },
+
+  async getDocuments(email, documentType) {
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_documents:v1') || [];
+      let filtered = all.filter(d => d.userEmail === email);
+      if (documentType) {
+        filtered = filtered.filter(d => d.documentType === documentType);
+      }
+      return { documents: filtered };
+    }
+    const qs = new URLSearchParams({ email });
+    if (documentType) qs.set('type', documentType);
+    const result = await api('GET', `/documents?${qs.toString()}`);
+    if (result.error) return { documents: [] };
+    return { documents: Array.isArray(result) ? result : (result.data || []) };
+  },
+
+  async deleteDocument(documentId, email) {
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_documents:v1') || [];
+      lsSet('precisionQuote_documents:v1', all.filter(d => d.id !== documentId));
+      return { success: true };
+    }
+    const result = await api('DELETE', `/documents/${documentId}`, { email });
+    if (result.error) return { success: false, error: result.error };
+    return { success: true };
+  },
+
   // ─── CHANGE PASSWORD ────────────────────────────
   async changePassword(email, oldPassword, newPassword) {
     if (IS_LOCAL) {

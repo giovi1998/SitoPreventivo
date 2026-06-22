@@ -12,9 +12,10 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const quotes = pgTable("quotes", {
+export const documents = pgTable("documents", {
   id: varchar({ length: 50 }).primaryKey(),
   userEmail: varchar("user_email", { length: 255 }).notNull(),
+  documentType: varchar("document_type", { length: 30 }).notNull().default("quote"),
   title: varchar({ length: 255 }),
   client: varchar({ length: 255 }),
   date: varchar({ length: 50 }),
@@ -30,6 +31,7 @@ export const quotes = pgTable("quotes", {
   isShared: boolean("is_shared").default(false),
   pdfUrl: text("pdf_url"),
   documentTheme: varchar("document_theme", { length: 50 }).default("corporate"),
+  data: jsonb(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
