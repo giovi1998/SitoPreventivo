@@ -49,6 +49,50 @@ Server su `http://localhost:8000`
 | **Logo Builder** | Generatore di loghi SVG da testo + icona (lucide 48 icone allowlist) + 4 forme + 3 layout. AI disabilitata nella v1 (placeholder per Replicate). Export SVG + PNG 512/1024/2048. Zero costo AI, output editabile in Illustrator/Inkscape. |
 | **Responsive** | Layout adattivo desktop (3-col), tablet e mobile (tab system + FAB AI + zoom preview) |
 
+## AI Coding Agent Optimization (solo sviluppatori)
+
+Tool per **ridurre i token** scambiati tra te e l'agente AI (opencode) durante lo sviluppo. **Non** fanno parte dell'app — sono solo per la produttività dello sviluppatore.
+
+| Tool | Direzione | Effetto tipico | Installazione |
+|------|-----------|----------------|---------------|
+| **headroom** v0.27 | INPUT ↓ | -60/95% token prompt | `pip install "headroom-ai[all]"` |
+| **caveman** v1.9 | OUTPUT ↓ | -65% token risposta | `npx skills add https://github.com/juliusbrussee/caveman --skill caveman` |
+
+### Headroom (compressione input)
+
+Proxy Python locale che si mette davanti all'LLM, comprime tool output / log / RAG chunks / history e inoltra al provider. Reversibile (CCR cache → l'LLM può chiedere l'originale se serve).
+
+```bash
+# Un solo comando: avvia il proxy (se non attivo) + lancia opencode già puntato al proxy
+npm run agent
+
+# Gestione del proxy
+npm run agent:proxy    # avvia solo il proxy in background (persistente)
+npm run agent:status   # verifica stato
+npm run agent:stop     # termina il proxy
+
+# Metriche live del proxy
+headroom perf
+```
+
+Il proxy è **persistente** tra le sessioni (resta attivo dopo l'uscita di opencode). Log in `.headroom.log` (gitignored). Sorgente: `scripts/start-agent.mjs`.
+
+> `headroom wrap opencode` **non esiste** in v0.27.0 (nonostante la tabella README upstream lo listi come ✅). I wrapper built-in sono: `claude`, `codex`, `copilot`, `aider`, `cursor`, `cline`, `continue`, `goose`, `openhands`, `openclaw`. Per opencode il workflow canonico è: `headroom proxy` + `OPENAI_BASE_URL` — automatizzato qui da `npm run agent`.
+
+### Caveman (compressione output)
+
+Skill auto-attiva che forza l'agente a rispondere in stile terso (drop articoli, no filler, frammenti OK). Caricata da `.agents/skills/caveman/SKILL.md` ad ogni avvio di opencode.
+
+| Comando | Effetto |
+|---------|---------|
+| `/caveman` | attiva (default `full`) |
+| `/caveman lite` | solo anti-filler, frasi complete |
+| `/caveman ultra` | telegrafico, abbreviazioni |
+| `/caveman commit` | messaggi di commit ≤50 char |
+| "normal mode" / "stop caveman" | disattiva |
+
+La skill **si auto-disattiva** in caso di: warning di sicurezza, conferme di azioni irreversibili, sequenze multi-step dove l'ordine dei frammenti può confondere. È un comportamento voluto (regola `Auto-Clarity`), non un bug.
+
 ## AI Co-Editor (DeepSeek)
 
 ### Configurazione

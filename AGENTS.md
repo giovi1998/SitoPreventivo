@@ -12,6 +12,105 @@ npm run db:generate  # Generate Drizzle migration
 npm run db:migrate   # Apply migrations to Neon
 ```
 
+## Token Optimization Stack
+
+Ogni sessione opencode su questo progetto usa **due layer di compressione token** attivi di default. Non fanno parte dell'app: sono strumenti per lo sviluppatore che lavora con l'AI agent.
+
+| Layer | Tool | Direzione | Modalità | Versione |
+|-------|------|-----------|----------|----------|
+| **Input** | [headroom](https://github.com/headroomlabs-ai/headroom) | prompt ↓ 60-95% | Proxy HTTP locale su `:8787` | v0.27.0 |
+| **Output** | [caveman](https://github.com/juliusbrussee/caveman) | risposta ↓ ~65% | Skill in `.agents/skills/caveman/SKILL.md` (auto-load) | v1.9.0 |
+
+### Setup (una tantum)
+
+```bash
+# Headroom (Python ≥ 3.10)
+pip install "headroom-ai[all]"
+
+# Caveman (Node ≥ 18)
+npx skills add https://github.com/juliusbrussee/caveman --skill caveman
+```
+
+Dopo le installazioni una tantum, lo script `npm run agent` (vedi sotto) gestisce tutto: avvia il proxy se non è già attivo, lancia opencode con `OPENAI_BASE_URL` già puntato al proxy, lascia il proxy attivo tra le sessioni. Sorgente: `scripts/start-agent.mjs`.
+
+### Uso quotidiano
+
+```bash
+# Un comando solo: avvia il proxy (se non attivo) + lancia opencode con OPENAI_BASE_URL già impostato
+npm run agent
+
+# oppure, tenendo i due passi separati:
+npm run agent:proxy    # avvia solo il proxy in background (persistente)
+# ...poi lancia opencode a mano con OPENAI_BASE_URL=http://127.0.0.1:8787
+
+npm run agent:status   # verifica stato del proxy
+npm run agent:stop     # termina il proxy
+```
+
+Il proxy è **persistente**: resta attivo anche dopo l'uscita di opencode, così sessions successive partono subito senza riavviarlo. Log del proxy in `.headroom.log` (gitignored).
+
+Da quel momento headroom comprime ciò che tu **leggi** (tool output, file, log, RAG) prima che raggiunga l'LLM, e caveman comprime ciò che l'LLM **scrive** prima che torni a te.
+
+> Il wrapper di opencode non è necessario: lo script `npm run agent` auto-rileva il binario `OpenCode.exe` dal path di installazione standard (`%LOCALAPPDATA%\Programs\@opencode-aidesktop\`). Override via `$env:OPENCODE_BIN = "C:\path\opencode.exe"`.
+
+### Caveat opencode
+
+`headroom wrap opencode` non esiste. I wrapper built-in di headroom sono: `claude`, `codex`, `copilot`, `aider`, `cursor`, `cline`, `continue`, `goose`, `openhands`, `openclaw`. Per opencode il workflow corretto è `headroom proxy` + env var `OPENAI_BASE_URL`.
+
+### Caveman — regole di auto-clarity
+
+La skill si **disattiva automaticamente** in questi casi (vedi `Auto-Clarity` in SKILL.md):
+- warning di sicurezza
+- conferme di azioni irreversibili
+- sequenze multi-step dove l'ordine dei frammenti può generare ambiguità
+- utente chiede chiarimento o ripete la domanda
+
+Quindi: se una risposta è più verbosa del solito, è un caso coperto da auto-clarity. Non cercare di "forzare" lo stile terso in quei casi — la skill sa quando tacere.
+
+### Metriche
+
+```bash
+headroom perf           # savings real-time del proxy (richiede proxy attivo)
+# /caveman-stats         # lifetime token savings (se l'agent lo supporta)
+```
+
+### Riferimenti
+
+- `headroom --help` / `headroom wrap --help` — wrapper elenco
+- `.agents/skills/caveman/SKILL.md` — regole complete della skill caveman
+- `skills-lock.json` — registro versionato delle skill installate (incluso `caveman`)
+- `scripts/start-agent.mjs` — sorgente del wrapper `npm run agent*`
+
+### Session Start Protocol (OBBLIGATORIO)
+
+All'avvio di **ogni** session opencode su questo progetto, **prima** di accettare qualsiasi task (anche "fixa x" / "implmenta y"), esegui in ordine:
+
+1. **Verifica lo stato del proxy**:
+   ```bash
+   node scripts/start-agent.mjs status
+   ```
+   - Exit 0 → proxy già attivo, salta al punto 3.
+   - Exit 1 → proxy NON attivo, vai al punto 2.
+
+2. **Avvia il proxy in background** (solo se il punto 1 ha dato exit 1):
+   ```bash
+   node scripts/start-agent.mjs proxy
+   ```
+   Il proxy è **persistente** — resta attivo anche dopo l'uscita di opencode, quindi questo step di solito è un no-op dalla seconda sessione in poi.
+
+3. **Verifica che la sessione corrente sia instradata attraverso il proxy**:
+   ```bash
+   echo $env:OPENAI_BASE_URL   # PowerShell
+   # echo $OPENAI_BASE_URL     # bash
+   ```
+   - Se ritorna `http://127.0.0.1:8787` → headroom attivo per questa sessione ✓. Procedi col task.
+   - Se è vuoto o diverso → la sessione **NON** sta usando headroom. Avvisa subito l'utente con questo messaggio esatto (poi procedi comunque col task, non bloccare):
+     > ⚠️ Sessione corrente non connessa a headroom (proxy attivo ma `OPENAI_BASE_URL` non settato al lancio). Per ridurre i token di input, la prossima volta lancia opencode con `npm run agent` invece di cliccare l'icona — avvia proxy + setta `OPENAI_BASE_URL` + lancia opencode in un solo comando. Il proxy è già attivo adesso, manca solo l'env var che va settata a processo avviato.
+
+**Non skippare questo protocollo** neanche per task rapidi — è il modo per garantire che l'utente beneficia della compressione. Il check costa <1s. Il proxy è persistente quindi dopo il primo avvio è sempre ready.
+
+**Perché non posso attivare headroom mid-session**: headroom è un proxy HTTP. opencode legge `OPENAI_BASE_URL` solo a processo avviato. Una sessione già in corso non può essere reindirizzata through il proxy — va rilanciata con l'env var corretta. Questo protocollo ensuring il proxy sia sempre up così la prossima sessione `npm run agent` parte subito.
+
 ## Pre-push Checklist
 
 Prima di consigliare un push, esegui e conferma tutto verde:
@@ -454,6 +553,7 @@ Queste skill vengono caricate automaticamente. Quando modifichi il codice riferi
 - `writing-guidelines` — docs/prose style
 - `test-driven-development` (obra/superpowers) — disciplina TDD per Blocco 3+
 - `frontend-design` (anthropics/skills) — design opinionale per UI
+- `caveman` ([juliusbrussee/caveman](https://github.com/juliusbrussee/caveman)) — **compressione output** (stile terso, ~-65% token risposta). Sempre attiva, vedi sezione *Token Optimization Stack* sopra. Disattivazione solo con "normal mode" o in casi di auto-clarity.
 
 **Skill on-demand** (caricare solo se il task lo richiede esplicitamente):
 - `deploy-to-vercel` — solo quando l'utente chiede deploy
