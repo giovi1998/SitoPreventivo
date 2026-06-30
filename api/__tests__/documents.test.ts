@@ -38,6 +38,10 @@ function makeSelectChain() {
       const result = mockDbState.selectResults.shift() ?? [];
       return result;
     }),
+    then(resolve: any) {
+      const result = mockDbState.selectResults.shift() ?? [];
+      resolve(result);
+    },
   };
   return chain;
 }

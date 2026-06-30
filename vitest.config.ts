@@ -7,6 +7,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test-setup.ts',
+    testTimeout: 15000, // 15s — API tests re-import modules via vi.resetModules(), can be slow on cold cache
+    hookTimeout: 15000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],

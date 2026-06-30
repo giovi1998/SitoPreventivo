@@ -33,6 +33,7 @@ vi.mock('./src/utils/dataService', () => ({
       displayName: 'Test', companyName: 'Test Co', profession: 'web',
       defaultColor: '#0B57D0', defaultVat: 22, documentTheme: 'corporate',
     }),
+    getUserTier: vi.fn().mockResolvedValue({ tier: 'free', documentCount: 0, documentLimit: 3 }),
     getQuotes: vi.fn().mockResolvedValue({ quotes: [] }),
     getTemplates: vi.fn().mockResolvedValue({ quotes: [] }),
     saveQuote: vi.fn(),
