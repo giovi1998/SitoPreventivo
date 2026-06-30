@@ -4,6 +4,7 @@ import GlobalStyles from './GlobalStyles';
 import Layout from './Layout';
 import Topbar from './Topbar';
 import ErrorBoundary from './ErrorBoundary';
+import TierLimitModal from './TierLimitModal';
 import type { PremiumQuote, DocumentTemplateId } from '../utils/quoteSchema';
 import { migrateFromLegacy, toLegacyFormat, recalculateQuote, addEmptyOption } from '../utils/quoteSchema';
 import { generateDOCX } from '../utils/generateDOCX';
@@ -21,6 +22,7 @@ import { useRouteView } from '../hooks/useRouteView';
 import { useAI } from '../hooks/useAI';
 import { useToast } from '../hooks/useToast';
 import { tryCatch } from '../utils/errors';
+import { FREE_DOCUMENT_LIMIT } from '../utils/watermark';
 
 function generateId() {
   const year = new Date().getFullYear();
@@ -76,6 +78,10 @@ export default function AppShell() {
     (localStorage.getItem('documentTheme') as DocumentTemplateId) || 'corporate'
   );
   const [theme, setThemeState] = useState(() => localStorage.getItem('theme') || 'light');
+  // Phase 5 — tier system
+  const [tier, setTier] = useState<'free' | 'unlocked' | 'loading'>('loading');
+  const [documentCount, setDocumentCount] = useState<number>(0);
+  const [showTierLimitModal, setShowTierLimitModal] = useState(false);
   const { logout, user } = useContext(AuthContext);
 
   const {
@@ -102,6 +108,43 @@ export default function AppShell() {
   useEffect(() => {
     localStorage.setItem('documentTheme', documentTheme);
   }, [documentTheme]);
+
+  // Phase 5: refresh tier when user changes
+  const refreshTier = useCallback(async () => {
+    if (!user?.email) {
+      setTier('free');
+      setDocumentCount(0);
+      return;
+    }
+    if (user.email === 'admin@gmail.com') {
+      setTier('unlocked');
+      setDocumentCount(0);
+      return;
+    }
+    const res: any = await dataService.getUserTier(user.email);
+    if (res && !res.error) {
+      setTier(res.tier === 'unlocked' ? 'unlocked' : 'free');
+      setDocumentCount(res.documentCount || 0);
+    }
+  }, [user?.email]);
+
+  useEffect(() => {
+    refreshTier();
+  }, [refreshTier]);
+
+  /**
+   * Check if the user can save a new document. Returns true if OK,
+   * false if the free limit is reached (in which case the tier modal
+   * is shown automatically).
+   */
+  const checkDocumentLimit = useCallback((): boolean => {
+    if (tier === 'unlocked' || tier === 'loading') return true;
+    if (documentCount >= FREE_DOCUMENT_LIMIT) {
+      setShowTierLimitModal(true);
+      return false;
+    }
+    return true;
+  }, [tier, documentCount]);
 
   useEffect(() => {
     if (user?.email) {
@@ -393,7 +436,8 @@ export default function AppShell() {
     setPdfLoading(true);
     const { error } = await tryCatch(async () => {
       const { generatePDFBlob } = await import('../utils/generatePDF');
-      const pdfBytes = await generatePDFBlob(quote, documentTheme);
+      const currentTier: 'free' | 'unlocked' = tier === 'unlocked' ? 'unlocked' : 'free';
+      const pdfBytes = await generatePDFBlob(quote, documentTheme, currentTier);
       const filename = `${quote.quoteId || quote.project?.title || 'preventivo'}_${quote.client?.name || 'preventivo'}.pdf`;
       const arrayBuffer = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength) as ArrayBuffer;
       const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
@@ -439,6 +483,11 @@ export default function AppShell() {
     previewRef, aiLogs, isProcessing, availableModels, resetChat,
     isDirty, lastSaveTime, pdfLoading, docxLoading, documentTheme, setDocumentTheme,
     onImportPDF: () => setShowPdfImport(true),
+    // Phase 5 — tier system
+    tier,
+    documentCount,
+    refreshTier,
+    checkDocumentLimit,
   } as any;
 
   return (
@@ -500,6 +549,16 @@ export default function AppShell() {
           }}
         />
       )}
+      {/* Phase 5 — Tier limit modal (shown when free user hits the 3-doc cap) */}
+      <TierLimitModal
+        open={showTierLimitModal}
+        userEmail={user?.email || ''}
+        onClose={() => setShowTierLimitModal(false)}
+        onRedeemed={() => {
+          refreshTier();
+          addToast('success', 'Piano sbloccato! Documenti illimitati.');
+        }}
+      />
     </AppContext.Provider>
   );
 }

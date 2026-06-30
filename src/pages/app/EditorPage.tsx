@@ -1,9 +1,25 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import EditorView from '../../components/EditorView';
-import { AppContext } from '../../contexts';
+import { AppContext, AuthContext } from '../../contexts';
 
 export default function EditorPage() {
   const ctx = useContext(AppContext) as any;
+  const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
+
+  // Defense-in-depth: l'AdminEditorRoute in main.tsx blocca già, ma
+  // questo fallback protegge da un eventuale accesso diretto.
+  useEffect(() => {
+    if (!user || user.role !== 'admin') {
+      navigate('/app/qr', { replace: true });
+    }
+  }, [user, navigate]);
+
+  if (!user || user.role !== 'admin') {
+    return null;
+  }
+
   return (
     <EditorView
       quote={ctx.editingQuote}

@@ -14,6 +14,21 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function IndexRedirect() {
+  const { user } = React.useContext(AuthContext);
+  // Admin → editor (preventivi), user normali → qr (entry point pratico)
+  const target = user?.role === 'admin' ? 'editor' : 'qr';
+  return <Navigate to={target} replace />;
+}
+
+function AdminEditorRoute({ children }: { children: React.ReactNode }) {
+  const { user } = React.useContext(AuthContext);
+  if (!user || user.role !== 'admin') {
+    return <Navigate to="/app/qr" replace />;
+  }
+  return <>{children}</>;
+}
+
 function AppWrapper() {
   return (
     <AuthProvider>
@@ -30,9 +45,9 @@ function AppWrapper() {
               <App />
             </ProtectedRoute>
           }>
-            <Route index element={<Navigate to="editor" replace />} />
-            <Route path="editor" element={<EditorPage />} />
-            <Route path="collection" element={<CollectionPage />} />
+            <Route index element={<IndexRedirect />} />
+            <Route path="editor" element={<AdminEditorRoute><EditorPage /></AdminEditorRoute>} />
+            <Route path="collection" element={<AdminEditorRoute><CollectionPage /></AdminEditorRoute>} />
             <Route path="qr" element={<QrPage />} />
             <Route path="card" element={<CardPage />} />
             <Route path="logo" element={<LogoPage />} />
@@ -42,7 +57,7 @@ function AppWrapper() {
                 <AdminPage />
               </AdminRoute>
             } />
-            <Route path="*" element={<Navigate to="editor" replace />} />
+            <Route path="*" element={<IndexRedirect />} />
           </Route>
           <Route path="/" element={
             <HomePageWrapper />
