@@ -8,10 +8,12 @@ import BuilderPanel from './BuilderPanel';
 import { useToast } from '../hooks/useToast';
 import { logger } from '../utils/logger';
 import './LogoEditor.css';
+import { useDocumentSave } from '../hooks/useDocumentSave';
 
 interface LogoEditorProps {
   userEmail: string;
   initialLogo?: Logo;
+  tier?: 'free' | 'unlocked';
 }
 
 function deepSetBuilder(logo: Logo, patch: Partial<LogoBuilder>): Logo {
@@ -23,7 +25,8 @@ function logoHasContent(logo: Logo): boolean {
   return !!(b.primaryText || b.tagline || b.iconGlyph);
 }
 
-export default function LogoEditor({ userEmail, initialLogo }: LogoEditorProps) {
+export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }: LogoEditorProps) {
+  const { save: saveDocumentGuarded } = useDocumentSave();
   const [logo, setLogo] = useState<Logo>(initialLogo || createEmptyLogo());
   const [tab, setTab] = useState<'builder' | 'ai'>('builder');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -86,7 +89,7 @@ export default function LogoEditor({ userEmail, initialLogo }: LogoEditorProps) 
     setExporting(`png-${size}` as any);
     try {
       const svg = sanitizeSvg(builderToSvg(logo.builder));
-      const bytes = await svgToPng(svg, size);
+      const bytes = await svgToPng(svg, size, { tier });
       const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
       const blob = new Blob([arrayBuffer], { type: 'image/png' });
       const url = URL.createObjectURL(blob);
@@ -102,22 +105,27 @@ export default function LogoEditor({ userEmail, initialLogo }: LogoEditorProps) 
     } finally {
       setExporting(null);
     }
-  }, [logo, addToast]);
+  }, [logo, tier, addToast]);
 
   const handleSave = useCallback((customName: string) => {
     const title = customName || logo.title || 'Logo';
     const toSave: Logo = { ...logo, userEmail, title, updatedAt: new Date().toISOString() };
-    dataService.saveDocument(userEmail, toSave)
+    // Phase 5: use guarded save which checks the free-tier doc limit
+    // and triggers the TierLimitModal if reached.
+    saveDocumentGuarded(userEmail, toSave)
       .then((result) => {
-        if ((result as any).error) {
-          addToast('error', (result as any).error);
+        if (result.blocked) {
+          addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
+          return;
+        }
+        if (result.error) {
+          addToast('error', result.error);
           return;
         }
         setLogo(toSave);
         addToast('success', `«${title}» salvato`);
-      })
-      .catch((err) => addToast('error', (err as Error).message || 'Errore salvataggio'));
-  }, [logo, userEmail, addToast]);
+      });
+  }, [logo, userEmail, addToast, saveDocumentGuarded]);
 
   const openSaveDialog = useCallback(() => {
     if (!logoHasContent(logo)) {
@@ -208,7 +216,7 @@ export default function LogoEditor({ userEmail, initialLogo }: LogoEditorProps) 
 
       <div id="logo-tab-panel" role="tabpanel" aria-labelledby={tab === 'builder' ? 'tab-builder' : 'tab-ai'}>
         {tab === 'builder' ? (
-          <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} />
+          <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} />
         ) : (
           <section className="logo-ai-disabled" aria-label="AI Generation disabilitata">
             <div className="logo-ai-card" role="status">
