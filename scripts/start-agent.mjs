@@ -183,6 +183,23 @@ function launchOpencode() {
     process.exit(1);
   }
   console.log(paint('cyan', '→ Lancio opencode ') + paint('dim', `(bin: ${bin})`));
+
+  // Pre-launch guard: garantisce che la sessione venga instradata
+  // attraverso headroom. Se l'utente ha settato OPENAI_BASE_URL a mano
+  // rispettiamo la sua scelta, altrimenti impostiamo il proxy. Log
+  // esplicito per auditing del routing.
+  const childEnv = { ...process.env };
+  if (childEnv.OPENAI_BASE_URL && childEnv.OPENAI_BASE_URL !== PROXY_URL) {
+    console.log(
+      paint('yellow', '  ⚠ OPENAI_BASE_URL già settato a ') +
+      paint('bold', childEnv.OPENAI_BASE_URL) +
+      paint('yellow', ` (override di headroom ${PROXY_URL})`)
+    );
+  } else {
+    childEnv.OPENAI_BASE_URL = PROXY_URL;
+    console.log(paint('green', `  ✓ instradato attraverso headroom @ ${PROXY_URL}`));
+  }
+
   // Su Windows, .bat/.cmd non sono eseguibili nativi: serve cmd /c.
   // Gli .exe funzionano diretti. Detect via estensione.
   let cmdArgs, exe;
@@ -195,7 +212,7 @@ function launchOpencode() {
   }
   const child = spawn(exe, cmdArgs, {
     stdio: 'inherit',
-    env: { ...process.env, OPENAI_BASE_URL: PROXY_URL },
+    env: childEnv,
     shell: false,
   });
   return new Promise((resolve) => {
@@ -213,6 +230,8 @@ async function cmdStart() {
     await waitForProxy();
     console.log(paint('green', '\n✓ headroom proxy pronto ') + paint('dim', `@ ${PROXY_URL}`));
   }
+  console.log(paint('cyan', '→ Dashboard headroom: ') + paint('bold', PROXY_URL));
+  openBrowserInDev();
   const { code } = await launchOpencode();
   console.log('');
   console.log(paint('dim', `opencode uscito (code ${code}). headroom proxy resta attivo.`));
@@ -247,14 +266,39 @@ async function cmdStop() {
   console.log(paint('green', '✓ headroom proxy terminato'));
 }
 
+// Open the headroom dashboard URL in the user's default browser (dev only).
+// Uses the OS-native opener (start on Windows, open on macOS, xdg-open on Linux)
+// to avoid an extra npm dependency.
+function openBrowserInDev() {
+  if (process.env.NODE_ENV === 'production') return;
+  try {
+    if (os.platform() === 'win32') {
+      // `start` is a cmd builtin. We use the `url.dll` API via `explorer` so the
+      // existing browser tab reuses the page if already open.
+      spawn('cmd', ['/c', 'start', '""', PROXY_URL], { detached: true, stdio: 'ignore' }).unref();
+    } else if (os.platform() === 'darwin') {
+      spawn('open', [PROXY_URL], { detached: true, stdio: 'ignore' }).unref();
+    } else {
+      // xdg-open is the standard on most Linux distros (Ubuntu, Fedora, Arch, ...)
+      spawn('xdg-open', [PROXY_URL], { detached: true, stdio: 'ignore' }).unref();
+    }
+  } catch {
+    // Browser not available — just print the URL so the user can click it.
+  }
+}
+
 async function cmdProxy() {
   if (await isProxyUp()) {
     console.log(paint('green', '✓ headroom proxy già attivo ') + paint('dim', `@ ${PROXY_URL}`));
+    console.log(paint('cyan', '\n→ Dashboard headroom: ') + paint('bold', PROXY_URL));
     return;
   }
   startProxy();
   await waitForProxy();
   console.log(paint('green', '\n✓ headroom proxy pronto ') + paint('dim', `@ ${PROXY_URL}`));
+  console.log(paint('cyan', '\n→ Dashboard headroom: ') + paint('bold', PROXY_URL));
+  console.log(paint('dim', '  (apertura browser in dev...)'));
+  openBrowserInDev();
   console.log(paint('dim', '  il proxy resterà attivo. Lancia opencode con:'));
   console.log(paint('dim', `    $env:OPENAI_BASE_URL="${PROXY_URL}"; opencode`));
 }
