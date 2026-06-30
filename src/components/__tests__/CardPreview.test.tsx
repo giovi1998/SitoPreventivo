@@ -344,12 +344,13 @@ describe('CardPreview', () => {
 
   // ─── Grid-based rendering (Phase 2) ────────────────────────
   describe('Grid-based rendering', () => {
-    it('front: when card.grid is set, renders with CSS Grid display', () => {
+    it('front: when card.front.useGrid is true and grid is set, renders with CSS Grid display', () => {
       const card: BusinessCard = {
         ...createGiovanniCardTemplate(),
+        front: { ...createGiovanniCardTemplate().front, useGrid: true },
         grid: gridPresetLeft(),
       };
-      render(<CardPreview side="front" card={card} showGrid={true} />);
+      render(<CardPreview side="front" card={card} showGrid={false} />);
       const front = screen.getByTestId('card-preview-front');
       const style = window.getComputedStyle(front);
       expect(style.display).toBe('grid');
@@ -367,9 +368,10 @@ describe('CardPreview', () => {
     it('front: grid element photo gets gridColumn/gridRow matching gridPresetLeft', () => {
       const card: BusinessCard = {
         ...createGiovanniCardTemplate(),
+        front: { ...createGiovanniCardTemplate().front, useGrid: true },
         grid: gridPresetLeft(),
       };
-      render(<CardPreview side="front" card={card} showGrid={true} />);
+      render(<CardPreview side="front" card={card} />);
       const photoEl = document.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
       expect(photoEl).not.toBeNull();
       const style = window.getComputedStyle(photoEl);
@@ -381,24 +383,29 @@ describe('CardPreview', () => {
     it('front: moving name element changes its grid-column', () => {
       const grid = gridPresetLeft();
       // name is at x=1, w=3 in presetLeft
-      const card1: BusinessCard = { ...createGiovanniCardTemplate(), grid };
-      const { rerender } = render(<CardPreview side="front" card={card1} showGrid={true} />);
+      const card1: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        front: { ...createGiovanniCardTemplate().front, useGrid: true },
+        grid,
+      };
+      const { rerender } = render(<CardPreview side="front" card={card1} />);
       let nameEl = document.querySelector('[data-testid="grid-el-name"]') as HTMLElement;
       expect(window.getComputedStyle(nameEl).gridColumn).toBe('2 / span 3');
 
       // Move name to x=0, w=2
       const grid2 = { ...grid, elements: { ...grid.elements, name: { x: 0, y: 0, w: 2, h: 1 } } };
-      rerender(<CardPreview side="front" card={{ ...card1, grid: grid2 }} showGrid={true} />);
+      rerender(<CardPreview side="front" card={{ ...card1, grid: grid2 }} />);
       nameEl = document.querySelector('[data-testid="grid-el-name"]') as HTMLElement;
       expect(window.getComputedStyle(nameEl).gridColumn).toBe('1 / span 2');
     });
 
-    it('back: when card.backGrid is set, renders QR and contacts via grid', () => {
+    it('back: when card.back.useGrid is true and backGrid is set, renders QR and contacts via grid', () => {
       const card: BusinessCard = {
         ...createGiovanniCardTemplate(),
+        back: { ...createGiovanniCardTemplate().back, useGrid: true },
         backGrid: gridPresetSplit(),
       };
-      render(<CardPreview side="back" card={card} showGrid={true} />);
+      render(<CardPreview side="back" card={card} />);
       const back = screen.getByTestId('card-preview-back');
       const style = window.getComputedStyle(back);
       expect(style.display).toBe('grid');
@@ -413,13 +420,17 @@ describe('CardPreview', () => {
 
     it('back: moving QR to x=0 changes its grid-column to 1', () => {
       const backGrid = gridPresetSplit();
-      const card: BusinessCard = { ...createGiovanniCardTemplate(), backGrid };
-      const { rerender } = render(<CardPreview side="back" card={card} showGrid={true} />);
+      const card: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        back: { ...createGiovanniCardTemplate().back, useGrid: true },
+        backGrid,
+      };
+      const { rerender } = render(<CardPreview side="back" card={card} />);
       let qrEl = document.querySelector('[data-testid="grid-el-qr"]') as HTMLElement;
       expect(window.getComputedStyle(qrEl).gridColumn).toBe('3 / span 1');
 
       const grid2 = { ...backGrid, elements: { ...backGrid.elements, qr: { x: 0, y: 2, w: 1, h: 2 } } };
-      rerender(<CardPreview side="back" card={{ ...card, backGrid: grid2 }} showGrid={true} />);
+      rerender(<CardPreview side="back" card={{ ...card, backGrid: grid2 }} />);
       qrEl = document.querySelector('[data-testid="grid-el-qr"]') as HTMLElement;
       expect(window.getComputedStyle(qrEl).gridColumn).toBe('1 / span 1');
     });
@@ -437,10 +448,12 @@ describe('CardPreview', () => {
       expect(screen.queryByTestId('grid-el-contacts')).toBeNull();
     });
 
-    it('front: showGrid=false ignores card.grid (uses flexbox even if grid is set) — Phase 2.1 UX fix', () => {
-      // Giovanni template: grid ha elementi del front
+    it('front: showGrid=false is independent of card.grid rendering (Phase 2.2 REQ-A02)', () => {
+      // Phase 2.2 REQ-A02: il toggle `showGrid` controlla SOLO l'overlay
+      // visivo delle linee guida, non il rendering della preview.
+      // La preview va in grid-mode solo se `card.front.useGrid` è true.
       const card = createGiovanniCardTemplate();
-      // showGrid=false (default) → anche se card.grid è settato, NO grid-mode
+      // useGrid=false (default) → flexbox, anche se card.grid è settato.
       render(<CardPreview side="front" card={card} showGrid={false} />);
       const front = screen.getByTestId('card-preview-front');
       expect(front.className).not.toContain('grid-mode');
@@ -448,16 +461,22 @@ describe('CardPreview', () => {
       expect(document.querySelector('[data-testid="grid-el-photo"]')).toBeNull();
     });
 
-    it('front: showGrid=true uses card.grid (grid-mode active)', () => {
-      const card = createGiovanniCardTemplate();
-      render(<CardPreview side="front" card={card} showGrid={true} />);
+    it('front: card.front.useGrid=true activates grid-mode regardless of showGrid (Phase 2.2 REQ-A02)', () => {
+      const card: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        front: { ...createGiovanniCardTemplate().front, useGrid: true },
+      };
+      // showGrid=false ma useGrid=true → grid-mode ATTIVO, linee guida NO
+      render(<CardPreview side="front" card={card} showGrid={false} />);
       const front = screen.getByTestId('card-preview-front');
       expect(front.className).toContain('grid-mode');
       // photo è nel grid → renderizzato come grid element
       expect(document.querySelector('[data-testid="grid-el-photo"]')).not.toBeNull();
+      // l'overlay NON è renderizzato
+      expect(document.querySelector('.card-grid-overlay')).toBeNull();
     });
 
-    it('back: showGrid=false ignores card.backGrid (uses flexbox even if backGrid is set)', () => {
+    it('back: showGrid=false is independent of card.backGrid rendering (Phase 2.2 REQ-A02)', () => {
       const card = createGiovanniCardTemplate();
       render(<CardPreview side="back" card={card} showGrid={false} />);
       const back = screen.getByTestId('card-preview-back');
@@ -469,7 +488,11 @@ describe('CardPreview', () => {
     it('front: grid renders logo element with data-testid grid-el-logo (Phase 2.1)', () => {
       const card: BusinessCard = {
         ...createGiovanniCardTemplate(),
-        front: { ...createGiovanniCardTemplate().front, logoUrl: 'data:image/png;base64,iVBORw0KGgo=' },
+        front: {
+          ...createGiovanniCardTemplate().front,
+          logoUrl: 'data:image/png;base64,iVBORw0KGgo=',
+          useGrid: true,
+        },
         grid: {
           cols: 4,
           rows: 4,
@@ -481,7 +504,7 @@ describe('CardPreview', () => {
           },
         },
       };
-      render(<CardPreview side="front" card={card} showGrid={true} />);
+      render(<CardPreview side="front" card={card} />);
       const logoEl = document.querySelector('[data-testid="grid-el-logo"]') as HTMLElement;
       expect(logoEl).not.toBeNull();
       expect(logoEl.querySelector('img.card-logo')).not.toBeNull();

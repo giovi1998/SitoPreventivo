@@ -114,16 +114,47 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
 
   // ─── PATCH HELPERS ──────────────────────────────────────
   const patchFront = useCallback((patch: Partial<BusinessCard['front']>) => {
-    setCard((prev) => ({ ...prev, front: { ...prev.front, ...patch }, updatedAt: new Date().toISOString() }));
-  }, []);
+    setCard((prev) => {
+      const next = { ...prev.front, ...patch };
+      // Phase 2.2 REQ-A03: cambiare `layout` mentre si è in grid-mode può
+      // rompere il layout (la grid-mode ignora `front.layout` ma elementi
+      // posizionati per un preset potrebbero non adattarsi al cambio).
+      // Disattiviamo `useGrid` con un toast.
+      if (patch.layout && patch.layout !== prev.front.layout && prev.front.useGrid) {
+        addToast('info', 'Layout griglia disattivato sul fronte. Riapplica un preset per riattivare.', 5000);
+        return { ...prev, front: { ...next, useGrid: false }, updatedAt: new Date().toISOString() };
+      }
+      return { ...prev, front: next, updatedAt: new Date().toISOString() };
+    });
+  }, [addToast]);
 
   const patchBack = useCallback((patch: Partial<BusinessCard['back']>) => {
     setCard((prev) => ({ ...prev, back: { ...prev.back, ...patch }, updatedAt: new Date().toISOString() }));
   }, []);
 
   const patchStyle = useCallback((patch: Partial<BusinessCard['style']>) => {
-    setCard((prev) => ({ ...prev, style: { ...prev.style, ...patch }, updatedAt: new Date().toISOString() }));
-  }, []);
+    setCard((prev) => {
+      // Phase 2.2 REQ-A03: cambiare `sizePreset` cambia l'aspect-ratio
+      // della preview; gli elementi posizionati via grid potrebbero non
+      // adattarsi (es. preset 4×4 su card quadrata). Disattiviamo
+      // `useGrid` su entrambi i lati per evitare overflow.
+      if (patch.sizePreset && patch.sizePreset !== prev.style.sizePreset) {
+        const wasFrontGrid = prev.front.useGrid;
+        const wasBackGrid = prev.back.useGrid;
+        if (wasFrontGrid || wasBackGrid) {
+          addToast('info', 'Layout griglia disattivato: il formato è cambiato. Riapplica un preset per riattivare.', 5000);
+          return {
+            ...prev,
+            style: { ...prev.style, ...patch },
+            front: { ...prev.front, useGrid: false },
+            back: { ...prev.back, useGrid: false },
+            updatedAt: new Date().toISOString(),
+          };
+        }
+      }
+      return { ...prev, style: { ...prev.style, ...patch }, updatedAt: new Date().toISOString() };
+    });
+  }, [addToast]);
 
   // ─── B2: Grid editor state ─────────────────────────────────
   const [selectedGridElement, setSelectedGridElement] = useState<keyof CardGrid['elements'] | ''>('');
@@ -134,12 +165,47 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
 
   const patchGrid = useCallback((grid: CardGrid) => {
     setCard((prev) => {
-      if (gridEditorSide === 'back') {
-        return { ...prev, backGrid: grid, updatedAt: new Date().toISOString() };
+      // Phase 2.2 REQ-A02: applicare un preset o modificare elementi nel
+      // grid editor è un'azione esplicita dell'utente → attiviamo
+      // automaticamente `useGrid` per il lato corrente così la preview
+      // riflette le modifiche. Il toggle "linee guida" (`showGrid`)
+      // controlla solo l'overlay visivo, non il rendering.
+      const side = gridEditorSide;
+      if (side === 'back') {
+        return {
+          ...prev,
+          backGrid: grid,
+          back: { ...prev.back, useGrid: true },
+          updatedAt: new Date().toISOString(),
+        };
       }
-      return { ...prev, grid, updatedAt: new Date().toISOString() };
+      return {
+        ...prev,
+        grid,
+        front: { ...prev.front, useGrid: true },
+        updatedAt: new Date().toISOString(),
+      };
     });
   }, [gridEditorSide]);
+
+  // Phase 2.2 REQ-A03: quando l'utente cambia `front.layout` o
+  // `style.sizePreset` mentre la card è in grid-mode, il grid esistente
+  // potrebbe non adattarsi (elementi che escono dai bordi, aspect-ratio
+  // cambiato con elementi rimasti nelle stesse posizioni). Disattiviamo
+  // `useGrid` per il lato coinvolto e mostriamo un toast informativo.
+  // L'utente può riapplicare un preset per riattivarlo.
+  const disableGridIfActive = useCallback((side: 'front' | 'back', reason: string) => {
+    setCard((prev) => {
+      const key = side === 'back' ? 'back' : 'front';
+      const current = (prev[key] as { useGrid?: boolean }).useGrid;
+      if (!current) return prev;
+      if (side === 'back') {
+        return { ...prev, back: { ...prev.back, useGrid: false }, updatedAt: new Date().toISOString() };
+      }
+      return { ...prev, front: { ...prev.front, useGrid: false }, updatedAt: new Date().toISOString() };
+    });
+    addToast('info', `Layout griglia disattivato sul ${side === 'back' ? 'retro' : 'fronte'}: ${reason}. Riapplica un preset per riattivare.`, 5000);
+  }, [addToast]);
 
   const applyGridPreset = useCallback((preset: 'left' | 'centered' | 'split') => {
     if (gridEditorSide === 'back') {
@@ -201,26 +267,34 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
   // disabilitati quando l'azione porterebbe fuori dalla grid o in
   // collisione con un altro elemento. Senza questo feedback l'utente
   // clicca +↔ e non succede nulla (UX brutto).
-  const activeGrid = gridEditorSide === 'back' ? card.backGrid : card.grid;
-  const bounds = useMemo(() => {
-    if (!selectedGridElement || !activeGrid) return null;
-    const el = activeGrid.elements[selectedGridElement as keyof typeof activeGrid.elements];
-    if (!el) return null;
-    return {
-      cols: activeGrid.cols,
-      rows: activeGrid.rows,
-      el,
-    };
-  }, [selectedGridElement, activeGrid]);
+  //
+  // Phase 2.2 REQ-A01: il check deve usare la griglia REALE (activeGrid),
+  // che contiene `elements`. Il `bounds` precedente era {cols, rows, el}
+  // (no elements), quindi `wouldCollideOnMove` leggeva sempre `undefined`
+  // e ritornava `false`: i bottoni risultavano abilitati anche in caso di
+  // collisione, e `moveSelectedElement` (che usa `clampMove` sulla grid
+  // reale) bloccava la mossa → "clicca ma non succede nulla".
+  const activeGrid: CardGrid | undefined =
+    gridEditorSide === 'back' ? card.backGrid : card.grid;
+  const selectedEl =
+    selectedGridElement && activeGrid
+      ? activeGrid.elements[selectedGridElement as keyof CardGrid['elements']]
+      : undefined;
 
-  const canMoveLeft = !!bounds && bounds.el.x > 0 && !wouldCollideOnMove(bounds as unknown as CardGrid, selectedGridElement as string, -1, 0);
-  const canMoveUp = !!bounds && bounds.el.y > 0 && !wouldCollideOnMove(bounds as unknown as CardGrid, selectedGridElement as string, 0, -1);
-  const canMoveRight = !!bounds && bounds.el.x + bounds.el.w < bounds.cols && !wouldCollideOnMove(bounds as unknown as CardGrid, selectedGridElement as string, 1, 0);
-  const canMoveDown = !!bounds && bounds.el.y + bounds.el.h < bounds.rows && !wouldCollideOnMove(bounds as unknown as CardGrid, selectedGridElement as string, 0, 1);
-  const canShrinkW = !!bounds && bounds.el.w > 1;
-  const canGrowW = !!bounds && bounds.el.x + bounds.el.w < bounds.cols && !wouldCollideOnResize(bounds as unknown as CardGrid, selectedGridElement as string, 1, 0);
-  const canShrinkH = !!bounds && bounds.el.h > 1;
-  const canGrowH = !!bounds && bounds.el.y + bounds.el.h < bounds.rows && !wouldCollideOnResize(bounds as unknown as CardGrid, selectedGridElement as string, 0, 1);
+  const canMoveLeft  = !!selectedEl && !!activeGrid && selectedEl.x > 0
+    && !wouldCollideOnMove(activeGrid, selectedGridElement as string, -1, 0);
+  const canMoveUp    = !!selectedEl && !!activeGrid && selectedEl.y > 0
+    && !wouldCollideOnMove(activeGrid, selectedGridElement as string, 0, -1);
+  const canMoveRight = !!selectedEl && !!activeGrid && selectedEl.x + selectedEl.w < activeGrid.cols
+    && !wouldCollideOnMove(activeGrid, selectedGridElement as string, 1, 0);
+  const canMoveDown  = !!selectedEl && !!activeGrid && selectedEl.y + selectedEl.h < activeGrid.rows
+    && !wouldCollideOnMove(activeGrid, selectedGridElement as string, 0, 1);
+  const canShrinkW = !!selectedEl && selectedEl.w > 1;
+  const canGrowW   = !!selectedEl && !!activeGrid && selectedEl.x + selectedEl.w < activeGrid.cols
+    && !wouldCollideOnResize(activeGrid, selectedGridElement as string, 1, 0);
+  const canShrinkH = !!selectedEl && selectedEl.h > 1;
+  const canGrowH   = !!selectedEl && !!activeGrid && selectedEl.y + selectedEl.h < activeGrid.rows
+    && !wouldCollideOnResize(activeGrid, selectedGridElement as string, 0, 1);
 
   const patchTitle = useCallback((title: string) => {
     setCard((prev) => ({ ...prev, title, updatedAt: new Date().toISOString() }));
@@ -694,7 +768,7 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
                   <div className="card-ai-actions">
                     <button type="button" onClick={() => runCardAI('premium')} disabled={isCardProcessing}>Rendi premium</button>
                     <button type="button" onClick={() => runCardAI('minimal')} disabled={isCardProcessing}>Minimal</button>
-                    <button type="button" onClick={() => runCardAI('fillName')} disabled={isCardProcessing}>Compila da nome</button>
+                    <button type="button" onClick={() => runCardAI('fill')} disabled={isCardProcessing}>Compila da nome</button>
                     <button type="button" onClick={() => runCardAI('palette')} disabled={isCardProcessing}>Cambia palette</button>
                     <button type="button" onClick={() => runCardAI('print')} disabled={isCardProcessing}>Ottimizza per stampa</button>
                     <button type="button" onClick={() => runCardAI('moveQr')} disabled={isCardProcessing}>← Sposta QR</button>
@@ -1366,7 +1440,7 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
               <div className="card-ai-actions">
                 <button type="button" onClick={() => runCardAI('premium')} disabled={isCardProcessing}>Rendi premium</button>
                 <button type="button" onClick={() => runCardAI('minimal')} disabled={isCardProcessing}>Minimal</button>
-                <button type="button" onClick={() => runCardAI('fillName')} disabled={isCardProcessing}>Compila da nome</button>
+                <button type="button" onClick={() => runCardAI('fill')} disabled={isCardProcessing}>Compila da nome</button>
                 <button type="button" onClick={() => runCardAI('palette')} disabled={isCardProcessing}>Cambia palette</button>
                 <button type="button" onClick={() => runCardAI('print')} disabled={isCardProcessing}>Ottimizza per stampa</button>
                 <button type="button" onClick={() => runCardAI('moveQr')} disabled={isCardProcessing} title="Sposta il QR a sinistra">← Sposta QR</button>

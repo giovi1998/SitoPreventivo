@@ -126,13 +126,16 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showG
   const hasPhoto = !!card.front.photoUrl;
   const hasLogo = !!card.front.logoUrl;
   const grid = card.grid;
-  // Phase 2.1: il front entra in grid mode SOLO se (a) la grid ha elementi
-  // del front E (b) l'utente ha attivato "Griglia ON" tramite il toggle.
-  // Senza (b), anche se card.grid è settato, renderizziamo in flexbox
-  // (layout classico) — altrimenti il front è "sminchiato" quando l'utente
-  // usa il grid editor e poi spegne l'overlay.
+  // Phase 2.2 REQ-A02: separazione tra "grid-mode attivo" (rende la
+  // preview via CSS Grid) e "linee guida visibili" (toggle `showGrid`,
+  // overlay puramente visivo). La griglia si attiva SOLO se:
+  //   (a) la grid ha elementi del front (sennò niente da posizionare)
+  //   (b) `card.front.useGrid` è true (l'utente ha esplicitamente
+  //       attivato il grid-mode, es. tramite il grid editor).
+  // Cambiare `showGrid` non influenza più il layout: serve solo a
+  // mostrare/nascondere le linee tratteggiate.
   const hasFrontElement = !!(grid && (grid.elements.photo || grid.elements.name || grid.elements.title || grid.elements.company || grid.elements.logo));
-  const isGridMode = !!grid && hasFrontElement && showGrid;
+  const isGridMode = !!grid && hasFrontElement && !!card.front.useGrid;
 
   const baseStyle: React.CSSProperties = {
     backgroundColor: card.style.bgColor,
@@ -295,11 +298,11 @@ const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gr
   const hostname = card.back.website ? deriveHostname(card.back.website) : '';
   const headerWord = hostname || card.front.company || '';
   const grid = card.backGrid ?? card.grid;
-  // Phase 2.1: il back entra in grid mode SOLO se (a) la grid ha elementi
-  // del back E (b) l'utente ha attivato "Griglia ON". Stessa logica del
-  // front — rispetta il toggle dell'utente.
+  // Phase 2.2 REQ-A02: come front — il grid-mode è controllato da
+  // `card.back.useGrid`, NON dal toggle linee guida. Cambiare `showGrid`
+  // influenza solo la visibilità dell'overlay.
   const hasBackElement = !!(grid && (grid.elements.contacts || grid.elements.qr || grid.elements.socials));
-  const isGridMode = !!grid && hasBackElement && showGrid;
+  const isGridMode = !!grid && hasBackElement && !!card.back.useGrid;
 
   const baseStyle: React.CSSProperties = {
     backgroundColor: card.style.bgColor,

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import CardEditor from '../CardEditor';
 import dataService from '../../utils/dataService';
 import { createEmptyCard, createGiovanniCardTemplate } from '../../utils/documentSchemas';
@@ -471,6 +471,33 @@ describe('CardEditor', () => {
       const options = Array.from(nameSelect.querySelectorAll('option')).map((o) => o.value);
       expect(options).toContain('logo');
     });
+
+    it('disables move button when next cell would collide with another element (Phase 2.2 REQ-A01)', () => {
+      // Pre-condizione: preset left ha name a (1,1,3,1) e title a (1,2,3,1).
+      // name.y=1 vuole andare a y=2 → collide con title → bottone ↓ disabilitato.
+      // PRIMA del fix, il collision check usava un `bounds` senza `elements`
+      // e ritornava sempre `false`, quindi il bottone era abilitato e la
+      // mossa veniva bloccata silenziosamente da clampMove (UX brutto).
+      renderEditor();
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'name' } });
+      const downBtn = screen.getByRole('button', { name: /Sposta giù/i }) as HTMLButtonElement;
+      expect(downBtn).toBeDisabled();
+      expect(downBtn.title).toMatch(/collisione|Limite/);
+    });
+
+    it('disables grow button when grow would collide with neighbor (Phase 2.2 REQ-A01)', () => {
+      // Pre-condizione: preset left, photo a (0,0,1,4) → può crescere in w
+      // (no elementi a destra sulla sua riga), ma in h è già a max (h=4 = rows).
+      // Per testare la collisione, selezioniamo name (1,1,3,1): può crescere
+      // in w (fino a w=3 perché cols=4, x+w≤4), ma crescere in h porterebbe
+      // a (1,1,3,2) che collide con title a (1,2,3,1).
+      renderEditor();
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'name' } });
+      const growH = screen.getByRole('button', { name: /Aumenta altezza/i }) as HTMLButtonElement;
+      expect(growH).toBeDisabled();
+    });
   });
 
   // ─── Responsive + AI mobile ───────────────────────────────
@@ -533,6 +560,19 @@ describe('CardEditor', () => {
       const dialog = screen.getByRole('dialog', { name: /Pannello AI/i });
       expect(dialog).toBeInTheDocument();
       expect(dialog.querySelector('[aria-label="Modello AI"]')).not.toBeNull();
+    });
+
+    it('on mobile: AI "Compila da nome" button is present and uses correct key (Phase 2.2 REQ-A05)', () => {
+      setMobile();
+      renderEditor();
+      fireEvent.click(screen.getByRole('button', { name: /Apri pannello AI/i }));
+      const dialog = screen.getByRole('dialog', { name: /Pannello AI/i });
+      // Tutti e 5 i bottoni rapidi devono essere presenti nella sheet mobile
+      // inclusi quelli con la stessa chiave di prompt del desktop (in
+      // particolare "Compila da nome" → 'fill', non 'fillName').
+      expect(dialog.querySelector('button:not([disabled])')?.textContent).toBeDefined();
+      expect(within(dialog).getByRole('button', { name: /Compila da nome/i })).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: /Rendi premium/i })).toBeInTheDocument();
     });
 
     it('on mobile: clicking "Modifica" tab shows form fields', () => {
