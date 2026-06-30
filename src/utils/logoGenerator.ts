@@ -1,5 +1,6 @@
 import type { LogoBuilder, LogoLayout, LogoIconShape } from './documentSchemas';
 import { LUCIDE_ICON_PATHS, type LucideIconChildren } from './lucideIconPaths';
+import { applyWatermarkToCanvas, getMaxPngSideForTier, type Tier } from './watermark';
 
 // ─── ALLOWLIST LUCIDE ICONS (48 nomi) ──────────────────────
 // Per v1, usiamo solo nomi come chiave di validazione. Il rendering
@@ -217,7 +218,7 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     taglineText = renderTagline(builder, W / 2, textY + 26, 'middle', 14, primary);
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${icon}${primaryText}${taglineText}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="none"/>${icon}${primaryText}${taglineText}</svg>`;
 }
 
 export function builderToSvg(b: LogoBuilder): string {
@@ -332,13 +333,20 @@ export function sanitizeSvg(svg: string): string {
 
 // ─── SVG → PNG ──────────────────────────────────────────
 
-export async function svgToPng(svg: string, size: number): Promise<Uint8Array> {
+export async function svgToPng(
+  svg: string,
+  size: number,
+  opts: { tier?: Tier } = {},
+): Promise<Uint8Array> {
   if (typeof document === 'undefined' || typeof window === 'undefined') {
     throw new Error('svgToPng richiede un ambiente browser');
   }
   if (!Number.isFinite(size) || size <= 0) {
     throw new Error('Size non valido per svgToPng');
   }
+  const tier: Tier = opts.tier || 'unlocked';
+  const maxSide = getMaxPngSideForTier(tier);
+  const effectiveSize = Math.min(size, maxSide);
   const blob = new Blob([svg], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
   try {
@@ -350,12 +358,17 @@ export async function svgToPng(svg: string, size: number): Promise<Uint8Array> {
       img.src = url;
     });
     const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = effectiveSize;
+    canvas.height = effectiveSize;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D non disponibile');
-    ctx.clearRect(0, 0, size, size);
-    ctx.drawImage(img, 0, 0, size, size);
+    // Ensure transparent background (some browsers default to black)
+    ctx.clearRect(0, 0, effectiveSize, effectiveSize);
+    ctx.fillStyle = 'rgba(0,0,0,0)';
+    ctx.fillRect(0, 0, effectiveSize, effectiveSize);
+    ctx.drawImage(img, 0, 0, effectiveSize, effectiveSize);
+    // Phase 5: tier-aware watermark on PNG canvas
+    applyWatermarkToCanvas(ctx, tier, effectiveSize, effectiveSize);
     const pngBlob: Blob = await new Promise((resolve, reject) => {
       canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob ha restituito null'))), 'image/png');
     });

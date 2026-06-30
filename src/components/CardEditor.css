@@ -1550,6 +1550,35 @@
   white-space: nowrap;
 }
 
+.card-back-services {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 6px 0 0;
+  border-top: 1px dashed color-mix(in srgb, currentColor 14%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--card-accent, #01696F);
+}
+
+.card-back-services li {
+  position: relative;
+  padding-left: 10px;
+  list-style: none;
+}
+
+.card-back-services li::before {
+  content: '·';
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-weight: 900;
+  color: currentColor;
+}
+
 /* ─── Mobile sticky toolbar (Salva + Esporta) ─── */
 .card-mobile-toolbar {
   position: fixed;

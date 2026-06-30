@@ -25,6 +25,7 @@ import { useCardPreviewZoom } from '../hooks/useCardPreviewZoom';
 import { CardAIFloatingProvider, useCardAIFloating } from '../hooks/useCardAIFloating';
 import CardPreviewZoomControls from './CardPreviewZoomControls';
 import { logger } from '../utils/logger';
+import { useDocumentSave } from '../hooks/useDocumentSave';
 
 const MAX_RAW_BYTES = 5_000_000;
 const AUTO_SAVE_DELAY_MS = 30_000;
@@ -82,6 +83,7 @@ export default function CardEditorWrapper(props: CardEditorProps) {
 }
 
 function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorProps) {
+  const { save: saveDocumentGuarded } = useDocumentSave();
   const [card, setCard] = useState<BusinessCard>(initialCard || createEmptyCard());
   const [showTemplateBanner, setShowTemplateBanner] = useState<boolean>(() => !initialCard);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -243,7 +245,11 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
       return;
     }
     try {
-      const dataUri = await compressImage(file);
+      // Logo → PNG per preservare la trasparenza (altrimenti JPEG riempe
+      // lo sfondo trasparente di nero). Foto → JPEG per file più leggero.
+      const dataUri = await compressImage(file, undefined, undefined, {
+        format: field === 'logoUrl' ? 'png' : 'jpeg',
+      });
       patchFront({ [field]: dataUri } as any);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Errore upload immagine';
@@ -347,7 +353,13 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
   // ─── SAVE (manual) ────────────────────────────────────
   const handleSave = useCallback(async () => {
     const sanitized: BusinessCard = { ...card, userEmail, updatedAt: new Date().toISOString() };
-    const result = await dataService.saveDocument(userEmail, sanitized);
+    // Phase 5: use guarded save which checks the free-tier doc limit
+    // and triggers the TierLimitModal if reached.
+    const result = await saveDocumentGuarded(userEmail, sanitized);
+    if (result.blocked) {
+      addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
+      return;
+    }
     if (result.error) {
       addToast('error', result.error);
       return;
@@ -393,8 +405,13 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
       const sanitized: BusinessCard = { ...card, userEmail, updatedAt: new Date().toISOString() };
-      dataService.saveDocument(userEmail, sanitized).catch((err) => {
-        logger.error('Card auto-save failed', { err: (err as Error).message });
+      // Phase 5: use guarded save
+      saveDocumentGuarded(userEmail, sanitized).then((result) => {
+        if (result.blocked) {
+          addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
+        } else if (result.error) {
+          logger.error('Card auto-save failed', { err: result.error });
+        }
       });
     }, AUTO_SAVE_DELAY_MS);
     return () => {
@@ -423,6 +440,35 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
     setCard((prev) => ({
       ...prev,
       back: { ...prev.back, socials: prev.back.socials.filter((_, i) => i !== idx) },
+      updatedAt: new Date().toISOString(),
+    }));
+  }, []);
+
+  // ─── Services (lista servizi offerti sul retro bigliettino) ────────
+  const addService = useCallback(() => {
+    setCard((prev) => {
+      const current = prev.back.services ?? [];
+      if (current.length >= 8) return prev;
+      return {
+        ...prev,
+        back: { ...prev.back, services: [...current, ''] },
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  }, []);
+
+  const updateService = useCallback((idx: number, value: string) => {
+    setCard((prev) => {
+      const services = [...(prev.back.services ?? [])];
+      services[idx] = value.slice(0, 80);
+      return { ...prev, back: { ...prev.back, services }, updatedAt: new Date().toISOString() };
+    });
+  }, []);
+
+  const removeService = useCallback((idx: number) => {
+    setCard((prev) => ({
+      ...prev,
+      back: { ...prev.back, services: (prev.back.services ?? []).filter((_, i) => i !== idx) },
       updatedAt: new Date().toISOString(),
     }));
   }, []);
@@ -594,11 +640,11 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
                   >
                     <div className="card-preview-wrap">
                       <h3>Fronte</h3>
-                      <CardPreview side="front" card={card} showGrid={showGrid} />
+                      <CardPreview side="front" card={card} showGrid={showGrid} tier={tier} />
                     </div>
                     <div className="card-preview-wrap">
                       <h3>Retro</h3>
-                      <CardPreview side="back" card={card} showGrid={showGrid} />
+                      <CardPreview side="back" card={card} showGrid={showGrid} tier={tier} />
                     </div>
                   </div>
                   <MobileGridEditor
@@ -752,7 +798,20 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
                 aria-label="Carica logo (fronte)"
               />
               {card.front.logoUrl && (
-                <button type="button" className="card-remove-image" onClick={removeLogo}>Rimuovi logo</button>
+                <>
+                  <button type="button" className="card-remove-image" onClick={removeLogo}>Rimuovi logo</button>
+                  <label className="card-field" style={{ marginTop: 8 }}>
+                    <span>Sfondo logo</span>
+                    <select
+                      value={card.front.logoBackground ?? 'none'}
+                      onChange={(e) => patchFront({ logoBackground: e.target.value as 'none' | 'card' })}
+                      aria-label="Sfondo del logo"
+                    >
+                      <option value="none">Nessuno (trasparente)</option>
+                      <option value="card">Colore del bigliettino</option>
+                    </select>
+                  </label>
+                </>
               )}
             </div>
 
@@ -808,6 +867,38 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
                 aria-label="P.IVA"
               />
             </label>
+
+            <div className="card-field" data-testid="card-services-field">
+              <span>Servizi offerti (max 8)</span>
+              <p className="card-field-hint" style={{ fontSize: '.72rem', color: '#647086', margin: '2px 0 6px' }}>
+                Es. "Web Design", "SEO", "Consulenza" — visualizzati sul retro
+              </p>
+              {(card.back.services ?? []).map((svc, idx) => (
+                <div key={idx} className="card-social-row">
+                  <input
+                    type="text"
+                    value={svc}
+                    onChange={(e) => updateService(idx, e.target.value)}
+                    placeholder={`Servizio ${idx + 1}`}
+                    maxLength={80}
+                    aria-label={`Servizio ${idx + 1}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeService(idx)}
+                    aria-label={`Rimuovi servizio ${idx + 1}`}
+                  >×</button>
+                </div>
+              ))}
+              {(card.back.services ?? []).length < 8 && (
+                <button
+                  type="button"
+                  onClick={addService}
+                  className="card-add-social"
+                  data-testid="card-add-service"
+                >+ Aggiungi servizio</button>
+              )}
+            </div>
 
             <div className="card-field">
               <span>Social (opzionali)</span>
@@ -1020,11 +1111,11 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
           >
             <div className="card-preview-wrap">
               <h3>Fronte</h3>
-              <CardPreview side="front" card={card} showGrid={showGrid} />
+              <CardPreview side="front" card={card} showGrid={showGrid} tier={tier} />
             </div>
             <div className="card-preview-wrap">
               <h3>Retro</h3>
-              <CardPreview side="back" card={card} showGrid={showGrid} />
+              <CardPreview side="back" card={card} showGrid={showGrid} tier={tier} />
             </div>
           </div>
 

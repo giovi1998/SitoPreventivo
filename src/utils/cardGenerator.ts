@@ -4,6 +4,7 @@ import type { BusinessCard, BusinessCardSizePreset } from './documentSchemas';
 import { SIZE_PRESETS_MM, BLEED_MM, CARD_A4_COLS, CARD_A4_ROWS, CARD_A4_GAP_MM, CARD_A4_MARGIN_MM } from './documentSchemas';
 import { generateQrSvg, isHttpUrl } from './qrGenerator';
 import { isAllowedLogoMime } from './qrGenerator';
+import { applyWatermarkToPdf, applyWatermarkToCanvas, type Tier } from './watermark';
 
 pdfMake.vfs = pdfFonts;
 
@@ -57,12 +58,11 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
   const innerW = dims.w - paddingMm * 2;
   const textColor = card.style.textColor;
   const accentColor = card.style.accentColor;
-  const monogram = computeMonogramLocal(card.front.name);
   const hasPhoto = !!card.front.photoUrl;
   const hasLogo = !!card.front.logoUrl;
   const cells: Content[] = [];
 
-  // Photo or monogram placeholder (top-left area)
+  // Photo or logo fallback (top-left area)
   if (hasPhoto) {
     cells.push({
       image: card.front.photoUrl,
@@ -70,15 +70,12 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
       height: 25,
       absolutePosition: { x: paddingMm, y: paddingMm },
     });
-  } else if (monogram) {
+  } else if (hasLogo) {
     cells.push({
-      text: monogram,
-      fontSize: 14,
-      bold: true,
-      color: accentColor,
-      absolutePosition: { x: paddingMm, y: paddingMm + 6 },
-      width: 25,
-      alignment: 'center',
+      image: card.front.logoUrl,
+      width: 22,
+      height: 22,
+      absolutePosition: { x: paddingMm + 1.5, y: paddingMm + 1.5 },
     });
   }
 
@@ -113,18 +110,8 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
     width: dims.w,
   });
 
-  // Bottom row: monogram (left, only if no photo) | handle/domain (center) | logo (right)
+  // Bottom row: handle/domain (center) | logo (right)
   const bottomY = divY + 4;
-  if (!hasPhoto && monogram) {
-    cells.push({
-      text: monogram,
-      fontSize: 9,
-      bold: true,
-      color: accentColor,
-      characterSpacing: 1.5,
-      absolutePosition: { x: paddingMm, y: bottomY },
-    });
-  }
   if (card.back.website) {
     const hostname = deriveHostnameLocal(card.back.website);
     cells.push({
@@ -137,7 +124,7 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
       opacity: 0.6,
     });
   }
-  if (hasLogo) {
+  if (hasLogo && hasPhoto) {
     // Logo ~30% della larghezza card (es. 25mm su 85mm). Era 14mm — troppo
     // piccolo per essere leggibile. Vedi AGENTS.md "Known Issues — Card".
     const logoMm = Math.min(25, dims.w * 0.30);
@@ -345,7 +332,7 @@ function buildPageContent(
 
 export async function generateCardPDF(
   card: BusinessCard,
-  _opts: { tier: 'free' | 'unlocked' },
+  opts: { tier: Tier },
 ): Promise<Uint8Array> {
   const dims = getCardDimensionsMm(card);
   const entries = computePageCardEntries(dims.w, dims.h);
@@ -378,7 +365,7 @@ export async function generateCardPDF(
   const frontContent = buildPageContent(card, 'front', entries, qrImage, true);
   const backContent = buildPageContent(card, 'back', entries, qrImage, false);
 
-  const docDef: TDocumentDefinitions = {
+  const baseDoc: TDocumentDefinitions = {
     pageSize: 'A4',
     pageMargins: [0, 0, 0, 0],
     content: [
@@ -391,6 +378,9 @@ export async function generateCardPDF(
       fontSize: 8,
     },
   };
+
+  // Phase 5: tier-aware watermark (free → diagonal "PRECISIONQUOTE" + footer)
+  const docDef = applyWatermarkToPdf(baseDoc, opts.tier);
 
   return new Promise<Uint8Array>((resolve, reject) => {
     try {
@@ -408,7 +398,7 @@ export async function generateCardPDF(
 export async function generateCardPng(
   card: BusinessCard,
   side: 'front' | 'back',
-  opts: { tier: 'free' | 'unlocked'; dpi?: number },
+  opts: { tier: Tier; dpi?: number },
 ): Promise<Uint8Array> {
   const dims = getCardDimensionsMm(card);
   const dpi = opts.tier === 'unlocked' ? (opts.dpi ?? 300) : 150;
@@ -433,6 +423,8 @@ export async function generateCardPng(
     ctx.fillStyle = card.style.bgColor;
     ctx.fillRect(0, 0, pxW, pxH);
     ctx.drawImage(img, 0, 0, pxW, pxH);
+    // Phase 5: tier-aware watermark on PNG canvas
+    applyWatermarkToCanvas(ctx, opts.tier, pxW, pxH);
 
     // 4. Export as PNG via toDataURL (works in all browsers + jsdom with canvas polyfill)
     const dataUrl = canvas.toDataURL('image/png');
@@ -642,7 +634,6 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
   const bg = card.style.bgColor;
   const text = card.style.textColor;
   const accent = card.style.accentColor;
-  const monogram = computeMonogramLocal(card.front.name);
   const hasPhoto = !!card.front.photoUrl;
   const hasLogo = !!card.front.logoUrl;
 
@@ -677,18 +668,21 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
   </pattern></defs>`;
   out += `<rect x="${Math.round(pxW * 0.6)}" y="0" width="${Math.round(pxW * 0.4)}" height="${Math.round(pxH * 0.35)}" fill="url(#diag)"/>`;
 
-  // 5. Photo or monogram (left zone in 'left' and 'split'; centered in 'centered')
+  // 5. Photo or logo fallback (left zone in 'left' and 'split'; centered in 'centered')
   const photoSize = Math.round(Math.min(pxW, pxH) * 0.4);
+  const logoBg = card.front.logoBackground === 'card' ? bg : 'none';
   if (isLeft) {
     const photoX = pad + stripW;
     const photoY = pad;
     if (hasPhoto) {
       out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${photoX}" y="${photoY}" width="${photoSize}" height="${photoSize}" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 6)"/>`;
-    } else if (monogram) {
-      out += `<rect x="${photoX}" y="${photoY}" width="${photoSize}" height="${photoSize}" rx="6" fill="none" stroke="${accent}" stroke-width="2"/>`;
-      out += `<text x="${photoX + photoSize / 2}" y="${photoY + photoSize / 2}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(photoSize * 0.4)}" font-weight="800" fill="${accent}" text-anchor="middle" dominant-baseline="central">${escapeXml(monogram)}</text>`;
+    } else if (hasLogo) {
+      if (logoBg !== 'none') {
+        out += `<rect x="${photoX}" y="${photoY}" width="${photoSize}" height="${photoSize}" rx="6" fill="${escapeXml(logoBg)}"/>`;
+      }
+      const ls = Math.round(photoSize * 0.7);
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${photoX + (photoSize - ls) / 2}" y="${photoY + (photoSize - ls) / 2}" width="${ls}" height="${ls}" preserveAspectRatio="xMidYMid meet"/>`;
     }
-    // Text to the right of photo
     const textX = photoX + photoSize + Math.round(pxW * 0.03);
     const textW = pxW - textX - pad;
     let textY = photoY + Math.round(photoSize * 0.18);
@@ -706,35 +700,30 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
     if (card.front.company) {
       out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${companySize}" font-weight="400" fill="${text}" opacity="0.78">${escapeXml(card.front.company)}</text>`;
     }
-    // Divider
     const divY = photoY + photoSize + Math.round(pxH * 0.04);
     out += `<line x1="${pad + stripW}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${accent}" stroke-width="1.2" opacity="0.85"/>`;
-    // Bottom row: monogram (left), handle/domain (center), logo (right)
     const bottomY = divY + Math.round(pxH * 0.08);
-    if (!hasPhoto && monogram) {
-      out += `<text x="${pad + stripW}" y="${bottomY}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(photoSize * 0.12)}" font-weight="800" fill="${accent}" letter-spacing="1.5">${escapeXml(monogram)}</text>`;
-    }
-    // Center: handle or domain
     const website = card.back.website;
     if (website) {
       const hostname = deriveHostnameLocal(website);
       out += `<text x="${pxW / 2}" y="${bottomY}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(photoSize * 0.085)}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.6">${escapeXml(hostname)}</text>`;
     }
-    // Right: logo
-    if (hasLogo) {
+    if (hasLogo && hasPhoto) {
       const logoSize = Math.round(photoSize * 0.48);
       out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${pxW - pad - logoSize}" y="${bottomY - logoSize}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`;
     }
   } else if (isSplit) {
-    // Split: 42% left / 58% right
     const leftW = Math.round(pxW * 0.42);
     out += `<rect x="0" y="0" width="${leftW}" height="${pxH}" fill="${accent}" opacity="0.08"/>`;
     if (hasPhoto) {
       out += `<image href="${escapeXml(card.front.photoUrl!)}" x="0" y="0" width="${leftW}" height="${pxH}" preserveAspectRatio="xMidYMid slice"/>`;
-    } else if (monogram) {
-      out += `<text x="${leftW / 2}" y="${pxH / 2}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.3)}" font-weight="800" fill="${accent}" text-anchor="middle" dominant-baseline="central" opacity="0.85">${escapeXml(monogram)}</text>`;
+    } else if (hasLogo) {
+      if (logoBg !== 'none') {
+        out += `<rect x="0" y="0" width="${leftW}" height="${pxH}" fill="${escapeXml(logoBg)}"/>`;
+      }
+      const ls = Math.round(Math.min(leftW, pxH) * 0.6);
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${(leftW - ls) / 2}" y="${(pxH - ls) / 2}" width="${ls}" height="${ls}" preserveAspectRatio="xMidYMid meet"/>`;
     }
-    // Right side: text
     const textX = leftW + pad;
     const textW = pxW - textX - pad;
     let textY = pad + Math.round(pxH * 0.12);
@@ -752,20 +741,12 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
     if (card.front.company) {
       out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${companySize}" font-weight="400" fill="${text}" opacity="0.78">${escapeXml(card.front.company)}</text>`;
     }
-    // Divider above bottom row
     const divY = pxH - Math.round(pxH * 0.18);
     out += `<line x1="${textX}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.5" stroke-dasharray="3,2" opacity="0.18"/>`;
-    // Bottom row: logo (left of bottom) + monogram/handle (right of bottom)
-    // Logo on the LEFT of the bottom row (above the accent area)
-    // (Phase 2.1 fix: logo was missing in split layout)
     const logoSize = Math.round(pxH * 0.20);
     const logoY = pxH - pad - logoSize;
-    if (hasLogo) {
+    if (hasLogo && hasPhoto) {
       out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${textX}" y="${logoY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`;
-    }
-    // Monogram (if no photo) goes right of logo
-    if (!hasPhoto && monogram) {
-      out += `<text x="${textX + logoSize + pad}" y="${pxH - pad}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.07)}" font-weight="800" fill="${accent}" letter-spacing="1.5">${escapeXml(monogram)}</text>`;
     }
   } else {
     // Centered layout
@@ -773,9 +754,12 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
     if (hasPhoto) {
       out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${(pxW - photoSize) / 2}" y="${cursorY}" width="${photoSize}" height="${photoSize}" rx="${photoSize / 2}" ry="${photoSize / 2}" preserveAspectRatio="xMidYMid slice"/>`;
       cursorY += photoSize + Math.round(pxH * 0.04);
-    } else if (monogram) {
-      out += `<circle cx="${pxW / 2}" cy="${cursorY + photoSize / 2}" r="${photoSize / 2}" fill="none" stroke="${accent}" stroke-width="2.5"/>`;
-      out += `<text x="${pxW / 2}" y="${cursorY + photoSize / 2}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(photoSize * 0.4)}" font-weight="800" fill="${accent}" text-anchor="middle" dominant-baseline="central">${escapeXml(monogram)}</text>`;
+    } else if (hasLogo) {
+      if (logoBg !== 'none') {
+        out += `<rect x="${(pxW - photoSize) / 2}" y="${cursorY}" width="${photoSize}" height="${photoSize}" rx="${photoSize / 2}" fill="${escapeXml(logoBg)}"/>`;
+      }
+      const ls = Math.round(photoSize * 0.7);
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${(pxW - ls) / 2}" y="${cursorY + (photoSize - ls) / 2}" width="${ls}" height="${ls}" preserveAspectRatio="xMidYMid meet"/>`;
       cursorY += photoSize + Math.round(pxH * 0.04);
     }
     const nameSize = Math.round(pxH * 0.09);
@@ -793,8 +777,7 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
       out += `<text x="${pxW / 2}" y="${cursorY + companySize}" font-family="Inter, system-ui, sans-serif" font-size="${companySize}" font-weight="400" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.front.company)}</text>`;
       cursorY += companySize * 1.4;
     }
-    // Logo centrato sotto al testo (Phase 2.1 — era mancante in centered)
-    if (hasLogo) {
+    if (hasLogo && hasPhoto) {
       const logoSize = Math.round(pxH * 0.20);
       out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${(pxW - logoSize) / 2}" y="${cursorY}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`;
     }
@@ -866,6 +849,18 @@ function buildBackSvg(card: BusinessCard, pxW: number, pxH: number): string {
   if (card.back.address) renderContact('Indirizzo', card.back.address);
   if (card.back.vatNumber) renderContact('P.IVA', card.back.vatNumber);
 
+  // Services (lista servizi offerti, dopo i contatti e prima dei socials)
+  const services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
+  if (services.length > 0) {
+    const servicesY = lineY + Math.round(pxH * 0.02);
+    out += `<line x1="${contactsX}" y1="${servicesY - valSize * 0.2}" x2="${contactsX + contactsW}" y2="${servicesY - valSize * 0.2}" stroke="${accent}" stroke-width="0.3" stroke-dasharray="2,1.5" opacity="0.16"/>`;
+    const svcSize = Math.round(pxH * 0.04);
+    services.forEach((svc, idx) => {
+      out += `<text x="${contactsX}" y="${servicesY + (idx + 1) * (svcSize * 1.3)}" font-family="Inter, system-ui, sans-serif" font-size="${svcSize}" font-weight="700" fill="${accent}">· ${escapeXml(svc)}</text>`;
+    });
+    lineY = servicesY + services.length * (svcSize * 1.3);
+  }
+
   // Socials (right after contacts, separated by dashed line)
   if (socials.length > 0) {
     const socialsY = lineY + Math.round(pxH * 0.03);
@@ -936,10 +931,28 @@ export function buildCardSvg(
   const inner = side === 'front' ? buildFrontSvg(card, pxW, pxH) : buildBackSvg(card, pxW, pxH);
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${pxW} ${pxH}" width="${pxW}" height="${pxH}">${inner}</svg>`;
 }
+export interface CompressImageOptions {
+  /**
+   * Output format. Use `'png'` to preserve transparency (logos with
+   * alpha channel). Defaults to `'jpeg'` (smaller files, but opaque).
+   *
+   * PNG output has no `quality` knob — size reduction is achieved by
+   * scaling the canvas dimensions down iteratively until the encoded
+   * dataURL fits under `maxBytes`.
+   */
+  format?: 'jpeg' | 'png';
+  /**
+   * Minimum width/height in pixels when scaling down a PNG to fit
+   * `maxBytes`. Defaults to 200. Below this the function throws.
+   */
+  minDim?: number;
+}
+
 export async function compressImage(
   file: File,
   maxDim: number = DEFAULT_MAX_DIM,
   maxBytes: number = DEFAULT_MAX_BYTES,
+  opts: CompressImageOptions = {},
 ): Promise<string> {
   if (!isAllowedLogoMime(file.type)) {
     throw new Error('Formato non supportato. Usa PNG, JPEG o SVG.');
@@ -953,6 +966,8 @@ export async function compressImage(
     throw new Error('Immagine troppo grande (max 4000px)');
   }
 
+  const format = opts.format || 'jpeg';
+  const minDim = opts.minDim || 200;
   const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -961,11 +976,37 @@ export async function compressImage(
   if (!ctx) {
     throw new Error('Canvas 2D non disponibile');
   }
+  // For PNG, preserve transparency: do NOT paint a background.
+  // For JPEG, the canvas is already opaque by default.
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
+  if (format === 'png') {
+    // PNG has no quality parameter. To reduce size, scale down
+    // dimensions iteratively (half each step) until the encoded
+    // dataURL fits under maxBytes — but never below minDim.
+    const maxChars = Math.floor(maxBytes * 1.37);
+    let curW = canvas.width;
+    let curH = canvas.height;
+    const minSide = Math.min(minDim, Math.max(img.width, img.height));
+    let dataUrl = canvas.toDataURL('image/png');
+    while (dataUrl.length > maxChars && Math.min(curW, curH) > minSide) {
+      curW = Math.max(minSide, Math.floor(curW / 2));
+      curH = Math.max(minSide, Math.floor(curH / 2));
+      canvas.width = curW;
+      canvas.height = curH;
+      ctx.clearRect(0, 0, curW, curH);
+      ctx.drawImage(img, 0, 0, curW, curH);
+      dataUrl = canvas.toDataURL('image/png');
+    }
+    if (dataUrl.length > maxChars) {
+      throw new Error('Immagine troppo pesante anche dopo compressione');
+    }
+    return dataUrl;
+  }
+
+  // Default: JPEG (current behavior, opaque output).
   let quality = 0.85;
   let dataUrl = canvas.toDataURL('image/jpeg', quality);
-  // base64 is ~1.37x the raw bytes; we measure the encoded length and the target
   const maxChars = Math.floor(maxBytes * 1.37);
   while (dataUrl.length > maxChars && quality > MIN_QUALITY) {
     quality -= 0.1;

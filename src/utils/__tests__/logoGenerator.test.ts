@@ -285,7 +285,9 @@ describe('logoGenerator', () => {
           (el as any).height = 0;
           (el as any).getContext = () => ({
             clearRect: () => undefined,
+            fillRect: () => undefined,
             drawImage: () => undefined,
+            fillStyle: '',
           });
           (el as any).toBlob = (cb: (b: Blob | null) => void) => {
             const blob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' });

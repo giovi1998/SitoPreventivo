@@ -187,6 +187,7 @@ export const businessCardSchema = z.object({
     company: z.string().default(''),
     photoUrl: z.string().nullable().default(null),
     logoUrl: z.string().nullable().default(null),
+    logoBackground: z.enum(['none', 'card']).default('none'),
     layout: businessCardLayoutSchema.default('left'),
   }),
   back: z.object({
@@ -195,6 +196,7 @@ export const businessCardSchema = z.object({
     website: z.string().default(''),
     address: z.string().default(''),
     vatNumber: z.string().default(''),
+    services: z.array(z.string().max(80)).max(8).default([]),
     socials: z.array(z.object({ platform: z.string(), url: z.string() })).default([]),
     qrPayload: z.string().default(''),
     qrLabel: z.string().default('Scansiona per visitare il sito'),
@@ -226,6 +228,7 @@ export function createEmptyCard(): BusinessCard {
       company: '',
       photoUrl: null,
       logoUrl: null,
+      logoBackground: 'none',
       layout: 'left',
     },
     back: {
@@ -234,6 +237,7 @@ export function createEmptyCard(): BusinessCard {
       website: '',
       address: '',
       vatNumber: '',
+      services: [],
       socials: [],
       qrPayload: '',
       qrLabel: 'Scansiona per visitare il sito',
@@ -283,7 +287,7 @@ export function createGiovanniCardTemplate(): BusinessCard {
       title: 'Web Developer',
       company: 'HPE CDS',
       photoUrl: '/giovanni-photo.jpg',
-      logoUrl: giovanniLogoDataUri(), // Logo SVG trasparente "WebdevCA"
+      logoUrl: giovanniLogoDataUri(),
       layout: 'split',
     },
     back: {

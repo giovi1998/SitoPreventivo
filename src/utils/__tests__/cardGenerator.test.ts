@@ -178,6 +178,59 @@ describe('cardGenerator - compressImage (AC-004, AC-005, AC-006, AC-006b)', () =
       vi.restoreAllMocks();
     }
   });
+
+  it('returns PNG dataURL with format="png" (preserves transparency for logos)', async () => {
+    mockLoadedImage(100, 100);
+    // Override the default JPEG mock — PNG output must be image/png
+    const ctxStub: any = { drawImage: vi.fn() };
+    const toDataURL = vi.fn(() => 'data:image/png;base64,' + 'A'.repeat(2000));
+    const canvasProto: any = { width: 0, height: 0, getContext: () => ctxStub, toDataURL };
+    const origCreate = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, 'createElement');
+    createSpy.mockImplementation((tag: string) => (tag === 'canvas' ? canvasProto as any : origCreate(tag)));
+    const file = makePngFile();
+    const result = await compressImage(file, undefined, undefined, { format: 'png' });
+    expect(result).toMatch(/^data:image\/png;base64,/);
+    expect(toDataURL).toHaveBeenCalledWith('image/png');
+  });
+
+  it('PNG output scales down iteratively when over maxBytes (no quality param on PNG)', async () => {
+    mockLoadedImage(400, 400);
+    let pngCall = 0;
+    // First call: too big (resizes). Second call: fits.
+    const sizes = [
+      'A'.repeat(900_000),
+      'A'.repeat(400_000),
+    ];
+    const ctxStub: any = { drawImage: vi.fn(), clearRect: vi.fn() };
+    const toDataURL = vi.fn(() => {
+      const s = sizes[pngCall++] ?? sizes[sizes.length - 1];
+      return 'data:image/png;base64,' + s;
+    });
+    const canvasProto: any = { width: 0, height: 0, getContext: () => ctxStub, toDataURL };
+    const origCreate = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, 'createElement');
+    createSpy.mockImplementation((tag: string) => (tag === 'canvas' ? canvasProto as any : origCreate(tag)));
+    const file = makePngFile();
+    const result = await compressImage(file, 800, 300_000, { format: 'png' });
+    expect(result).toMatch(/^data:image\/png;base64,/);
+    // PNG path uses toDataURL with no quality arg — verify it was called
+    expect(pngCall).toBeGreaterThanOrEqual(2);
+  });
+
+  it('PNG output throws when image is too complex even at minDim', async () => {
+    mockLoadedImage(100, 100);
+    const ctxStub: any = { drawImage: vi.fn(), clearRect: vi.fn() };
+    const toDataURL = vi.fn(() => 'data:image/png;base64,' + 'A'.repeat(900_000));
+    const canvasProto: any = { width: 0, height: 0, getContext: () => ctxStub, toDataURL };
+    const origCreate = document.createElement.bind(document);
+    const createSpy = vi.spyOn(document, 'createElement');
+    createSpy.mockImplementation((tag: string) => (tag === 'canvas' ? canvasProto as any : origCreate(tag)));
+    const file = makePngFile();
+    await expect(
+      compressImage(file, 800, 1000, { format: 'png', minDim: 50 }),
+    ).rejects.toThrow(/troppo pesante/i);
+  });
 });
 
 describe('cardGenerator - generateCardPDF (AC-009)', () => {
@@ -242,7 +295,7 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
     expect(serialized).toContain('AAAA'); // base64 photo data
   });
 
-  it('includes monogram text in docDefinition when name is set and no photo', async () => {
+  it('does NOT include monogram text in docDefinition (feature removed)', async () => {
     const card = {
       ...createEmptyCard(),
       front: { ...createEmptyCard().front, name: 'MARIO ROSSI' },
@@ -254,7 +307,7 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
     await generateCardPDF(card, { tier: 'free' });
     const docDef = createPdf.mock.calls[0][0];
     const serialized = JSON.stringify(docDef);
-    expect(serialized).toContain('MR'); // monogram
+    expect(serialized).not.toContain('"MR"'); // monogram removed
   });
 
   it('includes socials in back docDefinition when present', async () => {
@@ -397,13 +450,14 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
     expect(svg).toContain('#FF0000');
   });
 
-  it('includes monogram placeholder when no photo on front', () => {
+  it('does NOT include monogram placeholder when no photo on front (feature removed)', () => {
     const card = {
       ...createEmptyCard(),
       front: { ...createEmptyCard().front, name: 'MARIO ROSSI' },
     };
     const svg = buildCardSvg(card, 'front', 1024, 663);
-    expect(svg).toContain('MR'); // monogram
+    // monogram text should NOT be in the SVG anymore
+    expect(svg).not.toMatch(/>MR</);
   });
 
   it('includes photo image element when photoUrl is set', () => {

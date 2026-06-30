@@ -73,49 +73,40 @@ describe('CardPreview', () => {
       expect(img).toBeInTheDocument();
     });
 
-    it('renders monogram derived from name (e.g. GIOVANNI CIDU → GC) on front', () => {
+    it('does NOT render monogram (removed feature) when name is set but no photo', () => {
       const card = { ...createEmptyCard(), front: { ...createEmptyCard().front, name: 'GIOVANNI CIDU' } };
       render(<CardPreview side="front" card={card} />);
-      expect(screen.getByTestId('card-monogram-front')).toHaveTextContent('GC');
+      expect(screen.queryByTestId('card-monogram-front')).toBeNull();
     });
 
-    it('hides monogram when name is empty', () => {
+    it('does NOT render monogram when name is empty', () => {
       const card = createEmptyCard();
       render(<CardPreview side="front" card={card} />);
       expect(screen.queryByTestId('card-monogram-front')).toBeNull();
     });
 
-    it('renders monogram placeholder (circular) when no photo is set in left layout (C6)', () => {
+    it('does NOT render photo placeholder when no photo and no logo in left layout', () => {
       const card = { ...createEmptyCard(), front: { ...createEmptyCard().front, name: 'MARIO ROSSI', layout: 'left' as BusinessCardLayout } };
       render(<CardPreview side="front" card={card} />);
-      const placeholder = screen.getByTestId('card-photo-placeholder');
-      expect(placeholder).toBeInTheDocument();
-      expect(placeholder).toHaveTextContent('MR');
+      expect(screen.queryByTestId('card-photo-placeholder')).toBeNull();
     });
 
-    it('renders monogram filler in split layout when no photo is set (C7)', () => {
+    it('does NOT render split filler when no photo and no logo in split layout', () => {
       const card = { ...createEmptyCard(), front: { ...createEmptyCard().front, name: 'MARIO ROSSI', layout: 'split' as BusinessCardLayout } };
       render(<CardPreview side="front" card={card} />);
-      const filler = screen.getByTestId('card-split-filler');
-      expect(filler).toBeInTheDocument();
-      expect(filler).toHaveTextContent('MR');
+      expect(screen.queryByTestId('card-split-filler')).toBeNull();
     });
 
-    it('does NOT show bottom-right monogram when photo is present (C12)', () => {
+    it('does NOT show monogram when photo is present', () => {
       const card = {
         ...createEmptyCard(),
         front: { ...createEmptyCard().front, name: 'MARIO ROSSI', photoUrl: 'data:image/png;base64,AAAA', layout: 'left' as BusinessCardLayout },
       };
       render(<CardPreview side="front" card={card} />);
-      // With photo present, the bottom-right monogram is hidden
-      const monos = screen.queryAllByTestId('card-monogram-front');
-      // The placeholder takes the spot of the photo, but no bottom-right mono
-      monos.forEach((m) => {
-        expect(m).not.toHaveClass('large');
-      });
+      expect(screen.queryAllByTestId('card-monogram-front')).toHaveLength(0);
     });
 
-    it('renders bottom area with 3 elements (monogram | handle/domain | logo) in left layout', () => {
+    it('renders bottom area with handle/domain in left layout', () => {
       const card = {
         ...createEmptyCard(),
         back: { ...createEmptyCard().back, website: 'https://example.com' },
@@ -124,8 +115,6 @@ describe('CardPreview', () => {
       const { container } = render(<CardPreview side="front" card={card} />);
       const bottom = container.querySelector('.card-front-left-bottom');
       expect(bottom).toBeInTheDocument();
-      // Should have at least 2 child elements (monogram + handle)
-      expect(bottom!.children.length).toBeGreaterThanOrEqual(2);
     });
 
     it('renders decorative diagonal pattern in top-right of front card', () => {
