@@ -85,16 +85,41 @@ export class DeepSeekProvider extends BaseAIProvider {
   private async *streamLocal(body: Record<string, unknown>): AsyncGenerator<AIStreamChunk> {
     const key = await dataService.getDeepseekKey();
     if (!key) {
+      console.warn('[DeepSeek] Chiave non configurata in localStorage né in VITE_DEEPSEEK_API_KEY');
       yield { type: 'error', error: 'Chiave DeepSeek non configurata' };
       return;
     }
+    console.info(`[DeepSeek] Chiamata a ${API_URL} con modello=${this.model}, key length=${key.length}`);
 
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      console.error('[DeepSeek] Errore di rete:', err);
+      yield { type: 'error', error: `Errore di rete: ${err instanceof Error ? err.message : 'sconosciuto'}` };
+      return;
+    }
 
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      console.error(`[DeepSeek] HTTP ${res.status}: ${errBody.substring(0, 500)}`);
+      if (res.status === 401) {
+        yield { type: 'error', error: 'Chiave API DeepSeek non valida (401). Aggiorna la chiave.' };
+      } else if (res.status === 402) {
+        yield { type: 'error', error: 'Credito DeepSeek esaurito (402). Ricarica su platform.deepseek.com' };
+      } else if (res.status === 429) {
+        yield { type: 'error', error: 'Troppe richieste (429). Attendi qualche secondo.' };
+      } else {
+        yield { type: 'error', error: `DeepSeek HTTP ${res.status}: ${errBody.substring(0, 200)}` };
+      }
+      return;
+    }
+
+    console.info(`[DeepSeek] Stream HTTP ${res.status} avviato, content-type=${res.headers.get('content-type')}`);
     yield* this.parseSSEStream(res);
   }
 
@@ -124,6 +149,8 @@ export class DeepSeekProvider extends BaseAIProvider {
     const decoder = new TextDecoder();
     let buffer = '';
     let toolCallBuffer: Record<string, string> = {};
+    let chunkCount = 0;
+    let totalContentLength = 0;
 
     const flushToolCalls = function* (): Generator<AIStreamChunk> {
       const toolCalls = Object.entries(toolCallBuffer).reduce<
@@ -173,6 +200,7 @@ export class DeepSeekProvider extends BaseAIProvider {
 
           const data = trimmed.slice(5).trim();
           if (data === '[DONE]') {
+            console.info(`[DeepSeek] Stream completato: ${chunkCount} chunk, ${totalContentLength} caratteri ricevuti`);
             yield* flushToolCalls();
             yield { type: 'done', usage: finalUsage };
             return;
@@ -193,6 +221,8 @@ export class DeepSeekProvider extends BaseAIProvider {
             if (!delta) continue;
 
             if (delta.content) {
+              chunkCount++;
+              totalContentLength += delta.content.length;
               yield { type: 'content', content: delta.content };
             }
 

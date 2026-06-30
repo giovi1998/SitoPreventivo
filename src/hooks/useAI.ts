@@ -144,7 +144,8 @@ export function useAI(userEmail?: string): UseAIReturn {
         const orchestrator = getOrchestrator();
         options?.onProgress?.('🤖 Chiamata AI in corso...');
 
-        const result = await orchestrator.processPrompt(quote, prompt, {
+        // Prima chiamata
+        let result = await orchestrator.processPrompt(quote, prompt, {
           modelId: options?.modelId,
           onStream: (chunk: AIStreamChunk) => {
             if (chunk.type === 'content' && chunk.content) {
@@ -192,6 +193,29 @@ export function useAI(userEmail?: string): UseAIReturn {
             addLog(createToolEntry(`⚙ ${formatToolResult(toolResult, name)} — fatto`, durationMs));
           },
         });
+
+        // Se la risposta è completamente vuota (no content, no tool calls)
+        // ritenta una volta con il prompt semplificato.
+        const resultIsEmpty = !result.response?.content && (!result.response?.toolCalls || result.response.toolCalls.length === 0);
+        if (resultIsEmpty) {
+          console.warn('[useAI] Prima risposta vuota da DeepSeek, ritento con prompt semplificato');
+          addLog(createErrorEntry('⚠ Prima risposta vuota. Riprovo con prompt semplificato...'));
+          streamBufferRef.current.clear();
+          result = await orchestrator.processPrompt(quote, prompt, {
+            modelId: options?.modelId,
+            onStream: (chunk: AIStreamChunk) => {
+              if (chunk.type === 'content' && chunk.content) {
+                streamBufferRef.current.append(chunk.content);
+                if (!streamEntryIdRef.current) {
+                  const entry = createStreamEntry();
+                  streamEntryIdRef.current = entry.id;
+                  streamStartRef.current = Date.now();
+                  addLog(entry);
+                }
+              }
+            },
+          });
+        }
 
         setSessionId(result.sessionId);
 
