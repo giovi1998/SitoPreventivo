@@ -7,6 +7,8 @@ import {
   canResize,
   clampMove,
   clampResize,
+  stepMove,
+  stepResize,
   type GridRect,
 } from '../gridUtils';
 import type { CardGrid } from '../documentSchemas';
@@ -180,5 +182,63 @@ describe('gridUtils - clampMove / clampResize (BLOCK con clamp)', () => {
 
   it('clampResize shrink sempre funziona', () => {
     expect(clampResize(grid, 'name', -1, 0)).toEqual({ x: 1, y: 1, w: 2, h: 1 });
+  });
+});
+
+describe('gridUtils - stepMove / stepResize (Phase 2.2 REQ-A06, gradual per-axis)', () => {
+  it('stepMove con delta=±1 coincide con clampMove', () => {
+    const grid = makeGrid({
+      photo: rect(0, 0, 1, 4),
+      name: rect(1, 1, 3, 1),
+    });
+    expect(stepMove(grid, 'name', 0, -1)).toEqual({ x: 1, y: 0 });
+    expect(stepMove(grid, 'name', -1, 0)).toEqual({ x: 1, y: 1 });
+    expect(stepMove(grid, 'name', 1, 0)).toEqual({ x: 1, y: 1 });
+  });
+
+  it('stepMove multi-step avanza fino all\'ultima cella valida', () => {
+    // 6 colonne, name a x=0, niente altri elementi → può avanzare di 3
+    const grid = makeGrid({ name: rect(0, 1, 1, 1) }, 6, 4);
+    expect(stepMove(grid, 'name', 3, 0)).toEqual({ x: 3, y: 1 });
+  });
+
+  it('stepMove multi-step si ferma alla collisione (avanza parzialmente)', () => {
+    // 4 colonne, name a x=0, blocco a x=2 (w=1) → può avanzare di 2 non di 3
+    const grid = makeGrid({
+      name: rect(0, 1, 1, 1),
+      block: rect(2, 1, 1, 1),
+    }, 4, 4);
+    expect(stepMove(grid, 'name', 3, 0)).toEqual({ x: 1, y: 1 });
+  });
+
+  it('stepMove multi-step ferma a edge della grid', () => {
+    const grid = makeGrid({ name: rect(0, 0, 1, 1) }, 4, 4);
+    // x+w=1, può avanzare fino a x=3 (no elementi, no edge)
+    expect(stepMove(grid, 'name', 10, 0)).toEqual({ x: 3, y: 0 });
+  });
+
+  it('stepMove con delta 0 ritorna posizione corrente', () => {
+    const grid = makeGrid({ name: rect(2, 2, 1, 1) }, 4, 4);
+    expect(stepMove(grid, 'name', 0, 0)).toEqual({ x: 2, y: 2 });
+  });
+
+  it('stepResize multi-step advance then stop su collisione', () => {
+    const grid = makeGrid({
+      name: rect(1, 0, 1, 1),
+      title: rect(1, 1, 1, 1),
+    }, 4, 4);
+    // name vuole w=3: 1→2 OK, 2→3 OK (no elementi a destra). h=2: 1→2 collide con title.
+    expect(stepResize(grid, 'name', 2, 1)).toEqual({ x: 1, y: 0, w: 3, h: 1 });
+  });
+
+  it('stepResize shrink non collide mai (coerente con clampResize)', () => {
+    const grid = makeGrid({ name: rect(1, 0, 3, 1) }, 4, 4);
+    expect(stepResize(grid, 'name', -1, 0)).toEqual({ x: 1, y: 0, w: 2, h: 1 });
+  });
+
+  it('stepResize ferma a edge della grid', () => {
+    const grid = makeGrid({ name: rect(0, 0, 1, 1) }, 4, 4);
+    // può crescere in w fino a 4 (x+w=4 = cols)
+    expect(stepResize(grid, 'name', 10, 0)).toEqual({ x: 0, y: 0, w: 4, h: 1 });
   });
 });

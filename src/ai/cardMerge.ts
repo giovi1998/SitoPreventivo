@@ -1,10 +1,22 @@
 import type { BusinessCard, CardGrid } from '../utils/documentSchemas';
 import { businessCardSchema } from '../utils/documentSchemas';
-import { clampMove, clampResize } from '../utils/gridUtils';
+import { stepMove, stepResize } from '../utils/gridUtils';
 
 export interface CardMergeResult {
   card: BusinessCard;
   changes: string[];
+}
+
+// Phase 2.2 (REQ-A04): instradamento elementi grid per lato.
+// Elementi del FRONTE → card.grid; elementi del RETRO → card.backGrid.
+// Senza questo split, l'AI "sposta QR" scrive in card.grid e il retro
+// (che legge da card.backGrid ?? card.grid) ignora la modifica.
+const FRONT_GRID_KEYS = ['photo', 'name', 'title', 'company', 'logo'] as const;
+const BACK_GRID_KEYS = ['contacts', 'qr', 'socials'] as const;
+type GridTarget = 'grid' | 'backGrid';
+
+function targetForKey(key: string): GridTarget {
+  return (BACK_GRID_KEYS as readonly string[]).includes(key) ? 'backGrid' : 'grid';
 }
 
 // Helper: aggiorna una stringa solo se il nuovo valore è non-vuoto E
@@ -171,29 +183,39 @@ export function mergeCardAIResponse(
   }
 
   // ─── GRID ───────────────────────────────────────────────
+  // Phase 2.2 (REQ-A04): instradamento per lato. Elementi FRONT vanno in
+  // updated.grid, elementi BACK in updated.backGrid. Ogni lato mantiene la
+  // propria grid (cols/rows/elements). L'AI può modificare un lato alla
+  // volta; l'altro lato resta intatto.
+  //
+  // Phase 2.2 (REQ-A06): per mosse e resize multi-cella, usiamo stepMove /
+  // stepResize (graduali per-asse) invece di clampMove/clampResize
+  // (all-or-nothing). Una richiesta AI di spostare di 2 celle con la
+  // destinazione occupata avanza di 1 invece di essere scartata.
   if (modifiedSafe.grid && typeof modifiedSafe.grid === 'object') {
     const g = modifiedSafe.grid as Record<string, unknown>;
     const elements = g.elements as Record<string, unknown> | undefined;
     if (elements && typeof elements === 'object' && !isGridHallucinated(elements)) {
-      const currentGrid: CardGrid = updated.grid ?? {
-        cols: 4,
-        rows: 4,
-        elements: {},
-      };
-      const newGrid: CardGrid = {
-        ...currentGrid,
-        cols: (typeof g.cols === 'number' ? g.cols : currentGrid.cols),
-        rows: (typeof g.rows === 'number' ? g.rows : currentGrid.rows),
-        elements: { ...currentGrid.elements },
-      };
       for (const key of Object.keys(elements)) {
         const el = elements[key] as { x: number; y: number; w: number; h: number };
         if (!el || typeof el !== 'object') continue;
-        // Valida che abbia coordinate numeriche
         if (typeof el.x !== 'number' || typeof el.y !== 'number' ||
             typeof el.w !== 'number' || typeof el.h !== 'number') continue;
         if (el.w <= 0 || el.h <= 0) continue;
-        const current = currentGrid.elements[key as keyof typeof currentGrid.elements];
+
+        const target: GridTarget = targetForKey(key);
+        const currentTargetGrid: CardGrid = updated[target] ?? {
+          cols: (typeof g.cols === 'number' ? g.cols : 4),
+          rows: (typeof g.rows === 'number' ? g.rows : 4),
+          elements: {},
+        };
+        const newTargetGrid: CardGrid = {
+          ...currentTargetGrid,
+          cols: (typeof g.cols === 'number' ? g.cols : currentTargetGrid.cols),
+          rows: (typeof g.rows === 'number' ? g.rows : currentTargetGrid.rows),
+          elements: { ...currentTargetGrid.elements },
+        };
+        const current = currentTargetGrid.elements[key as keyof typeof currentTargetGrid.elements];
         let sanitized = el;
         if (current) {
           const dx = el.x - current.x;
@@ -201,29 +223,27 @@ export function mergeCardAIResponse(
           const dw = el.w - current.w;
           const dh = el.h - current.h;
           if (dx !== 0 || dy !== 0) {
-            const { x, y } = clampMove(currentGrid, key, dx, dy);
+            const { x, y } = stepMove(currentTargetGrid, key, dx, dy);
             sanitized = { x, y, w: el.w, h: el.h };
           }
           if (dw !== 0 || dh !== 0) {
-            const r = clampResize(currentGrid, key, dw, dh);
+            const r = stepResize(currentTargetGrid, key, dw, dh);
             sanitized = { x: r.x, y: r.y, w: r.w, h: r.h };
           }
         } else {
-          // Nuovo elemento aggiunto dall'AI: clamp ai bordi della grid.
-          // Non possiamo usare clampMove perché l'elemento non esiste in grid
-          // (wouldCollideOnMove ritornerebbe false in modo non significativo).
-          const cols = currentGrid.cols;
-          const rows = currentGrid.rows;
+          // Nuovo elemento: clamp ai bordi della grid di destinazione.
+          const cols = currentTargetGrid.cols;
+          const rows = currentTargetGrid.rows;
           const w = Math.max(1, Math.min(cols, el.w));
           const h = Math.max(1, Math.min(rows, el.h));
           const x = Math.max(0, Math.min(cols - w, el.x));
           const y = Math.max(0, Math.min(rows - h, el.y));
           sanitized = { x, y, w, h };
         }
-        newGrid.elements = { ...newGrid.elements, [key]: sanitized };
+        newTargetGrid.elements = { ...newTargetGrid.elements, [key]: sanitized };
+        updated[target] = newTargetGrid;
         changes.push(`Griglia: ${key} posizionato a (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}`);
       }
-      updated.grid = newGrid;
     }
   }
 

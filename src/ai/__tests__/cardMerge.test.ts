@@ -108,7 +108,7 @@ describe('mergeCardAIResponse', () => {
     expect(changes.length).toBeGreaterThanOrEqual(6);
   });
 
-  it('merges grid.elements.qr position (C - AI grid move)', () => {
+  it('merges grid.elements.qr position (C - AI grid move) — Phase 2.2 routes to backGrid', () => {
     const card = createEmptyCard();
     const { card: merged, changes } = mergeCardAIResponse(card, {
       grid: {
@@ -119,7 +119,9 @@ describe('mergeCardAIResponse', () => {
         },
       },
     });
-    expect(merged.grid?.elements.qr).toEqual({ x: 0, y: 2, w: 1, h: 2 });
+    // Phase 2.2 REQ-A04: qr è un elemento del retro, va in card.backGrid
+    expect(merged.backGrid?.elements.qr).toEqual({ x: 0, y: 2, w: 1, h: 2 });
+    expect(merged.grid?.elements.qr).toBeUndefined();
     expect(changes.some((c) => c.includes('qr'))).toBe(true);
   });
 
@@ -172,7 +174,7 @@ describe('mergeCardAIResponse', () => {
     expect(merged.grid?.elements.name?.x).toBe(1);
   });
 
-  it('AI grid resize that would collide is sanitized to nearest valid size', () => {
+  it('AI grid resize that would collide is sanitized with gradual per-axis clamp (Phase 2.2 REQ-A06)', () => {
     const card = createEmptyCard();
     card.grid = {
       cols: 4,
@@ -180,10 +182,11 @@ describe('mergeCardAIResponse', () => {
       elements: {
         photo: { x: 0, y: 0, w: 1, h: 4 },
         name: { x: 1, y: 0, w: 1, h: 1 },
-        title: { x: 1, y: 1, w: 1, h: 1 },
+        // title spostato a y=2 per non bloccare h=2 di name
+        title: { x: 1, y: 2, w: 1, h: 1 },
       },
     };
-    // AI prova a ingrandire name a w=3, h=3 (colliderebbe con title)
+    // AI prova a ingrandire name a w=3, h=3 (title a y=2 blocca h a 2)
     const { card: merged } = mergeCardAIResponse(card, {
       grid: {
         elements: {
@@ -191,9 +194,131 @@ describe('mergeCardAIResponse', () => {
         },
       },
     });
-    // size sanificata a w=1, h=1 (no collisione)
-    expect(merged.grid?.elements.name?.w).toBe(1);
-    expect(merged.grid?.elements.name?.h).toBe(1);
+    // REQ-A06: gradual clamp per-asse. w può crescere fino a 3 (nessun
+    // blocco in larghezza), h si ferma a 2 (title a y=2 blocca h=3).
+    expect(merged.grid?.elements.name?.w).toBe(3);
+    expect(merged.grid?.elements.name?.h).toBe(2);
+  });
+
+  it('AI grid move multi-step with final collision advances until last valid cell (Phase 2.2 REQ-A06)', () => {
+    // Setup: cols=6, name a x=0 vuole x=5 ma c'è un blocco a x=3.
+    // stepMove deve avanzare fino a x=2 (1 step oltre il blocco).
+    const card = createEmptyCard();
+    card.grid = {
+      cols: 6,
+      rows: 4,
+      elements: {
+        name: { x: 0, y: 1, w: 1, h: 1 },
+        // "block" — uso `logo` come blocco fittizio per testare la collisione
+        logo: { x: 3, y: 1, w: 1, h: 1 },
+      },
+    };
+    const { card: merged } = mergeCardAIResponse(card, {
+      grid: {
+        elements: {
+          name: { x: 5, y: 1, w: 1, h: 1 },
+        },
+      },
+    });
+    // Step 1: x=1 OK. Step 2: x=2 OK. Step 3: x=3 collide con block. Stop a x=2.
+    expect(merged.grid?.elements.name?.x).toBe(2);
+  });
+
+  // ─── Bug "Rendi premium" regression (Phase 2.1) ────────────────
+  describe('Grid routing front vs back (Phase 2.2 REQ-A04)', () => {
+    it('routes front elements (photo/name/title/company/logo) to card.grid', () => {
+      const card = createEmptyCard();
+      const { card: merged } = mergeCardAIResponse(card, {
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            photo: { x: 0, y: 0, w: 2, h: 2 },
+            name: { x: 0, y: 2, w: 4, h: 1 },
+            title: { x: 0, y: 3, w: 4, h: 1 },
+            logo: { x: 3, y: 0, w: 1, h: 1 },
+          },
+        },
+      });
+      expect(merged.grid?.elements.photo).toBeDefined();
+      expect(merged.grid?.elements.name).toBeDefined();
+      expect(merged.grid?.elements.title).toBeDefined();
+      expect(merged.grid?.elements.logo).toBeDefined();
+      // Nessun elemento front deve finire in backGrid
+      expect(merged.backGrid?.elements.photo).toBeUndefined();
+      expect(merged.backGrid?.elements.name).toBeUndefined();
+      expect(merged.backGrid?.elements.title).toBeUndefined();
+      expect(merged.backGrid?.elements.logo).toBeUndefined();
+    });
+
+    it('routes back elements (contacts/qr/socials) to card.backGrid', () => {
+      const card = createEmptyCard();
+      const { card: merged } = mergeCardAIResponse(card, {
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 3, h: 4 },
+            qr: { x: 3, y: 0, w: 1, h: 2 },
+            socials: { x: 3, y: 2, w: 1, h: 2 },
+          },
+        },
+      });
+      expect(merged.backGrid?.elements.contacts).toBeDefined();
+      expect(merged.backGrid?.elements.qr).toBeDefined();
+      expect(merged.backGrid?.elements.socials).toBeDefined();
+      // Nessun elemento back deve finire in grid
+      expect(merged.grid?.elements.contacts).toBeUndefined();
+      expect(merged.grid?.elements.qr).toBeUndefined();
+      expect(merged.grid?.elements.socials).toBeUndefined();
+    });
+
+    it('preserves existing backGrid when AI only touches front elements', () => {
+      const card = createGiovanniCardTemplate();
+      const originalBackGrid = JSON.parse(JSON.stringify(card.backGrid));
+      const { card: merged } = mergeCardAIResponse(card, {
+        grid: {
+          elements: {
+            photo: { x: 0, y: 0, w: 1, h: 1 },
+          },
+        },
+      });
+      expect(merged.backGrid).toEqual(originalBackGrid);
+      expect(merged.grid?.elements.photo).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    });
+
+    it('preserves existing grid when AI only touches back elements', () => {
+      const card = createGiovanniCardTemplate();
+      const originalGrid = JSON.parse(JSON.stringify(card.grid));
+      // L'AI chiede al qr di restare dov'è (nessuna mossa): solo conferma
+      // posizione. L'assertion è che il front grid resta intatto.
+      const { card: merged } = mergeCardAIResponse(card, {
+        grid: {
+          elements: {
+            qr: { x: 3, y: 0, w: 1, h: 2 }, // stessa posizione di Giovanni
+          },
+        },
+      });
+      expect(merged.grid).toEqual(originalGrid);
+      expect(merged.backGrid?.elements.qr).toEqual({ x: 3, y: 0, w: 1, h: 2 });
+    });
+
+    it('initializes backGrid with cols/rows when AI adds back elements to a card without it', () => {
+      const card = createEmptyCard();
+      expect(card.backGrid).toBeUndefined();
+      const { card: merged } = mergeCardAIResponse(card, {
+        grid: {
+          cols: 6,
+          rows: 6,
+          elements: {
+            qr: { x: 0, y: 0, w: 1, h: 1 },
+          },
+        },
+      });
+      expect(merged.backGrid?.cols).toBe(6);
+      expect(merged.backGrid?.rows).toBe(6);
+      expect(merged.backGrid?.elements.qr).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    });
   });
 
   // ─── Bug "Rendi premium" regression (Phase 2.1) ────────────────
@@ -288,7 +413,6 @@ describe('mergeCardAIResponse', () => {
     it('full "Rendi premium" attack vector: AI tries to clear everything', () => {
       // Caso reale: AI "Rendi premium" con tutti i bug insieme.
       const card = createGiovanniCardTemplate();
-      const originalCard = JSON.parse(JSON.stringify(card));
       const { card: merged, changes } = mergeCardAIResponse(card, {
         front: {
           name: 'GIOVANNI CIDU',
@@ -351,8 +475,13 @@ describe('mergeCardAIResponse', () => {
       // il layout se l'AI lo cambia esplicitamente. L'utente può riapplicare
       // il template Giovanni per ripristinare 'split'.
       expect(merged.front.layout).toBe('centered');
-      // Back grid invariato (hallucination detection)
-      expect(merged.backGrid).toEqual(originalCard.backGrid);
+      // Phase 2.2 REQ-A04: gli elementi back (qr/contacts/socials) sono
+      // instradati su backGrid e protetti dal gradual clamp (non possono
+      // collidere con contacts che occupa 0-3). Le posizioni finali sono
+      // l'esito del clamp, non dell'AI. L'utente può riapplicare il template
+      // Giovanni per ripristinare il backGrid originale.
+      expect(merged.backGrid?.cols).toBe(4);
+      expect(merged.backGrid?.rows).toBe(4);
       // Changes tracciate
       expect(changes.length).toBeGreaterThan(0);
     });

@@ -138,3 +138,88 @@ export function clampResize(
   }
   return { x: self.x, y: self.y, w: self.w, h: self.h };
 }
+
+// stepMove: variante per-asse di clampMove. Applica il delta un passo alla
+// volta fermandosi alla prima collisione. Usata dall'AI per mosse multi-cella
+// (REQ-A06): invece di scartare l'intera mossa se la destinazione collide,
+// avanza fino all'ultima cella valida.
+export function stepMove(
+  grid: CardGrid,
+  selfKey: string,
+  dx: number,
+  dy: number,
+): { x: number; y: number } {
+  const elements = (grid.elements ?? {}) as Record<string, GridRect>;
+  const self = elements[selfKey];
+  if (!self) return { x: 0, y: 0 };
+  let x = self.x;
+  let y = self.y;
+  const sx = Math.sign(dx);
+  const sy = Math.sign(dy);
+  for (let i = 0; i < Math.abs(dx); i++) {
+    const nextX = x + sx;
+    if (nextX < 0 || nextX + self.w > grid.cols) break;
+    if (wouldRectCollideWithOthers(grid, selfKey, nextX, y, self.w, self.h)) break;
+    x = nextX;
+  }
+  for (let i = 0; i < Math.abs(dy); i++) {
+    const nextY = y + sy;
+    if (nextY < 0 || nextY + self.h > grid.rows) break;
+    if (wouldRectCollideWithOthers(grid, selfKey, x, nextY, self.w, self.h)) break;
+    y = nextY;
+  }
+  return { x, y };
+}
+
+// stepResize: variante per-asse di clampResize. Stesso principio di stepMove
+// ma per i delta di w/h. Una richiesta AI di "+2 in larghezza" avanza di 2
+// se entrambi gli step sono liberi, di 1 se il secondo collide, di 0 se il
+// primo collide.
+export function stepResize(
+  grid: CardGrid,
+  selfKey: string,
+  dw: number,
+  dh: number,
+): { x: number; y: number; w: number; h: number } {
+  const elements = (grid.elements ?? {}) as Record<string, GridRect>;
+  const self = elements[selfKey];
+  if (!self) return { x: 0, y: 0, w: 1, h: 1 };
+  let w = self.w;
+  let h = self.h;
+  const sw = Math.sign(dw);
+  const sh = Math.sign(dh);
+  for (let i = 0; i < Math.abs(dw); i++) {
+    const nextW = w + sw;
+    if (nextW < 1 || self.x + nextW > grid.cols) break;
+    if (wouldRectCollideWithOthers(grid, selfKey, self.x, self.y, nextW, h)) break;
+    w = nextW;
+  }
+  for (let i = 0; i < Math.abs(dh); i++) {
+    const nextH = h + sh;
+    if (nextH < 1 || self.y + nextH > grid.rows) break;
+    if (wouldRectCollideWithOthers(grid, selfKey, self.x, self.y, w, nextH)) break;
+    h = nextH;
+  }
+  return { x: self.x, y: self.y, w, h };
+}
+
+// Helper interno: collision check contro TUTTI gli altri elementi (escluso
+// selfKey), usando coordinate esplicite invece di leggere self.x/y dalla
+// grid. Necessario per stepMove/stepResize che aggiornano una variabile
+// locale ad ogni iterazione e non vogliono mutare la grid.
+function wouldRectCollideWithOthers(
+  grid: CardGrid,
+  selfKey: string,
+  px: number,
+  py: number,
+  pw: number,
+  ph: number,
+): boolean {
+  const proposal: GridRect = { x: px, y: py, w: pw, h: ph };
+  for (const [k, v] of Object.entries(grid.elements ?? {})) {
+    if (k === selfKey) continue;
+    if (!v || typeof v.w !== 'number') continue;
+    if (collides(proposal, v)) return true;
+  }
+  return false;
+}

@@ -189,6 +189,11 @@ export const businessCardSchema = z.object({
     logoUrl: z.string().nullable().default(null),
     logoBackground: z.enum(['none', 'card']).default('none'),
     layout: businessCardLayoutSchema.default('left'),
+    // Phase 2.2 REQ-A02: separa "grid-mode attivo" (rende la preview via
+    // CSS Grid) dal toggle delle "linee guida" (overlay puramente visivo).
+    // Default false = le card esistenti continuano a renderizzare in
+    // flexbox finché l'utente non sposta un elemento nel grid editor.
+    useGrid: z.boolean().default(false),
   }),
   back: z.object({
     phone: z.string().default(''),
@@ -200,6 +205,9 @@ export const businessCardSchema = z.object({
     socials: z.array(z.object({ platform: z.string(), url: z.string() })).default([]),
     qrPayload: z.string().default(''),
     qrLabel: z.string().default('Scansiona per visitare il sito'),
+    // Phase 2.2 REQ-A02: come sopra, per il retro. Indipendente dal front
+    // (l'utente può avere grid-mode attivo solo su uno dei due lati).
+    useGrid: z.boolean().default(false),
   }),
   style: z.object({
     sizePreset: businessCardSizePresetSchema.default('eu-85x55'),
@@ -230,6 +238,7 @@ export function createEmptyCard(): BusinessCard {
       logoUrl: null,
       logoBackground: 'none',
       layout: 'left',
+      useGrid: false,
     },
     back: {
       phone: '',
@@ -241,6 +250,7 @@ export function createEmptyCard(): BusinessCard {
       socials: [],
       qrPayload: '',
       qrLabel: 'Scansiona per visitare il sito',
+      useGrid: false,
     },
     style: {
       sizePreset: 'eu-85x55',
