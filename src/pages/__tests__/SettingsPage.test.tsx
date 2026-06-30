@@ -6,6 +6,9 @@ import { AuthContext } from '../../contexts';
 vi.mock('../../utils/dataService', () => ({
   default: {
     changePassword: vi.fn(() => Promise.resolve({ success: true })),
+    getUserTier: vi.fn(() => Promise.resolve({ tier: 'free', documentCount: 0, documentLimit: 3 })),
+    getUserSettings: vi.fn(() => Promise.resolve({ userEmail: 'user@test.com' })),
+    redeemUnlockCode: vi.fn(() => Promise.resolve({ success: true, tier: 'unlocked' })),
   },
 }));
 

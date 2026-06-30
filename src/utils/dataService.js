@@ -172,10 +172,15 @@ const dataService = {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_documents:v1') || [];
       const ownerEmail = email || document.userEmail;
+      const isNew = !all.some(d => d.id === document.id);
       const owned = all.filter(d => d.userEmail === ownerEmail);
       const others = all.filter(d => d.userEmail !== ownerEmail);
       const updated = [document, ...owned.filter(d => d.id !== document.id), ...others];
       lsSet('precisionQuote_documents:v1', updated);
+      if (isNew) {
+        // fire-and-forget; failure here is non-fatal (best-effort counting)
+        dataService.incrementDocumentCount(ownerEmail).catch(() => {});
+      }
       return { success: true, data: document };
     }
     const result = await api('POST', '/documents', { email, document });
@@ -311,7 +316,7 @@ const dataService = {
   // ─── AI STREAM CHAT ──────────────────────────────
   async streamChat(params) {
     if (IS_LOCAL) {
-      const key = lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+      const key = import.meta.env.VITE_DEEPSEEK_API_KEY || lsGet('deepseekApiKey') || '';
       if (!key) return { error: 'Chiave DeepSeek non configurata.' };
       const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
@@ -331,7 +336,10 @@ const dataService = {
   // ─── SHARED DEEPSEEK API KEY ────────────────────
   async getDeepseekKey() {
     if (IS_LOCAL) {
-      return lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+      // Env var has priority over localStorage: if the user updates .env,
+      // the new key takes effect immediately (after dev server restart).
+      // localStorage is only used as fallback for keys saved via the admin UI.
+      return import.meta.env.VITE_DEEPSEEK_API_KEY || lsGet('deepseekApiKey') || '';
     }
     // In production, key is set via Vercel env var (DEEPSEEK_API_KEY)
     // The frontend never reads it — use chatWithAI() instead
@@ -350,7 +358,7 @@ const dataService = {
   // ─── CHECK DEEPSEEK STATUS (production debug) ────
   async checkDeepSeekStatus() {
     if (IS_LOCAL) {
-      const key = lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+      const key = import.meta.env.VITE_DEEPSEEK_API_KEY || lsGet('deepseekApiKey') || '';
       return { configured: !!key, envVarSet: false, localKeySet: !!key };
     }
     return await api('GET', '/admin/deepseek-status');
@@ -359,7 +367,7 @@ const dataService = {
   // ─── AI CHAT (proxy in prod, direct in local) ────
   async chatWithAI({ model, messages, response_format, temperature }) {
     if (IS_LOCAL) {
-      const key = lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+      const key = import.meta.env.VITE_DEEPSEEK_API_KEY || lsGet('deepseekApiKey') || '';
       if (!key) return { error: 'Chiave DeepSeek non configurata. Inseriscila nella Dashboard Admin (solo sviluppo locale).' };
       try {
         const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -422,6 +430,129 @@ const dataService = {
     if (result.error) return { success: false, error: result.error };
     return { success: true, ...result };
   },
+
+  // ─── TIER SYSTEM (phase 5) ─────────────────────
+  // Admin has implicit `unlocked` tier — short-circuit before any
+  // DB / localStorage access. This mirrors the admin pattern in
+  // AGENTS.md "Admin User".
+
+  isAdmin(email) {
+    return email === 'admin@gmail.com';
+  },
+
+  async getUserTier(email) {
+    if (dataService.isAdmin(email)) {
+      return { tier: 'unlocked', documentCount: 0, documentLimit: null };
+    }
+    if (IS_LOCAL) {
+      const settings = lsGet(`userSettings_${email}`) || {};
+      const tier = settings.tier === 'unlocked' ? 'unlocked' : 'free';
+      return {
+        tier,
+        documentCount: settings.documentCount || 0,
+        documentLimit: 3,
+      };
+    }
+    return api('GET', `/users/tier?email=${encodeURIComponent(email)}`);
+  },
+
+  async redeemUnlockCode(email, code) {
+    if (dataService.isAdmin(email)) {
+      return { success: true, tier: 'unlocked' };
+    }
+    const normalized = String(code || '').trim().toUpperCase();
+    if (IS_LOCAL) {
+      const codes = lsGet('unlock_codes') || [];
+      const found = codes.find(c => String(c.code || '').toUpperCase() === normalized);
+      if (!found) {
+        if (normalized === 'TEST-UNLOCK') {
+          // magic: per spec edge case 3 (locale dev fallback)
+          const settings = lsGet(`userSettings_${email}`) || {};
+          settings.tier = 'unlocked';
+          settings.unlockCode = normalized;
+          settings.unlockedAt = new Date().toISOString();
+          lsSet(`userSettings_${email}`, settings);
+          return { success: true, tier: 'unlocked' };
+        }
+        return { error: 'Codice non valido' };
+      }
+      if (found.usedBy) {
+        return { error: 'Codice già utilizzato' };
+      }
+      found.usedBy = email;
+      found.usedAt = new Date().toISOString();
+      lsSet('unlock_codes', codes);
+      const settings = lsGet(`userSettings_${email}`) || {};
+      settings.tier = 'unlocked';
+      settings.unlockCode = normalized;
+      settings.unlockedAt = new Date().toISOString();
+      lsSet(`userSettings_${email}`, settings);
+      return { success: true, tier: 'unlocked' };
+    }
+    return api('POST', '/users/redeem-code', { email, code: normalized });
+  },
+
+  async incrementDocumentCount(email, delta = 1) {
+    if (dataService.isAdmin(email)) return { documentCount: 0 };
+    if (IS_LOCAL) {
+      const settings = lsGet(`userSettings_${email}`) || {};
+      settings.documentCount = (settings.documentCount || 0) + delta;
+      lsSet(`userSettings_${email}`, settings);
+      return { documentCount: settings.documentCount };
+    }
+    return api('PATCH', '/users/document-count', { email, delta });
+  },
+
+  async adminGenerateUnlockCode(packageName) {
+    const code = generateUnlockCode();
+    if (IS_LOCAL) {
+      const codes = lsGet('unlock_codes') || [];
+      codes.push({
+        code,
+        package: packageName,
+        usedBy: null,
+        usedAt: null,
+        createdBy: 'admin@gmail.com',
+        createdAt: new Date().toISOString(),
+      });
+      lsSet('unlock_codes', codes);
+      return { success: true, code };
+    }
+    return api('POST', '/admin/generate-unlock-code', {
+      adminEmail: 'admin@gmail.com',
+      package: packageName,
+    });
+  },
+
+  async adminListUnlockCodes() {
+    if (IS_LOCAL) {
+      return { codes: lsGet('unlock_codes') || [] };
+    }
+    return api('GET', '/admin/unlock-codes?adminEmail=admin%40gmail.com');
+  },
+
+  async adminUnlockUser(userEmail) {
+    if (IS_LOCAL) {
+      const settings = lsGet(`userSettings_${userEmail}`) || {};
+      settings.tier = 'unlocked';
+      settings.unlockedAt = new Date().toISOString();
+      lsSet(`userSettings_${userEmail}`, settings);
+      return { success: true, tier: 'unlocked' };
+    }
+    return api('POST', '/admin/unlock-user', { adminEmail: 'admin@gmail.com', userEmail });
+  },
 };
+
+// ─── HELPERS ─────────────────────────────────────────
+function randomHex(n) {
+  let s = '';
+  const chars = '0123456789ABCDEF';
+  for (let i = 0; i < n; i++) s += chars[Math.floor(Math.random() * 16)];
+  return s;
+}
+
+function generateUnlockCode() {
+  return `PQ-${randomHex(8)}-${randomHex(8)}-${randomHex(8)}`;
+}
 
 export default dataService;

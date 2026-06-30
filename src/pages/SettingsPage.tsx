@@ -1,8 +1,9 @@
-import React, { useState, useContext, useMemo } from 'react';
+import React, { useState, useContext, useMemo, useEffect, useCallback } from 'react';
 import { AuthContext } from '../contexts';
 import dataService from '../utils/dataService';
 import PasswordInput from '../components/PasswordInput';
 import PasswordStrength, { evaluatePassword, EMPTY_RULES } from '../components/PasswordStrength';
+import { maskUnlockCode } from '../utils/watermark';
 import './SettingsPage.css';
 
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
@@ -17,6 +18,71 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Tier state (Phase 5)
+  const [tier, setTier] = useState<'free' | 'unlocked' | 'loading'>('loading');
+  const [documentCount, setDocumentCount] = useState<number>(0);
+  const [documentLimit, setDocumentLimit] = useState<number | null>(null);
+  const [unlockCode, setUnlockCode] = useState<string | null>(null);
+  const [unlockedAt, setUnlockedAt] = useState<string | null>(null);
+  const [redeemCode, setRedeemCode] = useState('');
+  const [redeemBusy, setRedeemBusy] = useState(false);
+  const [redeemMessage, setRedeemMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const refreshTier = useCallback(async () => {
+    if (!user?.email) return;
+    if (user.email === 'admin@gmail.com') {
+      setTier('unlocked');
+      setDocumentLimit(null);
+      return;
+    }
+    const res: any = await dataService.getUserTier(user.email);
+    if (res && !res.error) {
+      setTier(res.tier === 'unlocked' ? 'unlocked' : 'free');
+      setDocumentCount(res.documentCount || 0);
+      setDocumentLimit(res.documentLimit ?? null);
+    }
+  }, [user?.email]);
+
+  useEffect(() => {
+    if (tab === 'account') refreshTier();
+  }, [tab, refreshTier]);
+
+  // When tier becomes unlocked (and not admin), fetch unlockCode + unlockedAt
+  useEffect(() => {
+    if (tier === 'unlocked' && user?.email && user.email !== 'admin@gmail.com') {
+      dataService.getUserSettings(user.email).then((settings: any) => {
+        if (settings && !settings.error) {
+          setUnlockCode(settings.unlockCode || null);
+          setUnlockedAt(settings.unlockedAt || null);
+        }
+      }).catch(() => { /* ignore */ });
+    }
+  }, [tier, user?.email]);
+
+  const handleRedeem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.email || !redeemCode.trim()) return;
+    setRedeemBusy(true);
+    setRedeemMessage(null);
+    const result: any = await dataService.redeemUnlockCode(user.email, redeemCode.trim());
+    setRedeemBusy(false);
+    if (result?.error) {
+      setRedeemMessage({ text: result.error, type: 'error' });
+      return;
+    }
+    if (result?.tier === 'unlocked') {
+      setRedeemMessage({ text: 'Codice riscattato! Sbloccato.', type: 'success' });
+      setRedeemCode('');
+      await refreshTier();
+      // Pull unlockCode + unlockedAt from userSettings
+      const settings: any = await dataService.getUserSettings(user.email);
+      if (settings) {
+        setUnlockCode(settings.unlockCode || null);
+        setUnlockedAt(settings.unlockedAt || null);
+      }
+    }
+  };
 
   const rules = useMemo(() => evaluatePassword(newPassword), [newPassword]);
   const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
@@ -163,29 +229,119 @@ export default function SettingsPage() {
       )}
 
       {tab === 'account' && (
-        <div className="settings-card">
-          <div className="settings-card-header">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            <div>
-              <strong>Informazioni account</strong>
-              <span>Dettagli del tuo profilo</span>
+        <>
+          <div className="settings-card">
+            <div className="settings-card-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              <div>
+                <strong>Informazioni account</strong>
+                <span>Dettagli del tuo profilo</span>
+              </div>
+            </div>
+            <div className="settings-info">
+              <div className="settings-info-row"><span>Email</span><b>{user?.email || '—'}</b></div>
+              <div className="settings-info-row"><span>Username</span><b>{user?.username || '—'}</b></div>
+              <div className="settings-info-row"><span>Ruolo</span><b className={`role-badge ${user?.role === 'admin' ? 'admin' : 'user'}`}>{user?.role || 'user'}</b></div>
+              {user?.dataRegistrazione && (
+                <div className="settings-info-row"><span>Membro dal</span><b>{user.dataRegistrazione}</b></div>
+              )}
+              {user?.tokensUsed !== undefined && (
+                <div className="settings-info-row"><span>Token AI usati</span><b>{user.tokensUsed.toLocaleString('it-IT')} / {user.tokenLimit?.toLocaleString('it-IT') || '∞'}</b></div>
+              )}
             </div>
           </div>
-          <div className="settings-info">
-            <div className="settings-info-row"><span>Email</span><b>{user?.email || '—'}</b></div>
-            <div className="settings-info-row"><span>Username</span><b>{user?.username || '—'}</b></div>
-            <div className="settings-info-row"><span>Ruolo</span><b className={`role-badge ${user?.role === 'admin' ? 'admin' : 'user'}`}>{user?.role || 'user'}</b></div>
-            {user?.dataRegistrazione && (
-              <div className="settings-info-row"><span>Membro dal</span><b>{user.dataRegistrazione}</b></div>
+
+          {/* Phase 5 — Il mio account (stato tier + redeem) */}
+          <div className="settings-card" data-testid="settings-tier-card">
+            <div className="settings-card-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <div>
+                <strong>Il mio account</strong>
+                <span>Piano e stato sblocco</span>
+              </div>
+            </div>
+
+            <div className="settings-info" data-testid="settings-tier-info">
+              <div className="settings-info-row">
+                <span>Piano</span>
+                <b data-testid="settings-tier-value">
+                  {tier === 'loading' ? '—' : tier === 'unlocked' ? 'Sbloccato' : 'Free'}
+                </b>
+              </div>
+              {tier === 'free' && documentLimit !== null && (
+                <div className="settings-info-row">
+                  <span>Documenti salvati</span>
+                  <b data-testid="settings-doc-count">{documentCount} / {documentLimit}</b>
+                </div>
+              )}
+              {tier === 'unlocked' && user?.role !== 'admin' && (
+                <>
+                  {unlockCode && (
+                    <div className="settings-info-row">
+                      <span>Codice sbloccato</span>
+                      <b data-testid="settings-unlock-code">{maskUnlockCode(unlockCode)}</b>
+                    </div>
+                  )}
+                  {unlockedAt && (
+                    <div className="settings-info-row">
+                      <span>Sbloccato il</span>
+                      <b>{new Date(unlockedAt).toLocaleDateString('it-IT')}</b>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {tier === 'free' && user?.role !== 'admin' && (
+              <form onSubmit={handleRedeem} className="settings-form" data-testid="settings-redeem-form">
+                <label htmlFor="settings-redeem-input" className="settings-form-label">
+                  Hai un codice sbloccato? Riscattalo qui sotto.
+                </label>
+                <input
+                  id="settings-redeem-input"
+                  type="text"
+                  className="settings-form-input"
+                  value={redeemCode}
+                  onChange={(e) => setRedeemCode(e.target.value)}
+                  placeholder="PQ-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+                  disabled={redeemBusy}
+                  data-testid="settings-redeem-input"
+                  autoComplete="off"
+                />
+                {redeemMessage && (
+                  <div
+                    className={`settings-msg ${redeemMessage.type}`}
+                    role="alert"
+                    data-testid="settings-redeem-message"
+                  >
+                    {redeemMessage.text}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  className="settings-submit"
+                  disabled={redeemBusy || !redeemCode.trim()}
+                  data-testid="settings-redeem-submit"
+                >
+                  {redeemBusy ? 'Riscatto…' : 'Riscatta codice'}
+                </button>
+                <p className="settings-form-hint">
+                  Suggerimento: in locale puoi usare <code>TEST-UNLOCK</code>.
+                </p>
+              </form>
             )}
-            {user?.tokensUsed !== undefined && (
-              <div className="settings-info-row"><span>Token AI usati</span><b>{user.tokensUsed.toLocaleString('it-IT')} / {user.tokenLimit?.toLocaleString('it-IT') || '∞'}</b></div>
+
+            {tier === 'unlocked' && user?.role === 'admin' && (
+              <p className="settings-form-hint">L'account amministratore è sempre sbloccato.</p>
             )}
           </div>
-        </div>
+        </>
       )}
     </div>
   );
