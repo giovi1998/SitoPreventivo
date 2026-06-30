@@ -532,6 +532,28 @@ export default function GlobalStyles() {
     .confirm-dialog p{margin:0 0 22px;font-size:.85rem;color:var(--muted);line-height:1.5}
     .confirm-dialog .confirm-actions{display:flex;justify-content:flex-end;gap:8px}
 
+    /* ─── TIER LIMIT MODAL (Phase 5) ─────────────────── */
+    .tier-limit-overlay{position:fixed;inset:0;background:var(--overlay);display:grid;place-items:center;z-index:1100;padding:20px;animation:fadeIn .15s}
+    .tier-limit-dialog{background:var(--surface);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:440px;box-shadow:var(--shadow-lg)}
+    .tier-limit-dialog h3{margin:0 0 12px;font-size:1.15rem;font-weight:var(--weight-extrabold);color:var(--ink)}
+    .tier-limit-dialog p{margin:0 0 22px;font-size:.88rem;color:var(--muted);line-height:1.5}
+    .tier-limit-dialog .tier-limit-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .tier-limit-redeem{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+    .tier-limit-label{font-size:.78rem;font-weight:var(--weight-semibold);color:var(--ink)}
+    .tier-limit-input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-md);font-size:.88rem;font-family:'Roboto Mono',monospace;background:var(--bg);color:var(--ink);box-sizing:border-box}
+    .tier-limit-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(11,87,208,.12)}
+    .tier-limit-input:disabled{opacity:.5;cursor:not-allowed}
+    .tier-limit-error{margin:0;padding:8px 10px;background:rgba(220,38,38,.08);color:#dc2626;border-radius:var(--radius-sm);font-size:.8rem}
+    .tier-limit-hint{margin:8px 0 0;font-size:.72rem;color:var(--muted)}
+    .tier-limit-hint code{background:var(--bg);padding:1px 6px;border-radius:4px;font-family:'Roboto Mono',monospace;font-size:.7rem}
+
+    /* ─── PREVIEW WATERMARK (Phase 5) ─────────────────── */
+    /* Overlay applied to live previews of QR / Card / Logo when tier=free.
+       Sits on top of the preview content with pointer-events: none so it
+       never blocks user interaction. */
+    .preview-watermark{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5;mix-blend-mode:multiply;user-select:none}
+    .qr-preview-wrap,.card-preview-wrap,.logo-preview-wrap{position:relative;overflow:hidden}
+
     /* ─── TOAST ─────────────────────────────────────── */
     .toast-container{position:fixed;top:20px;right:20px;z-index:2000;display:flex;flex-direction:column;gap:8px;pointer-events:none}
     .toast{padding:12px 20px;border-radius:10px;font-size:.85rem;font-weight:var(--weight-semibold);pointer-events:auto;animation:toastIn .25s ease-out;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow-md);color:#fff}

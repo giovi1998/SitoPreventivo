@@ -15,11 +15,14 @@ import {
 import type { Logo, LogoBuilder, LogoIconType, LogoIconShape, LogoLayout, LogoSector } from '../utils/documentSchemas';
 import { LUCIDE_ICONS } from '../utils/logoGenerator';
 import { builderToSvg, sanitizeSvg, isValidLucideIcon, isHexColor } from '../utils/logoGenerator';
+import type { Tier } from '../utils/watermark';
+import PreviewWatermark from './PreviewWatermark';
 
 interface BuilderPanelProps {
   logo: Logo;
   onPatch: (path: string, value: any) => void;
   onTemplate?: (sector: LogoSector) => void;
+  tier?: Tier;
 }
 
 const LUCIDE_NAME_TO_COMPONENT: Record<string, React.ComponentType<any>> = {
@@ -71,7 +74,7 @@ function PreviewIcon({ builder }: { builder: LogoBuilder }) {
   return <IconComp size={20} aria-hidden="true" />;
 }
 
-export default function BuilderPanel({ logo, onPatch, onTemplate }: BuilderPanelProps) {
+export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlocked' }: BuilderPanelProps) {
   const b = logo.builder;
   const [search, setSearch] = useState('');
   const debouncedBuilder = useDebouncedValue(b, 200);
@@ -294,6 +297,7 @@ export default function BuilderPanel({ logo, onPatch, onTemplate }: BuilderPanel
           // che escape caratteri XML pericolosi prima dell'output.
           dangerouslySetInnerHTML={{ __html: previewSvg }}
         />
+        <PreviewWatermark tier={tier} />
         {b.iconType === 'lucide' && b.iconGlyph && (
           <div className="builder-preview-icon-meta" aria-hidden="true">
             <PreviewIcon builder={b} />

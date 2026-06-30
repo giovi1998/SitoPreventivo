@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import './QREditor.css';
+import PreviewWatermark from './PreviewWatermark';
+import { useDocumentSave } from '../hooks/useDocumentSave';
 import type { QRCode as QRCodeType, QrCodeData, QrStyle, QrDotStyle, QrErrorCorrection } from '../utils/documentSchemas';
 import { createEmptyQrCode, createGiovanniQrTemplate } from '../utils/documentSchemas';
 import {
@@ -47,9 +49,11 @@ interface QREditorProps {
   userEmail: string;
   initialQr?: QRCodeType;
   onSaveAsTemplate?: (qr: QRCodeType) => void;
+  tier?: 'free' | 'unlocked';
 }
 
-export default function QREditor({ userEmail, initialQr, onSaveAsTemplate }: QREditorProps) {
+export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier = 'unlocked' }: QREditorProps) {
+  const { save: saveDocumentGuarded } = useDocumentSave();
   const [qr, setQr] = useState<QRCodeType>(initialQr || createEmptyQrCode());
   const [showTemplateBanner, setShowTemplateBanner] = useState<boolean>(() => !initialQr);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -91,15 +95,21 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate }: QRE
     autoSaveTimerRef.current = setTimeout(() => {
       const sanitized = sanitizeForSave(qr, userEmail);
       if (qr.data.payload) {
-        dataService.saveDocument(userEmail, sanitized).catch((err) => {
-          logger.error('QR auto-save failed', { err: (err as Error).message });
+        // Phase 5: use guarded save which checks the free-tier doc limit
+        // and triggers the TierLimitModal if reached.
+        saveDocumentGuarded(userEmail, sanitized).then((result) => {
+          if (result.blocked) {
+            addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
+          } else if (result.error) {
+            logger.error('QR auto-save failed', { err: result.error });
+          }
         });
       }
     }, 30000);
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [qr, userEmail]);
+  }, [qr, userEmail, saveDocumentGuarded]);
 
   const updateData = useCallback((patch: Partial<QrCodeData>) => {
     setQr((prev) => ({
@@ -166,7 +176,7 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate }: QRE
   const exportPng = useCallback(async () => {
     setExporting('png');
     try {
-      const bytes = await generateQrPng(qr);
+      const bytes = await generateQrPng(qr, { tier });
       const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
       const blob = new Blob([arrayBuffer], { type: 'image/png' });
       const url = URL.createObjectURL(blob);
@@ -182,7 +192,7 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate }: QRE
     } finally {
       setExporting(null);
     }
-  }, [qr, addToast]);
+  }, [qr, tier, addToast]);
 
   const exportSvg = useCallback(() => {
     setExporting('svg');
@@ -398,12 +408,15 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate }: QRE
           {previewError ? (
             <div className="qr-preview-error" role="alert">{previewError}</div>
           ) : (
-            <div
-              className="qr-preview-svg"
-              role="img"
-              aria-label={`QR code ${qr.data.type}: ${qr.data.payload || 'vuoto'}`}
-              dangerouslySetInnerHTML={{ __html: svgPreview }}
-            />
+            <div className="qr-preview-wrap" data-tier={tier} data-testid="qr-preview-wrap">
+              <div
+                className="qr-preview-svg"
+                role="img"
+                aria-label={`QR code ${qr.data.type}: ${qr.data.payload || 'vuoto'}`}
+                dangerouslySetInnerHTML={{ __html: svgPreview }}
+              />
+              <PreviewWatermark tier={tier} />
+            </div>
           )}
           <p className="qr-payload-summary">
             <strong>Payload:</strong> <code>{buildQrPayload(qr.data) || '(vuoto)'}</code>

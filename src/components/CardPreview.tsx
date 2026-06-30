@@ -1,7 +1,9 @@
 import React, { useMemo } from 'react';
 import type { BusinessCard, BusinessCardSizePreset, CardGrid } from '../utils/documentSchemas';
+import type { Tier } from '../utils/watermark';
 import { resolveCardQrPayload } from '../utils/cardGenerator';
 import { generateQrSvg } from '../utils/qrGenerator';
+import PreviewWatermark from './PreviewWatermark';
 
 function gridPlacement(el: { x: number; y: number; w: number; h: number }): React.CSSProperties {
   return {
@@ -14,6 +16,7 @@ interface CardPreviewProps {
   side: 'front' | 'back';
   card: BusinessCard;
   showGrid?: boolean;
+  tier?: Tier;
 }
 
 const SIZE_CLASS: Record<BusinessCardSizePreset, string> = {
@@ -57,7 +60,7 @@ function deriveHandle(url: string): string {
   }
 }
 
-function CardPreview({ side, card, showGrid = false }: CardPreviewProps) {
+function CardPreview({ side, card, showGrid = false, tier = 'unlocked' }: CardPreviewProps) {
   const qrPayload = resolveCardQrPayload(card);
 
   // QR generato sincronamente (la libreria qrcode è sync, niente Promise
@@ -101,9 +104,19 @@ function CardPreview({ side, card, showGrid = false }: CardPreviewProps) {
   ) : null;
 
   if (side === 'front') {
-    return <FrontPreview card={card} gridOverlay={gridOverlay} showGrid={showGrid} />;
+    return (
+      <div className="card-preview-wrap" data-tier={tier} data-testid="card-preview-wrap-front">
+        <FrontPreview card={card} gridOverlay={gridOverlay} showGrid={showGrid} />
+        <PreviewWatermark tier={tier} />
+      </div>
+    );
   }
-  return <BackPreview card={card} qrSvg={qrSvg} qrPayload={qrPayload} gridOverlay={gridOverlay} showGrid={showGrid} />;
+  return (
+    <div className="card-preview-wrap" data-tier={tier} data-testid="card-preview-wrap-back">
+      <BackPreview card={card} qrSvg={qrSvg} qrPayload={qrPayload} gridOverlay={gridOverlay} showGrid={showGrid} />
+      <PreviewWatermark tier={tier} />
+    </div>
+  );
 }
 
 const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showGrid }: { card: BusinessCard; gridOverlay: React.ReactNode; showGrid: boolean }) {
@@ -112,7 +125,6 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showG
   const borderClass = `border-${card.style.borderStyle}`;
   const hasPhoto = !!card.front.photoUrl;
   const hasLogo = !!card.front.logoUrl;
-  const monogram = useMemo(() => computeMonogram(card.front.name), [card.front.name]);
   const grid = card.grid;
   // Phase 2.1: il front entra in grid mode SOLO se (a) la grid ha elementi
   // del front E (b) l'utente ha attivato "Griglia ON" tramite il toggle.
@@ -140,18 +152,11 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showG
 
   const photoContent = hasPhoto ? (
     <img className="card-photo" src={card.front.photoUrl!} alt="Foto del titolare" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />
-  ) : (
-    monogram && (
-      <span
-        className="card-photo-placeholder"
-        data-testid="card-photo-placeholder"
-        style={{ color: card.style.accentColor, borderColor: card.style.accentColor, background: card.style.bgColor, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        aria-hidden="true"
-      >
-        {monogram}
-      </span>
-    )
-  );
+  ) : hasLogo ? (
+    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', ...(card.front.logoBackground === 'card' ? { background: card.style.bgColor, borderRadius: '6px' } : {}) }}>
+      <img src={card.front.logoUrl!} alt="Logo aziendale" style={{ maxWidth: '80%', maxHeight: '80%', objectFit: 'contain' }} />
+    </div>
+  ) : null;
 
   return (
     <div
@@ -207,31 +212,19 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showG
         <div className="card-front-centered">
           {hasPhoto ? (
             <img className="card-photo centered" src={card.front.photoUrl!} alt="Foto del titolare" />
-          ) : (
-            monogram && (
-              <span
-                className="card-photo-placeholder centered"
-                data-testid="card-photo-placeholder"
-                style={{ color: card.style.accentColor, borderColor: card.style.accentColor, background: card.style.bgColor }}
-                aria-hidden="true"
-              >
-                {monogram}
-              </span>
-            )
-          )}
+          ) : hasLogo ? (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', ...(card.front.logoBackground === 'card' ? { background: card.style.bgColor, borderRadius: '6px' } : {}) }}>
+              <img src={card.front.logoUrl!} alt="Logo aziendale" style={{ maxWidth: '80%', maxHeight: '80%', objectFit: 'contain' }} />
+            </div>
+          ) : null}
           <div className="card-front-text">
             {card.front.name && <div className="card-name">{card.front.name}</div>}
             {card.front.title && <div className="card-title" style={{ color: card.style.accentColor }}>{card.front.title}</div>}
             {card.front.company && <div className="card-company">{card.front.company}</div>}
           </div>
-          {(hasLogo || monogram) && (
+          {hasLogo && hasPhoto && (
             <div className="card-front-footer">
-              {hasLogo && <img className="card-logo centered" src={card.front.logoUrl!} alt="Logo aziendale" />}
-              {!hasLogo && monogram && (
-                <span className="card-monogram" data-testid="card-monogram-front" style={{ color: card.style.accentColor }}>
-                  {monogram}
-                </span>
-              )}
+              <img className="card-logo centered" src={card.front.logoUrl!} alt="Logo aziendale" />
             </div>
           )}
         </div>
@@ -242,18 +235,11 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showG
           <div className="card-front-left-top">
             {hasPhoto ? (
               <img className="card-photo left" src={card.front.photoUrl!} alt="Foto del titolare" />
-            ) : (
-              monogram && (
-                <span
-                  className="card-photo-placeholder left"
-                  data-testid="card-photo-placeholder"
-                  style={{ color: card.style.accentColor, borderColor: card.style.accentColor, background: card.style.bgColor }}
-                  aria-hidden="true"
-                >
-                  {monogram}
-                </span>
-              )
-            )}
+            ) : hasLogo ? (
+              <div style={{ width: '64px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', ...(card.front.logoBackground === 'card' ? { background: card.style.bgColor, borderRadius: '6px' } : {}) }}>
+                <img src={card.front.logoUrl!} alt="Logo aziendale" style={{ maxWidth: '80%', maxHeight: '80%', objectFit: 'contain' }} />
+              </div>
+            ) : null}
             <div className="card-front-text">
               {card.front.name && <div className="card-name">{card.front.name}</div>}
               {card.front.title && <div className="card-title" style={{ color: card.style.accentColor }}>{card.front.title}</div>}
@@ -262,15 +248,6 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showG
           </div>
           <span className="card-accent-divider" data-testid="card-accent-divider" style={{ backgroundColor: card.style.accentColor }} aria-hidden="true" />
           <div className="card-front-left-bottom">
-            {!hasPhoto && monogram && (
-              <span
-                className="card-monogram large"
-                data-testid="card-monogram-front"
-                style={{ color: card.style.accentColor }}
-              >
-                {monogram}
-              </span>
-            )}
             {card.back.website && (() => {
               try {
                 const host = new URL(card.back.website).hostname.replace(/^www\./, '');
@@ -279,7 +256,7 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showG
                 return null;
               }
             })()}
-            {hasLogo && <img className="card-logo left" src={card.front.logoUrl!} alt="Logo aziendale" />}
+            {hasLogo && hasPhoto && <img className="card-logo left" src={card.front.logoUrl!} alt="Logo aziendale" />}
           </div>
         </div>
       )}
@@ -289,18 +266,11 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showG
           <div className="card-split-left">
             {hasPhoto ? (
               <img className="card-photo split" src={card.front.photoUrl!} alt="Foto del titolare" />
-            ) : (
-              monogram && (
-                <span
-                  className="card-split-filler"
-                  data-testid="card-split-filler"
-                  style={{ color: card.style.accentColor }}
-                  aria-hidden="true"
-                >
-                  {monogram}
-                </span>
-              )
-            )}
+            ) : hasLogo ? (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', ...(card.front.logoBackground === 'card' ? { background: card.style.bgColor } : {}) }}>
+                <img src={card.front.logoUrl!} alt="Logo aziendale" style={{ maxWidth: '70%', maxHeight: '70%', objectFit: 'contain' }} />
+              </div>
+            ) : null}
           </div>
           <div className="card-split-right">
             <div className="card-front-text">
@@ -309,12 +279,7 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showG
               {card.front.company && <div className="card-company">{card.front.company}</div>}
             </div>
             <div className="card-split-footer">
-              {hasLogo && <img className="card-logo split" src={card.front.logoUrl!} alt="Logo aziendale" />}
-              {monogram && !hasLogo && (
-                <span className="card-monogram" data-testid="card-monogram-front" style={{ color: card.style.accentColor }}>
-                  {monogram}
-                </span>
-              )}
+              {hasLogo && hasPhoto && <img className="card-logo split" src={card.front.logoUrl!} alt="Logo aziendale" />}
             </div>
           </div>
         </div>
@@ -378,6 +343,15 @@ const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gr
         })
         .join(' · ')}
     </div>
+  ) : null;
+
+  const services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
+  const servicesContent = services.length > 0 ? (
+    <ul className="card-back-services" data-testid="card-back-services">
+      {services.map((s, idx) => (
+        <li key={idx}>{s}</li>
+      ))}
+    </ul>
   ) : null;
 
   const qrContent = qrSvg ? (
@@ -446,6 +420,7 @@ const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gr
           <div className="card-back-body">
             <div className="card-back-contacts">
               {contactsContent}
+              {servicesContent}
               {socialsContent}
             </div>
             {qrContent}
