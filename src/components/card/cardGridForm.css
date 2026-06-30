@@ -1,0 +1,422 @@
+/* Mobile grid editor + form + color/QR/export */
+/* Phase 2.2 refactor: estratto da CardEditor.css (split per dimensione). */
+
+/* ─── Mobile grid editor ──────────────────────── */
+.card-mobile-grid-editor {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent, #01696F) 30%, var(--line));
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-mobile-grid-move-btn {
+  padding: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background: var(--accent, #01696F);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.card-mobile-grid-move-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.card-mobile-grid-popup {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 300;
+  display: grid;
+  place-items: center;
+}
+
+.card-mobile-grid-popup-content {
+  background: var(--surface);
+  padding: 24px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+  min-width: 220px;
+}
+
+.card-mobile-grid-popup-arrows {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(3, 56px);
+  gap: 6px;
+}
+
+.card-mobile-grid-popup-arrows button:nth-child(1) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.card-mobile-grid-popup-arrows button:nth-child(2) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.card-mobile-grid-popup-arrows button:nth-child(3) {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.card-mobile-grid-popup-arrows button:nth-child(4) {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.card-mobile-grid-popup-arrows button {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.card-mobile-grid-popup-close {
+  padding: 6px 16px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--ink-muted);
+}
+
+.card-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  margin: 0;
+}
+
+.card-fieldset legend {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--ink);
+  padding: 0 6px;
+}
+
+.card-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-field > span {
+  font-size: 0.78rem;
+  color: var(--ink-muted, #5d6b7e);
+  font-weight: 500;
+}
+
+.card-field input,
+.card-field select {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg, #fff);
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.card-field input[type="color"] {
+  height: 36px;
+  width: 60px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.card-warning {
+  color: #b00020;
+  font-size: 0.8rem;
+  margin: 4px 0 0;
+}
+
+.card-remove-image {
+  margin-top: 6px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  background: transparent;
+  color: var(--ink-muted, #5d6b7e);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.card-social-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.card-social-row input,
+.card-social-row select {
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg, #fff);
+  color: var(--ink);
+}
+
+.card-social-row button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--ink-muted);
+}
+
+.card-add-social {
+  margin-top: 6px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  background: transparent;
+  color: var(--accent, #01696F);
+  border: 1px dashed var(--accent, #01696F);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.card-actions button {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 500;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.card-actions button:hover:not(:disabled) {
+  background: var(--bg-hover, #f5f6f8);
+}
+
+.card-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.card-action-primary {
+  background: var(--accent, #01696F) !important;
+  color: #fff !important;
+  border-color: var(--accent, #01696F) !important;
+}
+
+.card-action-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--accent, #01696F) !important;
+}
+
+/* ─── B1: 3 color pickers in a row ─────────────────────── */
+.card-color-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.card-color-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.card-color-cell > span {
+  font-size: 0.7rem;
+  color: var(--ink-muted, #5d6b7e);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.card-color-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg, #fff);
+}
+
+.card-color-pill input[type="color"] {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.card-color-pill code {
+  font-size: 0.7rem;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  color: var(--ink-muted, #5d6b7e);
+  letter-spacing: 0.3px;
+}
+
+/* ─── B2: 2-col form rows ─────────────────────────────── */
+.card-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.card-row-2 .card-field {
+  margin: 0;
+}
+
+/* ─── B3: QR advanced <details> ──────────────────────── */
+.card-advanced-qr {
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  background: transparent;
+}
+
+.card-advanced-qr > summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-muted, #5d6b7e);
+  padding: 4px 0;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-advanced-qr > summary::-webkit-details-marker { display: none; }
+
+.card-advanced-qr > summary::before {
+  content: '▸';
+  display: inline-block;
+  transition: transform 0.15s;
+  color: var(--ink-muted);
+  font-size: 0.7rem;
+}
+
+.card-advanced-qr[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.card-advanced-qr[open] {
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg, #fff);
+  border-style: solid;
+}
+
+.card-advanced-qr-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--accent, #01696F);
+  background: color-mix(in srgb, var(--accent, #01696F) 12%, transparent);
+  padding: 1px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ─── B4: Export dropdown menu ──────────────────────── */
+.card-export-menu {
+  position: relative;
+}
+
+.card-export-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  min-width: 180px;
+  z-index: 50;
+}
+
+.card-export-list li {
+  margin: 0;
+  padding: 0;
+}
+
+.card-export-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  transition: background 0.1s;
+}
+
+.card-export-list button:hover {
+  background: var(--bg-hover, #f5f6f8);
+}
+
+.card-export-list button:active {
+  background: color-mix(in srgb, var(--accent, #01696F) 10%, transparent);
+}
+
+.card-export-hint {
+  font-size: 0.72rem;
+  color: var(--ink-muted, #5d6b7e);
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--blue-bg, #e8f0fe);
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--accent, #01696F) 18%, transparent);
+  line-height: 1.4;
+}
+
+.card-export-hint em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--accent, #01696F);
+}

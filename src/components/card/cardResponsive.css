@@ -1,0 +1,165 @@
+/* Responsive tabs + FAB + bottom sheet */
+/* Phase 2.2 refactor: estratto da CardEditor.css (split per dimensione). */
+
+/* ─── Responsive: mobile <900px shows tabs, 3-col not rendered ─── */
+@media (max-width: 900px) {
+  .card-editor-form label {
+    text-transform: none;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+  }
+  .card-editor-form input,
+  .card-editor-form select,
+  .card-editor-form textarea {
+    font-size: 16px;
+  }
+  .card-fieldset {
+    padding: 12px;
+    gap: 8px;
+  }
+  .card-advanced-qr > summary {
+    font-size: 0.85rem;
+  }
+  .card-editor-tab {
+    font-size: 0.82rem;
+    padding: 10px 8px;
+  }
+  .card-editor-tabs {
+    margin-top: 12px;
+  }
+  .card-editor-tabs-header {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 4px;
+    margin-bottom: 12px;
+  }
+  .card-editor-tab {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--ink-muted);
+    transition: background 0.15s;
+  }
+  .card-editor-tab.active {
+    background: var(--accent, #01696F);
+    color: #fff;
+  }
+  .card-editor-tabs-content {
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 12px;
+  }
+}
+
+/* ─── FAB AI (mobile only) ────────────────────── */
+.card-ai-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent, #01696F);
+  color: #fff;
+  border: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  transition: transform 0.15s;
+}
+
+.card-ai-fab:hover {
+  transform: scale(1.05);
+}
+
+.card-ai-fab-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: #ef4444;
+  color: white;
+  border-radius: 999px;
+  min-width: 22px;
+  height: 22px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  padding: 0 4px;
+  border: 2px solid var(--surface);
+}
+
+/* ─── Bottom sheet (mobile AI panel) ──────────── */
+.card-ai-bottom-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  animation: fadeIn 0.15s ease;
+}
+
+.card-ai-bottom-sheet-content {
+  background: var(--surface);
+  width: 100%;
+  max-height: 85vh;
+  border-radius: 16px 16px 0 0;
+  padding: 16px;
+  overflow-y: auto;
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.card-ai-mobile-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-ai-mobile-content .card-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.card-ai-mobile-content .card-ai-actions button {
+  flex: 1 1 auto;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+}
+
+.card-ai-mobile-content .panel-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent, #01696F);
+  margin-bottom: 6px;
+}
+
+.card-ai-mobile-content .panel-kicker button {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--ink);
+}

@@ -16,6 +16,9 @@ import {
   gridPresetLeft,
   gridPresetCentered,
   gridPresetSplit,
+  gridPresetFrontSplit,
+  deriveGridFromLayout,
+  hasGridElements,
   logoSchema,
   logoBuilderSchema,
   logoIconTypeSchema,
@@ -415,6 +418,52 @@ describe('documentSchemas', () => {
       expect(gridPresetLeft().elements.logo).toBeDefined();
       expect(gridPresetCentered().elements.logo).toBeDefined();
       expect(gridPresetSplit().elements.logo).toBeDefined();
+    });
+  });
+
+  // ─── Phase 2.2 fix: front split preset + init-from-layout ──────
+  describe('gridPresetFrontSplit + deriveGridFromLayout (fix)', () => {
+    it('gridPresetFrontSplit includes photo (front split layout)', () => {
+      const g = gridPresetFrontSplit();
+      expect(g.elements.photo).toBeDefined();
+      expect(g.elements.photo!.x).toBe(0);
+      expect(g.elements.photo!.h).toBe(4); // full height left
+      expect(g.elements.name).toBeDefined();
+      expect(g.elements.company).toBeDefined();
+      expect(g.elements.logo).toBeDefined();
+      // NON deve avere elementi del retro (contacts/qr)
+      expect(g.elements.contacts).toBeUndefined();
+      expect(g.elements.qr).toBeUndefined();
+    });
+
+    it('deriveGridFromLayout(split) keeps the photo (regression: prima la perdeva)', () => {
+      const card = createGiovanniCardTemplate(); // layout split + photoUrl
+      const grid = deriveGridFromLayout(card, 'front');
+      // Giovanni ha photoUrl → photo deve essere presente nella grid derivata
+      expect(grid.elements.photo).toBeDefined();
+      expect(grid.elements.name).toBeDefined();
+    });
+
+    it('deriveGridFromLayout(left) → photo a sinistra full height', () => {
+      const card = { ...createGiovanniCardTemplate(), front: { ...createGiovanniCardTemplate().front, layout: 'left' as const } };
+      const grid = deriveGridFromLayout(card, 'front');
+      expect(grid.elements.photo).toBeDefined();
+      expect(grid.elements.photo!.x).toBe(0);
+    });
+
+    it('deriveGridFromLayout filtra elementi senza contenuto', () => {
+      const card = createEmptyCard(); // niente foto/logo/nome
+      const grid = deriveGridFromLayout(card, 'front');
+      // Nessun elemento con contenuto → grid vuota
+      expect(Object.keys(grid.elements)).toHaveLength(0);
+    });
+
+    it('hasGridElements: true se il lato ha elementi con contenuto', () => {
+      const card = createGiovanniCardTemplate();
+      expect(hasGridElements('front', card)).toBe(true);
+      expect(hasGridElements('back', card)).toBe(true);
+      const empty = createEmptyCard();
+      expect(hasGridElements('front', empty)).toBe(false);
     });
   });
 

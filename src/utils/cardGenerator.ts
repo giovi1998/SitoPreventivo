@@ -53,6 +53,29 @@ function getCardDimensionsMm(card: BusinessCard): { w: number; h: number } {
   return SIZE_PRESETS_MM[card.style.sizePreset];
 }
 
+function decodeSvgDataUri(src: string): string | null {
+  if (!src.startsWith('data:image/svg+xml')) return null;
+  const comma = src.indexOf(',');
+  if (comma === -1) return null;
+  const meta = src.slice(0, comma);
+  const payload = src.slice(comma + 1);
+  try {
+    if (/;base64/i.test(meta)) {
+      if (typeof atob === 'function') return decodeURIComponent(escape(atob(payload)));
+      return Buffer.from(payload, 'base64').toString('utf8');
+    }
+    return decodeURIComponent(payload);
+  } catch {
+    return null;
+  }
+}
+
+function pdfImageOrSvg(src: string, opts: Record<string, unknown>): Content {
+  const svg = decodeSvgDataUri(src);
+  if (svg) return { svg, ...opts };
+  return { image: src, ...opts };
+}
+
 function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Content[] {
   const paddingMm = 4;
   const innerW = dims.w - paddingMm * 2;
@@ -60,23 +83,24 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
   const accentColor = card.style.accentColor;
   const hasPhoto = !!card.front.photoUrl;
   const hasLogo = !!card.front.logoUrl;
+  // Phase 2.2 REQ-D04: scala font globale applicata all'export PDF.
+  // Clamp difensivo (lo schema Zod già lo fa).
+  const f = Math.max(0.7, Math.min(1.5, card.style.fontScale ?? 1));
   const cells: Content[] = [];
 
   // Photo or logo fallback (top-left area)
   if (hasPhoto) {
-    cells.push({
-      image: card.front.photoUrl,
+    cells.push(pdfImageOrSvg(card.front.photoUrl!, {
       width: 25,
       height: 25,
       absolutePosition: { x: paddingMm, y: paddingMm },
-    });
+    }));
   } else if (hasLogo) {
-    cells.push({
-      image: card.front.logoUrl,
+    cells.push(pdfImageOrSvg(card.front.logoUrl!, {
       width: 22,
       height: 22,
       absolutePosition: { x: paddingMm + 1.5, y: paddingMm + 1.5 },
-    });
+    }));
   }
 
   // Text block (right of photo, or full width if no photo)
@@ -84,13 +108,13 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
   const textW = hasPhoto ? innerW - 27 : innerW;
   const textLines: Content[] = [];
   if (card.front.name) {
-    textLines.push({ text: card.front.name.toUpperCase(), color: textColor, fontSize: 11, bold: true, characterSpacing: 0.5 });
+    textLines.push({ text: card.front.name.toUpperCase(), color: textColor, fontSize: 11 * f, bold: true, characterSpacing: 0.5 });
   }
   if (card.front.title) {
-    textLines.push({ text: card.front.title, color: accentColor, fontSize: 7.5, bold: true, margin: [0, 1, 0, 0] });
+    textLines.push({ text: card.front.title, color: accentColor, fontSize: 7.5 * f, bold: true, margin: [0, 1, 0, 0] });
   }
   if (card.front.company) {
-    textLines.push({ text: card.front.company, color: textColor, fontSize: 6.5, margin: [0, 1, 0, 0] });
+    textLines.push({ text: card.front.company, color: textColor, fontSize: 6.5 * f, margin: [0, 1, 0, 0] });
   }
   if (textLines.length > 0) {
     cells.push({
@@ -116,7 +140,7 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
     const hostname = deriveHostnameLocal(card.back.website);
     cells.push({
       text: hostname,
-      fontSize: 6,
+      fontSize: 6 * f,
       color: textColor,
       alignment: 'center',
       absolutePosition: { x: 0, y: bottomY + 1 },
@@ -128,12 +152,11 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
     // Logo ~30% della larghezza card (es. 25mm su 85mm). Era 14mm — troppo
     // piccolo per essere leggibile. Vedi AGENTS.md "Known Issues — Card".
     const logoMm = Math.min(25, dims.w * 0.30);
-    cells.push({
-      image: card.front.logoUrl,
+    cells.push(pdfImageOrSvg(card.front.logoUrl!, {
       width: logoMm,
       height: logoMm,
       absolutePosition: { x: dims.w - paddingMm - logoMm, y: bottomY - 3 },
-    });
+    }));
   }
 
   void innerW;
@@ -143,22 +166,52 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
 function buildBackCell(card: BusinessCard, _dims: { w: number; h: number }): Content[] {
   const textColor = card.style.textColor;
   const accentColor = card.style.accentColor;
+  // Phase 2.2 REQ-D04: scala font globale applicata all'export PDF.
+  const f = Math.max(0.7, Math.min(1.5, card.style.fontScale ?? 1));
 
   const contactLines: Content[] = [];
   if (card.back.phone) {
-    contactLines.push({ text: card.back.phone, color: textColor, fontSize: 7 });
+    contactLines.push({ text: card.back.phone, color: textColor, fontSize: 7 * f });
   }
   if (card.back.email) {
-    contactLines.push({ text: card.back.email, color: textColor, fontSize: 7 });
+    contactLines.push({ text: card.back.email, color: textColor, fontSize: 7 * f });
   }
   if (card.back.website) {
-    contactLines.push({ text: card.back.website, color: accentColor, fontSize: 7, bold: true });
+    contactLines.push({ text: card.back.website, color: accentColor, fontSize: 7 * f, bold: true });
   }
   if (card.back.address) {
-    contactLines.push({ text: card.back.address, color: textColor, fontSize: 6.5 });
+    contactLines.push({ text: card.back.address, color: textColor, fontSize: 6.5 * f });
   }
   if (card.back.vatNumber) {
-    contactLines.push({ text: `P.IVA: ${card.back.vatNumber}`, color: textColor, fontSize: 6.5 });
+    contactLines.push({ text: `P.IVA: ${card.back.vatNumber}`, color: textColor, fontSize: 6.5 * f });
+  }
+
+  // Phase 2.2 REQ-F02: block label editabile sopra la lista servizi.
+  const services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
+  if (services.length > 0) {
+    const servicesLabelText = (card.back.servicesLabel ?? '').trim();
+    if (servicesLabelText) {
+      contactLines.push({
+        text: servicesLabelText.toUpperCase(),
+        color: accentColor,
+        fontSize: 5.5 * f,
+        bold: true,
+        characterSpacing: 1.2,
+        opacity: 0.7,
+        margin: [0, 3, 0, 0],
+      });
+    }
+    const hasLongService = services.some((s) => s.length >= 40);
+    const svcFontSize = (hasLongService ? 5.5 : 6.5) * f;
+    services.forEach((svc) => {
+      contactLines.push({
+        text: `· ${svc}`,
+        color: accentColor,
+        fontSize: svcFontSize,
+        bold: true,
+        margin: [0, 0.5, 0, 0],
+      });
+    });
   }
 
   // Socials: include platform name + value (raw text if URL is invalid, handle if valid)
@@ -173,7 +226,7 @@ function buildBackCell(card: BusinessCard, _dims: { w: number; h: number }): Con
     contactLines.push({
       text: socialsText,
       color: textColor,
-      fontSize: 6,
+      fontSize: 6 * f,
       italics: true,
       margin: [0, 3, 0, 0],
       opacity: 0.78,
@@ -230,6 +283,7 @@ function cropMarkLines(entry: PageCardEntry): Content {
       { type: 'line', x1: entry.x + entry.w + off, y1: entry.y + entry.h, x2: entry.x + entry.w + off + len, y2: entry.y + entry.h, lineWidth: 0.3, lineColor: accent },
       { type: 'line', x1: entry.x + entry.w, y1: entry.y + entry.h + off, x2: entry.x + entry.w, y2: entry.y + entry.h + off + len, lineWidth: 0.3, lineColor: accent },
     ],
+    absolutePosition: { x: 0, y: 0 },
   };
 }
 
@@ -239,7 +293,7 @@ function cardRect(entry: PageCardEntry, fill: string, border?: { color: string; 
   if (border) {
     out.push({ type: 'rect', x: entry.x, y: entry.y, w: entry.w, h: entry.h, lineWidth: border.width, lineColor: border.color });
   }
-  return { canvas: out };
+  return { canvas: out, absolutePosition: { x: 0, y: 0 } };
 }
 
 function accentStripLeft(entry: PageCardEntry, color: string): Content {
@@ -247,6 +301,7 @@ function accentStripLeft(entry: PageCardEntry, color: string): Content {
     canvas: [
       { type: 'rect', x: entry.x, y: entry.y, w: 1.5, h: entry.h, color },
     ],
+    absolutePosition: { x: 0, y: 0 },
   };
 }
 
@@ -255,6 +310,7 @@ function accentStripBottom(entry: PageCardEntry, color: string): Content {
     canvas: [
       { type: 'rect', x: entry.x, y: entry.y + entry.h - 1.5, w: entry.w, h: 1.5, color },
     ],
+    absolutePosition: { x: 0, y: 0 },
   };
 }
 
@@ -262,7 +318,7 @@ function buildPageContent(
   card: BusinessCard,
   side: 'front' | 'back',
   entries: PageCardEntry[],
-  qrImage: string | null,
+  qrSvg: string | null,
   isFirst: boolean,
 ): Content[] {
   const out: Content[] = [];
@@ -302,11 +358,20 @@ function buildPageContent(
       const contactCells = buildBackCell(card, dims);
       out.push({ stack: contactCells, absolutePosition: { x: contentX, y: contentY }, width: contentW * 0.55 });
 
-      if (qrImage) {
-        const qrSizeMm = Math.min(contentH - 4, 25);
+      if (qrSvg) {
+        // Phase 2.2 REQ-E02: dimensione QR controllata da `card.back.qrSize`
+        // (small/medium/large). Default 'medium' = 25mm. In flexbox-mode
+        // è l'unica sorgente; in grid-mode la dimensione deriva dalla
+        // cella (gestito in buildBackSvg).
+        const QR_SIZE_MM_BY_ENUM: Record<'small' | 'medium' | 'large', number> = {
+          small: 18,
+          medium: 25,
+          large: 32,
+        };
+        const qrSizeMm = Math.min(contentH - 4, QR_SIZE_MM_BY_ENUM[card.back.qrSize] ?? 25);
         const qrX = contentX + contentW - qrSizeMm;
         const qrY = contentY + (contentH - qrSizeMm) / 2;
-        out.push({ image: qrImage, absolutePosition: { x: qrX, y: qrY }, width: qrSizeMm, height: qrSizeMm });
+        out.push({ svg: qrSvg, absolutePosition: { x: qrX, y: qrY }, width: qrSizeMm, height: qrSizeMm });
         if (card.back.qrLabel) {
           out.push({
             text: card.back.qrLabel,
@@ -330,40 +395,97 @@ function buildPageContent(
   return out;
 }
 
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  if (typeof btoa === 'function') {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+  return Buffer.from(bytes).toString('base64');
+}
+
+async function renderCardSideDataUrl(
+  card: BusinessCard,
+  side: 'front' | 'back',
+  pxW: number,
+  pxH: number,
+): Promise<string> {
+  if (import.meta.env.MODE === 'test') {
+    const png = buildMinimalPng(pxW, pxH, card.style.bgColor);
+    return 'data:image/png;base64,' + uint8ArrayToBase64(png);
+  }
+  const svg = buildCardSvg(card, side, pxW, pxH);
+  const svgUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  try {
+    const img = await loadSvgImage(svgUri);
+    const canvas = document.createElement('canvas');
+    canvas.width = pxW;
+    canvas.height = pxH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D non disponibile');
+    ctx.fillStyle = card.style.bgColor;
+    ctx.fillRect(0, 0, pxW, pxH);
+    ctx.drawImage(img, 0, 0, pxW, pxH);
+    return canvas.toDataURL('image/png');
+  } catch {
+    const png = buildMinimalPng(pxW, pxH, card.style.bgColor);
+    return 'data:image/png;base64,' + uint8ArrayToBase64(png);
+  }
+}
+
+function buildPageContentFromImage(
+  card: BusinessCard,
+  entries: PageCardEntry[],
+  imageDataUrl: string,
+  isFirst: boolean,
+): Content[] {
+  const out: Content[] = [];
+  const accent = card.style.accentColor;
+  const bg = card.style.bgColor;
+  const borderColor = card.style.accentColor;
+
+  entries.forEach((entry) => {
+    out.push(cardRect(entry, bg, { color: borderColor, width: card.style.borderStyle === 'thin' ? 0.4 : 0 }));
+    if (card.style.borderStyle === 'accent-strip-left') {
+      out.push(accentStripLeft(entry, accent));
+    } else if (card.style.borderStyle === 'accent-strip-bottom') {
+      out.push(accentStripBottom(entry, accent));
+    }
+
+    const contentX = entry.x + BLEED_MM;
+    const contentY = entry.y + BLEED_MM;
+    const contentW = entry.w - BLEED_MM * 2;
+    const contentH = entry.h - BLEED_MM * 2;
+    out.push({
+      image: imageDataUrl,
+      absolutePosition: { x: contentX, y: contentY },
+      width: contentW,
+      height: contentH,
+    });
+    out.push(cropMarkLines(entry));
+  });
+
+  if (isFirst) out.unshift({ text: '', margin: [0, 0, 0, 0] });
+  return out;
+}
+
 export async function generateCardPDF(
   card: BusinessCard,
   opts: { tier: Tier },
 ): Promise<Uint8Array> {
   const dims = getCardDimensionsMm(card);
   const entries = computePageCardEntries(dims.w, dims.h);
-  const qrPayload = getEffectiveQrPayload(card);
+  // Il PDF 10-up deve avere le stesse proporzioni dell'export SVG/PNG.
+  // Usiamo la stessa pipeline `buildCardSvg` → canvas PNG a 300 DPI, poi
+  // piazziamo il raster su A4 dieci volte. Il vecchio PDF builder manuale
+  // divergeva dalla preview (font/posizioni/proporzioni diverse).
+  const pxW = Math.round((dims.w / 25.4) * 300);
+  const pxH = Math.round((dims.h / 25.4) * 300);
+  const frontImage = await renderCardSideDataUrl(card, 'front', pxW, pxH);
+  const backImage = await renderCardSideDataUrl(card, 'back', pxW, pxH);
 
-  let qrImage: string | null = null;
-  if (qrPayload) {
-    const qrObj: any = {
-      documentType: 'qrCode',
-      id: 'card-tmp',
-      title: '',
-      data: { type: 'url', payload: qrPayload },
-      style: {
-        errorCorrection: 'M',
-        fgColor: card.style.textColor,
-        bgColor: '#FFFFFF',
-        size: QR_RENDER_PX,
-        margin: 1,
-        logoOverlay: null,
-        dotStyle: 'square',
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const svg = generateQrSvg(qrObj);
-    // crude svg -> png via canvas (jsdom doesn't have canvas, but pdfmake accepts SVG strings)
-    qrImage = 'data:image/svg+xml;base64,' + (typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(svg))) : Buffer.from(svg).toString('base64'));
-  }
-
-  const frontContent = buildPageContent(card, 'front', entries, qrImage, true);
-  const backContent = buildPageContent(card, 'back', entries, qrImage, false);
+  const frontContent = buildPageContentFromImage(card, entries, frontImage, true);
+  const backContent = buildPageContentFromImage(card, entries, backImage, false);
 
   const baseDoc: TDocumentDefinitions = {
     pageSize: 'A4',
@@ -383,14 +505,55 @@ export async function generateCardPDF(
   const docDef = applyWatermarkToPdf(baseDoc, opts.tier);
 
   return new Promise<Uint8Array>((resolve, reject) => {
+    let settled = false;
+    const done = (bytes: Uint8Array) => {
+      if (settled) return;
+      settled = true;
+      resolve(bytes);
+    };
+    const fail = (err: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+    const timeout = setTimeout(() => {
+      fail(new Error('Timeout generazione PDF card'));
+    }, 20_000);
     try {
       const doc = (pdfMake as any).createPdf(docDef);
-      const maybePromise = doc.getBuffer((buf: Uint8Array) => resolve(new Uint8Array(buf)));
+      // Browser path: getBlob è più affidabile per download client-side.
+      if (typeof doc.getBlob === 'function') {
+        const maybePromise = doc.getBlob(async (blob: Blob) => {
+          try {
+            const ab = await blob.arrayBuffer();
+            clearTimeout(timeout);
+            done(new Uint8Array(ab));
+          } catch (e) {
+            clearTimeout(timeout);
+            fail(e);
+          }
+        });
+        if (maybePromise && typeof maybePromise.then === 'function') {
+          maybePromise.then(async (blob: Blob) => {
+            const ab = await blob.arrayBuffer();
+            clearTimeout(timeout);
+            done(new Uint8Array(ab));
+          }).catch((e: unknown) => { clearTimeout(timeout); fail(e); });
+        }
+        return;
+      }
+      const maybePromise = doc.getBuffer((buf: Uint8Array) => {
+        clearTimeout(timeout);
+        done(new Uint8Array(buf));
+      });
       if (maybePromise && typeof maybePromise.then === 'function') {
-        maybePromise.then((buf: Uint8Array) => resolve(new Uint8Array(buf))).catch(reject);
+        maybePromise
+          .then((buf: Uint8Array) => { clearTimeout(timeout); done(new Uint8Array(buf)); })
+          .catch((e: unknown) => { clearTimeout(timeout); fail(e); });
       }
     } catch (e) {
-      reject(e);
+      clearTimeout(timeout);
+      fail(e);
     }
   });
 }
@@ -598,6 +761,16 @@ function computeMonogramLocal(name: string): string {
   return (tokens[0][0] + tokens[tokens.length - 1][0]).toUpperCase();
 }
 
+// Phase 2.2 REQ-D04: helper per scalare la dimensione del testo in base
+// a `card.style.fontScale` (clamp 0.7-1.5, default 1). Da usare in tutti
+// i `font-size="..."` del SVG export. Il `pct` è la percentuale di `pxH`
+// (o `photoSize`) da usare come base; il valore finale è clonato.
+function fs(base: number, fontScale: number): number {
+  const f = typeof fontScale === 'number' && !Number.isNaN(fontScale) ? fontScale : 1;
+  const clamped = Math.max(0.7, Math.min(1.5, f));
+  return Math.max(1, Math.round(base * clamped));
+}
+
 function escapeXml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -636,6 +809,7 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
   const accent = card.style.accentColor;
   const hasPhoto = !!card.front.photoUrl;
   const hasLogo = !!card.front.logoUrl;
+  const fontScale = card.style.fontScale ?? 1;
 
   // Padding 4% of width
   const pad = Math.max(10, Math.round(pxW * 0.04));
@@ -686,9 +860,9 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
     const textX = photoX + photoSize + Math.round(pxW * 0.03);
     const textW = pxW - textX - pad;
     let textY = photoY + Math.round(photoSize * 0.18);
-    const nameSize = Math.round(photoSize * 0.13);
-    const titleSize = Math.round(photoSize * 0.09);
-    const companySize = Math.round(photoSize * 0.075);
+    const nameSize = fs(photoSize * 0.13, fontScale);
+    const titleSize = fs(photoSize * 0.09, fontScale);
+    const companySize = fs(photoSize * 0.075, fontScale);
     if (card.front.name) {
       out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${nameSize}" font-weight="800" fill="${text}" letter-spacing="0.5">${escapeXml(card.front.name.toUpperCase())}</text>`;
       textY += nameSize * 1.2;
@@ -727,9 +901,9 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
     const textX = leftW + pad;
     const textW = pxW - textX - pad;
     let textY = pad + Math.round(pxH * 0.12);
-    const nameSize = Math.round(pxH * 0.058);
-    const titleSize = Math.round(pxH * 0.042);
-    const companySize = Math.round(pxH * 0.038);
+    const nameSize = fs(pxH * 0.058, fontScale);
+    const titleSize = fs(pxH * 0.042, fontScale);
+    const companySize = fs(pxH * 0.038, fontScale);
     if (card.front.name) {
       out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${nameSize}" font-weight="800" fill="${text}" letter-spacing="0.5">${escapeXml(card.front.name.toUpperCase())}</text>`;
       textY += nameSize * 1.3;
@@ -762,9 +936,9 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
       out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${(pxW - ls) / 2}" y="${cursorY + (photoSize - ls) / 2}" width="${ls}" height="${ls}" preserveAspectRatio="xMidYMid meet"/>`;
       cursorY += photoSize + Math.round(pxH * 0.04);
     }
-    const nameSize = Math.round(pxH * 0.09);
-    const titleSize = Math.round(pxH * 0.06);
-    const companySize = Math.round(pxH * 0.05);
+    const nameSize = fs(pxH * 0.09, fontScale);
+    const titleSize = fs(pxH * 0.06, fontScale);
+    const companySize = fs(pxH * 0.05, fontScale);
     if (card.front.name) {
       out += `<text x="${pxW / 2}" y="${cursorY + nameSize}" font-family="Inter, system-ui, sans-serif" font-size="${nameSize}" font-weight="800" fill="${text}" text-anchor="middle" letter-spacing="0.5">${escapeXml(card.front.name.toUpperCase())}</text>`;
       cursorY += nameSize * 1.3;
@@ -792,6 +966,7 @@ function buildBackSvg(card: BusinessCard, pxW: number, pxH: number): string {
   const accent = card.style.accentColor;
   const stripW = Math.max(2, Math.round(pxW * 0.008));
   const pad = Math.max(10, Math.round(pxW * 0.04));
+  const fontScale = card.style.fontScale ?? 1;
 
   const hostname = card.back.website ? deriveHostnameLocal(card.back.website) : '';
   const headerWord = hostname || card.front.company || '';
@@ -824,15 +999,24 @@ function buildBackSvg(card: BusinessCard, pxW: number, pxH: number): string {
   // Contacts (left column). Se c'è QR, omettiamo la riga WEB (il QR
   // codifica già l'URL) e riduciamo la larghezza dei contatti.
   const contactsX = pad + stripW;
-  const qrSize = hasQr ? Math.round(pxH * 0.35) : 0;
+  // Phase 2.2 REQ-E02: dimensione QR in flexbox-mode controllata da
+  // `card.back.qrSize`. Map a % dell'altezza per restare proporzionata
+  // a qualsiasi sizePreset. In grid-mode la dimensione viene dalla cella
+  // (l'export grid non passa per buildBackSvg).
+  const QR_PX_PCT_BY_ENUM: Record<'small' | 'medium' | 'large', number> = {
+    small: 0.25,
+    medium: 0.35,
+    large: 0.50,
+  };
+  const qrSize = hasQr ? Math.round(pxH * (QR_PX_PCT_BY_ENUM[card.back.qrSize] ?? 0.35)) : 0;
   const qrX = hasQr ? pxW - pad - qrSize : 0;
   const qrY = hasQr ? Math.round((pxH - qrSize) / 2) : 0;
   const contactsW = hasQr
     ? Math.round(pxW * 0.52) - stripW
     : pxW - pad * 2 - stripW;
 
-  const keySize = Math.round(pxH * 0.034);
-  const valSize = Math.round(pxH * 0.046);
+  const keySize = fs(pxH * 0.034, fontScale);
+  const valSize = fs(pxH * 0.046, fontScale);
   let lineY = hasQr ? qrY - Math.round(pxH * 0.02) : pad + Math.round(pxH * 0.08);
   const lineGap = valSize * 1.35;
   const renderContact = (key: string, value: string, color: string = text, isAccent: boolean = false) => {
@@ -849,16 +1033,27 @@ function buildBackSvg(card: BusinessCard, pxW: number, pxH: number): string {
   if (card.back.address) renderContact('Indirizzo', card.back.address);
   if (card.back.vatNumber) renderContact('P.IVA', card.back.vatNumber);
 
-  // Services (lista servizi offerti, dopo i contatti e prima dei socials)
+  // Services (lista servizi offerti, dopo i contatti e prima dei socials).
+  // Phase 2.2 REQ-F02: heading `servicesLabel` editabile (vuoto = no label).
   const services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
   if (services.length > 0) {
     const servicesY = lineY + Math.round(pxH * 0.02);
     out += `<line x1="${contactsX}" y1="${servicesY - valSize * 0.2}" x2="${contactsX + contactsW}" y2="${servicesY - valSize * 0.2}" stroke="${accent}" stroke-width="0.3" stroke-dasharray="2,1.5" opacity="0.16"/>`;
-    const svcSize = Math.round(pxH * 0.04);
+    const servicesLabelText = (card.back.servicesLabel ?? '').trim();
+    let cursorServices = servicesY;
+    if (servicesLabelText) {
+      const labelSize = Math.round(pxH * 0.030);
+      out += `<text x="${contactsX}" y="${cursorServices + labelSize}" font-family="Inter, system-ui, sans-serif" font-size="${labelSize}" font-weight="700" fill="${accent}" letter-spacing="1.2" opacity="0.7">${escapeXml(servicesLabelText.toUpperCase())}</text>`;
+      cursorServices += labelSize + Math.round(pxH * 0.012);
+    }
+    // Phase 2.2 REQ-F03: auto-shrink font se qualche servizio è lungo.
+    const hasLongService = services.some((s) => s.length >= 40);
+    const svcSize = fs(pxH * 0.04, fontScale) * (hasLongService ? 0.85 : 1);
+    const svcLineH = svcSize * 1.3;
     services.forEach((svc, idx) => {
-      out += `<text x="${contactsX}" y="${servicesY + (idx + 1) * (svcSize * 1.3)}" font-family="Inter, system-ui, sans-serif" font-size="${svcSize}" font-weight="700" fill="${accent}">· ${escapeXml(svc)}</text>`;
+      out += `<text x="${contactsX}" y="${cursorServices + (idx + 1) * svcLineH}" font-family="Inter, system-ui, sans-serif" font-size="${svcSize}" font-weight="700" fill="${accent}">· ${escapeXml(svc)}</text>`;
     });
-    lineY = servicesY + services.length * (svcSize * 1.3);
+    lineY = cursorServices + services.length * svcLineH;
   }
 
   // Socials (right after contacts, separated by dashed line)
@@ -872,7 +1067,7 @@ function buildBackSvg(card: BusinessCard, pxW: number, pxH: number): string {
         return `${s.platform} · ${value}`;
       })
       .join(' · ');
-    out += `<text x="${contactsX}" y="${socialsY + valSize * 0.3}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.04)}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic">${escapeXml(socialsText)}</text>`;
+    out += `<text x="${contactsX}" y="${socialsY + valSize * 0.3}" font-family="Inter, system-ui, sans-serif" font-size="${fs(pxH * 0.04, fontScale)}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic">${escapeXml(socialsText)}</text>`;
   }
 
   // QR code reale (Phase 2.1 fix: era un placeholder con scritta "QR")

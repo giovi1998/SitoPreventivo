@@ -85,6 +85,44 @@ export type BusinessCardLayout = z.infer<typeof businessCardLayoutSchema>;
 export const businessCardBorderStyleSchema = z.enum(['none', 'thin', 'accent-strip-left', 'accent-strip-bottom']);
 export type BusinessCardBorderStyle = z.infer<typeof businessCardBorderStyleSchema>;
 
+export const businessCardQrSizeSchema = z.enum(['small', 'medium', 'large']);
+export type BusinessCardQrSize = z.infer<typeof businessCardQrSizeSchema>;
+
+// Phase 2.2 REQ-D04: scala globale del testo della card (1 = default).
+// Range ridotto (0.7–1.5) per evitare layout che rompono la card.
+export const FONT_SCALE_MIN = 0.7;
+export const FONT_SCALE_MAX = 1.5;
+export const FONT_SCALE_STEP = 0.05;
+export const FONT_SCALE_DEFAULT = 1;
+
+// Phase 2.2 REQ-D01: set sicuro di font mostrati nel selettore UI.
+// Card importate con altri font restano valide (lo schema usa stringa
+// libera); il selettore mostra l'opzione corrente come "Personalizzato"
+// senza sovrascriverla.
+export const SAFE_FONT_FAMILIES = [
+  'Inter',
+  'Roboto',
+  'Open Sans',
+  'Lato',
+  'Montserrat',
+  'Poppins',
+  'Georgia',
+  'Times New Roman',
+  'Courier New',
+] as const;
+export type SafeFontFamily = (typeof SAFE_FONT_FAMILIES)[number];
+export function isSafeFontFamily(value: string): value is SafeFontFamily {
+  return (SAFE_FONT_FAMILIES as readonly string[]).includes(value);
+}
+
+// Phase 2.2 REQ-E02: dimensione QR in flexbox-mode (px). In grid-mode
+// la dimensione deriva dalla cella della griglia.
+export const QR_SIZE_PX: Record<BusinessCardQrSize, number> = {
+  small: 84,
+  medium: 120,
+  large: 160,
+};
+
 export const SIZE_PRESETS_MM: Record<BusinessCardSizePreset, { w: number; h: number }> = {
   'eu-85x55': { w: 85, h: 55 },
   'us-89x51': { w: 89, h: 51 },
@@ -164,6 +202,25 @@ export function gridPresetSplit(): CardGrid {
   };
 }
 
+// Phase 2.2 fix: preset SPLIT per il FRONTE (foto a sinistra a tutta altezza,
+// testo + logo a destra). gridPresetSplit() qui sopra NON include `photo` e
+// contiene elementi del retro (contacts/qr) — non adatto al fronte. Questo
+// preset rispecchia il layout flexbox `split` del fronte, così init-from-layout
+// (REQ-E03) e il preset "Diviso" non perdono la foto.
+export function gridPresetFrontSplit(): CardGrid {
+  return {
+    cols: 4,
+    rows: 4,
+    elements: {
+      photo: { x: 0, y: 0, w: 2, h: 4 },
+      name: { x: 2, y: 0, w: 2, h: 1 },
+      title: { x: 2, y: 1, w: 2, h: 1 },
+      company: { x: 2, y: 2, w: 2, h: 1 },
+      logo: { x: 2, y: 3, w: 2, h: 1 },
+    },
+  };
+}
+
 export function gridPresetBackDefault(): CardGrid {
   return {
     cols: 4,
@@ -174,6 +231,85 @@ export function gridPresetBackDefault(): CardGrid {
       socials: { x: 3, y: 2, w: 1, h: 2 },
     },
   };
+}
+
+// Phase 2.2 REQ-E03: init-from-layout. Deriva la griglia iniziale dal
+// layout flexbox corrente così che attivare il master switch NON sposti
+// visivamente gli elementi. Per il retro usa sempre gridPresetBackDefault.
+// `filterByContent` rimuove gli elementi vuoti (es. `logo` se non c'è
+// logoUrl), così l'utente non vede "riserve" inutili nella griglia.
+export function deriveGridFromLayout(
+  card: BusinessCard,
+  side: 'front' | 'back',
+): CardGrid {
+  if (side === 'back') {
+    return filterGridElementsByContent(gridPresetBackDefault(), card, 'back');
+  }
+  const preset =
+    card.front.layout === 'centered'
+      ? gridPresetCentered()
+      : card.front.layout === 'split'
+        ? gridPresetFrontSplit() // fix: include `photo` (gridPresetSplit non l'ha)
+        : gridPresetLeft();
+  return filterGridElementsByContent(preset, card, 'front');
+}
+
+function filterGridElementsByContent(
+  grid: CardGrid,
+  card: BusinessCard,
+  side: 'front' | 'back',
+): CardGrid {
+  const els: Record<string, { x: number; y: number; w: number; h: number }> = {};
+  for (const [key, rect] of Object.entries(grid.elements)) {
+    if (rect && hasElementContent(key, card, side)) {
+      els[key] = rect;
+    }
+  }
+  return { cols: grid.cols, rows: grid.rows, elements: els as CardGrid['elements'] };
+}
+
+// Phase 2.2 REQ-E01: true se il lato ha almeno un elemento grid con
+// contenuto. Usato per decidere se renderizzare in grid-mode
+// (isGridMode = showGrid && hasGridElements).
+export function hasGridElements(side: 'front' | 'back', card: BusinessCard): boolean {
+  const grid = side === 'back' ? card.backGrid : card.grid;
+  if (!grid) return false;
+  for (const [key, rect] of Object.entries(grid.elements)) {
+    if (rect && hasElementContent(key, card, side)) return true;
+  }
+  return false;
+}
+
+function hasElementContent(
+  key: string,
+  card: BusinessCard,
+  side: 'front' | 'back',
+): boolean {
+  if (side === 'front') {
+    if (key === 'photo') return !!card.front.photoUrl;
+    if (key === 'logo') return !!card.front.logoUrl;
+    if (key === 'name') return card.front.name.trim().length > 0;
+    if (key === 'title') return card.front.title.trim().length > 0;
+    if (key === 'company') return card.front.company.trim().length > 0;
+    return false;
+  }
+  // back
+  if (key === 'contacts') {
+    return !!(
+      card.back.phone.trim() ||
+      card.back.email.trim() ||
+      card.back.website.trim() ||
+      card.back.address.trim() ||
+      card.back.vatNumber.trim()
+    );
+  }
+  if (key === 'qr') {
+    return !!(card.back.qrPayload.trim() || card.back.website.trim());
+  }
+  if (key === 'socials') {
+    return card.back.socials.some((s) => s.platform && s.url);
+  }
+  return false;
 }
 
 export const businessCardSchema = z.object({
@@ -202,9 +338,15 @@ export const businessCardSchema = z.object({
     address: z.string().default(''),
     vatNumber: z.string().default(''),
     services: z.array(z.string().max(80)).max(8).default([]),
+    // Phase 2.2 REQ-F02: heading editabile sopra la lista servizi nel
+    // retro. Se vuoto, nessun heading viene mostrato.
+    servicesLabel: z.string().max(40).default('Servizi'),
     socials: z.array(z.object({ platform: z.string(), url: z.string() })).default([]),
     qrPayload: z.string().default(''),
     qrLabel: z.string().default('Scansiona per visitare il sito'),
+    // Phase 2.2 REQ-E02: dimensione QR in flexbox-mode. In grid-mode
+    // la dimensione deriva dalla cella.
+    qrSize: businessCardQrSizeSchema.default('medium'),
     // Phase 2.2 REQ-A02: come sopra, per il retro. Indipendente dal front
     // (l'utente può avere grid-mode attivo solo su uno dei due lati).
     useGrid: z.boolean().default(false),
@@ -216,6 +358,9 @@ export const businessCardSchema = z.object({
     accentColor: hexColorSchema.default('#01696F'),
     fontFamily: z.string().default('Inter'),
     borderStyle: businessCardBorderStyleSchema.default('accent-strip-left'),
+    // Phase 2.2 REQ-D04: scala globale del testo della card (0.7–1.5,
+    // default 1). Applicata come CSS variable `--card-font-scale`.
+    fontScale: z.number().min(FONT_SCALE_MIN).max(FONT_SCALE_MAX).default(FONT_SCALE_DEFAULT),
   }),
   grid: cardGridSchema.optional(),
   backGrid: cardGridSchema.optional(),
@@ -247,9 +392,11 @@ export function createEmptyCard(): BusinessCard {
       address: '',
       vatNumber: '',
       services: [],
+      servicesLabel: 'Servizi',
       socials: [],
       qrPayload: '',
       qrLabel: 'Scansiona per visitare il sito',
+      qrSize: 'medium',
       useGrid: false,
     },
     style: {
@@ -259,6 +406,7 @@ export function createEmptyCard(): BusinessCard {
       accentColor: '#01696F',
       fontFamily: 'Inter',
       borderStyle: 'accent-strip-left',
+      fontScale: 1,
     },
     createdAt: now,
     updatedAt: now,
@@ -307,6 +455,8 @@ export function createGiovanniCardTemplate(): BusinessCard {
       website: GIOVANNI_PERSONAL_URL,
       qrPayload: GIOVANNI_PERSONAL_URL,
       qrLabel: 'Scansiona per visitare il mio sito',
+      servicesLabel: 'Servizi che offro',
+      qrSize: 'medium',
       socials: [
         { platform: 'LinkedIn', url: 'XXXXX' },
         { platform: 'GitHub', url: 'XXXXX' },
@@ -320,6 +470,7 @@ export function createGiovanniCardTemplate(): BusinessCard {
       accentColor: '#01696F',
       fontFamily: 'Inter',
       borderStyle: 'accent-strip-left',
+      fontScale: 1,
     },
     grid: {
       cols: 4,

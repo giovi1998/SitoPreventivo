@@ -3,7 +3,8 @@
 ## Quick Commands
 
 ```bash
-npm run dev          # Dev server on localhost:8000
+npm run dev          # Dev server: Vite + headroom proxy (best-effort) + caveman skill
+npm run dev:app      # Solo Vite (senza headroom), fallback
 npm run build        # Production build → dist/
 npm run test         # Run tests (vitest)
 npm run test:watch   # Watch mode
@@ -185,11 +186,20 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 - **AI = Option B (dedicated module)**, not generic refactor — zero risk to quote AI
 - **No new API endpoints** — reuses `providerRegistry` DeepSeek, same `/api/ai/chat`
 - **Card AI has NO tools** (no prices/discounts) — simpler than quote AI
-- **Grid-based rendering**: `CardPreview` renders via CSS Grid when `card.grid` is set. Each element (photo, name, title, company, qr, contacts, socials) gets `gridColumn`/`gridRow` based on `grid.elements[key]`. Moving an element in the grid **visually moves it** in the preview.
-- **`cardMerge.ts`** handles grid merging: never overwrites `photoUrl`/`logoUrl` (base64 user-uploaded)
-- **Grid presets**: `gridPresetLeft()`, `gridPresetCentered()`, `gridPresetSplit()` in `documentSchemas.ts`
+- **Phase 2.2 master switch griglia (REQ-E01)**: il toggle "Griglia ON/OFF" (`showGrid`) è il **controllo unico** del grid-mode. `isGridMode = showGrid && hasGridElements(side)`. `useGrid` resta persistito per reload/export.
+- **Init-from-layout (REQ-E03)**: attivare il master switch su un lato senza grid lo inizializza dal layout corrente (`deriveGridFromLayout`) — niente "salto" dell'intera card.
+- **QR sizing (REQ-E02)**: in flexbox-mode `back.qrSize` (`small` 84px / `medium` 120px / `large` 160px). In grid-mode la dimensione deriva dalla cella.
+- **Grid elements**: `photo`, `name`, `title`, `company`, `logo`, `qr`, `contacts`, `socials`. Ognuno ha `x,y,w,h` in `card.grid` (fronte) o `card.backGrid` (retro).
+- **`cardMerge.ts`** instrada elementi per lato (front→`grid`, back→`backGrid`), clampa collisioni con `stepMove`/`stepResize` graduali (REQ-A06), non sovrascrive `photoUrl`/`logoUrl` (base64 user-uploaded). Parity AI: supporta `services`, `servicesLabel`, `qrSize`, `fontScale` (clamp 0.7–1.5), `grid.elements.logo`.
+- **Grid presets**: `gridPresetLeft()`, `gridPresetCentered()`, `gridPresetSplit()`, `gridPresetBackDefault()` in `documentSchemas.ts`
+- **Font scale (REQ-D04)**: `style.fontScale` (0.7–1.5, default 1) applicato come CSS variable `--card-font-scale` su tutta la card. Replicato nell'export SVG/PDF via helper `fs()`.
+- **Safe font families (REQ-D01)**: `SAFE_FONT_FAMILIES` export, set sicuro mostrato nel selettore. Card importate con font fuori set mostrano "Personalizzato" senza sovrascriverlo.
+- **Componenti estratti** (REQ-B02): in `src/components/card/`. `CardFormFields.tsx` (Fronte, Media, Retro, Servizi, Social, QR avanzato, Stile) + `CardGridControls.tsx` (lato, preset, selettore, frecce, ridimensiona, cols/rows). Condivisi desktop 3-col e tab mobile "Modifica" → zero duplicazione JSX.
+- **Toast feedback** (REQ-G01): mossa applicata → success. Blocco (collisione/bordo) → info. Cambio master switch → info. Errori AI → error.
+- **Testo che va a capo** (REQ-F01): tutti i campi (nome, social, contatti, wordmark, handle-stamp) usano `overflow-wrap: break-word` invece di `ellipsis`.
+- **`servicesLabel`** (REQ-F02): heading editabile sopra la lista servizi. `services: string[]` con auto-shrink classe per servizi ≥ 40 char (REQ-F03).
 - **Export**: PDF 10-up (tipografia), PNG (raster), SVG (vettoriale), JSON (backup). All client-side via `pdfmake` + canvas pipeline.
-- **`buildCardSvg`** is the rendering pipeline: SVG → Image → canvas → PNG. `buildMinimalPng` fallback for jsdom.
+- **`buildCardSvg`** è la pipeline: SVG → Image → canvas → PNG. `buildMinimalPng` fallback per jsdom.
 
 ## QR Code Module
 
@@ -208,7 +218,7 @@ Stato corrente delle fasi di sviluppo (commit di riferimento: `126c9d1`).
 |------|-------|------|------|
 | 0 — Auto-save fix | ✅ done | `spec/spec-process-phase0-autosave-fix.md` | — |
 | 1 — QR Code | ✅ done | `spec/spec-tool-phase1-qr-code.md` | — |
-| 2 — Business Card | ✅ done (2.1 polish) | `spec/spec-design-phase2-business-card.md` | AI module incluso, fix 2.1 in [Known Issues — Card](#known-issues--card-module) |
+| 2 — Business Card | ✅ done (2.2 refactor) | `spec/spec-design-phase2-business-card.md`, `spec/spec-design-phase2-2-card-refactor.md` | Master switch, init-from-layout, QR sizing, fontScale, servicesLabel, parity mobile, AI parity. |
 | 3 — Volantino | ⏭️ **SKIPPED** | `spec/spec-design-phase3-flyer.md` | Vedi nota skip sotto |
 | 4 — Logo SVG Builder | ✅ done | `spec/spec-tool-phase4-logo-builder.md` | v1 senza AI (Replicate deferred a v2/Pro). Tab "AI Generation" disabilitato con messaggio. |
 | 5 — Tier System | ⏳ pending | `spec/spec-data-phase5-tier-system.md` | Da rivalutare post-fase 4 |
@@ -272,9 +282,11 @@ sarà cambiato.
 
 ## Known Issues — Card Module (fase 2)
 
-**Stato (post fase 2.1)**: la maggior parte dei problemi noti è stata
-risolta. Restano aperte due questioni di scope minore (UX mobile +
-persistenza selezione grid). Tutti i bug bloccanti sono chiusi.
+**Stato (post fase 2.2)**: tutti i bug bloccanti sono chiusi e le
+funzionalità nuove (master switch, init-from-layout, QR sizing,
+fontScale, servicesLabel, parità mobile, AI parity) sono implementate
+e coperte da test. Restano aperte due questioni di scope minore
+(UX mobile + persistenza selezione grid).
 
 ### ✅ Risolto in fase 2.1: collision detection BLOCK
 
@@ -373,7 +385,12 @@ condition `card.back.website && !qrPayload`.
   `CardAIFab`, `CardAIBottomSheet`, `MobileGridEditor`,
   `CardPreviewZoomControls`) + 1 nuovo `gridUtils.test.ts` + nuovi
   test collision in `CardEditor.test.tsx` e `MobileGridEditor.test.tsx`.
-- Totale: ~120 test sul modulo card.
+- **Phase 2.2**: test aggiunti per master switch, init-from-layout,
+  fontScale CSS var, servicesLabel rendering, qrSize, auto-shrink
+  classe. Test AI parity (fontScale clamp, services array clamp, qrSize
+  enum, servicesLabel, logo nel grid) in `cardMerge.test.ts` e
+  `aiCardInputSchema.test.ts`.
+- Totale: ~140+ test sul modulo card.
 
 ## Responsive Patterns
 
@@ -383,8 +400,8 @@ condition `card.back.website && !qrPayload`.
 - **FAB AI** (`CardAIFab`): bottone floating 56px, sempre visibile in mobile, badge con log count
 - **Bottom sheet** (`CardAIBottomSheet`): drawer dal basso 85vh, ESC + backdrop chiudono, `role=dialog`
 - **`useCardAIFloating`**: Context provider con stato `isOpen`/`hasUnread`, azioni `open`/`close`/`toggle`/`pushLog`
-- **Zoom preview** (`useCardPreviewZoom`): range 50-150%, step 10%, default 70% mobile / 100% desktop
-- **Mobile grid editor** (`MobileGridEditor`): select elemento + popup frecce 3×3 (non drag-and-drop, più accessibile)
+- **Zoom preview** (`useCardPreviewZoom`): range 50-150%, step 10%, default 70% mobile / 100% desktop. Phase 2.2 REQ-C01: scaling con width riservato (no overflow) + REQ-C02: reattività al breakpoint mobile/desktop.
+- **Mobile grid editor** (`MobileGridEditor`): select elemento + popup frecce 3×3 (non drag-and-drop, più accessibile). Phase 2.2: riusa `CardGridControls` con `mode='mobile'` (logica condivisa con desktop).
 - **iOS auto-zoom prevention**: `font-size: 16px` su tutti gli input in mobile
 
 ## Environment Variables

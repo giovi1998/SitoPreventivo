@@ -1,0 +1,165 @@
+/* Base editor + header + banner + grid-mode preview */
+/* Phase 2.2 refactor: estratto da CardEditor.css (split per dimensione). */
+
+.card-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.card-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.card-editor-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  color: var(--ink);
+}
+
+.card-title-input {
+  flex: 1 1 240px;
+  min-width: 240px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.card-reset-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink-muted, #5d6b7e);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.card-reset-btn:hover {
+  border-color: var(--accent, #01696F);
+  color: var(--accent, #01696F);
+}
+
+.card-template-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--blue-bg, #e8f0fe);
+  border: 1px solid var(--blue-border, #b8d6ff);
+  border-radius: var(--radius-md);
+  color: var(--info-text, #1e4a7a);
+  flex-wrap: wrap;
+}
+
+.card-template-banner span {
+  flex: 1 1 240px;
+}
+
+.card-template-banner button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent, #01696F);
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.card-template-banner button:last-child {
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
+  padding: 4px 8px;
+}
+
+.card-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(460px, 1.15fr);
+  gap: 20px;
+}
+
+@media (max-width: 880px) {
+  .card-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Grid mode card preview ──────────────────── */
+.card-preview-side.grid-mode {
+  padding: 16px;
+  gap: 4px;
+}
+
+.card-preview-side.grid-mode .card-name {
+  font-size: calc(1rem * var(--card-font-scale));
+  font-weight: 700;
+}
+
+.card-preview-side.grid-mode .card-title {
+  font-size: calc(0.78rem * var(--card-font-scale));
+  font-weight: 600;
+}
+
+.card-preview-side.grid-mode .card-company {
+  font-size: calc(0.72rem * var(--card-font-scale));
+  opacity: 0.8;
+}
+
+.card-preview-side.grid-mode .card-back-key {
+  font-size: calc(0.6rem * var(--card-font-scale));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+  min-width: 48px;
+}
+
+.card-preview-side.grid-mode .card-back-val {
+  font-size: calc(0.72rem * var(--card-font-scale));
+  /* Phase 2.2: wrap invece di ellipsis (vedi .card-back-val flexbox). */
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.card-preview-side.grid-mode .card-back-qr-svg svg {
+  /* Phase 2.2 REQ-E02: in grid-mode il QR riempie la cella
+   * (vedi .card-back-qr-svg). Qui forziamo solo il minimo leggibile. */
+  width: 100%;
+  height: 100%;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.card-preview-side.grid-mode .card-back-socials {
+  font-size: calc(0.68rem * var(--card-font-scale));
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  .card-preview-side.grid-mode .card-back-qr-svg svg {
+    /* minimo leggibile anche su mobile: 44px (vedi .card-back-qr-svg) */
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .card-preview-side.grid-mode .card-back-key {
+    font-size: 0.58rem;
+    min-width: 42px;
+  }
+  .card-preview-side.grid-mode .card-back-val {
+    font-size: 0.66rem;
+  }
+}

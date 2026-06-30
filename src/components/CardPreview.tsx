@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import type { BusinessCard, BusinessCardSizePreset, CardGrid } from '../utils/documentSchemas';
+import type { BusinessCard, BusinessCardSizePreset } from '../utils/documentSchemas';
+import { hasGridElements, QR_SIZE_PX, FONT_SCALE_MIN, FONT_SCALE_MAX } from '../utils/documentSchemas';
 import type { Tier } from '../utils/watermark';
 import { resolveCardQrPayload } from '../utils/cardGenerator';
 import { generateQrSvg } from '../utils/qrGenerator';
@@ -45,7 +46,6 @@ function deriveHostname(website: string): string {
 function deriveHandle(url: string): string {
   try {
     const u = new URL(url);
-    // strip leading www. and common platform hosts for a cleaner handle
     const host = u.hostname.replace(/^www\./, '');
     if (host === 'linkedin.com' || host === 'github.com' || host === 'twitter.com' || host === 'x.com' || host === 'instagram.com') {
       const path = u.pathname.replace(/^\/+|\/+$/g, '');
@@ -55,9 +55,24 @@ function deriveHandle(url: string): string {
     }
     return u.pathname.replace(/^\/+|\/+$/g, '') || host;
   } catch {
-    // Invalid URL — show the raw text the user typed instead of the platform name
     return url || '';
   }
+}
+
+// Phase 2.2 REQ-D04: clamp di sicurezza per il font scale. Lo schema Zod
+// fa lo stesso clamp alla scrittura, ma qui difendiamo da card importate
+// (JSON vecchi) con valori fuori range.
+function clampFontScale(v: number): number {
+  if (typeof v !== 'number' || Number.isNaN(v)) return 1;
+  return Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, v));
+}
+
+// UX fix: la griglia OFF nasconde overlay/controlli, ma NON deve perdere il
+// layout salvato. Se l'utente o l'AI ha persistito `useGrid`, la preview resta
+// in grid-mode anche quando `showGrid` è false. `showGrid` governa solo overlay.
+function isGridModeFor(side: 'front' | 'back', card: BusinessCard, showGrid: boolean): boolean {
+  const sideState = side === 'front' ? card.front : card.back;
+  return !!sideState.useGrid && hasGridElements(side, card);
 }
 
 function CardPreview({ side, card, showGrid = false, tier = 'unlocked' }: CardPreviewProps) {
@@ -91,7 +106,8 @@ function CardPreview({ side, card, showGrid = false, tier = 'unlocked' }: CardPr
     }
   }, [qrPayload, side, card.style.textColor]);
 
-  // Grid overlay: 4×4 lines over the card (absolute positioned, pointer-events: none)
+  // Grid overlay: 4×4 lines over the card (absolute positioned, pointer-events: none).
+  // Visibile solo se il master switch è ON.
   const gridOverlay = showGrid ? (
     <svg className="card-grid-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
       <line x1="25" y1="0" x2="25" y2="100" stroke="var(--card-accent)" strokeWidth="0.3" opacity="0.4" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
@@ -126,22 +142,18 @@ const FrontPreview = React.memo(function FrontPreview({ card, gridOverlay, showG
   const hasPhoto = !!card.front.photoUrl;
   const hasLogo = !!card.front.logoUrl;
   const grid = card.grid;
-  // Phase 2.2 REQ-A02: separazione tra "grid-mode attivo" (rende la
-  // preview via CSS Grid) e "linee guida visibili" (toggle `showGrid`,
-  // overlay puramente visivo). La griglia si attiva SOLO se:
-  //   (a) la grid ha elementi del front (sennò niente da posizionare)
-  //   (b) `card.front.useGrid` è true (l'utente ha esplicitamente
-  //       attivato il grid-mode, es. tramite il grid editor).
-  // Cambiare `showGrid` non influenza più il layout: serve solo a
-  // mostrare/nascondere le linee tratteggiate.
-  const hasFrontElement = !!(grid && (grid.elements.photo || grid.elements.name || grid.elements.title || grid.elements.company || grid.elements.logo));
-  const isGridMode = !!grid && hasFrontElement && !!card.front.useGrid;
+
+  // Phase 2.2 REQ-E01: master switch governa grid-mode + overlay.
+  // isGridMode = showGrid && hasGridElements (vedi helper in documentSchemas).
+  const isGridMode = isGridModeFor('front', card, showGrid);
 
   const baseStyle: React.CSSProperties = {
     backgroundColor: card.style.bgColor,
     color: card.style.textColor,
     fontFamily: card.style.fontFamily,
     ['--card-accent' as any]: card.style.accentColor,
+    // Phase 2.2 REQ-D04: scala font globale
+    ['--card-font-scale' as any]: clampFontScale(card.style.fontScale ?? 1),
   };
 
   const gridContainerStyle: React.CSSProperties = isGridMode
@@ -298,17 +310,24 @@ const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gr
   const hostname = card.back.website ? deriveHostname(card.back.website) : '';
   const headerWord = hostname || card.front.company || '';
   const grid = card.backGrid ?? card.grid;
-  // Phase 2.2 REQ-A02: come front — il grid-mode è controllato da
-  // `card.back.useGrid`, NON dal toggle linee guida. Cambiare `showGrid`
-  // influenza solo la visibilità dell'overlay.
-  const hasBackElement = !!(grid && (grid.elements.contacts || grid.elements.qr || grid.elements.socials));
-  const isGridMode = !!grid && hasBackElement && !!card.back.useGrid;
+
+  // Phase 2.2 REQ-E01: master switch governa grid-mode.
+  const isGridMode = isGridModeFor('back', card, showGrid);
+
+  // Phase 2.2 REQ-E02: dimensione QR in flexbox-mode. Default 'medium' (120px).
+  // In grid-mode la dimensione viene dalla cella (100% del contenitore, vedi CSS).
+  const qrSizePx = QR_SIZE_PX[card.back.qrSize] ?? QR_SIZE_PX.medium;
 
   const baseStyle: React.CSSProperties = {
     backgroundColor: card.style.bgColor,
     color: card.style.textColor,
     fontFamily: card.style.fontFamily,
     ['--card-accent' as any]: card.style.accentColor,
+    // Phase 2.2 REQ-D04: scala font globale
+    ['--card-font-scale' as any]: clampFontScale(card.style.fontScale ?? 1),
+    // Phase 2.2 REQ-E02: dimensione QR in flexbox-mode. In grid-mode il
+    // CSS sovrascrive a 100% del contenitore.
+    ['--card-qr-size' as any]: `${qrSizePx}px`,
   };
 
   const gridContainerStyle: React.CSSProperties = isGridMode
@@ -323,7 +342,7 @@ const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gr
   const contactsContent = (
     <>
       {card.back.phone && <div className="card-back-line"><span className="card-back-key">Telefono</span><span className="card-back-val">{card.back.phone}</span></div>}
-      {card.back.email && <div className="card-back-line"><span className="card-back-key">Email</span><span className="card-back-val">{card.back.email}</span></div>}
+      {card.back.email && <div className="card-back-line"><span className="card-back-key">Email</span><span className="card-back-val" data-testid="card-back-email-val">{card.back.email}</span></div>}
       {/* Phase 2.1: WEB row omessa se QR presente (ridondante — il QR codifica già l'URL) */}
       {card.back.website && !qrPayload && (
         <div className="card-back-line">
@@ -349,12 +368,26 @@ const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gr
   ) : null;
 
   const services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
+  // Phase 2.2 REQ-F02/F03: block label editabile + auto-shrink classe
+  // condizionale quando i singoli servizi sono lunghi (>= 40 char).
+  const servicesLabelText = (card.back.servicesLabel ?? '').trim();
+  const hasLongService = services.some((s) => s.length >= 40);
   const servicesContent = services.length > 0 ? (
-    <ul className="card-back-services" data-testid="card-back-services">
-      {services.map((s, idx) => (
-        <li key={idx}>{s}</li>
-      ))}
-    </ul>
+    <>
+      {servicesLabelText && (
+        <div className="card-back-services-label" data-testid="card-back-services-label">
+          {servicesLabelText}
+        </div>
+      )}
+      <ul
+        className={`card-back-services ${hasLongService ? 'card-back-services--long' : ''}`}
+        data-testid="card-back-services"
+      >
+        {services.map((s, idx) => (
+          <li key={idx}>{s}</li>
+        ))}
+      </ul>
+    </>
   ) : null;
 
   const qrContent = qrSvg ? (
@@ -393,17 +426,22 @@ const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gr
       {isGridMode ? (
         <>
           {grid!.elements.contacts && (
-            <div data-testid="grid-el-contacts" style={{ ...gridPlacement(grid!.elements.contacts), padding: '8px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '4px' }}>
+            <div data-testid="grid-el-contacts" style={{ ...gridPlacement(grid!.elements.contacts), padding: '8px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '4px', minWidth: 0 }}>
               {contactsContent}
+              {servicesContent}
+              {/* fix: i social vanno SOLO nella cella `socials` se esiste,
+                  altrimenti (fallback) restano coi contatti. Senza questo
+                  controllo i social comparivano DUE volte (qui + cella socials). */}
+              {!grid!.elements.socials && socialsContent}
             </div>
           )}
           {grid!.elements.qr && (
-            <div data-testid="grid-el-qr" style={{ ...gridPlacement(grid!.elements.qr), display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div data-testid="grid-el-qr" style={{ ...gridPlacement(grid!.elements.qr), display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 0, minHeight: 0 }}>
               {qrContent}
             </div>
           )}
           {grid!.elements.socials && socialsContent && (
-            <div data-testid="grid-el-socials" style={{ ...gridPlacement(grid!.elements.socials), padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div data-testid="grid-el-socials" style={{ ...gridPlacement(grid!.elements.socials), padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
               {socialsContent}
             </div>
           )}

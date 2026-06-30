@@ -1,21 +1,37 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './CardEditor.css';
-import CardPreview from './CardPreview';
-import AILogPanel from './AILogPanel';
 import CardEditorTabs from './CardEditorTabs';
 import MobileGridEditor from './MobileGridEditor';
 import CardAIFab from './CardAIFab';
 import CardAIBottomSheet from './CardAIBottomSheet';
+import CardPreviewSurface from './card/CardPreviewSurface';
 import type {
   BusinessCard,
-  BusinessCardLayout,
-  BusinessCardBorderStyle,
-  BusinessCardSizePreset,
   CardGrid,
 } from '../utils/documentSchemas';
-import { createEmptyCard, createGiovanniCardTemplate, gridPresetLeft, gridPresetCentered, gridPresetSplit, gridPresetBackDefault } from '../utils/documentSchemas';
-import { clampMove, clampResize, wouldCollideOnMove, wouldCollideOnResize } from '../utils/gridUtils';
-import { compressImage, generateCardPDF, generateCardPng, buildCardSvg } from '../utils/cardGenerator';
+import {
+  createEmptyCard,
+  createGiovanniCardTemplate,
+  gridPresetLeft,
+  gridPresetCentered,
+  gridPresetFrontSplit,
+  gridPresetBackDefault,
+  deriveGridFromLayout,
+  hasGridElements,
+} from '../utils/documentSchemas';
+import { CardGridControls, type GridSide } from './card/CardGridControls';
+import CardAIControls from './card/CardAIControls';
+import {
+  CardFrontFields,
+  CardBackFields,
+  CardMediaFields,
+  CardServicesFields,
+  CardSocialsFields,
+  CardQrAdvanced,
+  CardStyleFields,
+} from './card/CardFormFields';
+import { compressImage } from '../utils/cardGenerator';
+import { useCardExport } from '../hooks/useCardExport';
 import { isAllowedLogoMime, isHttpUrl } from '../utils/qrGenerator';
 import dataService from '../utils/dataService';
 import { useToast } from '../hooks/useToast';
@@ -23,49 +39,14 @@ import { useAICard } from '../hooks/useAICard';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useCardPreviewZoom } from '../hooks/useCardPreviewZoom';
 import { CardAIFloatingProvider, useCardAIFloating } from '../hooks/useCardAIFloating';
-import CardPreviewZoomControls from './CardPreviewZoomControls';
 import { logger } from '../utils/logger';
 import { useDocumentSave } from '../hooks/useDocumentSave';
 
 const MAX_RAW_BYTES = 5_000_000;
 const AUTO_SAVE_DELAY_MS = 30_000;
 
-const LAYOUT_LABELS: Record<BusinessCardLayout, string> = {
-  centered: 'Centrato',
-  left: 'Sinistra',
-  split: 'Split (foto a sinistra)',
-};
-
-const SIZE_PRESET_LABELS: Record<BusinessCardSizePreset, string> = {
-  'eu-85x55': 'EU 85×55mm',
-  'us-89x51': 'US 89×51mm',
-  'square-65x65': 'Quadrato 65×65mm',
-};
-
-const BORDER_LABELS: Record<BusinessCardBorderStyle, string> = {
-  none: 'Nessuno',
-  thin: 'Bordo sottile',
-  'accent-strip-left': 'Striscia accento a sinistra',
-  'accent-strip-bottom': 'Striscia accento in basso',
-};
-
-const SOCIAL_PLATFORMS = [
-  { value: '', label: '—' },
-  { value: 'LinkedIn', label: 'LinkedIn' },
-  { value: 'GitHub', label: 'GitHub' },
-  { value: 'X', label: 'X (Twitter)' },
-  { value: 'Instagram', label: 'Instagram' },
-  { value: 'Facebook', label: 'Facebook' },
-  { value: 'YouTube', label: 'YouTube' },
-  { value: 'Behance', label: 'Behance' },
-  { value: 'Dribbble', label: 'Dribbble' },
-] as const;
-
-const SIZE_PRESETS = {
-  'eu-85x55': { w: 85, h: 55 },
-  'us-89x51': { w: 89, h: 51 },
-  'square-65x65': { w: 65, h: 65 },
-} as const;
+// Phase 2.2: label/costanti UI sono in `card/CardFormFields.tsx`;
+// gli handler di export sono in `hooks/useCardExport.ts`.
 
 interface CardEditorProps {
   userEmail: string;
@@ -87,19 +68,41 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
   const [card, setCard] = useState<BusinessCard>(initialCard || createEmptyCard());
   const [showTemplateBanner, setShowTemplateBanner] = useState<boolean>(() => !initialCard);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState<'pdf' | 'png-front' | 'png-back' | null>(null);
+
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [aiText, setAiText] = useState('');
   const [aiModel, setAiModel] = useState('deepseek-chat');
   const [showAi, setShowAi] = useState(true);
+  // Phase 2.2 REQ-E01: `showGrid` è il master switch unico del grid-mode.
+  // Quando è OFF la preview è in flexbox, l'overlay è nascosto, e i
+  // controlli del grid editor sono disabilitati. `card.front.useGrid` /
+  // `card.back.useGrid` restano persistiti (per reload/export) ma non
+  // governano più il rendering: isGridMode = showGrid && hasGridElements.
   const [showGrid, setShowGrid] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMobile = useMediaQuery('(max-width: 900px)');
   const aiFloating = useCardAIFloating();
-  const previewZoom = useCardPreviewZoom(isMobile ? 0.7 : 1);
+  // Phase 2.2 REQ-C02: il default dello zoom si adegua al breakpoint
+  // corrente a runtime (vedi useEffect sotto). Passiamo 1 come initial;
+  // l'effect lo corregge dopo il primo render.
+  const previewZoom = useCardPreviewZoom(1);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
   const { processCardPrompt, resetCardChat, cardAiLogs, isCardProcessing, availableModels } = useAICard(userEmail);
+
+  // Phase 2.2 REQ-C02: adegua lo zoom di default al breakpoint mobile/desktop.
+  useEffect(() => {
+    const defaultZoom = isMobile ? 0.7 : 1;
+    // Solo se l'utente non l'ha cambiato manualmente (zoom ancora al default
+    // precedente). Per semplicità: se l'utente è già a un valore ≠ 1 su
+    // desktop, rispettiamo la sua scelta. Su mobile, se >0.9, portiamo a 0.7.
+    if (isMobile && previewZoom.zoom > 0.9) {
+      previewZoom.setZoom(defaultZoom);
+    } else if (!isMobile && previewZoom.zoom < 0.9) {
+      previewZoom.setZoom(defaultZoom);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile]);
 
   useEffect(() => {
     if (!exportMenuOpen) return;
@@ -158,155 +161,142 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
 
   // ─── B2: Grid editor state ─────────────────────────────────
   const [selectedGridElement, setSelectedGridElement] = useState<keyof CardGrid['elements'] | ''>('');
-  const [gridPresetChoice, setGridPresetChoice] = useState<'left' | 'centered' | 'split'>('left');
   // Phase 2.1: il grid editor è per lato (front o back). Non si possono
   // spostare elementi del front nel back e viceversa.
-  const [gridEditorSide, setGridEditorSide] = useState<'front' | 'back'>('front');
+  const [gridEditorSide, setGridEditorSide] = useState<GridSide>('front');
 
-  const patchGrid = useCallback((grid: CardGrid) => {
+  // Phase 2.2 REQ-E01: applica una grid al lato corrente. NON attiviamo
+  // più automaticamente `useGrid`: la sorgente di verità per il rendering
+  // è `showGrid` (master switch). `useGrid` viene impostato a true
+  // SOLO quando l'utente conferma il grid-mode dal master switch.
+  const patchGrid = useCallback((grid: CardGrid, persist?: { useGrid: boolean }) => {
     setCard((prev) => {
-      // Phase 2.2 REQ-A02: applicare un preset o modificare elementi nel
-      // grid editor è un'azione esplicita dell'utente → attiviamo
-      // automaticamente `useGrid` per il lato corrente così la preview
-      // riflette le modifiche. Il toggle "linee guida" (`showGrid`)
-      // controlla solo l'overlay visivo, non il rendering.
-      const side = gridEditorSide;
-      if (side === 'back') {
+      if (gridEditorSide === 'back') {
         return {
           ...prev,
           backGrid: grid,
-          back: { ...prev.back, useGrid: true },
+          back: { ...prev.back, useGrid: persist?.useGrid ?? prev.back.useGrid },
           updatedAt: new Date().toISOString(),
         };
       }
       return {
         ...prev,
         grid,
-        front: { ...prev.front, useGrid: true },
+        front: { ...prev.front, useGrid: persist?.useGrid ?? prev.front.useGrid },
         updatedAt: new Date().toISOString(),
       };
     });
   }, [gridEditorSide]);
 
-  // Phase 2.2 REQ-A03: quando l'utente cambia `front.layout` o
-  // `style.sizePreset` mentre la card è in grid-mode, il grid esistente
-  // potrebbe non adattarsi (elementi che escono dai bordi, aspect-ratio
-  // cambiato con elementi rimasti nelle stesse posizioni). Disattiviamo
-  // `useGrid` per il lato coinvolto e mostriamo un toast informativo.
-  // L'utente può riapplicare un preset per riattivarlo.
-  const disableGridIfActive = useCallback((side: 'front' | 'back', reason: string) => {
-    setCard((prev) => {
-      const key = side === 'back' ? 'back' : 'front';
-      const current = (prev[key] as { useGrid?: boolean }).useGrid;
-      if (!current) return prev;
-      if (side === 'back') {
-        return { ...prev, back: { ...prev.back, useGrid: false }, updatedAt: new Date().toISOString() };
-      }
-      return { ...prev, front: { ...prev.front, useGrid: false }, updatedAt: new Date().toISOString() };
-    });
-    addToast('info', `Layout griglia disattivato sul ${side === 'back' ? 'retro' : 'fronte'}: ${reason}. Riapplica un preset per riattivare.`, 5000);
-  }, [addToast]);
-
+  // Phase 2.2 REQ-E01: applica un preset di griglia al lato corrente.
+  // Imposta `useGrid: true` perché applicare un preset è azione
+  // esplicita dell'utente.
   const applyGridPreset = useCallback((preset: 'left' | 'centered' | 'split') => {
     if (gridEditorSide === 'back') {
-      patchGrid(gridPresetBackDefault());
+      // SOSTITUISCI completamente la grid: un preset non è un merge
+      // (altrimenti elementi vecchi come `logo` rimangono in posizioni
+      // precedenti, generando duplicati).
+      setCard((prev) => {
+        const next: BusinessCard = { ...prev, updatedAt: new Date().toISOString() };
+        next.backGrid = gridPresetBackDefault();
+        next.back = { ...prev.back, useGrid: true };
+        return next;
+      });
       return;
     }
-    if (preset === 'left') patchGrid(gridPresetLeft());
-    else if (preset === 'centered') patchGrid(gridPresetCentered());
-    else patchGrid(gridPresetSplit());
-  }, [patchGrid, gridEditorSide]);
-
-  const moveSelectedElement = useCallback((dx: number, dy: number) => {
-    if (!selectedGridElement) return;
+    const frontGrid =
+      preset === 'left' ? gridPresetLeft() :
+      preset === 'centered' ? gridPresetCentered() :
+      gridPresetFrontSplit();
     setCard((prev) => {
-      const isBack = gridEditorSide === 'back';
-      const current = isBack
-        ? (prev.backGrid ?? gridPresetBackDefault())
-        : (prev.grid ?? gridPresetLeft());
-      const el = current.elements[selectedGridElement];
-      if (!el) return prev;
-      const { x: newX, y: newY } = clampMove(current, selectedGridElement, dx, dy);
-      if (newX === el.x && newY === el.y) return prev;
-      const newGrid = {
-        ...current,
-        elements: { ...current.elements, [selectedGridElement]: { ...el, x: newX, y: newY } },
-      };
-      // Phase 2.2: attiva useGrid sul lato modificato così la preview
-      // riflette lo spostamento (senza questo, CardPreview resta in
-      // flexbox e l'utente non vede la mossa — bug "non si sposta nulla").
-      return {
-        ...prev,
-        [isBack ? 'backGrid' : 'grid']: newGrid,
-        [isBack ? 'back' : 'front']: { ...(prev[isBack ? 'back' : 'front'] as object), useGrid: true },
-        updatedAt: new Date().toISOString(),
-      } as typeof prev;
+      const next: BusinessCard = { ...prev, updatedAt: new Date().toISOString() };
+      next.grid = frontGrid;
+      next.front = { ...prev.front, useGrid: true };
+      return next;
     });
-  }, [selectedGridElement, gridEditorSide]);
+  }, [gridEditorSide]);
 
-  const resizeSelectedElement = useCallback((dw: number, dh: number) => {
-    if (!selectedGridElement) return;
-    setCard((prev) => {
-      const isBack = gridEditorSide === 'back';
-      const current = isBack
-        ? (prev.backGrid ?? gridPresetBackDefault())
-        : (prev.grid ?? gridPresetLeft());
-      const el = current.elements[selectedGridElement];
-      if (!el) return prev;
-      const next = clampResize(current, selectedGridElement, dw, dh);
-      if (next.w === el.w && next.h === el.h) return prev;
-      const newGrid = {
-        ...current,
-        elements: { ...current.elements, [selectedGridElement]: { ...el, w: next.w, h: next.h } },
-      };
-      // Phase 2.2: attiva useGrid sul lato modificato (vedi moveSelectedElement).
-      return {
-        ...prev,
-        [isBack ? 'backGrid' : 'grid']: newGrid,
-        [isBack ? 'back' : 'front']: { ...(prev[isBack ? 'back' : 'front'] as object), useGrid: true },
-        updatedAt: new Date().toISOString(),
-      } as typeof prev;
+  // Phase 2.2 REQ-G01: handler invocato dopo una mossa (successo o blocco).
+  // Mostra un toast coerente con la mossa. Restituisce true se applicata.
+  const handleAfterMove = useCallback((info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => {
+    if (info.applied) {
+      const dir = (() => {
+        if (info.dx > 0) return 'a destra';
+        if (info.dx < 0) return 'a sinistra';
+        if (info.dy > 0) return 'in basso';
+        return 'in alto';
+      })();
+      addToast('success', `${info.element} spostato ${dir}`, 2500);
+    } else if (info.reason === 'collision') {
+      addToast('info', `Bloccato: ${info.element} collide con un altro elemento`, 3000);
+    } else if (info.reason === 'border') {
+      addToast('info', `Bloccato: bordo della griglia raggiunto`, 3000);
+    }
+  }, [addToast]);
+
+  // Phase 2.2 REQ-G01: analogo per resize.
+  const handleAfterResize = useCallback((info: { element: string; dw: number; dh: number; applied: boolean; reason?: 'collision' | 'border' }) => {
+    if (info.applied) {
+      addToast('success', `${info.element} ridimensionato`, 2500);
+    } else if (info.reason === 'collision') {
+      addToast('info', `Bloccato: resize causa collisione`, 3000);
+    } else if (info.reason === 'border') {
+      addToast('info', `Bloccato: bordo della griglia raggiunto`, 3000);
+    }
+  }, [addToast]);
+
+  // Phase 2.2 REQ-E01: gestione master switch. Quando l'utente attiva
+  // `showGrid` (OFF→ON) e il lato non ha ancora una grid, inizializziamo
+  // la grid dal layout corrente (init-from-layout) e impostiamo useGrid
+  // sul lato. Quando disattiva (ON→OFF), lasciamo la grid persistita
+  // (verrà ricaricata al prossimo ON).
+  const handleToggleShowGrid = useCallback(() => {
+    setShowGrid((prev) => {
+      const next = !prev;
+      if (next) {
+        // OFF → ON: init-from-layout per i lati che non hanno ancora grid.
+        setCard((c) => {
+          let mutated = false;
+          let nextCard: BusinessCard = c;
+          if (!c.grid || !hasGridElements('front', c)) {
+            const initGrid = deriveGridFromLayout(c, 'front');
+            nextCard = {
+              ...nextCard,
+              grid: initGrid,
+              front: { ...nextCard.front, useGrid: true },
+            };
+            mutated = true;
+          }
+          if (!c.backGrid || !hasGridElements('back', c)) {
+            const initGrid = deriveGridFromLayout(c, 'back');
+            nextCard = {
+              ...nextCard,
+              backGrid: initGrid,
+              back: { ...nextCard.back, useGrid: true },
+            };
+            mutated = true;
+          }
+          if (mutated) {
+            addToast('info', 'Griglia attiva — ora puoi spostare gli elementi', 3000);
+          } else {
+            addToast('info', 'Griglia attiva', 2500);
+          }
+          return nextCard;
+        });
+      } else {
+        addToast('info', 'Griglia disattivata', 2500);
+      }
+      return next;
     });
-  }, [selectedGridElement, gridEditorSide]);
+  }, [addToast]);
 
-  // Bounds helpers: Phase 2.1 fix — i bottoni resize/move devono essere
-  // disabilitati quando l'azione porterebbe fuori dalla grid o in
-  // collisione con un altro elemento. Senza questo feedback l'utente
-  // clicca +↔ e non succede nulla (UX brutto).
-  //
-  // Phase 2.2 REQ-A01: il check deve usare la griglia REALE (activeGrid),
-  // che contiene `elements`. Il `bounds` precedente era {cols, rows, el}
-  // (no elements), quindi `wouldCollideOnMove` leggeva sempre `undefined`
-  // e ritornava `false`: i bottoni risultavano abilitati anche in caso di
-  // collisione, e `moveSelectedElement` (che usa `clampMove` sulla grid
-  // reale) bloccava la mossa → "clicca ma non succede nulla".
-  // Phase 2.2: usa il fallback preset se la grid del lato non è ancora
-  // definita. Così i bottoni del grid editor sono abilitati dalla prima
-  // mossa (l'utente non deve prima applicare un preset manualmente).
-  // La prima mossa persiste la grid in card.grid/backGrid e attiva useGrid.
-  const activeGrid: CardGrid =
-    gridEditorSide === 'back'
-      ? (card.backGrid ?? gridPresetBackDefault())
-      : (card.grid ?? gridPresetLeft());
-  const selectedEl =
-    selectedGridElement
-      ? activeGrid.elements[selectedGridElement as keyof CardGrid['elements']]
-      : undefined;
-
-  const canMoveLeft  = !!selectedEl && selectedEl.x > 0
-    && !wouldCollideOnMove(activeGrid, selectedGridElement as string, -1, 0);
-  const canMoveUp    = !!selectedEl && selectedEl.y > 0
-    && !wouldCollideOnMove(activeGrid, selectedGridElement as string, 0, -1);
-  const canMoveRight = !!selectedEl && selectedEl.x + selectedEl.w < activeGrid.cols
-    && !wouldCollideOnMove(activeGrid, selectedGridElement as string, 1, 0);
-  const canMoveDown  = !!selectedEl && selectedEl.y + selectedEl.h < activeGrid.rows
-    && !wouldCollideOnMove(activeGrid, selectedGridElement as string, 0, 1);
-  const canShrinkW = !!selectedEl && selectedEl.w > 1;
-  const canGrowW   = !!selectedEl && selectedEl.x + selectedEl.w < activeGrid.cols
-    && !wouldCollideOnResize(activeGrid, selectedGridElement as string, 1, 0);
-  const canShrinkH = !!selectedEl && selectedEl.h > 1;
-  const canGrowH   = !!selectedEl && selectedEl.y + selectedEl.h < activeGrid.rows
-    && !wouldCollideOnResize(activeGrid, selectedGridElement as string, 0, 1);
+  // Phase 2.2 REQ-E03: deriva la griglia corrente per bounds/UI.
+  const activeGrid: CardGrid = useMemo(() => {
+    if (gridEditorSide === 'back') {
+      return card.backGrid ?? deriveGridFromLayout(card, 'back');
+    }
+    return card.grid ?? deriveGridFromLayout(card, 'front');
+  }, [gridEditorSide, card.grid, card.backGrid, card]);
 
   // Phase 2.2: elementi disponibili nel grid editor in base al contenuto
   // effettivo della card. Mostra solo gli elementi che hanno qualcosa da
@@ -345,6 +335,18 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
     addToast('info', 'Template personale Giovanni caricato');
   }, [addToast]);
 
+  const resetCard = useCallback(() => {
+    setCard(createEmptyCard());
+    setShowTemplateBanner(true);
+    setShowGrid(false);
+    setSelectedGridElement('');
+    setGridEditorSide('front');
+    setUploadError(null);
+    setAiText('');
+    setExportMenuOpen(false);
+    addToast('info', 'Nuovo bigliettino vuoto pronto');
+  }, [addToast]);
+
   // ─── FILE UPLOAD (photo + logo) ────────────────────────
   const handleUpload = useCallback(async (file: File, field: 'photoUrl' | 'logoUrl') => {
     setUploadError(null);
@@ -357,6 +359,15 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
       return;
     }
     try {
+      if (field === 'logoUrl' && file.type === 'image/svg+xml') {
+        // Fix qualità logo: SVG deve restare vettoriale. Prima passava da
+        // canvas→PNG e diventava raster, quindi se ingrandito in grid-mode
+        // risultava sgranato. Come <img src="data:image/svg+xml..."> gli
+        // script SVG non vengono eseguiti dai browser moderni.
+        const svg = await file.text();
+        patchFront({ logoUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` });
+        return;
+      }
       // Logo → PNG per preservare la trasparenza (altrimenti JPEG riempe
       // lo sfondo trasparente di nero). Foto → JPEG per file più leggero.
       const dataUri = await compressImage(file, undefined, undefined, {
@@ -379,88 +390,8 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
     setUploadError(null);
   }, [patchFront]);
 
-  // ─── EXPORT PDF (AC-009) ──────────────────────────────
-  const exportPdf = useCallback(async () => {
-    setExporting('pdf');
-    try {
-      const bytes = await generateCardPDF(card, { tier });
-      const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `card_${card.id}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      addToast('success', 'PDF 10-up scaricato (pronto per la tipografia)');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Errore export PDF';
-      addToast('error', message);
-    } finally {
-      setExporting(null);
-    }
-  }, [card, tier, addToast]);
-
-  // ─── EXPORT PNG (AC-010) ──────────────────────────────
-  const exportPng = useCallback(async (side: 'front' | 'back') => {
-    setExporting(side === 'front' ? 'png-front' : 'png-back');
-    try {
-      const bytes = await generateCardPng(card, side, { tier, dpi: 300 });
-      const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-      const blob = new Blob([arrayBuffer], { type: 'image/png' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `card_${card.id}_${side}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-      addToast('success', `PNG ${side} scaricato (300 DPI)`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Errore export PNG';
-      addToast('error', message);
-    } finally {
-      setExporting(null);
-    }
-  }, [card, tier, addToast]);
-
-  // ─── EXPORT SVG ────────────────────────────────────────
-  const exportSvg = useCallback((side: 'front' | 'back') => {
-    try {
-      const dims = SIZE_PRESETS[card.style.sizePreset];
-      const pxW = Math.round(dims.w * 20);
-      const pxH = Math.round(dims.h * 20);
-      const svg = buildCardSvg(card, side, pxW, pxH);
-      const blob = new Blob([svg], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `card_${card.id}_${side}.svg`;
-      a.click();
-      URL.revokeObjectURL(url);
-      addToast('success', `SVG ${side} scaricato (vettoriale, editabile)`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Errore export SVG';
-      addToast('error', message);
-    }
-  }, [card, addToast]);
-
-  // ─── EXPORT JSON ───────────────────────────────────────
-  const exportJson = useCallback(() => {
-    try {
-      const json = JSON.stringify(card, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `card_${card.id}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      addToast('success', 'JSON scaricato (backup card data)');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Errore export JSON';
-      addToast('error', message);
-    }
-  }, [card, addToast]);
+  // ─── EXPORT (PDF/PNG/SVG/JSON) — hook dedicato (Phase 2.2 refactor) ──
+  const { exporting, exportPdf, exportPng, exportSvg, exportJson } = useCardExport(card, tier, addToast);
 
   // ─── SAVE (manual) ────────────────────────────────────
   const handleSave = useCallback(async () => {
@@ -502,6 +433,14 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
       });
       setCard(result.card);
       const realChanges = result.changes.filter((c: string) => !c.startsWith('error:'));
+      const gridChanged = realChanges.some((c: string) => c.startsWith('Griglia:')) ||
+        result.card.front.useGrid || result.card.back.useGrid;
+      if (gridChanged) {
+        // Phase 2.2 fix: se l'AI modifica la griglia, la preview deve
+        // entrare subito in grid-mode. Prima i dati cambiavano ma
+        // `showGrid` restava OFF, quindi visivamente non succedeva nulla.
+        setShowGrid(true);
+      }
       if (realChanges.length > 0) {
         addToast('success', `AI: ${realChanges.length} modifica${realChanges.length > 1 ? 'e' : ''} applicata${realChanges.length > 1 ? 'e' : ''}`, 5000);
       } else {
@@ -588,101 +527,55 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
   const websiteValid = useMemo(() => !card.back.website || isHttpUrl(card.back.website), [card.back.website]);
 
   // ─── Form content (shared between desktop 3-col and mobile tabs) ───
+  // Phase 2.2 REQ-B02: set UNICO di componenti condivisi (vedi
+  // src/components/card/CardFormFields.tsx). Niente più JSX duplicato
+  // desktop/mobile. Le sezioni sono: Fronte, Foto/Logo, Retro,
+  // Servizi, Social, Opzioni QR, Stile.
   const formAndActionsContent = useMemo(() => (
     <>
+      <CardFrontFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
+      <CardMediaFields
+        card={card}
+        patchFront={patchFront}
+        patchBack={patchBack}
+        patchStyle={patchStyle}
+        onUpload={handleUpload}
+        onRemovePhoto={removePhoto}
+        onRemoveLogo={removeLogo}
+        uploadError={uploadError}
+      />
+      <CardBackFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
       <fieldset className="card-fieldset">
-        <legend>Fronte</legend>
-        <label className="card-field">
-          <span>Nome (fronte)</span>
-          <input
-            type="text"
-            value={card.front.name}
-            onChange={(e) => patchFront({ name: e.target.value })}
-            aria-label="Nome (fronte)"
-          />
-        </label>
-        <label className="card-field">
-          <span>Ruolo (fronte)</span>
-          <input
-            type="text"
-            value={card.front.title}
-            onChange={(e) => patchFront({ title: e.target.value })}
-            aria-label="Ruolo (fronte)"
-          />
-        </label>
-        <label className="card-field">
-          <span>Azienda (fronte)</span>
-          <input
-            type="text"
-            value={card.front.company}
-            onChange={(e) => patchFront({ company: e.target.value })}
-            aria-label="Azienda (fronte)"
-          />
-        </label>
-        <label className="card-field">
-          <span>Layout fronte</span>
-          <select
-            value={card.front.layout}
-            onChange={(e) => patchFront({ layout: e.target.value as BusinessCardLayout })}
-            aria-label="Layout fronte"
-          >
-            {Object.entries(LAYOUT_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-        </label>
+        <legend>Servizi e social</legend>
+        <CardServicesFields
+          services={card.back.services ?? []}
+          servicesLabel={card.back.servicesLabel ?? ''}
+          updateService={updateService}
+          addService={addService}
+          removeService={removeService}
+          patchBack={patchBack}
+          socials={card.back.socials}
+          updateSocial={updateSocial}
+          addSocial={addSocial}
+          removeSocial={removeSocial}
+        />
+        <CardSocialsFields
+          services={card.back.services ?? []}
+          servicesLabel={card.back.servicesLabel ?? ''}
+          socials={card.back.socials}
+          updateSocial={updateSocial}
+          addSocial={addSocial}
+          removeSocial={removeSocial}
+          updateService={updateService}
+          addService={addService}
+          removeService={removeService}
+          patchBack={patchBack}
+        />
       </fieldset>
-      <fieldset className="card-fieldset">
-        <legend>Retro</legend>
-        <label className="card-field">
-          <span>Telefono (retro)</span>
-          <input
-            type="text"
-            value={card.back.phone}
-            onChange={(e) => patchBack({ phone: e.target.value })}
-            aria-label="Telefono (retro)"
-          />
-        </label>
-        <label className="card-field">
-          <span>Email (retro)</span>
-          <input
-            type="text"
-            value={card.back.email}
-            onChange={(e) => patchBack({ email: e.target.value })}
-            aria-label="Email (retro)"
-          />
-        </label>
-        <label className="card-field">
-          <span>Sito web (http:// o https://)</span>
-          <input
-            type="text"
-            value={card.back.website}
-            onChange={(e) => patchBack({ website: e.target.value })}
-            aria-label="Sito web"
-            placeholder="https://..."
-          />
-        </label>
-        <label className="card-field">
-          <span>Indirizzo</span>
-          <input
-            type="text"
-            value={card.back.address}
-            onChange={(e) => patchBack({ address: e.target.value })}
-            aria-label="Indirizzo"
-          />
-        </label>
-        <label className="card-field">
-          <span>P.IVA</span>
-          <input
-            type="text"
-            value={card.back.vatNumber}
-            onChange={(e) => patchBack({ vatNumber: e.target.value })}
-            aria-label="P.IVA"
-          />
-        </label>
-      </fieldset>
+      <CardQrAdvanced card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
+      <CardStyleFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
     </>
-  ), [card.front, card.back, patchFront, patchBack]);
+  ), [card, patchFront, patchBack, patchStyle, handleUpload, removePhoto, removeLogo, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial]);
 
   return (
     <div className="card-editor">
@@ -695,6 +588,9 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
           placeholder="Titolo del bigliettino"
           aria-label="Titolo del bigliettino"
         />
+        <button type="button" className="card-reset-btn" onClick={resetCard}>
+          Nuovo / reset
+        </button>
       </header>
 
       {showTemplateBanner && (
@@ -714,55 +610,23 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
               label: 'Anteprima',
               content: (
                 <div className="card-editor-preview" aria-label="Anteprima bigliettino">
-                  <div className="card-editor-preview-header">
-                    <h2>Anteprima</h2>
-                    <div className="card-editor-preview-toolbar">
-                      <CardPreviewZoomControls
-                        zoom={previewZoom.zoom}
-                        canZoomIn={previewZoom.canZoomIn()}
-                        canZoomOut={previewZoom.canZoomOut()}
-                        onZoomIn={previewZoom.zoomIn}
-                        onZoomOut={previewZoom.zoomOut}
-                        onReset={previewZoom.reset}
-                      />
-                      <button
-                        type="button"
-                        className={`card-grid-toggle ${showGrid ? 'active' : ''}`}
-                        onClick={() => setShowGrid((v) => !v)}
-                        title={showGrid ? 'Nascondi griglia' : 'Mostra griglia'}
-                        aria-label={showGrid ? 'Nascondi griglia' : 'Mostra griglia'}
-                        aria-pressed={showGrid}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="3" y="3" width="7" height="7" />
-                          <rect x="14" y="3" width="7" height="7" />
-                          <rect x="3" y="14" width="7" height="7" />
-                          <rect x="14" y="14" width="7" height="7" />
-                        </svg>
-                        <span>{showGrid ? 'Griglia ON' : 'Griglia OFF'}</span>
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    className="card-previews"
-                    style={{
-                      transform: `scale(${previewZoom.zoom})`,
-                      transformOrigin: 'top center',
-                    }}
-                  >
-                    <div className="card-preview-wrap">
-                      <h3>Fronte</h3>
-                      <CardPreview side="front" card={card} showGrid={showGrid} tier={tier} />
-                    </div>
-                    <div className="card-preview-wrap">
-                      <h3>Retro</h3>
-                      <CardPreview side="back" card={card} showGrid={showGrid} tier={tier} />
-                    </div>
-                  </div>
+                  <CardPreviewSurface
+                    card={card}
+                    tier={tier}
+                    showGrid={showGrid}
+                    onToggleGrid={handleToggleShowGrid}
+                    zoom={previewZoom}
+                    heading="Anteprima"
+                  />
                   <MobileGridEditor
-                    grid={card.backGrid ?? gridPresetBackDefault()}
-                    onChange={(g) => patchGrid(g)}
-                    side="back"
+                    card={card}
+                    side={gridEditorSide}
+                    gridEnabled={showGrid}
+                    selected={selectedGridElement}
+                    onSelect={setSelectedGridElement}
+                    onChangeSide={(s) => { setGridEditorSide(s); setSelectedGridElement(''); }}
+                    onChangeGrid={patchGrid}
+                    onAfterMove={handleAfterMove}
                   />
                 </div>
               ),
@@ -781,54 +645,18 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
               label: 'AI',
               content: (
                 <div className="card-ai-mobile-content">
-                  <label className="card-field">
-                    <span>Modello AI</span>
-                    <select
-                      value={aiModel}
-                      onChange={(e) => setAiModel(e.target.value)}
-                      aria-label="Modello AI"
-                    >
-                      {availableModels.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name} — {m.model}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="card-field card-ai-textarea">
-                    <span>Prompt AI personalizzato</span>
-                    <textarea
-                      value={aiText}
-                      onChange={(e) => setAiText(e.target.value)}
-                      rows={4}
-                      placeholder="Es. Rendi premium..."
-                      aria-label="Prompt AI personalizzato"
-                    />
-                  </label>
-                  <div className="card-ai-actions">
-                    <button type="button" onClick={() => runCardAI('premium')} disabled={isCardProcessing}>Rendi premium</button>
-                    <button type="button" onClick={() => runCardAI('minimal')} disabled={isCardProcessing}>Minimal</button>
-                    <button type="button" onClick={() => runCardAI('fill')} disabled={isCardProcessing}>Compila da nome</button>
-                    <button type="button" onClick={() => runCardAI('palette')} disabled={isCardProcessing}>Cambia palette</button>
-                    <button type="button" onClick={() => runCardAI('print')} disabled={isCardProcessing}>Ottimizza per stampa</button>
-                    <button type="button" onClick={() => runCardAI('moveQr')} disabled={isCardProcessing}>← Sposta QR</button>
-                    <button type="button" onClick={() => runCardAI('growPhoto')} disabled={isCardProcessing}>↔ Allarga foto</button>
-                  </div>
-                  <button
-                    type="button"
-                    className="card-ai-apply"
-                    onClick={() => runCardAI('custom')}
-                    disabled={isCardProcessing || !aiText.trim()}
-                  >
-                    Applica prompt personalizzato
-                  </button>
-                  <button
-                    type="button"
-                    className="card-ai-reset"
-                    onClick={resetCardChat}
-                    disabled={isCardProcessing}
-                  >
-                    Nuova conversazione
-                  </button>
-                  <AILogPanel logs={cardAiLogs} isProcessing={isCardProcessing} />
+                  <CardAIControls
+                    variant="mobile"
+                    aiModel={aiModel}
+                    onModelChange={setAiModel}
+                    aiText={aiText}
+                    onTextChange={setAiText}
+                    availableModels={availableModels}
+                    isProcessing={isCardProcessing}
+                    onRun={runCardAI}
+                    onReset={resetCardChat}
+                    logs={cardAiLogs}
+                  />
                 </div>
               ),
             },
@@ -838,322 +666,10 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
 
       {!isMobile && (
       <div className="card-editor-3col">
-        {/* COLONNA 1: FORM */}
+        {/* COLONNA 1: FORM (Phase 2.2 REQ-B02: riusa lo stesso set di
+         * componenti della tab mobile "Modifica", zero duplicazione). */}
         <section className="card-editor-form" aria-label="Configurazione bigliettino">
-          <fieldset className="card-fieldset">
-            <legend>Fronte</legend>
-            <label className="card-field">
-              <span>Nome (fronte)</span>
-              <input
-                type="text"
-                value={card.front.name}
-                onChange={(e) => patchFront({ name: e.target.value })}
-                aria-label="Nome (fronte)"
-              />
-            </label>
-            <label className="card-field">
-              <span>Ruolo (fronte)</span>
-              <input
-                type="text"
-                value={card.front.title}
-                onChange={(e) => patchFront({ title: e.target.value })}
-                aria-label="Ruolo (fronte)"
-              />
-            </label>
-            <label className="card-field">
-              <span>Azienda (fronte)</span>
-              <input
-                type="text"
-                value={card.front.company}
-                onChange={(e) => patchFront({ company: e.target.value })}
-                aria-label="Azienda (fronte)"
-              />
-            </label>
-            <label className="card-field">
-              <span>Layout fronte</span>
-              <select
-                value={card.front.layout}
-                onChange={(e) => patchFront({ layout: e.target.value as BusinessCardLayout })}
-                aria-label="Layout fronte"
-              >
-                {Object.entries(LAYOUT_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-            </label>
-
-            <div className="card-field">
-              <span>Foto (fronte)</span>
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/svg+xml"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleUpload(file, 'photoUrl');
-                }}
-                aria-label="Carica foto (fronte)"
-              />
-              {card.front.photoUrl && (
-                <button type="button" className="card-remove-image" onClick={removePhoto}>Rimuovi foto</button>
-              )}
-            </div>
-
-            <div className="card-field">
-              <span>Logo (fronte)</span>
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/svg+xml"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleUpload(file, 'logoUrl');
-                }}
-                aria-label="Carica logo (fronte)"
-              />
-              {card.front.logoUrl && (
-                <>
-                  <button type="button" className="card-remove-image" onClick={removeLogo}>Rimuovi logo</button>
-                  <label className="card-field" style={{ marginTop: 8 }}>
-                    <span>Sfondo logo</span>
-                    <select
-                      value={card.front.logoBackground ?? 'none'}
-                      onChange={(e) => patchFront({ logoBackground: e.target.value as 'none' | 'card' })}
-                      aria-label="Sfondo del logo"
-                    >
-                      <option value="none">Nessuno (trasparente)</option>
-                      <option value="card">Colore del bigliettino</option>
-                    </select>
-                  </label>
-                </>
-              )}
-            </div>
-
-            {uploadError && <p className="card-warning" role="alert">{uploadError}</p>}
-          </fieldset>
-
-          <fieldset className="card-fieldset">
-            <legend>Retro</legend>
-            <label className="card-field">
-              <span>Telefono (retro)</span>
-              <input
-                type="tel"
-                value={card.back.phone}
-                onChange={(e) => patchBack({ phone: e.target.value })}
-                aria-label="Telefono (retro)"
-              />
-            </label>
-            <label className="card-field">
-              <span>Email (retro)</span>
-              <input
-                type="email"
-                value={card.back.email}
-                onChange={(e) => patchBack({ email: e.target.value })}
-                aria-label="Email (retro)"
-              />
-            </label>
-            <label className="card-field">
-              <span>Sito web (http:// o https://)</span>
-              <input
-                type="url"
-                value={card.back.website}
-                onChange={(e) => patchBack({ website: e.target.value })}
-                aria-invalid={!websiteValid}
-                aria-label="Sito web"
-              />
-              {!websiteValid && <small className="card-warning">URL non valido. Includi http:// o https://</small>}
-            </label>
-            <label className="card-field">
-              <span>Indirizzo</span>
-              <input
-                type="text"
-                value={card.back.address}
-                onChange={(e) => patchBack({ address: e.target.value })}
-                aria-label="Indirizzo"
-              />
-            </label>
-            <label className="card-field">
-              <span>P.IVA</span>
-              <input
-                type="text"
-                value={card.back.vatNumber}
-                onChange={(e) => patchBack({ vatNumber: e.target.value })}
-                aria-label="P.IVA"
-              />
-            </label>
-
-            <div className="card-field" data-testid="card-services-field">
-              <span>Servizi offerti (max 8)</span>
-              <p className="card-field-hint" style={{ fontSize: '.72rem', color: '#647086', margin: '2px 0 6px' }}>
-                Es. "Web Design", "SEO", "Consulenza" — visualizzati sul retro
-              </p>
-              {(card.back.services ?? []).map((svc, idx) => (
-                <div key={idx} className="card-social-row">
-                  <input
-                    type="text"
-                    value={svc}
-                    onChange={(e) => updateService(idx, e.target.value)}
-                    placeholder={`Servizio ${idx + 1}`}
-                    maxLength={80}
-                    aria-label={`Servizio ${idx + 1}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeService(idx)}
-                    aria-label={`Rimuovi servizio ${idx + 1}`}
-                  >×</button>
-                </div>
-              ))}
-              {(card.back.services ?? []).length < 8 && (
-                <button
-                  type="button"
-                  onClick={addService}
-                  className="card-add-social"
-                  data-testid="card-add-service"
-                >+ Aggiungi servizio</button>
-              )}
-            </div>
-
-            <div className="card-field">
-              <span>Social (opzionali)</span>
-              {card.back.socials.map((s, idx) => {
-                const knownPlatform = SOCIAL_PLATFORMS.find((p) => p.value === s.platform);
-                const isAltro = !knownPlatform;
-                return (
-                  <div key={idx} className="card-social-row">
-                    <select
-                      value={knownPlatform ? knownPlatform.value : '__altro__'}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === '__altro__') {
-                          updateSocial(idx, 'platform', '__altro__');
-                        } else {
-                          updateSocial(idx, 'platform', v);
-                        }
-                      }}
-                      aria-label={`Social ${idx + 1} piattaforma`}
-                    >
-                      {SOCIAL_PLATFORMS.map((p) => (
-                        <option key={p.value || 'empty'} value={p.value}>{p.label}</option>
-                      ))}
-                      <option value="__altro__">Altro</option>
-                    </select>
-                    {isAltro ? (
-                      <input
-                        type="text"
-                        value={s.platform === '__altro__' ? '' : s.platform}
-                        onChange={(e) => updateSocial(idx, 'platform', e.target.value || '__altro__')}
-                        placeholder="Nome piattaforma (es. Mastodon)"
-                        aria-label={`Altra piattaforma ${idx + 1}`}
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value={s.url}
-                        onChange={(e) => updateSocial(idx, 'url', e.target.value)}
-                        placeholder="@username o URL"
-                        aria-label={`Social ${idx + 1} URL`}
-                      />
-                    )}
-                    <button type="button" onClick={() => removeSocial(idx)} aria-label={`Rimuovi social ${idx + 1}`}>×</button>
-                  </div>
-                );
-              })}
-              <button type="button" onClick={addSocial} className="card-add-social">+ Aggiungi social</button>
-            </div>
-          </fieldset>
-
-          <details className="card-advanced-qr" data-testid="qr-advanced-details">
-            <summary>Opzioni QR avanzate</summary>
-            <label className="card-field">
-              <span>Payload QR (override manuale)</span>
-              <input
-                type="text"
-                name="qrPayload"
-                value={card.back.qrPayload}
-                onChange={(e) => patchBack({ qrPayload: e.target.value })}
-                placeholder="Lascia vuoto per usare il sito web"
-                aria-label="Payload QR"
-              />
-            </label>
-            <label className="card-field">
-              <span>Etichetta sotto il QR</span>
-              <input
-                type="text"
-                name="qrLabel"
-                value={card.back.qrLabel}
-                onChange={(e) => patchBack({ qrLabel: e.target.value })}
-                placeholder="Es. Scansiona per visitare il sito"
-                aria-label="Etichetta QR"
-              />
-            </label>
-          </details>
-
-          <fieldset className="card-fieldset">
-            <legend>Stile</legend>
-            <div className="card-row-2">
-              <label className="card-field">
-                <span>Formato bigliettino</span>
-                <select
-                  value={card.style.sizePreset}
-                  onChange={(e) => patchStyle({ sizePreset: e.target.value as BusinessCardSizePreset })}
-                  aria-label="Formato bigliettino"
-                >
-                  {Object.entries(SIZE_PRESET_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="card-field">
-                <span>Stile bordo</span>
-                <select
-                  value={card.style.borderStyle}
-                  onChange={(e) => patchStyle({ borderStyle: e.target.value as BusinessCardBorderStyle })}
-                  aria-label="Stile bordo"
-                >
-                  {Object.entries(BORDER_LABELS).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="card-color-row">
-              <label className="card-color-cell">
-                <span>Sfondo</span>
-                <div className="card-color-pill">
-                  <input
-                    type="color"
-                    value={card.style.bgColor}
-                    onChange={(e) => patchStyle({ bgColor: e.target.value })}
-                    aria-label="Colore sfondo"
-                  />
-                  <code>{card.style.bgColor.toUpperCase()}</code>
-                </div>
-              </label>
-              <label className="card-color-cell">
-                <span>Testo</span>
-                <div className="card-color-pill">
-                  <input
-                    type="color"
-                    value={card.style.textColor}
-                    onChange={(e) => patchStyle({ textColor: e.target.value })}
-                    aria-label="Colore testo"
-                  />
-                  <code>{card.style.textColor.toUpperCase()}</code>
-                </div>
-              </label>
-              <label className="card-color-cell">
-                <span>Accento</span>
-                <div className="card-color-pill">
-                  <input
-                    type="color"
-                    value={card.style.accentColor}
-                    onChange={(e) => patchStyle({ accentColor: e.target.value })}
-                    aria-label="Colore accento"
-                  />
-                  <code>{card.style.accentColor.toUpperCase()}</code>
-                </div>
-              </label>
-            </div>
-          </fieldset>
+          {formAndActionsContent}
 
           <div className="card-actions">
             <button type="button" onClick={handleSave} className="card-action-primary">Salva</button>
@@ -1168,12 +684,12 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
               </button>
               {exportMenuOpen && (
                 <ul className="card-export-list" role="menu">
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportPdf(); }}>PDF 10-up (A4, pronto tipografia)</li>
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportPng('front'); }}>PNG fronte (300 DPI)</li>
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportPng('back'); }}>PNG retro (300 DPI)</li>
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportSvg('front'); }}>SVG fronte (vettoriale, editabile)</li>
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportSvg('back'); }}>SVG retro (vettoriale, editabile)</li>
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportJson(); }}>JSON (backup card data)</li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); void exportPdf(); }}>PDF 10-up (A4, pronto tipografia)</button></li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); void exportPng('front'); }}>PNG fronte (300 DPI)</button></li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); void exportPng('back'); }}>PNG retro (300 DPI)</button></li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); exportSvg('front'); }}>SVG fronte (vettoriale, editabile)</button></li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); exportSvg('back'); }}>SVG retro (vettoriale, editabile)</button></li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); exportJson(); }}>JSON (backup card data)</button></li>
                 </ul>
               )}
             </div>
@@ -1185,121 +701,34 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
 
         {/* COLONNA 2: PREVIEW */}
         <section className="card-editor-preview" aria-label="Anteprima bigliettino">
-          <div className="card-editor-preview-header">
-            <h2>Anteprima</h2>
-            <div className="card-editor-preview-toolbar">
-              <CardPreviewZoomControls
-                zoom={previewZoom.zoom}
-                canZoomIn={previewZoom.canZoomIn()}
-                canZoomOut={previewZoom.canZoomOut()}
-                onZoomIn={previewZoom.zoomIn}
-                onZoomOut={previewZoom.zoomOut}
-                onReset={previewZoom.reset}
-              />
-              <button
-                type="button"
-                className={`card-grid-toggle ${showGrid ? 'active' : ''}`}
-                onClick={() => setShowGrid((v) => !v)}
-                title={showGrid ? 'Nascondi griglia' : 'Mostra griglia'}
-                aria-label={showGrid ? 'Nascondi griglia' : 'Mostra griglia'}
-                aria-pressed={showGrid}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="7" height="7" />
-                  <rect x="14" y="3" width="7" height="7" />
-                  <rect x="3" y="14" width="7" height="7" />
-                  <rect x="14" y="14" width="7" height="7" />
-                </svg>
-                <span>{showGrid ? 'Griglia ON' : 'Griglia OFF'}</span>
-              </button>
-            </div>
-          </div>
-          <div
-            className="card-previews"
-            style={{
-              transform: `scale(${previewZoom.zoom})`,
-              transformOrigin: 'top center',
-            }}
-          >
-            <div className="card-preview-wrap">
-              <h3>Fronte</h3>
-              <CardPreview side="front" card={card} showGrid={showGrid} tier={tier} />
-            </div>
-            <div className="card-preview-wrap">
-              <h3>Retro</h3>
-              <CardPreview side="back" card={card} showGrid={showGrid} tier={tier} />
-            </div>
-          </div>
+          <CardPreviewSurface
+            card={card}
+            tier={tier}
+            showGrid={showGrid}
+            onToggleGrid={handleToggleShowGrid}
+            zoom={previewZoom}
+            heading="Anteprima"
+          />
 
-          {/* B2: Grid editor manuale — Phase 2.1: per lato (front/back) */}
-          <div className="card-grid-editor" data-testid="card-grid-editor">
-            <div className="card-grid-editor-title">Sposta elementi sulla griglia</div>
-            <label className="card-field">
-              <span>Lato</span>
-              <select
-                value={gridEditorSide}
-                onChange={(e) => {
-                  setGridEditorSide(e.target.value as 'front' | 'back');
-                  setSelectedGridElement('');
-                }}
-                aria-label="Lato griglia"
-                data-testid="grid-editor-side"
-              >
-                <option value="front">Fronte (foto, nome, ruolo, azienda, logo)</option>
-                <option value="back">Retro (contatti, QR, social)</option>
-              </select>
-            </label>
-            <label className="card-field">
-              <span>Elemento selezionato</span>
-              <select
-                value={selectedGridElement}
-                onChange={(e) => setSelectedGridElement(e.target.value as keyof CardGrid['elements'])}
-                aria-label="Elemento selezionato"
-              >
-                <option value="">—</option>
-                {availableGridElements.map((el) => (
-                  <option key={el.value} value={el.value}>{el.label}</option>
-                ))}
-                {availableGridElements.length === 0 && (
-                  <option value="" disabled>Nessun elemento con contenuto</option>
-                )}
-              </select>
-            </label>
-            <label className="card-field">
-              <span>Preset griglia</span>
-              <select
-                value={gridPresetChoice}
-                onChange={(e) => {
-                  const v = e.target.value as 'left' | 'centered' | 'split';
-                  setGridPresetChoice(v);
-                  applyGridPreset(v);
-                }}
-                aria-label="Preset griglia"
-              >
-                {gridEditorSide === 'front' ? (
-                  <>
-                    <option value="left">Sinistra (foto a sx)</option>
-                    <option value="centered">Centrato</option>
-                    <option value="split">Diviso (testo + logo)</option>
-                  </>
-                ) : (
-                  <option value="split">Default retro (contatti + QR)</option>
-                )}
-              </select>
-            </label>
-            <div className="card-grid-arrows" role="group" aria-label="Sposta elemento">
-              <button type="button" onClick={() => moveSelectedElement(-1, 0)} disabled={!canMoveLeft} aria-label="Sposta a sinistra" title={canMoveLeft ? 'Sposta a sinistra' : 'Limite raggiunto (colonna 0)'}><span aria-hidden="true">←</span></button>
-              <button type="button" onClick={() => moveSelectedElement(0, -1)} disabled={!canMoveUp} aria-label="Sposta su" title={canMoveUp ? 'Sposta su' : 'Limite raggiunto (riga 0)'}><span aria-hidden="true">↑</span></button>
-              <button type="button" onClick={() => moveSelectedElement(0, 1)} disabled={!canMoveDown} aria-label="Sposta giù" title={canMoveDown ? 'Sposta giù' : 'Limite raggiunto (ultima riga)'}><span aria-hidden="true">↓</span></button>
-              <button type="button" onClick={() => moveSelectedElement(1, 0)} disabled={!canMoveRight} aria-label="Sposta a destra" title={canMoveRight ? 'Sposta a destra' : 'Limite raggiunto (ultima colonna)'}><span aria-hidden="true">→</span></button>
-            </div>
-            <div className="card-grid-resize" role="group" aria-label="Ridimensiona elemento">
-              <button type="button" onClick={() => resizeSelectedElement(-1, 0)} disabled={!canShrinkW} aria-label="Riduci larghezza" title={canShrinkW ? 'Riduci larghezza' : 'Limite raggiunto (larghezza minima 1)'}><span aria-hidden="true">−↔</span></button>
-              <button type="button" onClick={() => resizeSelectedElement(1, 0)} disabled={!canGrowW} aria-label="Aumenta larghezza" title={canGrowW ? 'Aumenta larghezza' : 'Limite raggiunto (bordo destro della griglia)'}><span aria-hidden="true">+↔</span></button>
-              <button type="button" onClick={() => resizeSelectedElement(0, -1)} disabled={!canShrinkH} aria-label="Riduci altezza" title={canShrinkH ? 'Riduci altezza' : 'Limite raggiunto (altezza minima 1)'}><span aria-hidden="true">−↕</span></button>
-              <button type="button" onClick={() => resizeSelectedElement(0, 1)} disabled={!canGrowH} aria-label="Aumenta altezza" title={canGrowH ? 'Aumenta altezza' : 'Limite raggiunto (bordo inferiore della griglia)'}><span aria-hidden="true">+↕</span></button>
-            </div>
-          </div>
+          {/* Phase 2.2 REQ-B02: grid editor condiviso (vedi card/CardGridControls).
+           * Sostituisce l'inline duplicato (lato + elemento + preset + frecce
+           * + resize) e gestisce: gating del master switch, filtro per
+           * contenuto, cols/rows, clamp graduale, toast feedback via onAfterMove. */}
+          <CardGridControls
+            card={card}
+            side={gridEditorSide}
+            gridEnabled={showGrid}
+            onSideChange={(s) => {
+              setGridEditorSide(s);
+              setSelectedGridElement('');
+            }}
+            onChangeGrid={patchGrid}
+            onApplyPreset={applyGridPreset}
+            selected={selectedGridElement}
+            onSelect={setSelectedGridElement}
+            onAfterMove={handleAfterMove}
+            onAfterResize={handleAfterResize}
+          />
         </section>
 
         {/* COLONNA 3: AI PANEL (collapsible) */}
@@ -1316,44 +745,18 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
               </button>
             </div>
-            <div className="card-ai-model-row">
-              <label className="card-field">
-                <span>Modello AI</span>
-                <select value={aiModel} onChange={(e) => setAiModel(e.target.value)} aria-label="Modello AI">
-                  {availableModels.length > 0 ? availableModels.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name} — {m.model}</option>
-                  )) : (
-                    <option value="deepseek-chat">DeepSeek Chat</option>
-                  )}
-                </select>
-              </label>
-            </div>
-            <textarea
-              className="card-ai-textarea"
-              value={aiText}
-              onChange={(e) => setAiText(e.target.value)}
-              aria-label="Prompt AI personalizzato"
-              placeholder="Es. Rendi premium, cambia palette in navy, sposta il QR a sinistra..."
-              rows={2}
+            <CardAIControls
+              variant="desktop"
+              aiModel={aiModel}
+              onModelChange={setAiModel}
+              aiText={aiText}
+              onTextChange={setAiText}
+              availableModels={availableModels}
+              isProcessing={isCardProcessing}
+              onRun={runCardAI}
+              onReset={resetCardChat}
+              logs={cardAiLogs}
             />
-            <div className="card-ai-actions">
-              <button type="button" onClick={() => runCardAI('premium')} disabled={isCardProcessing}>Rendi premium</button>
-              <button type="button" onClick={() => runCardAI('minimal')} disabled={isCardProcessing}>Minimal</button>
-              <button type="button" onClick={() => runCardAI('fill')} disabled={isCardProcessing}>Compila da nome</button>
-              <button type="button" onClick={() => runCardAI('palette')} disabled={isCardProcessing}>Cambia palette</button>
-              <button type="button" onClick={() => runCardAI('print')} disabled={isCardProcessing}>Ottimizza per stampa</button>
-              <button type="button" onClick={() => runCardAI('moveQr')} disabled={isCardProcessing} title="Sposta il QR a sinistra">← Sposta QR</button>
-              <button type="button" onClick={() => runCardAI('growPhoto')} disabled={isCardProcessing} title="Allarga la foto">↔ Allarga foto</button>
-            </div>
-            <div className="card-ai-extra">
-              <button type="button" className="card-action-primary" onClick={() => runCardAI('custom')} disabled={isCardProcessing}>
-                {isCardProcessing ? 'Elaborazione...' : 'Applica prompt personalizzato'}
-              </button>
-              <button type="button" className="card-ai-reset" onClick={resetCardChat} disabled={isCardProcessing}>
-                Nuova conversazione
-              </button>
-            </div>
-            <AILogPanel logs={cardAiLogs} isProcessing={isCardProcessing} />
           </section>
         ) : (
           <button
@@ -1403,24 +806,12 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
               </button>
               {exportMenuOpen && (
                 <ul className="card-mobile-export-menu" role="menu">
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportPdf(); }}>
-                    {exporting === 'pdf' ? 'Esportando…' : 'PDF 10-up (tipografia)'}
-                  </li>
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportPng('front'); }}>
-                    {exporting === 'png-front' ? 'Esportando…' : 'PNG fronte'}
-                  </li>
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportPng('back'); }}>
-                    PNG retro
-                  </li>
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportSvg('front'); }}>
-                    SVG fronte (vettoriale, editabile)
-                  </li>
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportSvg('back'); }}>
-                    SVG retro (vettoriale, editabile)
-                  </li>
-                  <li role="menuitem" onClick={() => { setExportMenuOpen(false); exportJson(); }}>
-                    JSON (backup card data)
-                  </li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); void exportPdf(); }}>{exporting === 'pdf' ? 'Esportando…' : 'PDF 10-up (tipografia)'}</button></li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); void exportPng('front'); }}>{exporting === 'png-front' ? 'Esportando…' : 'PNG fronte'}</button></li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); void exportPng('back'); }}>PNG retro</button></li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); exportSvg('front'); }}>SVG fronte (vettoriale, editabile)</button></li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); exportSvg('back'); }}>SVG retro (vettoriale, editabile)</button></li>
+                  <li><button type="button" role="menuitem" onClick={() => { setExportMenuOpen(false); exportJson(); }}>JSON (backup card data)</button></li>
                 </ul>
               )}
             </div>
@@ -1444,54 +835,18 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
                   title="Chiudi"
                 >×</button>
               </div>
-              <label className="card-field">
-                <span>Modello AI</span>
-                <select
-                  value={aiModel}
-                  onChange={(e) => setAiModel(e.target.value)}
-                  aria-label="Modello AI"
-                >
-                  {availableModels.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name} — {m.model}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="card-field card-ai-textarea">
-                <span>Prompt AI personalizzato</span>
-                <textarea
-                  value={aiText}
-                  onChange={(e) => setAiText(e.target.value)}
-                  rows={4}
-                  placeholder="Es. Rendi premium, cambia palette in navy, sposta il QR a sinistra..."
-                  aria-label="Prompt AI personalizzato"
-                />
-              </label>
-              <div className="card-ai-actions">
-                <button type="button" onClick={() => runCardAI('premium')} disabled={isCardProcessing}>Rendi premium</button>
-                <button type="button" onClick={() => runCardAI('minimal')} disabled={isCardProcessing}>Minimal</button>
-                <button type="button" onClick={() => runCardAI('fill')} disabled={isCardProcessing}>Compila da nome</button>
-                <button type="button" onClick={() => runCardAI('palette')} disabled={isCardProcessing}>Cambia palette</button>
-                <button type="button" onClick={() => runCardAI('print')} disabled={isCardProcessing}>Ottimizza per stampa</button>
-                <button type="button" onClick={() => runCardAI('moveQr')} disabled={isCardProcessing} title="Sposta il QR a sinistra">← Sposta QR</button>
-                <button type="button" onClick={() => runCardAI('growPhoto')} disabled={isCardProcessing} title="Allarga la foto">↔ Allarga foto</button>
-              </div>
-              <button
-                type="button"
-                className="card-ai-apply"
-                onClick={() => runCardAI('custom')}
-                disabled={isCardProcessing || !aiText.trim()}
-              >
-                Applica prompt personalizzato
-              </button>
-              <button
-                type="button"
-                className="card-ai-reset"
-                onClick={resetCardChat}
-                disabled={isCardProcessing}
-              >
-                Nuova conversazione
-              </button>
-              <AILogPanel logs={cardAiLogs} isProcessing={isCardProcessing} />
+              <CardAIControls
+                variant="mobile"
+                aiModel={aiModel}
+                onModelChange={setAiModel}
+                aiText={aiText}
+                onTextChange={setAiText}
+                availableModels={availableModels}
+                isProcessing={isCardProcessing}
+                onRun={runCardAI}
+                onReset={resetCardChat}
+                logs={cardAiLogs}
+              />
             </div>
           </CardAIBottomSheet>
         </>

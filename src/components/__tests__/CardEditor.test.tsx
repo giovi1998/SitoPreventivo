@@ -111,6 +111,14 @@ describe('CardEditor', () => {
     expect(nameInput.value).toBe('MARIO ROSSI');
   });
 
+  it('reset button clears the card and restores empty state', () => {
+    renderEditor({ initialCard: createGiovanniCardTemplate() });
+    expect((screen.getByLabelText(/Nome \(fronte\)/i) as HTMLInputElement).value).toBe('GIOVANNI CIDU');
+    fireEvent.click(screen.getByRole('button', { name: /Nuovo \/ reset/i }));
+    expect((screen.getByLabelText(/Nome \(fronte\)/i) as HTMLInputElement).value).toBe('');
+    expect(screen.getByText(/Usa template personale di Giovanni/i)).toBeInTheDocument();
+  });
+
   it('changes front.layout and re-renders preview with new class (AC-003)', () => {
     renderEditor();
     const select = screen.getByLabelText(/Layout fronte/i) as HTMLSelectElement;
@@ -419,8 +427,68 @@ describe('CardEditor', () => {
       expect(screen.getByRole('button', { name: /Sposta giù/i })).toBeInTheDocument();
     });
 
+    it('element selector is DISABLED when grid is OFF, ENABLED when ON (fix chicken-and-egg)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      // Grid OFF (default) → disabilitato + hint visibile
+      expect(elSelect).toBeDisabled();
+      expect(screen.getByTestId('grid-editor-disabled-hint')).toBeInTheDocument();
+      // Grid ON → abilitato anche se nessun elemento è selezionato
+      fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
+      expect(elSelect).not.toBeDisabled();
+      // E ora posso selezionare il primo elemento (era impossibile col bug !selected)
+      fireEvent.change(elSelect, { target: { value: 'photo' } });
+      expect(elSelect.value).toBe('photo');
+    });
+
+    it('preset selector is enabled when grid ON and applies a front-split grid WITH photo (fix)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      expect(presetSelect).not.toBeDisabled();
+      // Applica preset "split" → la foto deve restare nella preview grid
+      fireEvent.change(presetSelect, { target: { value: 'split' } });
+      const front = screen.getByTestId('card-preview-front');
+      expect(front.className).toContain('grid-mode');
+      // photo presente come grid element (regression: prima il preset split front la perdeva)
+      expect(document.querySelector('[data-testid="grid-el-photo"]')).not.toBeNull();
+    });
+
+    it('preset selection persists in the dropdown after applying (fix: non si resetta)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      // Il dropdown deve restare su "centered", non tornare a "— seleziona preset —"
+      expect(presetSelect.value).toBe('centered');
+    });
+
+    it('applying a preset SOSTITUISCE la grid (no duplicati di elementi come logo)', () => {
+      // Giovanni template ha grid con logo a (2, 3, 1, 1). Applico preset
+      // 'centered' che mette logo a (3, 3, 1, 1). Il merge precedente
+      // lasciava il logo vecchio + aggiungeva quello nuovo = 2 loghi visibili.
+      const card = createGiovanniCardTemplate();
+      expect(card.grid?.elements.logo).toEqual({ x: 2, y: 3, w: 1, h: 1 });
+      renderEditor({ initialCard: card });
+      // Attiva griglia (init-from-layout) + seleziona centered
+      fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      // Verifica che la preview mostri UN SOLO logo (grid centered ha 1 logo)
+      const front = screen.getByTestId('card-preview-front');
+      expect(front.className).toContain('grid-mode');
+      // Dopo centered: logo a (3, 3, 1, 1)
+      const grid = front.querySelector('[data-testid="grid-el-logo"]') as HTMLElement;
+      expect(grid).not.toBeNull();
+      expect(window.getComputedStyle(grid).gridColumn).toBe('4 / span 1');
+      expect(window.getComputedStyle(grid).gridRow).toBe('4 / span 1');
+    });
+
     it('moves the selected element left when ← is pressed', () => {
       renderEditor();
+      // Phase 2.2 REQ-E01: attivare il master switch prima di poter spostare
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(nameSelect, { target: { value: 'name' } });
       const leftBtn = screen.getByRole('button', { name: /Sposta a sinistra/i });
@@ -438,6 +506,9 @@ describe('CardEditor', () => {
 
     it('resizes selected element with +/- buttons', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      // Phase 2.2 REQ-E01: attivare il master switch prima
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(nameSelect, { target: { value: 'photo' } });
       const plus = screen.getByRole('button', { name: /Aumenta larghezza/i });
@@ -452,7 +523,8 @@ describe('CardEditor', () => {
       // x=0 → canMoveLeft = false
       const leftBtn = screen.getByRole('button', { name: /Sposta a sinistra/i }) as HTMLButtonElement;
       expect(leftBtn).toBeDisabled();
-      expect(leftBtn.title).toMatch(/Limite raggiunto/);
+      // Phase 2.2: nuovo wording REQ-G01: "Limite (bordo)" o "Limite (collisione)"
+      expect(leftBtn.title).toMatch(/Limite/);
     });
 
     it('disables grow buttons when at right/bottom edge (Phase 2.1)', () => {
@@ -463,7 +535,7 @@ describe('CardEditor', () => {
       fireEvent.change(nameSelect, { target: { value: 'photo' } });
       const growH = screen.getByRole('button', { name: /Aumenta altezza/i }) as HTMLButtonElement;
       expect(growH).toBeDisabled();
-      expect(growH.title).toMatch(/Limite raggiunto/);
+      expect(growH.title).toMatch(/Limite/);
     });
 
     it('logo is selectable in grid editor (Phase 2.1)', () => {
@@ -529,6 +601,9 @@ describe('CardEditor', () => {
 
     it('moves photo left by 1 (grid editor front, Giovanni + centered preset)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      // Phase 2.2 REQ-E01: attivare il master switch prima
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       // Applica preset centered (photo a x=1, può andare a sinistra)
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
@@ -544,6 +619,8 @@ describe('CardEditor', () => {
 
     it('resizes photo taller by 1 (grid editor front, Giovanni + centered preset)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -560,6 +637,8 @@ describe('CardEditor', () => {
 
     it('moves name down blocked by title (grid editor front, centered preset)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -571,6 +650,8 @@ describe('CardEditor', () => {
 
     it('resizes name shrink width (grid editor front, centered preset)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -585,6 +666,8 @@ describe('CardEditor', () => {
 
     it('moves title up blocked by name (grid editor front, centered preset)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -596,6 +679,8 @@ describe('CardEditor', () => {
 
     it('resizes title shrink height (grid editor front, centered preset)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -607,6 +692,8 @@ describe('CardEditor', () => {
 
     it('moves company left blocked by grid edge (grid editor front, centered)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -618,6 +705,8 @@ describe('CardEditor', () => {
 
     it('resizes company shrink width (grid editor front, centered preset)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -632,6 +721,8 @@ describe('CardEditor', () => {
 
     it('moves logo up blocked by company (grid editor front, centered)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -644,6 +735,8 @@ describe('CardEditor', () => {
 
     it('resizes logo shrink width (grid editor front, centered preset)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -655,6 +748,8 @@ describe('CardEditor', () => {
 
     it('grid editor back: moves QR down blocked by socials (Giovanni template)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -667,6 +762,8 @@ describe('CardEditor', () => {
 
     it('grid editor back: resizes contacts wider blocked by QR (Giovanni)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -678,6 +775,8 @@ describe('CardEditor', () => {
 
     it('grid editor back: resizes socials taller blocked by grid edge (Giovanni)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -689,6 +788,8 @@ describe('CardEditor', () => {
 
     it('grid editor back: moves socials up blocked by QR (Giovanni template)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -700,6 +801,8 @@ describe('CardEditor', () => {
 
     it('grid editor back: shrinks contacts width (Giovanni template)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -714,6 +817,8 @@ describe('CardEditor', () => {
 
     it('grid editor back: shrinks QR height (Giovanni template)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -728,6 +833,8 @@ describe('CardEditor', () => {
 
     it('grid editor back: shrinks socials height (Giovanni template)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+      fireEvent.click(gridToggle);
       const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;

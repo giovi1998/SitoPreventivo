@@ -14,10 +14,15 @@ App React/TypeScript + Vite per creare preventivi multi-opzione per servizi digi
 git clone https://github.com/giovi1998/SitoPreventivo.git
 cd SitoPreventivo
 npm install
-npm run dev
+npm run dev      # Vite + headroom proxy (best-effort) + caveman skill attiva
 ```
 
 Server su `http://localhost:8000`
+
+> **Phase 2.2 — DX**: `npm run dev` ora lancia automaticamente
+> [`scripts/dev.mjs`](./scripts/dev.mjs): avvia il proxy headroom
+> (degradando con grazia se assente) + Vite in foreground + caveman
+> auto-attiva via skill. Usa `npm run dev:app` per il solo Vite.
 
 > **Windows**: se `npm run dev` fallisce per policy di esecuzione:
 > ```powershell
@@ -44,10 +49,27 @@ Server su `http://localhost:8000`
 | **10 colori brand** | Palette di colori per personalizzare il documento |
 | **Collection** | Salva, duplica, elimina preventivi, cambia stato (BOZZA/INVIATO/ACCETTATO/RIFIUTATO) |
 | **QR Code Generator** | Crea QR code personalizzati (URL, vCard, WiFi, SMS, email, phone) con stili (square/rounded/dots), logo overlay, export SVG/PNG |
-| **Bigliettini da Visita** | Editor fronte/retro con 3 layout, 3 formati (EU/US/square), grid editor manuale, AI Design Mode, export PDF 10-up/PNG/SVG/JSON |
+| **Bigliettini da Visita** | Editor fronte/retro con 3 layout, 3 formati (EU/US/square), grid editor con master switch (REQ-E01), AI Design Mode, parità mobile completa, scala font (0.7–1.5), export PDF 10-up/PNG/SVG/JSON |
 | **AI Design Mode (Card)** | 7 quick actions per bigliettini (premium, minimal, compila, palette, stampa, sposta QR, allarga foto) + prompt personalizzato |
 | **Logo Builder** | Generatore di loghi SVG da testo + icona (lucide 48 icone allowlist) + 4 forme + 3 layout. AI disabilitata nella v1 (placeholder per Replicate). Export SVG + PNG 512/1024/2048. Zero costo AI, output editabile in Illustrator/Inkscape. |
 | **Responsive** | Layout adattivo desktop (3-col), tablet e mobile (tab system + FAB AI + zoom preview) |
+
+## Bigliettino — Phase 2.2 features
+
+| Feature | Descrizione |
+|---------|-------------|
+| **Master switch griglia** (REQ-E01) | Un unico toggle "Griglia ON/OFF" governa rendering grid-mode + overlay linee guida + abilitazione controlli. Persiste lo stato in `card.front.useGrid` / `card.back.useGrid`. |
+| **Init-from-layout** (REQ-E03) | Attivare il master switch su un lato senza grid lo inizializza dal layout corrente (`gridPresetLeft`/`centered`/`split`/`backDefault`). Niente "salto" dell'intera card. |
+| **QR ridimensionabile** (REQ-E02) | In flexbox-mode il QR usa `card.back.qrSize` (`small` 84px, `medium` 120px, `large` 160px). In grid-mode la dimensione deriva dalla cella grid. |
+| **Griglia fine** (REQ-E04) | Bottoni +/− su cols/rows (range 2–8). Su griglia 6×6 il QR si sposta a passi più piccoli. |
+| **Testo che va a capo** (REQ-F01) | Tutti i campi (nome, social, contatti, wordmark, handle-stamp) vanno a capo invece di essere troncati con "…". |
+| **Block label servizi** (REQ-F02) | `back.servicesLabel` editabile (max 40 char), mostrato sopra la lista servizi nel retro. Se vuoto, nessun heading. |
+| **Auto-shrink servizi** (REQ-F03) | Se un servizio supera 40 char, la lista applica una classe CSS che riduce leggermente il font per restare su poche righe. |
+| **Font family selector** (REQ-D01) | Selettore con set sicuro (`Inter`, `Roboto`, `Open Sans`, `Lato`, `Montserrat`, `Poppins`, `Georgia`, `Times New Roman`, `Courier New`). Card importate con font fuori set mostrano "Personalizzato" senza sovrascriverlo. |
+| **Font scale** (REQ-D04) | Controllo dimensione testo (range 0.7–1.5, step 0.05) applicato come CSS variable `--card-font-scale`. Replicato nell'export SVG/PDF. |
+| **Toast feedback** (REQ-G01) | Mossa/resize applicata → toast success. Mossa bloccata (collisione/bordo) → toast info. Cambio master switch → toast. |
+| **Parità AI** (REQ-I01) | L'AI può modificare `fontScale`, `qrSize`, `services`, `servicesLabel` e posizionare il logo nel grid (via `grid.elements.logo`). Il merge clampa `fontScale` a [0.7, 1.5]. |
+| **Componenti estratti** (REQ-B02) | Form condiviso desktop/mobile in `src/components/card/`: `CardFrontFields`, `CardMediaFields`, `CardBackFields`, `CardServicesFields`, `CardSocialsFields`, `CardQrAdvanced`, `CardStyleFields`, `CardGridControls`. Zero duplicazione JSX. |
 
 ## AI Coding Agent Optimization (solo sviluppatori)
 

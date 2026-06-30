@@ -50,6 +50,12 @@ describe('detectCardRelevantFields', () => {
     expect(detectCardRelevantFields('ottimizza per stampa').has('analysis')).toBe(true);
   });
 
+  it('detects grid manipulation keywords → grid field', () => {
+    expect(detectCardRelevantFields('scambia logo con nome').has('grid')).toBe(true);
+    expect(detectCardRelevantFields('sposta il logo sopra').has('grid')).toBe(true);
+    expect(detectCardRelevantFields('cambia posizione del ruolo').has('grid')).toBe(true);
+  });
+
   it('returns empty set for unrelated prompt', () => {
     const f = detectCardRelevantFields('hello world');
     expect(f.size).toBe(0);
@@ -107,5 +113,13 @@ describe('buildCardAIContext', () => {
     const { relevantFields } = buildCardAIContext(card, 'hello');
     expect(relevantFields.length).toBeGreaterThan(0);
     expect(relevantFields).toContain('style');
+  });
+
+  it('includes grid/backGrid in AI context when present (needed for swap/move prompts)', () => {
+    const card = createGiovanniCardTemplate();
+    const { payload, relevantFields } = buildCardAIContext(card, 'scambia logo con nome e ruolo');
+    expect(payload.grid).toBeDefined();
+    expect(payload.backGrid).toBeDefined();
+    expect(relevantFields).toContain('grid');
   });
 });

@@ -259,10 +259,51 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
     expect(docDef.pageSize).toBe('A4');
   });
 
+  it('10-up canvas layers are absolute-positioned (regression: no 16-page flow)', async () => {
+    const card = createGiovanniCardTemplate();
+    const pdfMakeModule = await import('pdfmake/build/pdfmake');
+    const pdfMake = (pdfMakeModule as any).default;
+    const createPdf = pdfMake.createPdf as any;
+    createPdf.mockClear();
+    await generateCardPDF(card, { tier: 'free' });
+    const docDef = createPdf.mock.calls[0][0];
+    const serialized = JSON.stringify(docDef);
+    // Background, strips and crop marks are canvas objects. They MUST be
+    // absolute-positioned; otherwise pdfmake treats them as flow content and
+    // produces many pages instead of front/back sheets.
+    const canvasNodes: any[] = [];
+    const visit = (node: any) => {
+      if (!node || typeof node !== 'object') return;
+      if (node.canvas) canvasNodes.push(node);
+      if (Array.isArray(node)) node.forEach(visit);
+      else Object.values(node).forEach(visit);
+    };
+    visit(docDef.content);
+    expect(canvasNodes.length).toBeGreaterThan(0);
+    expect(canvasNodes.every((n) => n.absolutePosition)).toBe(true);
+    expect(serialized).toContain('pageBreak');
+  });
+
   it('handles Giovanni template without errors', async () => {
     const card = createGiovanniCardTemplate();
     const buf = await generateCardPDF(card, { tier: 'free' });
     expect(buf.length).toBeGreaterThan(0);
+  });
+
+  it('uses PNG card snapshots in PDF 10-up (same proportions as SVG/PNG export)', async () => {
+    const card = createGiovanniCardTemplate();
+    const pdfMakeModule = await import('pdfmake/build/pdfmake');
+    const pdfMake = (pdfMakeModule as any).default;
+    const createPdf = pdfMake.createPdf as any;
+    createPdf.mockClear();
+    await generateCardPDF(card, { tier: 'free' });
+    const docDef = createPdf.mock.calls[0][0];
+    const serialized = JSON.stringify(docDef);
+    // Regression: il vecchio PDF builder manuale non rispettava proporzioni
+    // della preview. Ora ogni lato viene rasterizzato dalla stessa pipeline
+    // `buildCardSvg` → PNG e inserito dieci volte come image data URL.
+    expect(serialized).toContain('"image":"data:image/png;base64');
+    expect(serialized).not.toContain('"image":"data:image/svg+xml');
   });
 
   it('handles all 3 size presets', async () => {
@@ -310,7 +351,7 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
     expect(serialized).not.toContain('"MR"'); // monogram removed
   });
 
-  it('includes socials in back docDefinition when present', async () => {
+  it('renders back side as PNG snapshot when socials are present', async () => {
     const card = {
       ...createEmptyCard(),
       back: {
@@ -325,8 +366,10 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
     await generateCardPDF(card, { tier: 'free' });
     const docDef = createPdf.mock.calls[0][0];
     const serialized = JSON.stringify(docDef);
-    expect(serialized).toContain('LinkedIn');
-    expect(serialized).toContain('XXXXX');
+    // PDF 10-up usa snapshot PNG della card: le proporzioni sono uguali a
+    // preview/SVG, ma il testo non resta nel docDefinition come stringa.
+    expect(serialized).toContain('"image":"data:image/png;base64');
+    expect(serialized).not.toContain('LinkedIn');
   });
 });
 

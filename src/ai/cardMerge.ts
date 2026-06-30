@@ -1,5 +1,6 @@
 import type { BusinessCard, CardGrid } from '../utils/documentSchemas';
-import { businessCardSchema } from '../utils/documentSchemas';
+import { businessCardSchema, FONT_SCALE_MIN, FONT_SCALE_MAX } from '../utils/documentSchemas';
+import { aiCardInputSchema } from './aiCardInputSchema';
 import { stepMove, stepResize } from '../utils/gridUtils';
 
 export interface CardMergeResult {
@@ -57,22 +58,34 @@ export function mergeCardAIResponse(
   modified: Record<string, unknown>,
 ): CardMergeResult {
   // ─── Sanitizzazione Zod ────────────────────────────────────
-  // Strip di QUALSIASI campo non presente nello schema businessCardSchema.
-  // Questo cattura campi inventati dall'AI come `visible`, `enabled`, ecc.
-  // Usa .partial() per rendere tutti i top-level field opzionali (AI può
-  // inviare solo i campi che vuole modificare). I nested objects (front,
-  // back, style, grid) restano required-if-present.
-  // Pre-process: aggiungi cols/rows default se mancanti (Zod li richiede).
+  // Phase 2.2 REQ-I01: usiamo `aiCardInputSchema` (più permissivo) invece
+  // di `businessCardSchema.partial()` per permettere all'AI di inviare
+  // valori fuori range per `fontScale` (es. 3.0) — il clamp a [0.7, 1.5]
+  // è applicato qui sotto nel merge. Lo schema AI strippa comunque
+  // `visible`, `enabled` e altri campi inventati.
   const preprocessed: Record<string, unknown> = { ...modified };
   if (preprocessed.grid && typeof preprocessed.grid === 'object') {
     const g = { ...(preprocessed.grid as Record<string, unknown>) };
     if (typeof g.cols !== 'number') g.cols = 4;
     if (typeof g.rows !== 'number') g.rows = 4;
+    // fix: l'AI spesso invia `null` per gli elementi grid che NON vuole
+    // modificare (es. sposta solo il logo, invia logo: {...} e null per
+    // photo/name/title/...). Lo schema Zod rifiuta `null` su elementi
+    // opzionali (z.object().optional() non accetta null espliciti), quindi
+    // filtriamo via i null PRIMA della validazione: null ≡ "non menzionato".
+    if (g.elements && typeof g.elements === 'object') {
+      const els = { ...(g.elements as Record<string, unknown>) };
+      for (const k of Object.keys(els)) {
+        if (els[k] === null || els[k] === undefined) {
+          delete els[k];
+        }
+      }
+      g.elements = els;
+    }
     preprocessed.grid = g;
   }
-  const safeParse = businessCardSchema.partial().safeParse(preprocessed);
+  const safeParse = aiCardInputSchema.safeParse(preprocessed);
   if (!safeParse.success) {
-    // Input completamente invalido → nessuna modifica
     return { card: currentCard, changes: [] };
   }
   const modifiedSafe = safeParse.data as Record<string, unknown>;
@@ -100,6 +113,12 @@ export function mergeCardAIResponse(
     if (typeof f.layout === 'string' && f.layout !== updated.front.layout) {
       updated.front.layout = f.layout as BusinessCard['front']['layout'];
       changes.push(`Fronte: layout → "${f.layout}"`);
+    }
+    // fix: se l'AI invia front.useGrid = true esplicitamente (es. "vai in
+    // grid mode" o insieme a grid.elements.*), propaghiamolo.
+    if (f.useGrid === true && !updated.front.useGrid) {
+      updated.front.useGrid = true;
+      changes.push('Fronte: griglia attivata');
     }
     // ─── Protezione: photoUrl/logoUrl ───────────────────────
     // MAI sovrascrivere. Sono base64 user-uploaded (foto profilo, logo).
@@ -149,6 +168,29 @@ export function mergeCardAIResponse(
       updated.back.qrLabel = b.qrLabel as string;
       changes.push(`Retro: etichetta QR aggiornata`);
     }
+    // Phase 2.2 REQ-I01: services (array), servicesLabel, qrSize.
+    if (Array.isArray(b.services)) {
+      const newServices = (b.services as unknown[]).filter((s): s is string => typeof s === 'string');
+      if (newServices.length > 0 && JSON.stringify(newServices) !== JSON.stringify(updated.back.services)) {
+        updated.back.services = newServices.slice(0, 8).map((s) => String(s).slice(0, 80));
+        changes.push(`Retro: servizi aggiornati (${updated.back.services.length} elementi)`);
+      }
+    }
+    if (shouldUpdateString(b.servicesLabel, updated.back.servicesLabel)) {
+      updated.back.servicesLabel = (b.servicesLabel as string).slice(0, 40);
+      changes.push(`Retro: etichetta servizi → "${updated.back.servicesLabel}"`);
+    }
+    if (typeof b.qrSize === 'string' && ['small', 'medium', 'large'].includes(b.qrSize)) {
+      if (b.qrSize !== updated.back.qrSize) {
+        updated.back.qrSize = b.qrSize as BusinessCard['back']['qrSize'];
+        changes.push(`Retro: dimensione QR → "${b.qrSize}"`);
+      }
+    }
+    // fix: stesso fix del fronte (vedi sopra)
+    if (b.useGrid === true && !updated.back.useGrid) {
+      updated.back.useGrid = true;
+      changes.push('Retro: griglia attivata');
+    }
   }
 
   // ─── STYLE ──────────────────────────────────────────────
@@ -180,6 +222,14 @@ export function mergeCardAIResponse(
       updated.style.borderStyle = s.borderStyle as BusinessCard['style']['borderStyle'];
       changes.push(`Stile: bordo → "${s.borderStyle}"`);
     }
+    // Phase 2.2 REQ-I01: fontScale (number clampa a [0.7, 1.5])
+    if (typeof s.fontScale === 'number') {
+      const clamped = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, s.fontScale));
+      if (clamped !== updated.style.fontScale) {
+        updated.style.fontScale = clamped;
+        changes.push(`Stile: dimensione testo → ${clamped}`);
+      }
+    }
   }
 
   // ─── GRID ───────────────────────────────────────────────
@@ -204,6 +254,14 @@ export function mergeCardAIResponse(
         if (el.w <= 0 || el.h <= 0) continue;
 
         const target: GridTarget = targetForKey(key);
+        if (target === 'grid' && !updated.front.useGrid) {
+          updated.front = { ...updated.front, useGrid: true };
+          changes.push('Fronte: griglia attivata');
+        }
+        if (target === 'backGrid' && !updated.back.useGrid) {
+          updated.back = { ...updated.back, useGrid: true };
+          changes.push('Retro: griglia attivata');
+        }
         const currentTargetGrid: CardGrid = updated[target] ?? {
           cols: (typeof g.cols === 'number' ? g.cols : 4),
           rows: (typeof g.rows === 'number' ? g.rows : 4),
@@ -240,9 +298,24 @@ export function mergeCardAIResponse(
           const y = Math.max(0, Math.min(rows - h, el.y));
           sanitized = { x, y, w, h };
         }
+        const sameAsCurrent = !!current && sanitized.x === current.x && sanitized.y === current.y &&
+          sanitized.w === current.w && sanitized.h === current.h;
+        const sameAsRequested = sanitized.x === el.x && sanitized.y === el.y &&
+          sanitized.w === el.w && sanitized.h === el.h;
+
         newTargetGrid.elements = { ...newTargetGrid.elements, [key]: sanitized };
-        updated[target] = newTargetGrid;
-        changes.push(`Griglia: ${key} posizionato a (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}`);
+
+        if (sameAsCurrent) {
+          // Nessuna modifica effettiva: richiesta impossibile per collisione/bordi.
+          changes.push(`Griglia: ${key} bloccato (collisione) — posizione richiesta non raggiungibile`);
+        } else {
+          updated[target] = newTargetGrid;
+          if (sameAsRequested) {
+            changes.push(`Griglia: ${key} posizionato a (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}`);
+          } else {
+            changes.push(`Griglia: ${key} parziale (collisione) — richiesto (${el.x}, ${el.y}) ${el.w}×${el.h}, applicato (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}`);
+          }
+        }
       }
     }
   }

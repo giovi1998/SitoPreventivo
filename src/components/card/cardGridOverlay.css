@@ -1,0 +1,214 @@
+/* Grid overlay + toggle + grid editor */
+/* Phase 2.2 refactor: estratto da CardEditor.css (split per dimensione). */
+
+/* ─── Grid overlay toggle + overlay ───────────────────── */
+.card-editor-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.card-editor-preview-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--ink);
+}
+
+.card-editor-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-previews {
+  transition: transform 0.2s ease;
+}
+
+.card-preview-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.card-preview-zoom-btn {
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: var(--ink-muted, #5d6b7e);
+  display: grid;
+  place-items: center;
+  transition: background 0.15s;
+}
+
+.card-preview-zoom-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
+  color: var(--accent, #01696F);
+}
+
+.card-preview-zoom-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.card-preview-zoom-label {
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--ink);
+  min-width: 42px;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-preview-zoom-label:hover {
+  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
+  color: var(--accent, #01696F);
+}
+
+.card-grid-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--ink-muted, #5d6b7e);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.card-grid-toggle.active {
+  background: color-mix(in srgb, var(--accent, #01696F) 12%, var(--surface));
+  color: var(--accent, #01696F);
+  border-color: var(--accent, #01696F);
+}
+
+.card-grid-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.card-grid-overlay line {
+  vector-effect: non-scaling-stroke;
+}
+
+.card-grid-editor {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent, #01696F) 30%, var(--line));
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-grid-editor-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent, #01696F);
+}
+
+/* Phase 2.2 fix: hint quando i controlli grid sono disabilitati (master
+ * switch OFF). Aiuta l'utente a capire che deve attivare "Griglia ON". */
+.card-grid-editor-hint {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--info-text, #1e4a7a);
+  background: var(--blue-bg, #e8f0fe);
+  border: 1px solid color-mix(in srgb, var(--accent, #01696F) 18%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.card-grid-editor[data-disabled] .card-field select,
+.card-grid-editor[data-disabled] .card-field {
+  opacity: 0.65;
+}
+
+.card-grid-editor .card-field span {
+  font-size: 0.7rem;
+}
+
+.card-grid-arrows,
+.card-grid-resize {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.card-grid-arrows button,
+.card-grid-resize button {
+  padding: 6px 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.card-grid-arrows button:hover:not(:disabled),
+.card-grid-resize button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
+  border-color: var(--accent, #01696F);
+}
+
+.card-grid-arrows button:disabled,
+.card-grid-resize button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.card-editor-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-editor-preview h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--ink);
+}
+
+.card-previews {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.card-preview-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-preview-wrap h3 {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-muted, #5d6b7e);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}

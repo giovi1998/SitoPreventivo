@@ -1,0 +1,107 @@
+/* Mobile sticky toolbar */
+/* Phase 2.2 refactor: estratto da CardEditor.css (split per dimensione). */
+
+/* ─── Mobile sticky toolbar (Salva + Esporta) ─── */
+.card-mobile-toolbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+  z-index: 80;
+}
+
+.card-mobile-save-btn,
+.card-mobile-export-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 14px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  min-height: 44px;
+  font-family: inherit;
+}
+
+.card-mobile-save-btn {
+  background: var(--accent, #01696F);
+  color: #fff;
+}
+
+.card-mobile-save-btn:hover {
+  background: color-mix(in srgb, var(--accent, #01696F) 85%, black);
+}
+
+.card-mobile-export-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.card-mobile-export-btn {
+  width: 100%;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.card-mobile-export-btn:hover {
+  border-color: var(--accent, #01696F);
+  color: var(--accent, #01696F);
+}
+
+.card-mobile-export-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  z-index: 85;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.card-mobile-export-menu li {
+  margin: 0;
+  padding: 0;
+}
+
+.card-mobile-export-menu button {
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--ink);
+  border: 0;
+  background: transparent;
+  font: inherit;
+  transition: background 0.1s;
+}
+
+.card-mobile-export-menu button:hover {
+  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
+  color: var(--accent, #01696F);
+}
+
+/* Push content above sticky toolbar */
+@media (max-width: 900px) {
+  .card-editor {
+    padding-bottom: 76px;
+  }
+}

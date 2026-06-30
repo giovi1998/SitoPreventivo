@@ -7,6 +7,12 @@ owner: Giovanni Cidu
 tags: [design, business-card, refactor, clean-code, grid, ai, responsive, vercel, mobile-parity, qr, typography, feedback, dx, headroom, caveman]
 ---
 
+> **Stato (2026-06-30)**: Phase 2.2 **completata**. Fasi A-K tutte
+> implementate e coperte da test. **1042 test verdi** (90 file),
+> typecheck pulito. Tutti i bug bloccanti chiusi; restano solo due
+> questioni di scope minore (UX mobile + persistenza selezione grid)
+> documentate in "Known Issues — Card".
+
 # Introduction
 
 La fase 2.2 è un intervento di **refactor e bug-fixing** sul modulo

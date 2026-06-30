@@ -138,18 +138,32 @@ describe('mergeCardAIResponse', () => {
     expect(changes.some((c) => c.includes('photo'))).toBe(true);
   });
 
-  it('merges grid.elements.logo position (Phase 2.1: logo is grid-editable)', () => {
-    const card = createEmptyCard();
-    const { card: merged, changes } = mergeCardAIResponse(card, {
-      grid: {
-        elements: {
+    it('merges grid.elements.logo position (Phase 2.1: logo is grid-editable)', () => {
+      const card = createEmptyCard();
+      const { card: merged, changes } = mergeCardAIResponse(card, {
+        grid: {
+          elements: {
           logo: { x: 2, y: 3, w: 1, h: 1 },
         },
       },
     });
-    expect(merged.grid?.elements.logo).toEqual({ x: 2, y: 3, w: 1, h: 1 });
-    expect(changes.some((c) => c.includes('logo'))).toBe(true);
-  });
+      expect(merged.grid?.elements.logo).toEqual({ x: 2, y: 3, w: 1, h: 1 });
+      expect(changes.some((c) => c.includes('logo'))).toBe(true);
+    });
+
+    it('AI grid change auto-enables front.useGrid so preview can switch to grid-mode', () => {
+      const card = createGiovanniCardTemplate();
+      card.front.useGrid = false;
+      const { card: merged, changes } = mergeCardAIResponse(card, {
+        grid: {
+          elements: {
+            logo: { x: 2, y: 0, w: 2, h: 1 },
+          },
+        },
+      });
+      expect(merged.front.useGrid).toBe(true);
+      expect(changes.some((c) => /griglia attivata/i.test(c))).toBe(true);
+    });
 
   it('AI grid move that would collide is sanitized to nearest valid position (BLOCK + clamp)', () => {
     const card = createEmptyCard();
@@ -319,6 +333,206 @@ describe('mergeCardAIResponse', () => {
       expect(merged.backGrid?.rows).toBe(6);
       expect(merged.backGrid?.elements.qr).toEqual({ x: 0, y: 0, w: 1, h: 1 });
     });
+  });
+
+  // ─── Bug "Rendi premium" regression (Phase 2.1) ────────────────
+  describe('Phase 2.2: new AI parity fields (REQ-I01)', () => {
+    it('merges style.fontScale (number, clamped to [0.7, 1.5])', () => {
+      const card = createGiovanniCardTemplate();
+      const { card: merged, changes } = mergeCardAIResponse(card, {
+        style: { fontScale: 1.3 },
+      });
+      expect(merged.style.fontScale).toBe(1.3);
+      expect(changes.some((c) => /dimensione testo/i.test(c))).toBe(true);
+
+      // Out-of-range values clamped
+      const { card: merged2 } = mergeCardAIResponse(card, { style: { fontScale: 3.0 } });
+      expect(merged2.style.fontScale).toBe(1.5);
+      const { card: merged3 } = mergeCardAIResponse(card, { style: { fontScale: 0.1 } });
+      expect(merged3.style.fontScale).toBe(0.7);
+    });
+
+    it('merges back.qrSize (enum)', () => {
+      const card = createGiovanniCardTemplate();
+      const { card: merged, changes } = mergeCardAIResponse(card, {
+        back: { qrSize: 'small' },
+      });
+      expect(merged.back.qrSize).toBe('small');
+      expect(changes.some((c) => /dimensione QR/i.test(c))).toBe(true);
+    });
+
+    it('merges back.servicesLabel (string)', () => {
+      const card = createGiovanniCardTemplate();
+      const { card: merged, changes } = mergeCardAIResponse(card, {
+        back: { servicesLabel: 'I miei servizi' },
+      });
+      expect(merged.back.servicesLabel).toBe('I miei servizi');
+      expect(changes.some((c) => /etichetta servizi/i.test(c))).toBe(true);
+    });
+
+    it('merges back.services (array, max 8 items, max 80 chars each)', () => {
+      const card = createGiovanniCardTemplate();
+      const { card: merged, changes } = mergeCardAIResponse(card, {
+        back: { services: ['Web Design', 'SEO', 'Consulenza'] },
+      });
+      expect(merged.back.services).toEqual(['Web Design', 'SEO', 'Consulenza']);
+      expect(changes.some((c) => /servizi aggiornati/i.test(c))).toBe(true);
+    });
+
+    it('clamps back.services to 8 items and 80 chars per item', () => {
+      const card = createGiovanniCardTemplate();
+      const longText = 'a'.repeat(100);
+      // 9 short items + 1 long item (index 8), in modo che dopo slice(0, 8)
+      // l'8° item (index 7) sia il long text troncato a 80 char.
+      const { card: merged } = mergeCardAIResponse(card, {
+        back: { services: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', longText, 'S9', 'S10'] },
+      });
+      expect(merged.back.services).toHaveLength(8);
+      // L'8° elemento (index 7) è il long text troncato a 80 char
+      expect(merged.back.services[7]).toHaveLength(80);
+      expect(merged.back.services[7]).toBe('a'.repeat(80));
+    });
+
+    it('AI cannot clear existing services with empty array (anti-hallucination)', () => {
+      // Se l'AI invia [] esplicitamente, NON sovrascriviamo i servizi esistenti.
+      const card = createGiovanniCardTemplate();
+      card.back.services = ['Esistente1', 'Esistente2'];
+      const { card: merged } = mergeCardAIResponse(card, {
+        back: { services: [] as never },
+      });
+      expect(merged.back.services).toEqual(['Esistente1', 'Esistente2']);
+    });
+
+    // ─── Bug AI parity: l'AI invia `null` per elementi grid che non vuole
+    // toccare, ma lo schema Zod rifiuta `null` su elementi opzionali,
+    // invalidando TUTTA la risposta. Repro esatto del log utente:
+    // "Metti sopra rispetto al logo" con grid.elements.logo: {0,0,4,1}
+    // e tutti gli altri elementi a null.
+    describe('AI grid elements null handling (regression: "Metti sopra al logo")', () => {
+      it('accetta grid.elements con null per elementi non menzionati', () => {
+        // Questo è esattamente l'output AI del log: l'AI vuole spostare
+        // solo il logo, invia `null` per gli altri.
+        const card = createGiovanniCardTemplate();
+        const aiOutput = {
+          front: {
+            name: 'Antonio Ruggeri',
+            title: 'Impresa Edile',
+            layout: 'centered',
+            useGrid: true,
+          },
+          style: { accentColor: '#1e3a5f' },
+          grid: {
+            cols: 4,
+            rows: 4,
+            elements: {
+              photo: null,    // null ≡ "non toccare"
+              name: null,
+              title: null,
+              company: null,
+              logo: { x: 0, y: 0, w: 4, h: 1 },  // SOPRA
+              qr: null,
+              contacts: null,
+              socials: null,
+            },
+          },
+        };
+        const { card: merged, changes } = mergeCardAIResponse(card, aiOutput as unknown as Record<string, unknown>);
+        // La validazione NON deve fallire
+        expect(changes.length).toBeGreaterThan(0);
+        // Logo PARZIALE (photo a (0,0,2,4) occupa lo spazio richiesto).
+        // Il merge NON finge di aver raggiunto la posizione richiesta.
+        expect(changes.some((c) => /logo.*parziale/i.test(c))).toBe(true);
+        // useGrid attivato
+        expect(merged.front.useGrid).toBe(true);
+        // Modifiche tracciate
+        expect(changes).toEqual(expect.arrayContaining([
+          expect.stringMatching(/nome/),
+          expect.stringMatching(/titolo/),
+          expect.stringMatching(/accento/),
+        ]));
+      });
+
+      it('accetta grid.elements con null solo per logo (caso iniziale)', () => {
+        const card = createGiovanniCardTemplate();
+        const { card: merged } = mergeCardAIResponse(card, {
+          front: { useGrid: true },
+          grid: {
+            cols: 4,
+            rows: 4,
+            elements: {
+              photo: null,
+              name: null,
+              title: null,
+              company: null,
+              logo: null,  // AI non ha modificato il logo, solo lo spazio
+              qr: null,
+              contacts: null,
+              socials: null,
+            },
+          },
+        } as unknown as Record<string, unknown>);
+        // Nessun crash, grid vuota mantenuta
+        expect(merged.grid).toBeDefined();
+      });
+
+    it('useGrid: true esplicito viene propagato (anche senza grid.elements)', () => {
+      const card = createGiovanniCardTemplate();
+      const { card: merged, changes } = mergeCardAIResponse(card, {
+        front: { useGrid: true },
+      });
+      expect(merged.front.useGrid).toBe(true);
+      expect(changes.some((c) => /griglia attivata/i.test(c))).toBe(true);
+    });
+
+    it('AI "metti logo sopra" con null elements: accetta null, applica campi non-grid', () => {
+      // L'AI invia null per gli elementi non menzionati. Il merge deve
+      // accettarli (filtro null nel preprocessore) e applicare le modifiche
+      // non-grid (nome, titolo, accento, useGrid). Il logo è bloccato perché
+      // la posizione richiesta (0,0,4,1) collide con photo (0,0,2,4) — il
+      // merge lo reporta come "bloccato" invece di fingere di averlo mosso.
+      const card = createGiovanniCardTemplate();
+      const { card: merged, changes } = mergeCardAIResponse(card, {
+        front: { useGrid: true, name: 'Antonio Ruggeri', title: 'Impresa Edile' },
+        style: { accentColor: '#1e3a5f' },
+        grid: {
+          cols: 4, rows: 4,
+          elements: {
+            photo: null, name: null, title: null, company: null,
+            logo: { x: 0, y: 0, w: 4, h: 1 },
+            qr: null, contacts: null, socials: null,
+          },
+        },
+      } as unknown as Record<string, unknown>);
+      // Le modifiche non-grid sono applicate
+      expect(merged.front.name).toBe('Antonio Ruggeri');
+      expect(merged.front.title).toBe('Impresa Edile');
+      expect(merged.style.accentColor).toBe('#1e3a5f');
+      expect(merged.front.useGrid).toBe(true);
+      // Il logo è PARZIALE (photo occupa lo spazio). L'AI deve re-inviare
+      // con una posizione libera o spostando anche photo.
+      expect(changes.some((c) => /logo.*parziale/i.test(c))).toBe(true);
+    });
+
+    it('AI sposta logo in posizione libera → mossa applicata', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, name: 'Test', logoUrl: 'data:image/png;base64,x' },
+        grid: {
+          cols: 4, rows: 4,
+          elements: {
+            name: { x: 0, y: 0, w: 4, h: 1 },
+            logo: { x: 0, y: 3, w: 2, h: 1 },
+          },
+        },
+      };
+      // Sposta logo a (2, 3, 2, 1) — spazio libero a destra
+      const { card: merged, changes } = mergeCardAIResponse(card, {
+        grid: { cols: 4, rows: 4, elements: { logo: { x: 2, y: 3, w: 2, h: 1 } } },
+      } as unknown as Record<string, unknown>);
+      expect(merged.grid?.elements.logo).toEqual({ x: 2, y: 3, w: 2, h: 1 });
+      expect(changes.some((c) => /logo.*posizionato/i.test(c))).toBe(true);
+    });
+  });
   });
 
   // ─── Bug "Rendi premium" regression (Phase 2.1) ────────────────

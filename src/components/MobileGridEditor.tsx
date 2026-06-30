@@ -1,127 +1,98 @@
 import { useState } from 'react';
 import type { CardGrid } from '../utils/documentSchemas';
-import {
-  gridPresetLeft,
-  gridPresetCentered,
-  gridPresetSplit,
-  gridPresetBackDefault,
-} from '../utils/documentSchemas';
-import {
-  canMove as canMoveUtil,
-  clampMove,
-  wouldCollideOnMove,
-} from '../utils/gridUtils';
+import { CardGridControls, getAvailableGridElements, type GridSide } from './card/CardGridControls';
+import { clampMove, wouldCollideOnMove } from '../utils/gridUtils';
 
 interface MobileGridEditorProps {
-  grid: CardGrid;
-  onChange: (grid: CardGrid) => void;
-  side?: 'front' | 'back';
+  card: import('../utils/documentSchemas').BusinessCard;
+  side: GridSide;
+  /** Master switch (REQ-E01): quando false, il grid editor è disabilitato. */
+  gridEnabled: boolean;
+  selected: keyof CardGrid['elements'] | '';
+  onSelect: (k: keyof CardGrid['elements'] | '') => void;
+  onChangeSide: (s: GridSide) => void;
+  onChangeGrid: (grid: CardGrid, persist: { useGrid: boolean }) => void;
+  /** Restituisce informazioni sulla mossa (per toast feedback in G). */
+  onAfterMove?: (info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
 }
 
-type ElementKey = keyof CardGrid['elements'];
-
-const FRONT_ELEMENTS: { value: ElementKey; label: string }[] = [
-  { value: 'photo', label: 'Foto' },
-  { value: 'name', label: 'Nome' },
-  { value: 'title', label: 'Ruolo' },
-  { value: 'company', label: 'Azienda' },
-  { value: 'logo', label: 'Logo' },
-];
-
-const BACK_ELEMENTS: { value: ElementKey; label: string }[] = [
-  { value: 'contacts', label: 'Contatti' },
-  { value: 'qr', label: 'QR' },
-  { value: 'socials', label: 'Social' },
-];
-
-export default function MobileGridEditor({ grid, onChange, side = 'front' }: MobileGridEditorProps) {
-  const isFront = side === 'front';
-  const elementOptions = isFront ? FRONT_ELEMENTS : BACK_ELEMENTS;
-  const presetOptions: Array<{ value: 'left' | 'centered' | 'split'; label: string }> = isFront
-    ? [
-        { value: 'left', label: 'Sinistra' },
-        { value: 'centered', label: 'Centrato' },
-        { value: 'split', label: 'Diviso' },
-      ]
-    : [{ value: 'split', label: 'Default retro' }];
-  const [selected, setSelected] = useState<ElementKey | ''>('');
-  const [preset, setPreset] = useState<'left' | 'centered' | 'split'>('left');
+// Phase 2.2 REQ-B02: MobileGridEditor condivide la logica con
+// CardGridControls (selezione lato, filtro per contenuto, master switch
+// gating, cols/rows) ma presenta l'interazione move come popup 3×3
+// (più comodo su touch di 4 frecce inline).
+export default function MobileGridEditor({
+  card,
+  side,
+  gridEnabled,
+  selected,
+  onSelect,
+  onChangeSide,
+  onChangeGrid,
+  onAfterMove,
+}: MobileGridEditorProps) {
   const [popupOpen, setPopupOpen] = useState(false);
+  const activeGrid: CardGrid = side === 'back'
+    ? (card.backGrid ?? { cols: 4, rows: 4, elements: {} })
+    : (card.grid ?? { cols: 4, rows: 4, elements: {} });
+  const available = getAvailableGridElements(side, card);
+  const selectedEl = selected ? activeGrid.elements[selected] : null;
 
-  const applyPreset = (p: 'left' | 'centered' | 'split') => {
-    setPreset(p);
-    if (!isFront) {
-      onChange(gridPresetBackDefault());
-      return;
-    }
-    if (p === 'left') onChange(gridPresetLeft());
-    else if (p === 'centered') onChange(gridPresetCentered());
-    else onChange(gridPresetSplit());
-  };
+  // canMove helpers (riuso clampMove/wouldCollideOnMove per il popup mobile).
+  const canUp = !!selectedEl && (() => {
+    const r = clampMove(activeGrid, selected, 0, -1);
+    return r.y !== selectedEl.y;
+  })();
+  const canDown = !!selectedEl && (() => {
+    const r = clampMove(activeGrid, selected, 0, 1);
+    return r.y !== selectedEl.y;
+  })();
+  const canLeft = !!selectedEl && (() => {
+    const r = clampMove(activeGrid, selected, -1, 0);
+    return r.x !== selectedEl.x;
+  })();
+  const canRight = !!selectedEl && (() => {
+    const r = clampMove(activeGrid, selected, 1, 0);
+    return r.x !== selectedEl.x;
+  })();
+  const upCollide = selected && selectedEl ? wouldCollideOnMove(activeGrid, selected, 0, -1) : false;
+  const downCollide = selected && selectedEl ? wouldCollideOnMove(activeGrid, selected, 0, 1) : false;
+  const leftCollide = selected && selectedEl ? wouldCollideOnMove(activeGrid, selected, -1, 0) : false;
+  const rightCollide = selected && selectedEl ? wouldCollideOnMove(activeGrid, selected, 1, 0) : false;
 
   const move = (dx: number, dy: number) => {
-    if (!selected) return;
-    const el = grid.elements[selected];
-    if (!el) return;
-    const { x: newX, y: newY } = clampMove(grid, selected, dx, dy);
-    if (newX === el.x && newY === el.y) return;
-    onChange({
-      ...grid,
-      elements: { ...grid.elements, [selected]: { ...el, x: newX, y: newY } },
-    });
+    if (!selected || !selectedEl) return;
+    const r = clampMove(activeGrid, selected, dx, dy);
+    if (r.x === selectedEl.x && r.y === selectedEl.y) {
+      onAfterMove?.({ element: selected, dx, dy, applied: false, reason: dx === 0 ? (dy < 0 ? 'border' : 'border') : 'border' });
+      return;
+    }
+    onChangeGrid(
+      { ...activeGrid, elements: { ...activeGrid.elements, [selected]: { ...selectedEl, x: r.x, y: r.y } } },
+      { useGrid: true },
+    );
+    onAfterMove?.({ element: selected, dx, dy, applied: true });
     setPopupOpen(false);
   };
 
-  const canUp = selected ? canMoveUtil(grid, selected, 'up') : false;
-  const canDown = selected ? canMoveUtil(grid, selected, 'down') : false;
-  const canLeft = selected ? canMoveUtil(grid, selected, 'left') : false;
-  const canRight = selected ? canMoveUtil(grid, selected, 'right') : false;
-  const selectedEl = selected ? grid.elements[selected] : null;
-  const upCollide = selected && selectedEl
-    ? wouldCollideOnMove(grid, selected, 0, -1)
-    : false;
-  const downCollide = selected && selectedEl
-    ? wouldCollideOnMove(grid, selected, 0, 1)
-    : false;
-  const leftCollide = selected && selectedEl
-    ? wouldCollideOnMove(grid, selected, -1, 0)
-    : false;
-  const rightCollide = selected && selectedEl
-    ? wouldCollideOnMove(grid, selected, 1, 0)
-    : false;
-
   return (
     <div className="card-mobile-grid-editor" data-testid="mobile-grid-editor">
-      <label className="card-field">
-        <span>Elemento</span>
-        <select
-          value={selected}
-          onChange={(e) => setSelected(e.target.value as ElementKey)}
-          aria-label="Elemento"
-        >
-          <option value="">—</option>
-          {elementOptions.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </label>
-      <label className="card-field">
-        <span>Preset</span>
-        <select
-          value={preset}
-          onChange={(e) => applyPreset(e.target.value as 'left' | 'centered' | 'split')}
-          aria-label="Preset"
-        >
-          {presetOptions.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
-          ))}
-        </select>
-      </label>
+      <CardGridControls
+        card={card}
+        side={side}
+        gridEnabled={gridEnabled}
+        onSideChange={(s) => { onChangeSide(s); onSelect(''); }}
+        onChangeGrid={onChangeGrid}
+        selected={selected}
+        onSelect={onSelect}
+        onAfterMove={onAfterMove}
+        mode="mobile"
+      />
       <button
         type="button"
         className="card-mobile-grid-move-btn"
         onClick={() => setPopupOpen(true)}
-        disabled={!selected}
+        disabled={!gridEnabled || !selected || available.length === 0}
+        data-testid="mobile-grid-move-btn"
       >
         Sposta elemento
       </button>
