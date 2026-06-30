@@ -16,9 +16,15 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "agent": "node scripts/start-agent.mjs",
+    "agent:setup": "node scripts/start-agent.mjs setup",
     "agent:proxy": "node scripts/start-agent.mjs proxy",
     "agent:status": "node scripts/start-agent.mjs status",
-    "agent:stop": "node scripts/start-agent.mjs stop"
+    "agent:stop": "node scripts/start-agent.mjs stop",
+    "agent:dashboard": "node scripts/start-agent.mjs dashboard",
+    "agent:autostart": "node scripts/start-agent.mjs autostart:enable",
+    "agent:autostart:disable": "node scripts/start-agent.mjs autostart:disable",
+    "agent:autostart:startup": "node scripts/start-agent.mjs autostart:startup",
+    "agent:autostart:startup:disable": "node scripts/start-agent.mjs autostart:startup:disable"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

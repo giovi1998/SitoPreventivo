@@ -10,135 +10,42 @@
 // Per killarlo: `npm run agent:stop`.
 
 import { spawn, execSync } from 'node:child_process';
-import { existsSync, openSync, appendFileSync } from 'node:fs';
-import http from 'node:http';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import {
+  PORT, PROXY_URL, DASHBOARD_URL,
+  SAVINGS_PROFILE, c as _c, paint, isProxyUp, killProxy, startProxy,
+  waitForProxy, openBrowserInDev, writeStartupBat, removeStartupBat,
+} from './headroom.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = path.join(__dirname, '..');
-const LOG_FILE = path.join(PROJECT_ROOT, '.headroom.log');
+const c = _c;
 
-const PORT = 8787;
-const PROXY_URL = `http://127.0.0.1:${PORT}`;
-const READY_TIMEOUT_MS = 30_000;
+function setPersistentProxyEnv() {
+  process.env.OPENAI_BASE_URL = PROXY_URL;
+  process.env.ANTHROPIC_BASE_URL = PROXY_URL;
 
-const c = {
-  reset: '\x1b[0m',
-  dim: '\x1b[2m',
-  green: '\x1b[32m',
-  red: '\x1b[31m',
-  yellow: '\x1b[33m',
-  cyan: '\x1b[36m',
-  bold: '\x1b[1m',
-};
-const paint = (color, s) => `${c[color]}${s}${c.reset}`;
+  if (os.platform() !== 'win32') return;
 
-function isProxyUp() {
-  return new Promise((resolve) => {
-    const req = http.get(
-      `${PROXY_URL}/livez`,
-      { timeout: 3000 },
-      (res) => {
-        res.resume();
-        // /livez ritorna 200 quando il processo è vivo e il server è in ascolto
-        resolve(res.statusCode === 200);
-      }
-    );
-    req.on('error', () => resolve(false));
-    req.on('timeout', () => {
-      req.destroy();
-      resolve(false);
-    });
-  });
+  // Persistente per nuovi processi Windows. setx aggiorna l'env utente;
+  // i processi già aperti (opencode incluso) vanno riavviati.
+  execSync(`setx OPENAI_BASE_URL "${PROXY_URL}"`, { stdio: 'ignore' });
+  execSync(`setx ANTHROPIC_BASE_URL "${PROXY_URL}"`, { stdio: 'ignore' });
 }
 
-function findProxyPids() {
-  try {
-    if (os.platform() === 'win32') {
-      const out = execSync(
-        'wmic process where "name=\'headroom.exe\'" get ProcessId /format:list',
-        { stdio: ['ignore', 'pipe', 'ignore'] }
-      ).toString();
-      return out
-        .split('\n')
-        .map((l) => l.match(/ProcessId=(\d+)/i)?.[1])
-        .filter(Boolean);
-    }
-    const out = execSync("pgrep -f 'headroom proxy'", { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
-    return out.trim().split('\n').filter(Boolean);
-  } catch {
-    return [];
+function installStartupAutostart() {
+  if (os.platform() !== 'win32') return;
+  const startupDir = path.join(
+    process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
+    'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'
+  );
+  const batPath = path.join(startupDir, 'headroom-proxy.bat');
+  const logPath = path.join(os.homedir(), '.headroom-autostart.log');
+  if (!existsSync(startupDir)) {
+    throw new Error(`cartella startup non trovata: ${startupDir}`);
   }
-}
-
-function killProxy() {
-  const pids = findProxyPids();
-  if (pids.length === 0) return false;
-  for (const pid of pids) {
-    try {
-      if (os.platform() === 'win32') {
-        execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
-      } else {
-        process.kill(Number(pid), 'SIGTERM');
-      }
-    } catch {
-      // best effort
-    }
-  }
-  return true;
-}
-
-function startProxy() {
-  console.log(paint('cyan', '→ Avvio headroom proxy su :' + PORT));
-  console.log(paint('dim', `  log: ${LOG_FILE}`));
-  // Resetta il log ad ogni start pulito
-  appendFileSync(LOG_FILE, `\n--- [start-agent] start ${new Date().toISOString()} ---\n`);
-
-  try {
-    if (os.platform() === 'win32') {
-      // `start /B` dentro cmd.exe è l'unico modo affidabile su Windows per
-      // staccare headroom dal parent. execSync ritorna appena `start /B`
-      // ritorna (subito), headroom resta in background. Redirection va passata
-      // dentro la stringa cmd (NON come args separati a spawn, altrimenti
-      // `>` diventa un argomento letterale di headroom).
-      execSync(
-        `cmd /c "start /B headroom proxy --port ${PORT} > "${LOG_FILE}" 2>&1"`,
-        { stdio: 'ignore' }
-      );
-    } else {
-      // POSIX: detached + stdio su file (= nohup)
-      const out = openSync(LOG_FILE, 'a');
-      const errFd = openSync(LOG_FILE, 'a');
-      const child = spawn('headroom', ['proxy', '--port', String(PORT)], {
-        detached: true,
-        stdio: ['ignore', out, errFd],
-      });
-      child.unref();
-    }
-  } catch (err) {
-    appendFileSync(LOG_FILE, `\n[start-agent] spawn error: ${err?.message || err}\n`);
-    console.error(paint('red', `✗ Impossibile avviare headroom: ${err.message}`));
-    console.error(paint('dim', '  installalo con: pip install "headroom-ai[all]"'));
-    process.exit(1);
-  }
-}
-
-async function waitForProxy() {
-  const start = Date.now();
-  let lastLog = 0;
-  while (Date.now() - start < READY_TIMEOUT_MS) {
-    if (await isProxyUp()) return;
-    const elapsed = Date.now() - start;
-    if (elapsed - lastLog > 3000) {
-      lastLog = elapsed;
-      process.stdout.write(paint('dim', `  ...attendo proxy (${Math.floor(elapsed / 1000)}s)\r`));
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  process.stdout.write('\n');
-  throw new Error(`headroom proxy non risponde su :${PORT} entro ${READY_TIMEOUT_MS / 1000}s. Vedi log: ${LOG_FILE}`);
+  writeStartupBat(batPath, logPath);
+  return { batPath, logPath };
 }
 
 function findOpencodeBin() {
@@ -226,11 +133,11 @@ async function cmdStart() {
   if (await isProxyUp()) {
     console.log(paint('green', '✓ headroom proxy già attivo ') + paint('dim', `@ ${PROXY_URL}`));
   } else {
-    startProxy();
+    startProxy({ source: 'start-agent' });
     await waitForProxy();
     console.log(paint('green', '\n✓ headroom proxy pronto ') + paint('dim', `@ ${PROXY_URL}`));
   }
-  console.log(paint('cyan', '→ Dashboard headroom: ') + paint('bold', PROXY_URL));
+  console.log(paint('cyan', '→ Dashboard headroom: ') + paint('bold', DASHBOARD_URL));
   openBrowserInDev();
   const { code } = await launchOpencode();
   console.log('');
@@ -241,11 +148,14 @@ async function cmdStart() {
 
 async function cmdStatus() {
   if (await isProxyUp()) {
+    const { findProxyPids } = await import('./headroom.mjs');
     const pids = findProxyPids();
     console.log(paint('green', '● headroom proxy attivo') + paint('dim', ` @ ${PROXY_URL}  (pid: ${pids.join(', ') || 'n/a'})`));
+    console.log(paint('cyan', '  Dashboard: ') + paint('bold', DASHBOARD_URL));
     process.exit(0);
   } else {
     console.log(paint('yellow', '○ headroom proxy NON attivo') + paint('dim', ` (porta ${PORT} libera)`));
+    console.log(paint('dim', '  avvialo con: npm run agent:proxy'));
     process.exit(1);
   }
 }
@@ -266,49 +176,175 @@ async function cmdStop() {
   console.log(paint('green', '✓ headroom proxy terminato'));
 }
 
-// Open the headroom dashboard URL in the user's default browser (dev only).
-// Uses the OS-native opener (start on Windows, open on macOS, xdg-open on Linux)
-// to avoid an extra npm dependency.
-function openBrowserInDev() {
-  if (process.env.NODE_ENV === 'production') return;
+// Apre la dashboard nel browser. Se il proxy non è attivo lo avvia prima
+// (modalità no-op per chi vuole solo consultare le metriche correnti).
+async function cmdDashboard() {
+  if (!(await isProxyUp())) {
+    startProxy({ source: 'dashboard' });
+    await waitForProxy();
+    console.log(paint('green', '\n✓ headroom proxy pronto ') + paint('dim', `@ ${PROXY_URL}`));
+  } else {
+    console.log(paint('green', '● headroom proxy attivo ') + paint('dim', `@ ${PROXY_URL}`));
+  }
+  console.log(paint('cyan', '\n→ Dashboard headroom: ') + paint('bold', DASHBOARD_URL));
+  openDashboardInBrowser();
+}
+
+function openDashboardInBrowser() {
   try {
     if (os.platform() === 'win32') {
-      // `start` is a cmd builtin. We use the `url.dll` API via `explorer` so the
-      // existing browser tab reuses the page if already open.
-      spawn('cmd', ['/c', 'start', '""', PROXY_URL], { detached: true, stdio: 'ignore' }).unref();
+      spawn('cmd', ['/c', 'start', '""', DASHBOARD_URL], { detached: true, stdio: 'ignore' }).unref();
     } else if (os.platform() === 'darwin') {
-      spawn('open', [PROXY_URL], { detached: true, stdio: 'ignore' }).unref();
+      spawn('open', [DASHBOARD_URL], { detached: true, stdio: 'ignore' }).unref();
     } else {
-      // xdg-open is the standard on most Linux distros (Ubuntu, Fedora, Arch, ...)
-      spawn('xdg-open', [PROXY_URL], { detached: true, stdio: 'ignore' }).unref();
+      spawn('xdg-open', [DASHBOARD_URL], { detached: true, stdio: 'ignore' }).unref();
     }
   } catch {
-    // Browser not available — just print the URL so the user can click it.
+    // best effort
+  }
+}
+
+// Crea/rimuove un Task Scheduler di Windows che lancia headroom proxy al
+// logon dell'utente. Solo Windows. Per "sempre attivo" anche dopo reboot
+// e anche se l'utente non lancia opencode.
+async function cmdAutostart({ enable, mode = 'task' }) {
+  if (os.platform() !== 'win32') {
+    console.error(paint('red', '✗ autostart supportato solo su Windows per ora'));
+    process.exit(1);
+  }
+  const taskName = 'HeadroomProxy';
+  if (mode === 'startup') {
+    // Fallback no-admin: cartella shell:startup (solo utente corrente).
+    const startupDir = path.join(
+      process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
+      'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup'
+    );
+    const batPath = path.join(startupDir, 'headroom-proxy.bat');
+    const logPath = path.join(os.homedir(), '.headroom-autostart.log');
+    if (enable) {
+      try {
+        if (!existsSync(startupDir)) {
+          console.error(paint('red', `✗ cartella startup non trovata: ${startupDir}`));
+          process.exit(1);
+        }
+        writeStartupBat(batPath, logPath);
+        console.log(paint('green', `✓ Script startup creato: ${batPath}`));
+        console.log(paint('dim', `  log autostart: ${logPath}`));
+        console.log(paint('dim', '  Al prossimo logon Windows il proxy partirà in automatico.'));
+      } catch (err) {
+        console.error(paint('red', `✗ scrittura fallita: ${err.message}`));
+        process.exit(1);
+      }
+    } else {
+      try {
+        removeStartupBat(batPath);
+        console.log(paint('green', `✓ Script startup rimosso: ${batPath}`));
+      } catch (err) {
+        console.error(paint('red', `✗ rimozione fallita: ${err.message}`));
+        process.exit(1);
+      }
+    }
+    return;
+  }
+  if (enable) {
+    const logPath = path.join(os.homedir(), '.headroom-autostart.log');
+    const cmd = [
+      'schtasks',
+      '/Create',
+      '/TN', taskName,
+      '/TR', `cmd /c headroom proxy --port ${PORT} --target-ratio ${SAVINGS_PROFILE.HEADROOM_TARGET_RATIO} --budget ${SAVINGS_PROFILE.HEADROOM_BUDGET} --budget-period ${SAVINGS_PROFILE.HEADROOM_BUDGET_PERIOD} > "${logPath}" 2>&1`,
+      '/SC', 'ONLOGON',
+      '/RL', 'HIGHEST',
+      '/F',
+    ].map((a) => `"${a}"`).join(' ');
+    try {
+      execSync(cmd, { stdio: 'inherit' });
+      console.log(paint('green', `✓ Task "${taskName}" creato (ONLOGON, headroom proxy :${PORT})`));
+      console.log(paint('dim', `  log autostart: ${logPath}`));
+      console.log(paint('dim', '  Al prossimo logon Windows il proxy partirà in automatico.'));
+    } catch (err) {
+      console.error(paint('red', `✗ schtasks fallito: ${err.message}`));
+      console.error(paint('dim', '  Probabile mancanza privilegi admin. Riprova con:'));
+      console.error(paint('dim', '    npm run agent:autostart:startup   (no admin, solo utente corrente)'));
+      process.exit(1);
+    }
+  } else {
+    try {
+      execSync(`schtasks /Delete /TN ${taskName} /F`, { stdio: 'inherit' });
+      console.log(paint('green', `✓ Task "${taskName}" rimosso`));
+    } catch (err) {
+      console.error(paint('red', `✗ rimozione fallita: ${err.message}`));
+      process.exit(1);
+    }
   }
 }
 
 async function cmdProxy() {
   if (await isProxyUp()) {
     console.log(paint('green', '✓ headroom proxy già attivo ') + paint('dim', `@ ${PROXY_URL}`));
-    console.log(paint('cyan', '\n→ Dashboard headroom: ') + paint('bold', PROXY_URL));
+    console.log(paint('cyan', '\n→ Dashboard headroom: ') + paint('bold', DASHBOARD_URL));
     return;
   }
-  startProxy();
+  startProxy({ source: 'proxy' });
   await waitForProxy();
   console.log(paint('green', '\n✓ headroom proxy pronto ') + paint('dim', `@ ${PROXY_URL}`));
-  console.log(paint('cyan', '\n→ Dashboard headroom: ') + paint('bold', PROXY_URL));
+  console.log(paint('cyan', '\n→ Dashboard headroom: ') + paint('bold', DASHBOARD_URL));
   console.log(paint('dim', '  (apertura browser in dev...)'));
   openBrowserInDev();
   console.log(paint('dim', '  il proxy resterà attivo. Lancia opencode con:'));
   console.log(paint('dim', `    $env:OPENAI_BASE_URL="${PROXY_URL}"; opencode`));
 }
 
+async function cmdSetup() {
+  console.log(paint('cyan', '→ Setup headroom automatico'));
+
+  setPersistentProxyEnv();
+  console.log(paint('green', `✓ env utente: OPENAI_BASE_URL=${PROXY_URL}`));
+  console.log(paint('green', `✓ env utente: ANTHROPIC_BASE_URL=${PROXY_URL}`));
+
+  if (os.platform() === 'win32') {
+    const startup = installStartupAutostart();
+    console.log(paint('green', `✓ autostart Windows: ${startup.batPath}`));
+  }
+
+  if (await isProxyUp()) {
+    killProxy();
+    for (let i = 0; i < 25 && (await isProxyUp()); i++) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
+  startProxy({ source: 'setup' });
+  const ready = await waitForProxy();
+  if (!ready) {
+    throw new Error('headroom proxy non pronto dopo setup');
+  }
+  console.log(paint('green', `✓ proxy agent-90 attivo @ ${PROXY_URL}`));
+  console.log(paint('cyan', `→ Dashboard: ${DASHBOARD_URL}`));
+  openDashboardInBrowser();
+
+  console.log('');
+  console.log(paint('yellow', 'Nota: opencode già aperto va chiuso e riaperto.'));
+  console.log(paint('dim', 'Motivo: Windows passa le env var solo ai nuovi processi.'));
+}
+
 const cmd = process.argv[2] || 'start';
-const handlers = { start: cmdStart, status: cmdStatus, stop: cmdStop, proxy: cmdProxy };
+const handlers = {
+  start: cmdStart,
+  status: cmdStatus,
+  stop: cmdStop,
+  proxy: cmdProxy,
+  setup: cmdSetup,
+  dashboard: cmdDashboard,
+  'autostart:enable': () => cmdAutostart({ enable: true, mode: 'task' }),
+  'autostart:disable': () => cmdAutostart({ enable: false, mode: 'task' }),
+  'autostart:startup': () => cmdAutostart({ enable: true, mode: 'startup' }),
+  'autostart:startup:disable': () => cmdAutostart({ enable: false, mode: 'startup' }),
+};
 const handler = handlers[cmd];
 if (!handler) {
   console.error(paint('red', `comando sconosciuto: ${cmd}`));
-  console.error(paint('dim', '  uso: node scripts/start-agent.mjs [start|proxy|stop|status]'));
+  console.error(paint('dim', '  uso: node scripts/start-agent.mjs [start|setup|proxy|stop|status|dashboard|autostart:enable|autostart:disable|autostart:startup|autostart:startup:disable]'));
   process.exit(2);
 }
 handler().catch((err) => {
