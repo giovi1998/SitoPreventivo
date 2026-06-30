@@ -109,9 +109,9 @@
 
 .card-preview-side.grid-mode .card-back-val {
   font-size: 0.72rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Phase 2.2: wrap invece di ellipsis (vedi .card-back-val flexbox). */
+  overflow-wrap: break-word;
+  word-break: break-word;
   max-width: 100%;
 }
 
@@ -122,9 +122,8 @@
 
 .card-preview-side.grid-mode .card-back-socials {
   font-size: 0.68rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
   max-width: 100%;
 }
 
@@ -1480,9 +1479,11 @@
 .card-back-val {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Phase 2.2: i contatti (email, telefono, indirizzo) devono essere
+   * leggibili per intero, non tagliati con "..." — sono dati essenziali
+   * di un bigliettino da visita. Permettiamo il wrap con word-break. */
+  overflow-wrap: break-word;
+  word-break: break-word;
   font-weight: 500;
 }
 

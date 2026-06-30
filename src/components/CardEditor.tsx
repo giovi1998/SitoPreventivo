@@ -232,11 +232,15 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
         ...current,
         elements: { ...current.elements, [selectedGridElement]: { ...el, x: newX, y: newY } },
       };
+      // Phase 2.2: attiva useGrid sul lato modificato così la preview
+      // riflette lo spostamento (senza questo, CardPreview resta in
+      // flexbox e l'utente non vede la mossa — bug "non si sposta nulla").
       return {
         ...prev,
         [isBack ? 'backGrid' : 'grid']: newGrid,
+        [isBack ? 'back' : 'front']: { ...(prev[isBack ? 'back' : 'front'] as object), useGrid: true },
         updatedAt: new Date().toISOString(),
-      };
+      } as typeof prev;
     });
   }, [selectedGridElement, gridEditorSide]);
 
@@ -255,11 +259,13 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
         ...current,
         elements: { ...current.elements, [selectedGridElement]: { ...el, w: next.w, h: next.h } },
       };
+      // Phase 2.2: attiva useGrid sul lato modificato (vedi moveSelectedElement).
       return {
         ...prev,
         [isBack ? 'backGrid' : 'grid']: newGrid,
+        [isBack ? 'back' : 'front']: { ...(prev[isBack ? 'back' : 'front'] as object), useGrid: true },
         updatedAt: new Date().toISOString(),
-      };
+      } as typeof prev;
     });
   }, [selectedGridElement, gridEditorSide]);
 
@@ -274,27 +280,59 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
   // e ritornava `false`: i bottoni risultavano abilitati anche in caso di
   // collisione, e `moveSelectedElement` (che usa `clampMove` sulla grid
   // reale) bloccava la mossa → "clicca ma non succede nulla".
-  const activeGrid: CardGrid | undefined =
-    gridEditorSide === 'back' ? card.backGrid : card.grid;
+  // Phase 2.2: usa il fallback preset se la grid del lato non è ancora
+  // definita. Così i bottoni del grid editor sono abilitati dalla prima
+  // mossa (l'utente non deve prima applicare un preset manualmente).
+  // La prima mossa persiste la grid in card.grid/backGrid e attiva useGrid.
+  const activeGrid: CardGrid =
+    gridEditorSide === 'back'
+      ? (card.backGrid ?? gridPresetBackDefault())
+      : (card.grid ?? gridPresetLeft());
   const selectedEl =
-    selectedGridElement && activeGrid
+    selectedGridElement
       ? activeGrid.elements[selectedGridElement as keyof CardGrid['elements']]
       : undefined;
 
-  const canMoveLeft  = !!selectedEl && !!activeGrid && selectedEl.x > 0
+  const canMoveLeft  = !!selectedEl && selectedEl.x > 0
     && !wouldCollideOnMove(activeGrid, selectedGridElement as string, -1, 0);
-  const canMoveUp    = !!selectedEl && !!activeGrid && selectedEl.y > 0
+  const canMoveUp    = !!selectedEl && selectedEl.y > 0
     && !wouldCollideOnMove(activeGrid, selectedGridElement as string, 0, -1);
-  const canMoveRight = !!selectedEl && !!activeGrid && selectedEl.x + selectedEl.w < activeGrid.cols
+  const canMoveRight = !!selectedEl && selectedEl.x + selectedEl.w < activeGrid.cols
     && !wouldCollideOnMove(activeGrid, selectedGridElement as string, 1, 0);
-  const canMoveDown  = !!selectedEl && !!activeGrid && selectedEl.y + selectedEl.h < activeGrid.rows
+  const canMoveDown  = !!selectedEl && selectedEl.y + selectedEl.h < activeGrid.rows
     && !wouldCollideOnMove(activeGrid, selectedGridElement as string, 0, 1);
   const canShrinkW = !!selectedEl && selectedEl.w > 1;
-  const canGrowW   = !!selectedEl && !!activeGrid && selectedEl.x + selectedEl.w < activeGrid.cols
+  const canGrowW   = !!selectedEl && selectedEl.x + selectedEl.w < activeGrid.cols
     && !wouldCollideOnResize(activeGrid, selectedGridElement as string, 1, 0);
   const canShrinkH = !!selectedEl && selectedEl.h > 1;
-  const canGrowH   = !!selectedEl && !!activeGrid && selectedEl.y + selectedEl.h < activeGrid.rows
+  const canGrowH   = !!selectedEl && selectedEl.y + selectedEl.h < activeGrid.rows
     && !wouldCollideOnResize(activeGrid, selectedGridElement as string, 0, 1);
+
+  // Phase 2.2: elementi disponibili nel grid editor in base al contenuto
+  // effettivo della card. Mostra solo gli elementi che hanno qualcosa da
+  // posizionare (es. se non c'è un QR code, non mostrare "QR" nella select).
+  const availableGridElements = useMemo<Array<{ value: keyof CardGrid['elements']; label: string }>>(() => {
+    if (gridEditorSide === 'front') {
+      const els: Array<{ value: keyof CardGrid['elements']; label: string }> = [];
+      if (card.front.photoUrl) els.push({ value: 'photo', label: 'Foto' });
+      if (card.front.logoUrl) els.push({ value: 'logo', label: 'Logo' });
+      if (card.front.name.trim()) els.push({ value: 'name', label: 'Nome' });
+      if (card.front.title.trim()) els.push({ value: 'title', label: 'Ruolo' });
+      if (card.front.company.trim()) els.push({ value: 'company', label: 'Azienda' });
+      return els;
+    }
+    const els: Array<{ value: keyof CardGrid['elements']; label: string }> = [];
+    const hasContacts = card.back.phone.trim() || card.back.email.trim() ||
+      card.back.website.trim() || card.back.address.trim() || card.back.vatNumber.trim();
+    if (hasContacts) els.push({ value: 'contacts', label: 'Contatti' });
+    if (card.back.qrPayload.trim() || card.back.website.trim()) {
+      els.push({ value: 'qr', label: 'QR' });
+    }
+    if (card.back.socials.some((s) => s.platform && s.url)) {
+      els.push({ value: 'socials', label: 'Social' });
+    }
+    return els;
+  }, [gridEditorSide, card.front, card.back]);
 
   const patchTitle = useCallback((title: string) => {
     setCard((prev) => ({ ...prev, title, updatedAt: new Date().toISOString() }));
@@ -1219,20 +1257,11 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
                 aria-label="Elemento selezionato"
               >
                 <option value="">—</option>
-                {gridEditorSide === 'front' ? (
-                  <>
-                    <option value="photo">Foto</option>
-                    <option value="logo">Logo</option>
-                    <option value="name">Nome</option>
-                    <option value="title">Ruolo</option>
-                    <option value="company">Azienda</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="contacts">Contatti</option>
-                    <option value="qr">QR</option>
-                    <option value="socials">Social</option>
-                  </>
+                {availableGridElements.map((el) => (
+                  <option key={el.value} value={el.value}>{el.label}</option>
+                ))}
+                {availableGridElements.length === 0 && (
+                  <option value="" disabled>Nessun elemento con contenuto</option>
                 )}
               </select>
             </label>

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 import CardEditor from '../CardEditor';
 import dataService from '../../utils/dataService';
 import { createEmptyCard, createGiovanniCardTemplate } from '../../utils/documentSchemas';
+import type { BusinessCard } from '../../utils/documentSchemas';
 import { compressImage, generateCardPDF, generateCardPng } from '../../utils/cardGenerator';
 import { useToast } from '../../hooks/useToast';
 
@@ -66,7 +67,7 @@ const baseProps = {
   tier: 'unlocked' as const,
 };
 
-function renderEditor(overrides: Partial<typeof baseProps> = {}) {
+function renderEditor(overrides: Partial<typeof baseProps & { initialCard?: BusinessCard }> = {}) {
   return render(<CardEditor {...baseProps} {...overrides} />);
 }
 
@@ -436,7 +437,7 @@ describe('CardEditor', () => {
     });
 
     it('resizes selected element with +/- buttons', () => {
-      renderEditor();
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
       const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(nameSelect, { target: { value: 'photo' } });
       const plus = screen.getByRole('button', { name: /Aumenta larghezza/i });
@@ -444,7 +445,7 @@ describe('CardEditor', () => {
     });
 
     it('disables move buttons at grid boundary (Phase 2.1 visual feedback)', () => {
-      renderEditor();
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
       // Seleziona photo (è all'inizio del preset left: x=0)
       const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(nameSelect, { target: { value: 'photo' } });
@@ -455,7 +456,7 @@ describe('CardEditor', () => {
     });
 
     it('disables grow buttons when at right/bottom edge (Phase 2.1)', () => {
-      renderEditor();
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
       // Seleziona photo del preset left: photo at x=0, w=1, h=4 in 4×4 grid
       // → canGrowH = false (y=0, h=4, rows=4)
       const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
@@ -466,10 +467,32 @@ describe('CardEditor', () => {
     });
 
     it('logo is selectable in grid editor (Phase 2.1)', () => {
-      renderEditor();
+      // Giovanni template ha logoUrl → logo è tra le opzioni disponibili.
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
       const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       const options = Array.from(nameSelect.querySelectorAll('option')).map((o) => o.value);
       expect(options).toContain('logo');
+    });
+
+    it('grid editor select shows only elements with content (Phase 2.2)', () => {
+      // Card vuota: nessun elemento ha contenuto → select vuota.
+      renderEditor();
+      const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      const options = Array.from(nameSelect.querySelectorAll('option')).map((o) => o.value);
+      // Solo l'opzione vuota "—"
+      expect(options.filter((v) => v !== '')).toHaveLength(0);
+    });
+
+    it('grid editor select shows all front elements with Giovanni template (Phase 2.2)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      const options = Array.from(nameSelect.querySelectorAll('option')).map((o) => o.value);
+      // Giovanni ha foto, logo, nome, ruolo, azienda → tutti presenti
+      expect(options).toContain('photo');
+      expect(options).toContain('logo');
+      expect(options).toContain('name');
+      expect(options).toContain('title');
+      expect(options).toContain('company');
     });
 
     it('disables move button when next cell would collide with another element (Phase 2.2 REQ-A01)', () => {
@@ -478,7 +501,7 @@ describe('CardEditor', () => {
       // PRIMA del fix, il collision check usava un `bounds` senza `elements`
       // e ritornava sempre `false`, quindi il bottone era abilitato e la
       // mossa veniva bloccata silenziosamente da clampMove (UX brutto).
-      renderEditor();
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'name' } });
       const downBtn = screen.getByRole('button', { name: /Sposta giù/i }) as HTMLButtonElement;
@@ -492,11 +515,229 @@ describe('CardEditor', () => {
       // Per testare la collisione, selezioniamo name (1,1,3,1): può crescere
       // in w (fino a w=3 perché cols=4, x+w≤4), ma crescere in h porterebbe
       // a (1,1,3,2) che collide con title a (1,2,3,1).
-      renderEditor();
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'name' } });
       const growH = screen.getByRole('button', { name: /Aumenta altezza/i }) as HTMLButtonElement;
       expect(growH).toBeDisabled();
+    });
+
+    // ─── Phase 2.2: test sposta/ridimensiona ogni elemento (template Giovanni) ──
+    // Giovanni template non ha card.grid (usa fallback gridPresetLeft che è
+    // molto compatto: nessun elemento può muoversi). Per testare mosse valide,
+    // applichiamo prima il preset 'centered' (ha spazio) poi facciamo le mosse.
+
+    it('moves photo left by 1 (grid editor front, Giovanni + centered preset)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      // Applica preset centered (photo a x=1, può andare a sinistra)
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'photo' } });
+      const leftBtn = screen.getByRole('button', { name: /Sposta a sinistra/i });
+      expect(leftBtn).not.toBeDisabled();
+      fireEvent.click(leftBtn);
+      // Dopo la mossa: useGrid=true → preview in grid-mode
+      const front = screen.getByTestId('card-preview-front');
+      expect(front.className).toContain('grid-mode');
+    });
+
+    it('resizes photo taller by 1 (grid editor front, Giovanni + centered preset)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'photo' } });
+      // photo centered: (1,0,2,1) → growH: (1,0,2,2) → collide con name(0,1,4,1)?
+      // x: 3>0 OK, 4<=1 No → x overlap. y: 2<=1 No, 2<=0 No → y overlap. Collide!
+      // Quindi growH è disabled. Usiamo shrinkW invece (w=2 > 1 → canShrinkW=true)
+      const shrinkW = screen.getByRole('button', { name: /Riduci larghezza/i });
+      expect(shrinkW).not.toBeDisabled();
+      fireEvent.click(shrinkW);
+      const front = screen.getByTestId('card-preview-front');
+      expect(front.className).toContain('grid-mode');
+    });
+
+    it('moves name down blocked by title (grid editor front, centered preset)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'name' } });
+      // name centered: (0,1,4,1) → ↓ va a (0,2,4,1) → collide con title(0,2,4,1)
+      const downBtn = screen.getByRole('button', { name: /Sposta giù/i });
+      expect(downBtn).toBeDisabled();
+    });
+
+    it('resizes name shrink width (grid editor front, centered preset)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'name' } });
+      // name centered: (0,1,4,1), w=4 > 1 → canShrinkW = true
+      const shrinkW = screen.getByRole('button', { name: /Riduci larghezza/i });
+      expect(shrinkW).not.toBeDisabled();
+      fireEvent.click(shrinkW);
+      const front = screen.getByTestId('card-preview-front');
+      expect(front.className).toContain('grid-mode');
+    });
+
+    it('moves title up blocked by name (grid editor front, centered preset)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'title' } });
+      // title centered: (0,2,4,1) → ↑ va a (0,1,4,1) → collide con name(0,1,4,1)
+      const upBtn = screen.getByRole('button', { name: /Sposta su/i });
+      expect(upBtn).toBeDisabled();
+    });
+
+    it('resizes title shrink height (grid editor front, centered preset)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'title' } });
+      // title centered: (0,2,4,1), h=1 → canShrinkH = false (h=1 min)
+      const shrinkH = screen.getByRole('button', { name: /Riduci altezza/i });
+      expect(shrinkH).toBeDisabled();
+    });
+
+    it('moves company left blocked by grid edge (grid editor front, centered)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'company' } });
+      // company centered: (0,3,3,1) → x=0 → canMoveLeft = false
+      const leftBtn = screen.getByRole('button', { name: /Sposta a sinistra/i });
+      expect(leftBtn).toBeDisabled();
+    });
+
+    it('resizes company shrink width (grid editor front, centered preset)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'company' } });
+      // company centered: (0,3,3,1), w=3 > 1 → canShrinkW = true
+      const shrinkW = screen.getByRole('button', { name: /Riduci larghezza/i });
+      expect(shrinkW).not.toBeDisabled();
+      fireEvent.click(shrinkW);
+      const front = screen.getByTestId('card-preview-front');
+      expect(front.className).toContain('grid-mode');
+    });
+
+    it('moves logo up blocked by company (grid editor front, centered)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'logo' } });
+      // logo centered: (3,3,1,1) → ↑ va a (3,2,1,1) → collide con title(0,2,4,1)?
+      // x: 4>0 OK, 4<=3 No → x overlap. y: 3<=2 No, 3<=3 No → y overlap. Collide!
+      const upBtn = screen.getByRole('button', { name: /Sposta su/i });
+      expect(upBtn).toBeDisabled();
+    });
+
+    it('resizes logo shrink width (grid editor front, centered preset)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'centered' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'logo' } });
+      // logo centered: (3,3,1,1), w=1 → canShrinkW = false (w=1 min)
+      const shrinkW = screen.getByRole('button', { name: /Riduci larghezza/i });
+      expect(shrinkW).toBeDisabled();
+    });
+
+    it('grid editor back: moves QR down blocked by socials (Giovanni template)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
+      fireEvent.change(sideSelect, { target: { value: 'back' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'qr' } });
+      // Giovanni backGrid (gridPresetBackDefault): qr a (3,0,1,2), socials a (3,2,1,2)
+      // → ↓ va a (3,1,1,2) → collide con socials (y overlap: qr.y2=3 > socials.y=2)
+      const downBtn = screen.getByRole('button', { name: /Sposta giù/i });
+      expect(downBtn).toBeDisabled();
+    });
+
+    it('grid editor back: resizes contacts wider blocked by QR (Giovanni)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
+      fireEvent.change(sideSelect, { target: { value: 'back' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'contacts' } });
+      // contacts a (0,0,3,4), cols=4 → growW: (0,0,4,4) collide con qr(3,0,1,2)
+      const growW = screen.getByRole('button', { name: /Aumenta larghezza/i });
+      expect(growW).toBeDisabled();
+    });
+
+    it('grid editor back: resizes socials taller blocked by grid edge (Giovanni)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
+      fireEvent.change(sideSelect, { target: { value: 'back' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'socials' } });
+      // socials a (3,2,1,2), rows=4 → y+h=4 = rows → canGrowH = false
+      const growH = screen.getByRole('button', { name: /Aumenta altezza/i });
+      expect(growH).toBeDisabled();
+    });
+
+    it('grid editor back: moves socials up blocked by QR (Giovanni template)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
+      fireEvent.change(sideSelect, { target: { value: 'back' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'socials' } });
+      // socials a (3,2,1,2) → ↑ va a (3,1,1,2) → collide con qr(3,0,1,2)
+      const upBtn = screen.getByRole('button', { name: /Sposta su/i });
+      expect(upBtn).toBeDisabled();
+    });
+
+    it('grid editor back: shrinks contacts width (Giovanni template)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
+      fireEvent.change(sideSelect, { target: { value: 'back' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'contacts' } });
+      // contacts a (0,0,3,4), w=3 > 1 → canShrinkW = true
+      const shrinkW = screen.getByRole('button', { name: /Riduci larghezza/i });
+      expect(shrinkW).not.toBeDisabled();
+      fireEvent.click(shrinkW);
+      const back = screen.getByTestId('card-preview-back');
+      expect(back.className).toContain('grid-mode');
+    });
+
+    it('grid editor back: shrinks QR height (Giovanni template)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
+      fireEvent.change(sideSelect, { target: { value: 'back' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'qr' } });
+      // qr a (3,0,1,2), h=2 > 1 → canShrinkH = true
+      const shrinkH = screen.getByRole('button', { name: /Riduci altezza/i });
+      expect(shrinkH).not.toBeDisabled();
+      fireEvent.click(shrinkH);
+      const back = screen.getByTestId('card-preview-back');
+      expect(back.className).toContain('grid-mode');
+    });
+
+    it('grid editor back: shrinks socials height (Giovanni template)', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
+      fireEvent.change(sideSelect, { target: { value: 'back' } });
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'socials' } });
+      // socials a (3,2,1,2), h=2 > 1 → canShrinkH = true
+      const shrinkH = screen.getByRole('button', { name: /Riduci altezza/i });
+      expect(shrinkH).not.toBeDisabled();
+      fireEvent.click(shrinkH);
+      const back = screen.getByTestId('card-preview-back');
+      expect(back.className).toContain('grid-mode');
     });
   });
 
