@@ -42,6 +42,17 @@ export type AppContextValue = {
   onUpdateStatus?: (id: string, status: string) => void;
   onDeleteRequest?: (item: any) => void;
   createFromTemplate?: (t: any) => void;
+  // Phase 6 — unified collection. Each editor receives the document
+  // currently being edited; setters live in AppShell state and are
+  // exposed here so the CollectionView can dispatch the right editor.
+  qrDocument?: unknown;
+  setQrDocument?: (d: any) => void;
+  cardDocument?: unknown;
+  setCardDocument?: (d: any) => void;
+  logoDocument?: unknown;
+  setLogoDocument?: (d: any) => void;
+  openDocument?: (doc: any) => void;
+  refreshDocuments?: () => void;
   [key: string]: any;
 };
 

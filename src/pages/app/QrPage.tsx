@@ -12,7 +12,7 @@ export default function QrPage() {
     : (ctx?.tier === 'unlocked' ? 'unlocked' : 'free');
   return (
     <Suspense fallback={<div className="view-loading"><div className="spinner" /></div>}>
-      <QREditor userEmail={user?.email || ''} tier={tier} />
+      <QREditor userEmail={user?.email || ''} tier={tier} initialQr={ctx?.qrDocument} />
     </Suspense>
   );
 }

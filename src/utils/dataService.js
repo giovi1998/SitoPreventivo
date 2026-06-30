@@ -204,6 +204,47 @@ const dataService = {
     return { documents: Array.isArray(result) ? result : (result.data || []) };
   },
 
+  // ─── MIGRATION (phase 6) ───────────────────────
+  // Copy legacy quotes from `precisionQuote_quotes` to the unified
+  // `precisionQuote_documents:v1` storage with `documentType='quote'`.
+  // Idempotent: uses stable `migrate_<oldid>` IDs (no timestamp) so
+  // re-runs never duplicate. Flag `pq_migration_v1_done_<email>` skips
+  // already-migrated users. On `QuotaExceeded` the function throws so
+  // the caller can decide (e.g. AppShell shows a recovery toast).
+  async migrateLegacyQuotes(email) {
+    if (!email) return { migrated: 0, skipped: true };
+    if (IS_LOCAL) {
+      const flag = `pq_migration_v1_done_${email}`;
+      if (localStorage.getItem(flag)) return { migrated: 0, skipped: true };
+      const legacy = lsGet('precisionQuote_quotes') || [];
+      const mine = legacy.filter((q) => q && q.owner === email);
+      const docs = lsGet('precisionQuote_documents:v1') || [];
+      const existingIds = new Set(docs.map((d) => d && d.id));
+      let migrated = 0;
+      for (const q of mine) {
+        const newId = `migrate_${q.id}`;
+        if (existingIds.has(newId)) continue;
+        docs.push({
+          ...q,
+          id: newId,
+          userEmail: email,
+          documentType: 'quote',
+          data: null,
+        });
+        migrated += 1;
+      }
+      // Direct setItem (not lsSet) so QuotaExceeded propagates and the
+      // caller can show a recovery toast instead of silently losing data.
+      localStorage.setItem('precisionQuote_documents:v1', JSON.stringify(docs));
+      localStorage.setItem(flag, '1');
+      return { migrated, skipped: false };
+    }
+    // Production: DB was already migrated in phase 1 (rename
+    // `quotes` → `documents`). Just mark flag for consistency.
+    try { localStorage.setItem(`pq_migration_v1_done_${email}`, '1'); } catch {}
+    return { migrated: 0, skipped: true };
+  },
+
   async deleteDocument(documentId, email) {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_documents:v1') || [];

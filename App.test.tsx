@@ -39,6 +39,7 @@ vi.mock('./src/utils/dataService', () => ({
     saveQuote: vi.fn(),
     deleteQuote: vi.fn(),
     saveUserSettings: vi.fn().mockResolvedValue({ success: true }),
+    migrateLegacyQuotes: vi.fn().mockResolvedValue({ migrated: 0, skipped: true }),
   },
 }));
 

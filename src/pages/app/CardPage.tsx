@@ -15,6 +15,7 @@ export default function CardPage() {
         userEmail={user?.email || ''}
         documentTheme={ctx.documentTheme}
         tier={tier}
+        initialCard={ctx?.cardDocument}
       />
     </Suspense>
   );

@@ -23,6 +23,7 @@ import { useAI } from '../hooks/useAI';
 import { useToast } from '../hooks/useToast';
 import { tryCatch } from '../utils/errors';
 import { FREE_DOCUMENT_LIMIT } from '../utils/watermark';
+import { logger } from '../utils/logger';
 
 function generateId() {
   const year = new Date().getFullYear();
@@ -74,6 +75,12 @@ export default function AppShell() {
   const [docxLoading, setDocxLoading] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showPdfImport, setShowPdfImport] = useState(false);
+  // Phase 6 — unified collection. Each editor receives the document
+  // currently being edited as `initial*` prop. Setters are exposed
+  // via context so the CollectionView can dispatch the right editor.
+  const [qrDocument, setQrDocument] = useState<any>(null);
+  const [cardDocument, setCardDocument] = useState<any>(null);
+  const [logoDocument, setLogoDocument] = useState<any>(null);
   const [documentTheme, setDocumentTheme] = useState<DocumentTemplateId>(() =>
     (localStorage.getItem('documentTheme') as DocumentTemplateId) || 'corporate'
   );
@@ -214,6 +221,29 @@ export default function AppShell() {
       }).catch(() => {});
     }
   }, [user?.email]);
+
+  // Phase 6: migrate legacy `precisionQuote_quotes` to the unified
+  // `precisionQuote_documents:v1` storage on first login per user.
+  // Idempotent (dataService handles flag + stable IDs). Toast on
+  // success, soft-fail on error so users can still reach their
+  // legacy quotes via `getQuotes` / `/quotes`.
+  const refreshDocumentsRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!user?.email) return;
+    dataService.migrateLegacyQuotes(user.email).then((result) => {
+      if (result.migrated > 0) {
+        addToast('success', `${result.migrated} preventivi migrati nel nuovo formato`);
+        refreshDocumentsRef.current();
+      }
+    }).catch((err) => {
+      logger.error('Migration failed', { err: (err as Error).message });
+      addToast(
+        'error',
+        'Migrazione non riuscita, i tuoi preventivi sono comunque accessibili',
+        6000,
+      );
+    });
+  }, [user?.email, addToast]);
 
   const markDirty = () => setIsDirty(true);
 
@@ -424,6 +454,47 @@ export default function AppShell() {
     addToast('info', `${saved.id} aperto in modifica.`);
   };
 
+  // Phase 6: dispatch a document of any type to its editor. Volantini
+  // (flyers) are not yet available (phase 3 skipped) — we surface a
+  // toast and stay on the collection.
+  const openDocument = (doc: any) => {
+    if (!doc) return;
+    switch (doc.documentType) {
+      case 'quote': {
+        const migrated = migrateFromLegacy(doc);
+        setQuote(migrated);
+        setView('editor');
+        break;
+      }
+      case 'qrCode':
+        setQrDocument(doc);
+        setView('qr');
+        break;
+      case 'businessCard':
+        setCardDocument(doc);
+        setView('card');
+        break;
+      case 'logo':
+        setLogoDocument(doc);
+        setView('logo');
+        break;
+      case 'flyer':
+        addToast('info', 'I volantini non sono ancora disponibili (fase 3 saltata).');
+        break;
+      default:
+        addToast('error', `Tipo documento non supportato: ${doc.documentType}`);
+    }
+  };
+
+  // Phase 6: notify listeners (CollectionView) that documents changed
+  // (e.g. after a successful migration or delete). The actual fetch
+  // happens inside CollectionView via dataService.getDocuments.
+  const refreshDocuments = useCallback(() => {
+    setDocumentsVersion((v) => v + 1);
+  }, []);
+  refreshDocumentsRef.current = refreshDocuments;
+  const [documentsVersion, setDocumentsVersion] = useState(0);
+
   const updateQuoteStatus = (id: string, newStatus: string) => {
     setQuotes((c: any[]) => c.map((q: any) => q.id === id ? { ...q, status: newStatus } : q));
     if (user?.email) {
@@ -488,6 +559,13 @@ export default function AppShell() {
     documentCount,
     refreshTier,
     checkDocumentLimit,
+    // Phase 6 — unified collection
+    qrDocument, setQrDocument,
+    cardDocument, setCardDocument,
+    logoDocument, setLogoDocument,
+    openDocument,
+    refreshDocuments,
+    documentsVersion,
   } as any;
 
   return (

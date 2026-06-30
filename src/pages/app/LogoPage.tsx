@@ -11,7 +11,7 @@ export default function LogoPage() {
     : (ctx?.tier === 'unlocked' ? 'unlocked' : 'free');
   return (
     <Suspense fallback={<div className="view-loading"><div className="spinner" /></div>}>
-      <LogoEditor userEmail={user?.email || ''} tier={tier} />
+      <LogoEditor userEmail={user?.email || ''} tier={tier} initialLogo={ctx?.logoDocument} />
     </Suspense>
   );
 }
