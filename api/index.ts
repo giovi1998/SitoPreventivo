@@ -69,7 +69,24 @@ const userSettingsTable = pgTable('user_settings', {
   logoUrl: text('logo_url'),
   documentTheme: varchar('document_theme', { length: 50 }).default('corporate'),
   onboardingDone: boolean('onboarding_done').default(false),
+  // Phase 5 — tier system
+  tier: varchar({ length: 20 }).default('free'),
+  unlockCode: varchar('unlock_code', { length: 50 }),
+  unlockedAt: timestamp('unlocked_at'),
+  documentCount: integer('document_count').default(0),
 });
+
+const unlockCodesTable = pgTable('unlock_codes', {
+  code: varchar({ length: 50 }).primaryKey(),
+  package: varchar({ length: 50 }).notNull(),
+  usedBy: varchar('used_by', { length: 255 }),
+  usedAt: timestamp('used_at'),
+  createdBy: varchar('created_by', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+const VALID_PACKAGES = new Set(['starter', 'apertura', 'presenza', 'custom']);
+const FREE_DOCUMENT_LIMIT = 3;
 
 type RouteHandler = (
   path: string,
@@ -178,6 +195,17 @@ function validate<T>(schema: z.ZodType<T>, data: unknown): { error: true; errors
   return { error: false, data: result.data };
 }
 
+function randomHex(n: number): string {
+  const chars = '0123456789ABCDEF';
+  let s = '';
+  for (let i = 0; i < n; i++) s += chars[Math.floor(Math.random() * 16)];
+  return s;
+}
+
+function generateUnlockCode(): string {
+  return `PQ-${randomHex(8)}-${randomHex(8)}-${randomHex(8)}`;
+}
+
 const passwordSchema = z.string()
   .min(12, 'Password: minimo 12 caratteri')
   .max(100)
@@ -214,6 +242,26 @@ const TokenLimitSchema = z.object({
 const TrackTokensSchema = z.object({
   email: z.string().email('Email non valida'),
   tokens: z.number().positive('tokens deve essere positivo'),
+});
+
+const RedeemCodeSchema = z.object({
+  email: z.string().email('Email non valida'),
+  code: z.string().min(1, 'Codice richiesto').max(50),
+});
+
+const DocumentCountSchema = z.object({
+  email: z.string().email('Email non valida'),
+  delta: z.number().int().min(-100).max(100).optional().default(1),
+});
+
+const GenerateCodeSchema = z.object({
+  adminEmail: z.string().email('Email non valida'),
+  package: z.enum(['starter', 'apertura', 'presenza', 'custom']),
+});
+
+const UnlockUserSchema = z.object({
+  adminEmail: z.string().email('Email non valida'),
+  userEmail: z.string().email('Email utente non valida'),
 });
 
 const QuoteBodySchema = z.object({
@@ -444,7 +492,193 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     return json(req, res, 200, { success: true });
   }
 
+  // ─── TIER SYSTEM (phase 5) ────────────────────────────
+
+  if (path === '/users/tier' && method === 'GET') {
+    const url = new URL(req.url, 'http://localhost');
+    const email = url.searchParams.get('email');
+    if (!email) return json(req, res, 400, { error: 'Email richiesta' });
+    if (email === ADMIN_EMAIL) {
+      return json(req, res, 200, { data: { tier: 'unlocked', documentCount: 0, documentLimit: null } });
+    }
+    const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    const tier = settings?.tier === 'unlocked' ? 'unlocked' : 'free';
+    return json(req, res, 200, {
+      data: {
+        tier,
+        documentCount: settings?.documentCount || 0,
+        documentLimit: tier === 'unlocked' ? null : FREE_DOCUMENT_LIMIT,
+      },
+    });
+  }
+
+  if (path === '/users/document-count' && method === 'PATCH') {
+    const v = validate(DocumentCountSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, delta } = v.data;
+    if (email === ADMIN_EMAIL) {
+      return json(req, res, 200, { data: { documentCount: 0 } });
+    }
+    // upsert: ensure user_settings row exists, then increment
+    const [existing] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    if (!existing) {
+      const [created] = await db.insert(userSettingsTable).values({
+        userEmail: email,
+        tier: 'free',
+        documentCount: Math.max(0, delta),
+      }).returning();
+      return json(req, res, 200, { data: { documentCount: created.documentCount || 0 } });
+    }
+    const newCount = Math.max(0, (existing.documentCount || 0) + delta);
+    await db.update(userSettingsTable).set({
+      documentCount: newCount,
+    }).where(eq(userSettingsTable.userEmail, email));
+    return json(req, res, 200, { data: { documentCount: newCount } });
+  }
+
+  if (path === '/users/redeem-code' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(ip, 'redeem', 5, 15 * 60 * 1000);
+    if (rl.blocked) {
+      return json(req, res, 429, { error: 'Troppi tentativi di riscatto. Riprova tra 15 minuti.' });
+    }
+    const v = validate(RedeemCodeSchema, body);
+    if (v.error) {
+      recordRateAttempt(ip, false, 'redeem');
+      return json(req, res, 400, { errors: v.errors });
+    }
+    const { email, code } = v.data;
+    const normalized = code.trim().toUpperCase();
+
+    // Admin short-circuit
+    if (email === ADMIN_EMAIL) {
+      recordRateAttempt(ip, true, 'redeem');
+      return json(req, res, 200, { data: { tier: 'unlocked' } });
+    }
+
+    // Lookup case-insensitive
+    const [found] = await db.select().from(unlockCodesTable)
+      .where(sql`LOWER(${unlockCodesTable.code}) = LOWER(${normalized})`);
+
+    if (!found) {
+      recordRateAttempt(ip, false, 'redeem');
+      return json(req, res, 404, { error: 'Codice non valido' });
+    }
+    if (found.usedBy) {
+      recordRateAttempt(ip, false, 'redeem');
+      return json(req, res, 409, { error: 'Codice già utilizzato' });
+    }
+
+    // Atomic claim: only update if used_by is still null (race-condition safe)
+    const claimResult = await db.update(unlockCodesTable).set({
+      usedBy: email,
+      usedAt: sql`now()`,
+    }).where(sql`${unlockCodesTable.code} = ${found.code} AND ${unlockCodesTable.usedBy} IS NULL`).returning();
+    if (claimResult.length === 0) {
+      recordRateAttempt(ip, false, 'redeem');
+      return json(req, res, 409, { error: 'Codice già utilizzato' });
+    }
+
+    // Upsert user_settings → unlocked
+    const [existing] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    if (existing) {
+      await db.update(userSettingsTable).set({
+        tier: 'unlocked',
+        unlockCode: normalized,
+        unlockedAt: sql`now()`,
+      }).where(eq(userSettingsTable.userEmail, email));
+    } else {
+      await db.insert(userSettingsTable).values({
+        userEmail: email,
+        tier: 'unlocked',
+        unlockCode: normalized,
+        unlockedAt: sql`now()`,
+        documentCount: 0,
+      });
+    }
+
+    recordRateAttempt(ip, true, 'redeem');
+    console.info('[tier] code redeemed', { email, codePrefix: normalized.slice(0, 4) });
+    return json(req, res, 200, { data: { tier: 'unlocked' } });
+  }
+
   return json(req, res, 404, { error: 'Endpoint users non trovato' });
+};
+
+const handleAdmin: RouteHandler = async (path, method, req, res, body) => {
+  if (path === '/admin/deepseek-status' && method === 'GET') {
+    return json(req, res, 200, { configured: !!process.env.DEEPSEEK_API_KEY });
+  }
+
+  if (path === '/admin/generate-unlock-code' && method === 'POST') {
+    const v = validate(GenerateCodeSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { adminEmail, package: pkg } = v.data;
+    if (adminEmail !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    if (!VALID_PACKAGES.has(pkg)) {
+      return json(req, res, 400, { error: 'Package non valido' });
+    }
+    const code = generateUnlockCode();
+    const [created] = await db.insert(unlockCodesTable).values({
+      code,
+      package: pkg,
+      usedBy: null,
+      usedAt: null,
+      createdBy: adminEmail,
+    }).returning();
+    return json(req, res, 201, { data: { code: created.code } });
+  }
+
+  if (path === '/admin/unlock-codes' && method === 'GET') {
+    const url = new URL(req.url, 'http://localhost');
+    const adminEmail = url.searchParams.get('adminEmail');
+    if (adminEmail !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    const list = await db.select().from(unlockCodesTable).orderBy(sql`created_at DESC`);
+    return json(req, res, 200, {
+      data: list.map(c => ({
+        code: c.code,
+        package: c.package,
+        usedBy: c.usedBy,
+        usedAt: c.usedAt,
+        createdAt: c.createdAt,
+      })),
+    });
+  }
+
+  // Admin sblocca direttamente un utente senza codice
+  if (path === '/admin/unlock-user' && method === 'POST') {
+    const v = validate(UnlockUserSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { adminEmail, userEmail } = v.data;
+    if (adminEmail !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    if (userEmail === ADMIN_EMAIL) {
+      return json(req, res, 200, { data: { tier: 'unlocked' } });
+    }
+    const [existing] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, userEmail));
+    if (existing) {
+      await db.update(userSettingsTable).set({
+        tier: 'unlocked',
+        unlockedAt: sql`now()`,
+      }).where(eq(userSettingsTable.userEmail, userEmail));
+    } else {
+      await db.insert(userSettingsTable).values({
+        userEmail,
+        tier: 'unlocked',
+        unlockedAt: sql`now()`,
+        documentCount: 0,
+      });
+    }
+    console.info('[tier] admin unlocked user', { adminEmail, userEmail });
+    return json(req, res, 200, { data: { tier: 'unlocked' } });
+  }
+
+  return json(req, res, 404, { error: 'Endpoint admin non trovato' });
 };
 
 const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
@@ -574,6 +808,21 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
         data: qr.data as never,
         isTemplate: false,
       }).returning();
+      // Phase 5: increment user document count (admin excluded, no-op)
+      if (email !== ADMIN_EMAIL) {
+        const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+        if (settings) {
+          await db.update(userSettingsTable).set({
+            documentCount: sql`COALESCE(${userSettingsTable.documentCount}, 0) + 1`,
+          }).where(eq(userSettingsTable.userEmail, email));
+        } else {
+          await db.insert(userSettingsTable).values({
+            userEmail: email,
+            tier: 'free',
+            documentCount: 1,
+          });
+        }
+      }
       return json(req, res, 201, saved);
     }
 
@@ -650,10 +899,6 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
 };
 
 const handleAI: RouteHandler = async (path, method, req, res, body) => {
-  if (path === '/admin/deepseek-status' && method === 'GET') {
-    return json(req, res, 200, { configured: !!process.env.DEEPSEEK_API_KEY });
-  }
-
   if (path === '/ai/chat' && method === 'POST') {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
@@ -793,7 +1038,7 @@ const routes: Array<{ prefix: string; handler: RouteHandler }> = [
   { prefix: '/documents', handler: handleDocuments },
   { prefix: '/ai', handler: handleAI },
   { prefix: '/user-settings', handler: handleUserSettings },
-  { prefix: '/admin', handler: handleAI },
+  { prefix: '/admin', handler: handleAdmin },
 ];
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {

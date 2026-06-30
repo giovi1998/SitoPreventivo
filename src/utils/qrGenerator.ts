@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import type { QrCodeData, QrDotStyle, QrErrorCorrection, QRCode as QRCodeType } from './documentSchemas';
+import { applyWatermarkToCanvas, getMaxPngSideForTier, type Tier } from './watermark';
 
 export function escapeVcard(value: string): string {
   return value
@@ -130,16 +131,73 @@ export function generateQrSvg(qr: QRCodeType): string {
   return svg;
 }
 
-export async function generateQrPng(qr: QRCodeType): Promise<Uint8Array> {
-  const opts: QRCode.QRCodeToBufferOptions = {
-    type: 'png',
+export async function generateQrPng(
+  qr: QRCodeType,
+  opts: { tier?: Tier } = {},
+): Promise<Uint8Array> {
+  const tier: Tier = opts.tier || 'unlocked';
+  const maxSide = getMaxPngSideForTier(tier);
+  const requestedSize = Math.min(qr.style.size, maxSide);
+  const isFree = tier === 'free';
+
+  // For free tier we MUST render to canvas so we can apply the watermark
+  // (qrcode.toBuffer doesn't expose a way to add overlay). For unlocked
+  // we use the faster toBuffer path.
+  if (!isFree) {
+    const bufferOpts: QRCode.QRCodeToBufferOptions = {
+      type: 'png',
+      errorCorrectionLevel: qr.style.errorCorrection,
+      margin: qr.style.margin,
+      width: requestedSize,
+      color: { dark: qr.style.fgColor, light: qr.style.bgColor },
+    };
+    const buf = await QRCode.toBuffer(buildQrPayload(qr.data), bufferOpts);
+    return new Uint8Array(buf);
+  }
+
+  // Free path: canvas render + watermark
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+    // No canvas (SSR / node) — fall back to buffer, watermark not applied.
+    // Watermark is a no-op in node anyway since the file is meant for browser.
+    const bufferOpts: QRCode.QRCodeToBufferOptions = {
+      type: 'png',
+      errorCorrectionLevel: qr.style.errorCorrection,
+      margin: qr.style.margin,
+      width: requestedSize,
+      color: { dark: qr.style.fgColor, light: qr.style.bgColor },
+    };
+    const buf = await QRCode.toBuffer(buildQrPayload(qr.data), bufferOpts);
+    return new Uint8Array(buf);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = requestedSize;
+  canvas.height = requestedSize;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    // Canvas 2D unavailable (jsdom without polyfill) → fallback buffer
+    const buf = await QRCode.toBuffer(buildQrPayload(qr.data), {
+      type: 'png',
+      errorCorrectionLevel: qr.style.errorCorrection,
+      margin: qr.style.margin,
+      width: requestedSize,
+      color: { dark: qr.style.fgColor, light: qr.style.bgColor },
+    });
+    return new Uint8Array(buf);
+  }
+  await QRCode.toCanvas(canvas, buildQrPayload(qr.data), {
     errorCorrectionLevel: qr.style.errorCorrection,
     margin: qr.style.margin,
-    width: qr.style.size,
+    width: requestedSize,
     color: { dark: qr.style.fgColor, light: qr.style.bgColor },
-  };
-  const buf = await QRCode.toBuffer(buildQrPayload(qr.data), opts);
-  return new Uint8Array(buf);
+  });
+  applyWatermarkToCanvas(ctx, tier, requestedSize, requestedSize);
+  const dataUrl = canvas.toDataURL('image/png');
+  const base64 = dataUrl.split(',')[1] || '';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {

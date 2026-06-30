@@ -2,6 +2,7 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { PremiumQuote, DocumentTemplateId } from './quoteSchema';
 import { getPdfMakeStyle } from './documentThemes';
+import { applyWatermarkToPdf, type Tier } from './watermark';
 
 pdfMake.vfs = pdfFonts;
 
@@ -223,12 +224,14 @@ function buildDocDefinition(quote: PremiumQuote, themeId: DocumentTemplateId = '
   return docDefinition;
 }
 
-export function generatePDFBlob(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate'): Promise<Uint8Array> {
+export function generatePDFBlob(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate', tier: Tier = 'unlocked'): Promise<Uint8Array> {
   const docDefinition = buildDocDefinition(quote, themeId);
-  return pdfMake.createPdf(docDefinition).getBuffer();
+  const watermarked = applyWatermarkToPdf(docDefinition, tier);
+  return pdfMake.createPdf(watermarked).getBuffer();
 }
 
-export default function generatePDF(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate') {
+export default function generatePDF(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate', tier: Tier = 'unlocked') {
   const docDefinition = buildDocDefinition(quote, themeId);
-  pdfMake.createPdf(docDefinition).download(`${quote.quoteId || quote.project?.title || 'preventivo'}_${quote.client?.name || 'preventivo'}.pdf`);
+  const watermarked = applyWatermarkToPdf(docDefinition, tier);
+  pdfMake.createPdf(watermarked).download(`${quote.quoteId || quote.project?.title || 'preventivo'}_${quote.client?.name || 'preventivo'}.pdf`);
 }

@@ -46,4 +46,18 @@ export const userSettings = pgTable("user_settings", {
   logoUrl: text("logo_url"),
   documentTheme: varchar("document_theme", { length: 50 }).default("corporate"),
   onboardingDone: boolean("onboarding_done").default(false),
+  // Phase 5 — tier system (freemium + unlock code)
+  tier: varchar({ length: 20 }).default("free"),
+  unlockCode: varchar("unlock_code", { length: 50 }),
+  unlockedAt: timestamp("unlocked_at"),
+  documentCount: integer("document_count").default(0),
+});
+
+export const unlockCodes = pgTable("unlock_codes", {
+  code: varchar({ length: 50 }).primaryKey(),
+  package: varchar({ length: 50 }).notNull(),
+  usedBy: varchar("used_by", { length: 255 }),
+  usedAt: timestamp("used_at"),
+  createdBy: varchar("created_by", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
