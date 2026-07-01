@@ -133,4 +133,36 @@ describe('QREditor', () => {
     fireEvent.click(saveBtn);
     expect(screen.queryByRole('heading', { name: /Salva preventivo/i })).not.toBeInTheDocument();
   });
+
+  it('renders without crashing when initialQr.style is missing (regression: fgColor of undefined)', () => {
+    // Phase 7 hotfix: a saved QR without `style` (legacy / partial save /
+    // schema drift) used to crash the first render with
+    // `Cannot read properties of undefined (reading 'fgColor')` at
+    // `qr.style.fgColor` in the contrast useMemo. The fix is a deep-merge
+    // with createEmptyQrCode() defaults via mergeQrWithDefaults.
+    const broken = {
+      ...createEmptyQrCode(),
+      // style field intentionally missing
+      style: undefined as any,
+    };
+    expect(() =>
+      render(<QREditor userEmail="user@test.com" initialQr={broken} />)
+    ).not.toThrow();
+  });
+
+  it('preserves user-set fgColor when initialQr.style is partial', () => {
+    // The merge should fill missing fields with defaults but keep the
+    // user-provided value. Important for re-opening saved QR documents.
+    const partial = {
+      ...createEmptyQrCode(),
+      style: {
+        ...createEmptyQrCode().style,
+        fgColor: '#FF00FF',
+        // bgColor and others left to defaults
+      } as any,
+    };
+    render(<QREditor userEmail="user@test.com" initialQr={partial} />);
+    // The contrast useMemo should not throw and the editor should mount.
+    expect(screen.getByRole('heading', { level: 1, name: /QR Code/i })).toBeInTheDocument();
+  });
 });

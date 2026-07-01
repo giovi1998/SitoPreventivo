@@ -76,6 +76,22 @@ export function createDocumentFromQrCode(qr: QRCode, userEmail: string): QRCode 
   return { ...qr, userEmail, updatedAt: new Date().toISOString() };
 }
 
+// Defensive merge: a QR loaded from DB / Collection might be missing
+// nested fields (legacy save, schema drift, partial JSON). Spreading
+// `createEmptyQrCode()` first and the input second ensures all
+// required fields have a defined value before render. Used by
+// QREditor and any consumer that re-hydrates a saved QR.
+export function mergeQrWithDefaults(input: Partial<QRCode> | null | undefined): QRCode {
+  const base = createEmptyQrCode();
+  if (!input) return base;
+  return {
+    ...base,
+    ...input,
+    data: { ...base.data, ...(input.data || {}) },
+    style: { ...base.style, ...(input.style || {}) },
+  };
+}
+
 export const businessCardSizePresetSchema = z.enum(['eu-85x55', 'us-89x51', 'square-65x65']);
 export type BusinessCardSizePreset = z.infer<typeof businessCardSizePresetSchema>;
 
