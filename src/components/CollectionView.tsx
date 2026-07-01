@@ -308,12 +308,16 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
         <span>
           {isAdmin
             ? 'Tutti i tuoi documenti: preventivi, QR, bigliettini e loghi.'
-            : 'Tutti i tuoi documenti: QR, bigliettini e loghi.'}
+            : 'Tutti i tuoi documenti: QR, bigliettini e loghi. Se hai preventivi salvati in passato li trovi nella tab "Preventivi".'}
         </span>
       </div>
 
       <div role="tablist" aria-label="Tipo documento" className="collection-tabs">
-        {TABS.filter((t) => isAdmin || t.type !== 'quote').map((t) => (
+        {/* Non-admin users can see the "Preventivi" tab only if they
+            actually have at least one quote saved (legacy or admin-shared).
+            Admin always sees it. The tab is read-only: there's no
+            "Nuovo preventivo" CTA for non-admin. */}
+        {TABS.filter((t) => isAdmin || t.type !== 'quote' || counts.quote > 0).map((t) => (
           <button
             key={t.id}
             type="button"
