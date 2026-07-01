@@ -1,0 +1,1 @@
+ALTER TABLE "user_settings" ADD COLUMN "preferred_document_type" varchar(30);

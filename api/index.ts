@@ -69,11 +69,14 @@ const userSettingsTable = pgTable('user_settings', {
   logoUrl: text('logo_url'),
   documentTheme: varchar('document_theme', { length: 50 }).default('corporate'),
   onboardingDone: boolean('onboarding_done').default(false),
-  // Phase 5 — tier system
+  // Phase 5, tier system
   tier: varchar({ length: 20 }).default('free'),
   unlockCode: varchar('unlock_code', { length: 50 }),
   unlockedAt: timestamp('unlocked_at'),
   documentCount: integer('document_count').default(0),
+  // Phase 7, onboarding step 5 preference. Optional, null if the
+  // user skipped the step. See spec REQ-002.
+  preferredDocumentType: varchar('preferred_document_type', { length: 30 }),
 });
 
 const unlockCodesTable = pgTable('unlock_codes', {
@@ -326,6 +329,13 @@ const UserSettingsSchema = z.object({
   logoUrl: z.string().optional(),
   onboardingDone: z.boolean().optional(),
   documentTheme: z.string().optional(),
+  // Phase 7, onboarding step 5 preference. Optional, no transform.
+  // Accepts one of: 'editor' | 'qr' | 'card' | 'logo'. Other values
+  // are rejected by the regex to keep the column clean.
+  preferredDocumentType: z
+    .string()
+    .regex(/^(editor|qr|card|logo)$/, 'Tipo documento non valido')
+    .optional(),
 });
 
 const MAX_LOG_MSG = 2000;
@@ -878,6 +888,7 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
         ...(settings.logoUrl !== undefined && { logoUrl: settings.logoUrl }),
         ...(settings.onboardingDone !== undefined && { onboardingDone: settings.onboardingDone }),
         ...(settings.documentTheme !== undefined && { documentTheme: settings.documentTheme }),
+        ...(settings.preferredDocumentType !== undefined && { preferredDocumentType: settings.preferredDocumentType }),
       }).where(eq(userSettingsTable.userEmail, email)).returning();
       return json(req, res, 200, updated);
     }
@@ -891,6 +902,7 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
       logoUrl: settings.logoUrl,
       documentTheme: settings.documentTheme ?? 'corporate',
       onboardingDone: settings.onboardingDone ?? false,
+      preferredDocumentType: settings.preferredDocumentType,
     }).returning();
     return json(req, res, 201, created);
   }

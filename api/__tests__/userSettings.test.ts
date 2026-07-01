@@ -250,3 +250,93 @@ describe('Routing (regression: /user-settings must NOT be captured by /users pre
     expect(res.body).toHaveProperty('onboardingDone');
   });
 });
+
+describe('Phase 7, preferredDocumentType in user-settings', () => {
+  it('POST /user-settings accepts a valid preferredDocumentType and persists it', async () => {
+    mockDbState.selectResults = [[]]; // no existing row → insert path
+    mockDbState.nextReturning = [{
+      userEmail: 'user@test.com',
+      onboardingDone: true,
+      preferredDocumentType: 'qr',
+    }];
+    const res = await callHandler({
+      method: 'POST',
+      url: '/api/user-settings',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        displayName: 'Test',
+        onboardingDone: true,
+        preferredDocumentType: 'qr',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.preferredDocumentType).toBe('qr');
+  });
+
+  it('POST /user-settings rejects an invalid preferredDocumentType with 400', async () => {
+    const res = await callHandler({
+      method: 'POST',
+      url: '/api/user-settings',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        preferredDocumentType: 'flyer', // not in allowlist (Volantino is skipped)
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toHaveProperty('errors');
+  });
+
+  it('POST /user-settings accepts "card" (bigliettino) and "logo"', async () => {
+    mockDbState.selectResults = [[]];
+    mockDbState.nextReturning = [{
+      userEmail: 'user@test.com',
+      preferredDocumentType: 'card',
+    }];
+    const res1 = await callHandler({
+      method: 'POST',
+      url: '/api/user-settings',
+      headers: { origin: 'http://localhost' },
+      body: { email: 'user@test.com', preferredDocumentType: 'card' },
+    });
+    expect(res1.statusCode).toBe(201);
+    expect(res1.body.preferredDocumentType).toBe('card');
+
+    mockDbState.nextReturning = [{
+      userEmail: 'user@test.com',
+      preferredDocumentType: 'logo',
+    }];
+    const res2 = await callHandler({
+      method: 'POST',
+      url: '/api/user-settings',
+      headers: { origin: 'http://localhost' },
+      body: { email: 'user@test.com', preferredDocumentType: 'logo' },
+    });
+    expect(res2.statusCode).toBe(201);
+    expect(res2.body.preferredDocumentType).toBe('logo');
+  });
+
+  it('POST /user-settings updates preferredDocumentType on existing row (re-onboarding)', async () => {
+    mockDbState.selectResults = [[
+      { userEmail: 'user@test.com', onboardingDone: false, preferredDocumentType: null },
+    ]];
+    mockDbState.nextReturning = [{
+      userEmail: 'user@test.com',
+      onboardingDone: true,
+      preferredDocumentType: 'logo',
+    }];
+    const res = await callHandler({
+      method: 'POST',
+      url: '/api/user-settings',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        onboardingDone: true,
+        preferredDocumentType: 'logo',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.preferredDocumentType).toBe('logo');
+  });
+});

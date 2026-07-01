@@ -46,11 +46,17 @@ export const userSettings = pgTable("user_settings", {
   logoUrl: text("logo_url"),
   documentTheme: varchar("document_theme", { length: 50 }).default("corporate"),
   onboardingDone: boolean("onboarding_done").default(false),
-  // Phase 5 — tier system (freemium + unlock code)
+  // Phase 5, tier system (freemium + unlock code)
   tier: varchar({ length: 20 }).default("free"),
   unlockCode: varchar("unlock_code", { length: 50 }),
   unlockedAt: timestamp("unlocked_at"),
   documentCount: integer("document_count").default(0),
+  // Phase 7, onboarding step 5 preference (SPEC REQ-002). Stores the
+  // view the user picked as starting point. Optional, null if the
+  // user skipped the step. Soft fail: missing value is treated the
+  // same as "no preference" and the user lands on the default
+  // (editor) view per spec AC-003.
+  preferredDocumentType: varchar("preferred_document_type", { length: 30 }),
 });
 
 export const unlockCodes = pgTable("unlock_codes", {
