@@ -238,77 +238,147 @@ function buildBackCell(card: BusinessCard, _dims: { w: number; h: number }): Con
   ];
 }
 
-interface PageCardEntry {
-  x: number; // mm top-left X on the A4 page
-  y: number; // mm top-left Y on the A4 page
-  w: number; // mm full width with bleed
-  h: number; // mm full height with bleed
+export interface PageCardEntry {
+  x: number; // mm top-left X on the A4 page (trim, no bleed)
+  y: number; // mm top-left Y on the A4 page (trim, no bleed)
+  w: number; // mm trim width (= cardW)
+  h: number; // mm trim height (= cardH)
 }
 
-function computePageCardEntries(cardW: number, cardH: number): PageCardEntry[] {
-  const fullW = cardW + BLEED_MM * 2;
-  const fullH = cardH + BLEED_MM * 2;
-  const totalW = CARD_A4_COLS * fullW + (CARD_A4_COLS - 1) * CARD_A4_GAP_MM;
-  const totalH = CARD_A4_ROWS * fullH + (CARD_A4_ROWS - 1) * CARD_A4_GAP_MM;
-  const pageW = 210;
-  const pageH = 297;
-  const offsetX = (pageW - totalW) / 2;
-  const offsetY = (pageH - totalH) / 2;
-  const entries: PageCardEntry[] = [];
-  for (let r = 0; r < CARD_A4_ROWS; r++) {
-    for (let c = 0; c < CARD_A4_COLS; c++) {
-      entries.push({
-        x: offsetX + c * (fullW + CARD_A4_GAP_MM),
-        y: offsetY + r * (fullH + CARD_A4_GAP_MM),
-        w: fullW,
-        h: fullH,
-      });
+export interface PageLayout {
+  entries: PageCardEntry[];
+  pageOrientation: 'portrait' | 'landscape';
+}
+
+// Build a 2×5 (10-up) tile grid. `entry.w/h` are the trim dimensions
+// (cardW × cardH). Bleed is NOT doubled per card: the GAP between tiles
+// is the shared bleed (= CARD_A4_GAP_MM = BLEED_MM). The bg rect drawn
+// underneath extends BLEED_MM/2 outward into the gap/page margin so the
+// final cut line sits at the gap midpoint with proper bleed on both
+// sides. Page is chosen adaptively: portrait A4 if 10 tiles fit, else
+// landscape A4 (still 2×5 arrangement).
+export function computePageCardEntries(cardW: number, cardH: number): PageLayout {
+  // Le card sono ruotate 90° (clockwise) nella sheet: il lato lungo
+  // (cardW) diventa verticale, il lato corto (cardH) orizzontale.
+  // Quindi nella page la tile occupa (cardH × cardW) mm.
+  const tileW = cardH;
+  const tileH = cardW;
+  // 5 colonne × 2 righe su A4 landscape (297×210mm) con GAP=BLEED=3mm
+  // e tile ruotata. Math per EU 85×55: trimW = 5*55+4*3 = 287<297
+  // (margine 5mm×2), trimH = 2*85+3 = 173<210 (margine 18.5mm×2).
+  const build = (pageW: number, pageH: number): PageLayout => {
+    const trimW = CARD_A4_COLS * tileW + (CARD_A4_COLS - 1) * CARD_A4_GAP_MM;
+    const trimH = CARD_A4_ROWS * tileH + (CARD_A4_ROWS - 1) * CARD_A4_GAP_MM;
+    const offsetX = (pageW - trimW) / 2;
+    const offsetY = (pageH - trimH) / 2;
+    const entries: PageCardEntry[] = [];
+    for (let r = 0; r < CARD_A4_ROWS; r++) {
+      for (let c = 0; c < CARD_A4_COLS; c++) {
+        entries.push({
+          x: offsetX + c * (tileW + CARD_A4_GAP_MM),
+          y: offsetY + r * (tileH + CARD_A4_GAP_MM),
+          w: tileW,
+          h: tileH,
+        });
+      }
     }
-  }
-  return entries;
+    return { entries, pageOrientation: pageH >= pageW ? 'portrait' : 'landscape' };
+  };
+  // A4 landscape 297×210 è il layout primario (5×2 con card ruotate).
+  const landscape = build(297, 210);
+  const fits = landscape.entries.every(
+    (e) => e.x >= 0 && e.y >= 0 && e.x + e.w <= 297 && e.y + e.h <= 210,
+  );
+  if (fits) return landscape;
+  // Fallback portrait A4 (raro: cards molto grandi dove 5×2 landscape
+  // non basta, es. 2 righe × 85=170 > 210? Mai per preset supportati).
+  return build(210, 297);
 }
 
 function cropMarkLines(entry: PageCardEntry): Content {
-  const len = 3;
-  const off = 1;
+  // Crop marks sit at the CUT line (gap midpoint = entry edge - GAP/2),
+  // extending outward into the bleed band. With GAP=BLEED_MM=3mm and
+  // len=2mm the marks stay inside the bleed band on both inner and
+  // outer edges. Coordinate in pt (vedi MM_TO_PT).
+  const len = mm2pt(2);
+  const g = mm2pt(CARD_A4_GAP_MM / 2);
+  const x0 = mm2pt(entry.x) - g;
+  const y0 = mm2pt(entry.y) - g;
+  const x1 = mm2pt(entry.x + entry.w) + g;
+  const y1 = mm2pt(entry.y + entry.h) + g;
+  const lw = 0.3;
   const accent = '#000000';
   return {
     canvas: [
-      { type: 'line', x1: entry.x - off - len, y1: entry.y, x2: entry.x - off, y2: entry.y, lineWidth: 0.3, lineColor: accent },
-      { type: 'line', x1: entry.x, y1: entry.y - off - len, x2: entry.x, y2: entry.y - off, lineWidth: 0.3, lineColor: accent },
-      { type: 'line', x1: entry.x + entry.w + off, y1: entry.y, x2: entry.x + entry.w + off + len, y2: entry.y, lineWidth: 0.3, lineColor: accent },
-      { type: 'line', x1: entry.x + entry.w, y1: entry.y - off - len, x2: entry.x + entry.w, y2: entry.y - off, lineWidth: 0.3, lineColor: accent },
-      { type: 'line', x1: entry.x - off - len, y1: entry.y + entry.h, x2: entry.x - off, y2: entry.y + entry.h, lineWidth: 0.3, lineColor: accent },
-      { type: 'line', x1: entry.x, y1: entry.y + entry.h + off, x2: entry.x, y2: entry.y + entry.h + off + len, lineWidth: 0.3, lineColor: accent },
-      { type: 'line', x1: entry.x + entry.w + off, y1: entry.y + entry.h, x2: entry.x + entry.w + off + len, y2: entry.y + entry.h, lineWidth: 0.3, lineColor: accent },
-      { type: 'line', x1: entry.x + entry.w, y1: entry.y + entry.h + off, x2: entry.x + entry.w, y2: entry.y + entry.h + off + len, lineWidth: 0.3, lineColor: accent },
+      // top-left corner
+      { type: 'line', x1: x0 - len, y1: y0, x2: x0, y2: y0, lineWidth: lw, lineColor: accent },
+      { type: 'line', x1: x0, y1: y0 - len, x2: x0, y2: y0, lineWidth: lw, lineColor: accent },
+      // top-right corner
+      { type: 'line', x1: x1, y1: y0, x2: x1 + len, y2: y0, lineWidth: lw, lineColor: accent },
+      { type: 'line', x1: x1, y1: y0 - len, x2: x1, y2: y0, lineWidth: lw, lineColor: accent },
+      // bottom-left corner
+      { type: 'line', x1: x0 - len, y1: y1, x2: x0, y2: y1, lineWidth: lw, lineColor: accent },
+      { type: 'line', x1: x0, y1: y1, x2: x0, y2: y1 + len, lineWidth: lw, lineColor: accent },
+      // bottom-right corner
+      { type: 'line', x1: x1, y1: y1, x2: x1 + len, y2: y1, lineWidth: lw, lineColor: accent },
+      { type: 'line', x1: x1, y1: y1, x2: x1, y2: y1 + len, lineWidth: lw, lineColor: accent },
     ],
     absolutePosition: { x: 0, y: 0 },
   };
 }
 
+// Bleed extension: bg/accent rect extend BLEED_MM/2 outward on every
+// side, filling the shared gap (cut line at gap midpoint) and the page
+// margin on outer cards. For cards sharing a side the two bleed zones
+// overlap exactly (same color), giving a clean shared-bleed band.
+const BLEED_HALF_MM = BLEED_MM / 2;
+
+// pdfmake lavora in PUNTI (1pt = 1/72 inch = 25.4/72 mm). Tutte le
+// coordinate passate a `canvas` / `absolutePosition` / `width` / `height`
+// devono essere in pt, NON in mm. Senza questa conversione le card
+// vengono disegnate a ~3mm l'una (287pt = 101mm invece di 287mm) e
+// sembrano piccole e "raggruppate" sul foglio A4.
+const MM_TO_PT = 72 / 25.4;
+
+function mm2pt(mm: number): number {
+  return mm * MM_TO_PT;
+}
+
 function cardRect(entry: PageCardEntry, fill: string, border?: { color: string; width: number }): Content {
-  const rect: any = { type: 'rect', x: entry.x, y: entry.y, w: entry.w, h: entry.h, color: fill };
+  const b = mm2pt(BLEED_HALF_MM);
+  const x = mm2pt(entry.x) - b;
+  const y = mm2pt(entry.y) - b;
+  const w = mm2pt(entry.w) + b * 2;
+  const h = mm2pt(entry.h) + b * 2;
+  const rect: any = { type: 'rect', x, y, w, h, color: fill };
   const out: any[] = [rect];
   if (border) {
-    out.push({ type: 'rect', x: entry.x, y: entry.y, w: entry.w, h: entry.h, lineWidth: border.width, lineColor: border.color });
+    out.push({ type: 'rect', x, y, w, h, lineWidth: border.width, lineColor: border.color });
   }
   return { canvas: out, absolutePosition: { x: 0, y: 0 } };
 }
 
+// accent-strip-left/bottom del design: con cards ruotate 90° CW nella
+// sheet, "left" del design → "top" della tile, "bottom" del design →
+// "right" della tile. Le funzioni ricevono la tile ruotata quindi
+// disegnano nella direzione corretta.
 function accentStripLeft(entry: PageCardEntry, color: string): Content {
+  const b = mm2pt(BLEED_HALF_MM);
+  // top della tile (1.5mm wide, tutta l'altezza + bleed)
   return {
     canvas: [
-      { type: 'rect', x: entry.x, y: entry.y, w: 1.5, h: entry.h, color },
+      { type: 'rect', x: mm2pt(entry.x) - b, y: mm2pt(entry.y), w: mm2pt(1.5 + BLEED_MM), h: mm2pt(entry.h), color },
     ],
     absolutePosition: { x: 0, y: 0 },
   };
 }
 
 function accentStripBottom(entry: PageCardEntry, color: string): Content {
+  const b = mm2pt(BLEED_HALF_MM);
+  // right della tile (1.5mm tall, tutta la larghezza + bleed)
   return {
     canvas: [
-      { type: 'rect', x: entry.x, y: entry.y + entry.h - 1.5, w: entry.w, h: 1.5, color },
+      { type: 'rect', x: mm2pt(entry.x + entry.w) - mm2pt(1.5), y: mm2pt(entry.y) - b, w: mm2pt(1.5), h: mm2pt(entry.h) + b * 2, color },
     ],
     absolutePosition: { x: 0, y: 0 },
   };
@@ -404,32 +474,108 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('base64');
 }
 
+// Risolve un URL immagine (relativo, blob, data:) in un base64 data URL.
+// Necessario perché un SVG caricato come Image non può fetchare immagini
+// esterne in modo affidabile cross-browser / cross-origin / cross-prod
+// (anche same-origin). Solo immagini inline (base64) sono garantite.
+//
+// Casi gestiti:
+// - data:* → passa direttamente (già inline)
+// - blob:* → passa direttamente (già inline)
+// - path relativo (es. '/giovanni-photo.jpg') → fetch same-origin → base64
+// - URL http(s) → tenta fetch con CORS; se fallisce, fallback all'originale
+async function resolveToBase64DataUrl(url: string): Promise<string> {
+  if (!url) return url;
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+  try {
+    const response = await fetch(url, { credentials: 'same-origin' });
+    if (!response.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`[cardGenerator] image fetch ${url} failed: HTTP ${response.status}`);
+      return url;
+    }
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error || new Error('FileReader error'));
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn(`[cardGenerator] image fetch ${url} threw:`, e);
+    return url;
+  }
+}
+
 async function renderCardSideDataUrl(
   card: BusinessCard,
   side: 'front' | 'back',
   pxW: number,
   pxH: number,
+  opts: { rotate?: 0 | 90 | 180 | 270 } = {},
 ): Promise<string> {
+  const rotate = opts.rotate ?? 0;
+  // In test mode buildMinimalPng non ruota. Per il PDF 10-up la rotazione
+  // è gestita al livello successivo (vedi sotto). Niente da fare qui.
   if (import.meta.env.MODE === 'test') {
     const png = buildMinimalPng(pxW, pxH, card.style.bgColor);
     return 'data:image/png;base64,' + uint8ArrayToBase64(png);
   }
-  const svg = buildCardSvg(card, side, pxW, pxH);
-  const svgUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  // Pre-risolvi TUTTI gli URL immagine (photo, logo, QR logoOverlay) in
+  // base64 data URL PRIMA di costruire l'SVG. Garantisce che il PDF
+  // contenga le immagini anche in produzione (Vercel serve `public/` alla
+  // root) e in qualsiasi browser (Chrome/Firefox/Safari + mobile).
+  const [resolvedPhotoUrl, resolvedLogoUrl] = await Promise.all([
+    card.front.photoUrl ? resolveToBase64DataUrl(card.front.photoUrl) : Promise.resolve(null),
+    card.front.logoUrl ? resolveToBase64DataUrl(card.front.logoUrl) : Promise.resolve(null),
+  ]);
+  const cardForSvg: BusinessCard = {
+    ...card,
+    front: {
+      ...card.front,
+      photoUrl: resolvedPhotoUrl,
+      logoUrl: resolvedLogoUrl,
+    },
+  };
+  const svg = buildCardSvg(cardForSvg, side, pxW, pxH);
+  // Bug storico: usare `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+  // carica l'SVG in un contesto "data:" senza base URL → tutti gli URL
+  // relativi interni (es. `photoUrl: '/giovanni-photo.jpg'`) e i nested
+  // SVG con viewBox falliscono silenziosamente: foto e QR invisibili
+  // nel PDF. Soluzione: Blob URL che eredita l'origin della pagina →
+  // URL relativi risolvono, nested SVG renderizzano correttamente.
+  const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUri = URL.createObjectURL(blob);
   try {
     const img = await loadSvgImage(svgUri);
+    // Canvas finale con dimensioni post-rotazione. rotate=90/270 → swap
+    // width/height; rotate=0/180 → dimensioni native.
+    const outW = rotate === 90 || rotate === 270 ? pxH : pxW;
+    const outH = rotate === 90 || rotate === 270 ? pxW : pxH;
     const canvas = document.createElement('canvas');
-    canvas.width = pxW;
-    canvas.height = pxH;
+    canvas.width = outW;
+    canvas.height = outH;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D non disponibile');
     ctx.fillStyle = card.style.bgColor;
-    ctx.fillRect(0, 0, pxW, pxH);
-    ctx.drawImage(img, 0, 0, pxW, pxH);
+    ctx.fillRect(0, 0, outW, outH);
+    if (rotate === 0) {
+      ctx.drawImage(img, 0, 0, pxW, pxH);
+    } else {
+      // Centro di rotazione = centro del canvas finale. Traslazione
+      // inversa dopo la rotazione per rimettere l'immagine in bounding box.
+      ctx.translate(outW / 2, outH / 2);
+      ctx.rotate((rotate * Math.PI) / 180);
+      ctx.drawImage(img, -pxW / 2, -pxH / 2, pxW, pxH);
+    }
     return canvas.toDataURL('image/png');
   } catch {
-    const png = buildMinimalPng(pxW, pxH, card.style.bgColor);
+    const png = buildMinimalPng(rotate === 90 || rotate === 270 ? pxH : pxW, rotate === 90 || rotate === 270 ? pxW : pxH, card.style.bgColor);
     return 'data:image/png;base64,' + uint8ArrayToBase64(png);
+  } finally {
+    // Libera la memoria del Blob (l'immagine è già decodata in `img`).
+    URL.revokeObjectURL(svgUri);
   }
 }
 
@@ -445,23 +591,25 @@ function buildPageContentFromImage(
   const borderColor = card.style.accentColor;
 
   entries.forEach((entry) => {
+    // 1. Card background with shared bleed (extends BLEED_MM/2 into gap).
     out.push(cardRect(entry, bg, { color: borderColor, width: card.style.borderStyle === 'thin' ? 0.4 : 0 }));
+    // 2. Accent strip (left or bottom) on top of bg bleed.
     if (card.style.borderStyle === 'accent-strip-left') {
       out.push(accentStripLeft(entry, accent));
     } else if (card.style.borderStyle === 'accent-strip-bottom') {
       out.push(accentStripBottom(entry, accent));
     }
-
-    const contentX = entry.x + BLEED_MM;
-    const contentY = entry.y + BLEED_MM;
-    const contentW = entry.w - BLEED_MM * 2;
-    const contentH = entry.h - BLEED_MM * 2;
+    // 3. Raster card face laid at trim coords (no per-card bleed offset
+    //    — bleed is the shared gap, filled by the bg rect above).
+    //    width/height in pt perché pdfmake interpreta le unità del
+    //    pageSize (pt di default, 1mm = 2.8346pt).
     out.push({
       image: imageDataUrl,
-      absolutePosition: { x: contentX, y: contentY },
-      width: contentW,
-      height: contentH,
+      absolutePosition: { x: mm2pt(entry.x), y: mm2pt(entry.y) },
+      width: mm2pt(entry.w),
+      height: mm2pt(entry.h),
     });
+    // 4. Crop marks on the cut line (gap midpoint).
     out.push(cropMarkLines(entry));
   });
 
@@ -474,21 +622,31 @@ export async function generateCardPDF(
   opts: { tier: Tier },
 ): Promise<Uint8Array> {
   const dims = getCardDimensionsMm(card);
-  const entries = computePageCardEntries(dims.w, dims.h);
+  const { entries, pageOrientation } = computePageCardEntries(dims.w, dims.h);
   // Il PDF 10-up deve avere le stesse proporzioni dell'export SVG/PNG.
   // Usiamo la stessa pipeline `buildCardSvg` → canvas PNG a 300 DPI, poi
-  // piazziamo il raster su A4 dieci volte. Il vecchio PDF builder manuale
-  // divergeva dalla preview (font/posizioni/proporzioni diverse).
+  // piazziamo il raster su A4 dieci volte. Cards ruotate 90° (senso
+  // orario) per entrare in 5 colonne × 2 righe su A4 landscape.
+  // `renderCardSideDataUrl` ruota il canvas di 90° prima di esportare.
   const pxW = Math.round((dims.w / 25.4) * 300);
   const pxH = Math.round((dims.h / 25.4) * 300);
-  const frontImage = await renderCardSideDataUrl(card, 'front', pxW, pxH);
-  const backImage = await renderCardSideDataUrl(card, 'back', pxW, pxH);
+  // In landscape il raster va ruotato. computePageCardEntries ha già
+  // determinato l'orientamento della pagina: se landscape, ruotiamo.
+  const rotate: 0 | 90 = pageOrientation === 'landscape' ? 90 : 0;
+  const frontImage = await renderCardSideDataUrl(card, 'front', pxW, pxH, { rotate });
+  const backImage = await renderCardSideDataUrl(card, 'back', pxW, pxH, { rotate });
 
   const frontContent = buildPageContentFromImage(card, entries, frontImage, true);
   const backContent = buildPageContentFromImage(card, entries, backImage, false);
 
   const baseDoc: TDocumentDefinitions = {
-    pageSize: 'A4',
+    // pageSize esplicito in pt: pdfmake lavora in pt (1mm = 2.8346pt).
+    // Senza conversioni, le coordinate mm passate altrove farebbero
+    // sembrare le cards piccole (287pt = 101mm invece di 287mm).
+    pageSize: pageOrientation === 'landscape'
+      ? { width: mm2pt(297), height: mm2pt(210) }
+      : { width: mm2pt(210), height: mm2pt(297) },
+    pageOrientation,
     pageMargins: [0, 0, 0, 0],
     content: [
       { stack: frontContent },
@@ -1091,7 +1249,15 @@ function buildBackSvg(card: BusinessCard, pxW: number, pxH: number): string {
     };
     const qrSvg = generateQrSvg(qrObj);
     out += `<rect x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" fill="#FFFFFF" stroke="${accent}" stroke-width="2"/>`;
-    out += `<svg x="${qrX + 4}" y="${qrY + 4}" width="${qrSize - 8}" height="${qrSize - 8}" viewBox="0 0 ${qrSize} ${qrSize}">${extractQrInner(qrSvg)}</svg>`;
+    // Bug storico: nested <svg viewBox="0 0 qrSize qrSize"> scalava il
+    // contenuto del QR (che è in coordinate 0-totalSize) con fattore
+    // sbagliato, e in alcuni browser Image-context il nested SVG non
+    // renderizza. Fix: <g transform> con scale esplicito ricavato dal
+    // viewBox reale del QR (estratto via regex).
+    const viewBoxMatch = qrSvg.match(/viewBox="0 0 (\d+) (\d+)"/);
+    const totalSize = viewBoxMatch ? parseInt(viewBoxMatch[1], 10) : qrSize;
+    const innerScale = (qrSize - 8) / totalSize;
+    out += `<g transform="translate(${qrX + 4} ${qrY + 4}) scale(${innerScale})">${extractQrInner(qrSvg)}</g>`;
   }
 
   // QR label
@@ -1230,5 +1396,5 @@ function loadImage(file: File): Promise<HTMLImageElement> {
 }
 
 export function _internalForTests() {
-  return { MAX_RAW_BYTES, MAX_DIMENSION, DEFAULT_MAX_DIM, DEFAULT_MAX_BYTES };
+  return { MAX_RAW_BYTES, MAX_DIMENSION, DEFAULT_MAX_DIM, DEFAULT_MAX_BYTES, resolveToBase64DataUrl };
 }

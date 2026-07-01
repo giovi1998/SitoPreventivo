@@ -131,9 +131,16 @@ export const SIZE_PRESETS_MM: Record<BusinessCardSizePreset, { w: number; h: num
 
 export const BLEED_MM = 3;
 export const CARD_A4_PAGE_MM = { w: 210, h: 297 };
+// Layout 10-up A4: 5 colonne × 2 righe su A4 LANDSCAPE (297×210mm).
+// Le card sono ruotate 90° (senso orario) nel PDF: il lato lungo
+// (cardW=85) diventa verticale, il lato corto (cardH=55) orizzontale.
+// Il raster PNG viene ruotato 90° nel canvas pipeline (vedi
+// renderCardSideDataUrl con `rotate: true`). Il GAP coincide con il
+// BLEED condiviso: 5×55+4×3=287<297 e 2×85+3=173<210. Vedi fix
+// "10-up A4 landscape rotation" in cardGenerator.ts.
 export const CARD_A4_COLS = 5;
 export const CARD_A4_ROWS = 2;
-export const CARD_A4_GAP_MM = 5;
+export const CARD_A4_GAP_MM = 3;
 export const CARD_A4_MARGIN_MM = 10;
 
 export const cardGridElementSchema = z.object({
