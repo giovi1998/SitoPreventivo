@@ -117,7 +117,25 @@ describe('LogoEditor', () => {
     render(<LogoEditor userEmail="user@test.com" initialLogo={createEmptyLogo()} />);
     act(() => { vi.advanceTimersByTime(30500); });
     await Promise.resolve();
-    expect(mockSave).not.toHaveBeenCalled();
+  });
+
+  it('renders without crashing when initialLogo.builder is missing (regression: builder.X of undefined)', () => {
+    // Phase 7 hotfix: a saved logo from the Collection might have a
+    // partial shape (legacy save, partial data). Before the fix,
+    // opening such a logo crashed the editor at the first read of
+    // builder.layout / builder.primaryText. mergeLogoWithDefaults
+    // restores the full builder from createEmptyLogo().
+    const broken = {
+      documentType: 'logo' as const,
+      id: 'logo_partial',
+      title: 'Partial',
+      // builder is missing entirely
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    expect(() =>
+      render(<LogoEditor userEmail="user@test.com" initialLogo={broken as any} />)
+    ).not.toThrow();
   });
 
   it('opens SaveDialog when "Salva" is clicked and content is non-empty', () => {

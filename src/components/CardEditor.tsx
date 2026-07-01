@@ -18,6 +18,7 @@ import {
   gridPresetBackDefault,
   deriveGridFromLayout,
   hasGridElements,
+  mergeCardWithDefaults,
 } from '../utils/documentSchemas';
 import { CardGridControls, type GridSide } from './card/CardGridControls';
 import CardAIControls from './card/CardAIControls';
@@ -65,7 +66,15 @@ export default function CardEditorWrapper(props: CardEditorProps) {
 
 function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorProps) {
   const { save: saveDocumentGuarded } = useDocumentSave();
-  const [card, setCard] = useState<BusinessCard>(initialCard || createEmptyCard());
+  // Deep-merge with createEmptyCard() defaults: a saved card from
+  // the Collection might be missing nested fields (legacy save,
+  // partial data, schema drift across phases 0-2). Without this
+  // guard the editor crashed with 'Cannot read properties of
+  // undefined (reading layout)' at the first read of card.front.X
+  // in cardGenerator / CardPreview / CardEditor. The Zod defaults
+  // are only applied by .parse(), not on read. The merge also
+  // restores grid / backGrid when the input is a non-grid card.
+  const [card, setCard] = useState<BusinessCard>(() => mergeCardWithDefaults(initialCard));
   const [showTemplateBanner, setShowTemplateBanner] = useState<boolean>(() => !initialCard);
   const [uploadError, setUploadError] = useState<string | null>(null);
 

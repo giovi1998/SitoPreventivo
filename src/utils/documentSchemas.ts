@@ -92,6 +92,52 @@ export function mergeQrWithDefaults(input: Partial<QRCode> | null | undefined): 
   };
 }
 
+// Defensive merge for business cards. Same rationale as
+// `mergeQrWithDefaults`: a saved card from the Collection might be
+// missing nested fields (legacy save, partial data, schema drift
+// across phases 0-2). Without this, opening a partial card from
+// collection crashed the editor with "Cannot read properties of
+// undefined (reading 'layout')" at the first read of `card.front.X`
+// in cardGenerator / CardPreview / CardEditor. The merge ensures
+// `front`, `back`, and `style` are always full objects before the
+// component tree touches them.
+//
+// `grid` and `backGrid` are optional in the schema (only present
+// when useGrid is true on that side), so we only merge them when
+// the input has them.
+export function mergeCardWithDefaults(input: Partial<BusinessCard> | null | undefined): BusinessCard {
+  const base = createEmptyCard();
+  if (!input) return base;
+  return {
+    ...base,
+    ...input,
+    front: { ...base.front, ...(input.front || {}) },
+    back: { ...base.back, ...(input.back || {}) },
+    style: { ...base.style, ...(input.style || {}) },
+    grid: input.grid
+      ? { ...(base.grid || gridPresetLeft()), ...input.grid, elements: { ...((base.grid || gridPresetLeft()).elements), ...(input.grid.elements || {}) } }
+      : base.grid,
+    backGrid: input.backGrid
+      ? { ...(base.backGrid || gridPresetBackDefault()), ...input.backGrid, elements: { ...((base.backGrid || gridPresetBackDefault()).elements), ...(input.backGrid.elements || {}) } }
+      : base.backGrid,
+  };
+}
+
+// Defensive merge for logos. Same pattern as cards. A saved logo
+// from the Collection might be missing the `builder` field, which
+// is the only nested object that gets read by the editor and the
+// SVG generator. Without the merge, opening a partial logo
+// crashes the editor at `builder.layout` (or any other builder.X).
+export function mergeLogoWithDefaults(input: Partial<Logo> | null | undefined): Logo {
+  const base = createEmptyLogo();
+  if (!input) return base;
+  return {
+    ...base,
+    ...input,
+    builder: { ...base.builder, ...(input.builder || {}) },
+  };
+}
+
 export const businessCardSizePresetSchema = z.enum(['eu-85x55', 'us-89x51', 'square-65x65']);
 export type BusinessCardSizePreset = z.infer<typeof businessCardSizePresetSchema>;
 

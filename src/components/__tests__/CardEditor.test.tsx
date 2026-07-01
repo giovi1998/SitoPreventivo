@@ -394,6 +394,41 @@ describe('CardEditor', () => {
     expect(nameInput.value).toBe('GIANNI EDITED');
   });
 
+  it('renders without crashing when initialCard.front is missing (regression: layout of undefined)', () => {
+    // Phase 7 hotfix: a saved card from the Collection might have a
+    // partial shape (legacy save, partial data, schema drift across
+    // phases 0-2). Before the fix, opening such a card crashed the
+    // editor with "Cannot read properties of undefined (reading
+    // 'layout')" at the first read of card.front.layout in
+    // cardGenerator / CardPreview. The mergeCardWithDefaults helper
+    // restores the missing fields from createEmptyCard().
+    const broken = {
+      documentType: 'businessCard' as const,
+      id: 'card_partial',
+      title: 'Partial',
+      // front is missing entirely
+      back: { phone: '+39 333' },
+      style: createEmptyCard().style,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    expect(() =>
+      render(<CardEditor {...baseProps} initialCard={broken as any} />)
+    ).not.toThrow();
+  });
+
+  it('renders without crashing when initialCard has only the id and documentType', () => {
+    // Edge case: completely empty card from a partial save. The merge
+    // should restore the full shape from createEmptyCard().
+    const almostEmpty = {
+      documentType: 'businessCard' as const,
+      id: 'card_empty',
+    };
+    expect(() =>
+      render(<CardEditor {...baseProps} initialCard={almostEmpty as any} />)
+    ).not.toThrow();
+  });
+
   it('renders AI panel with 5 quick action buttons', () => {
     renderEditor();
     expect(screen.getByText(/AI Design Mode/i)).toBeInTheDocument();

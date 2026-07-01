@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Logo, LogoSector, LogoBuilder } from '../utils/documentSchemas';
-import { createEmptyLogo, createLogoTemplate } from '../utils/documentSchemas';
+import { createEmptyLogo, createLogoTemplate, mergeLogoWithDefaults } from '../utils/documentSchemas';
 import { builderToSvg, sanitizeSvg, svgToPng } from '../utils/logoGenerator';
 import dataService from '../utils/dataService';
 import SaveDialog from './SaveDialog';
@@ -27,7 +27,12 @@ function logoHasContent(logo: Logo): boolean {
 
 export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }: LogoEditorProps) {
   const { save: saveDocumentGuarded } = useDocumentSave();
-  const [logo, setLogo] = useState<Logo>(initialLogo || createEmptyLogo());
+  // Deep-merge with createEmptyLogo() defaults: a saved logo from
+  // the Collection might be missing the builder field (legacy save
+  // / partial data). Without this guard the editor crashed at the
+  // first read of logo.builder.X (layout, primaryText, ...). Same
+  // pattern as the QR / Card mergeQr / mergeCard helpers.
+  const [logo, setLogo] = useState<Logo>(() => mergeLogoWithDefaults(initialLogo));
   const [tab, setTab] = useState<'builder' | 'ai'>('builder');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [exporting, setExporting] = useState<'svg' | 'png-512' | 'png-1024' | 'png-2048' | null>(null);

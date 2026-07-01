@@ -973,10 +973,16 @@ function buildFrontSvg(card: BusinessCard, pxW: number, pxH: number): string {
   const pad = Math.max(10, Math.round(pxW * 0.04));
   const stripW = Math.max(2, Math.round(pxW * 0.008));
 
-  // Determine layout zones
-  const isLeft = card.front.layout === 'left';
-  const isSplit = card.front.layout === 'split';
-  const isCentered = card.front.layout === 'centered';
+  // Determine layout zones. Defensive: a card coming from a
+  // legacy / partial save might lack front.layout. Default to
+  // 'left' in that case so the SVG still renders. The same guard
+  // covers the case where the whole `front` object is missing
+  // (the editor's mergeCardWithDefaults should have already
+  // restored it, but we double-check here for safety).
+  const frontLayout = card.front?.layout ?? 'left';
+  const isLeft = frontLayout === 'left';
+  const isSplit = frontLayout === 'split';
+  const isCentered = frontLayout === 'centered';
 
   let out = '';
 
