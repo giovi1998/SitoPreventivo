@@ -579,8 +579,8 @@ const adminStyles = `
 .admin-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:28px}
 .admin-stat{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:20px;text-align:center}
 [data-theme="dark"] .admin-stat{background:#1a1d27;border-color:#2d3044}
-.admin-stat b{display:block;font-size:1.6rem;font-weight:900;color:#0B57D0;line-height:1.2;margin-bottom:4px;overflow-wrap:break-word;word-break:break-word}
-[data-theme="dark"] .admin-stat b{color:#4d94ff}
+.admin-stat b{display:block;font-size:1.6rem;font-weight:900;color:#1A1A1A;line-height:1.2;margin-bottom:4px;overflow-wrap:break-word;word-break:break-word}
+[data-theme="dark"] .admin-stat b{color:#e8eaf0}
 .admin-stat span{font-size:.75rem;color:#647086;text-transform:uppercase;letter-spacing:.05em;font-weight:600;line-height:1.3}
 [data-theme="dark"] .admin-stat span{color:#8892a8}
 .admin-error{background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:12px 16px;border-radius:10px;margin-bottom:20px;font-size:.85rem}
@@ -597,18 +597,18 @@ const adminStyles = `
 .admin-table th{background:#f8fafc;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;font-weight:800;color:#647086}
 [data-theme="dark"] .admin-table th{background:#14161f;color:#8892a8}
 .admin-table tr:last-child td{border-bottom:none}
-.admin-table tr:hover{background:rgba(11,87,208,.02)}
+.admin-table tr:hover{background:rgba(230,32,32,.02)}
 [data-theme="dark"] .admin-table tr:hover{background:rgba(255,255,255,.02)}
 .admin-role{padding:3px 8px;border-radius:6px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;display:inline-block}
-.admin-role.admin{background:#e8f0fe;color:#0B57D0}
-[data-theme="dark"] .admin-role.admin{background:rgba(77,148,255,.12);color:#4d94ff}
+.admin-role.admin{background:#FCE8E8;color:#E62020}
+[data-theme="dark"] .admin-role.admin{background:rgba(255,59,59,.12);color:#FF3B3B}
 .admin-role.user{background:#f0f1f5;color:#666c7c}
 [data-theme="dark"] .admin-role.user{background:rgba(255,255,255,.06);color:#8892a8}
 .admin-status{padding:3px 8px;border-radius:6px;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;display:inline-block}
 .admin-status.bozza,.admin-status.draft{background:#f0f1f5;color:#666c7c}
 [data-theme="dark"] .admin-status.bozza,[data-theme="dark"] .admin-status.draft{background:rgba(255,255,255,.06);color:#8892a8}
-.admin-status.inviato,.admin-status.sent{background:#e6eefc;color:#0B57D0}
-[data-theme="dark"] .admin-status.inviato,[data-theme="dark"] .admin-status.sent{background:rgba(77,148,255,.12);color:#4d94ff}
+.admin-status.inviato,.admin-status.sent{background:#FFF1F1;color:#E62020}
+[data-theme="dark"] .admin-status.inviato,[data-theme="dark"] .admin-status.sent{background:rgba(255,59,59,.12);color:#FF3B3B}
 .admin-status.accettato,.admin-status.accepted{background:#f7eddc;color:#a66200}
 [data-theme="dark"] .admin-status.accettato,[data-theme="dark"] .admin-status.accepted{background:rgba(245,158,11,.12);color:#f59e0b}
 .admin-status.rifiutato,.admin-status.rejected{background:#fef2f2;color:#dc2626}
@@ -618,21 +618,21 @@ const adminStyles = `
 .admin-limit-edit{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
 .admin-limit-edit input{width:90px;padding:4px 6px;border:1px solid #e2e8f0;border-radius:6px;font-size:.8rem}
 [data-theme="dark"] .admin-limit-edit input{border-color:#2d3044;background:#1a1d27;color:#e8eaf0}
-.admin-limit-edit button{padding:4px 8px;border:none;border-radius:6px;font-size:.72rem;font-weight:600;cursor:pointer;background:#0B57D0;color:#fff}
+.admin-limit-edit button{padding:4px 8px;border:none;border-radius:6px;font-size:.72rem;font-weight:600;cursor:pointer;background:#E62020;color:#fff}
 .admin-limit-edit .btn-ghost{background:transparent;color:#647086}
 [data-theme="dark"] .admin-limit-edit .btn-ghost{color:#8892a8}
 .admin-table td button{padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;font-size:.72rem;font-weight:600;cursor:pointer;transition:all .15s}
 [data-theme="dark"] .admin-table td button{border-color:#2d3044;background:#1a1d27;color:#e8eaf0}
-.admin-table td button:hover{border-color:#0B57D0;color:#0B57D0}
+.admin-table td button:hover{border-color:#E62020;color:#E62020}
 .admin-apikey-info{background:#f0f7ff;border:1px solid #b8d6ff;border-radius:12px;padding:16px 20px;font-size:.85rem;color:#1e4a7a;line-height:1.6;overflow-wrap:break-word;word-break:break-word}
-[data-theme="dark"] .admin-apikey-info{background:rgba(77,148,255,.08);border-color:rgba(77,148,255,.15);color:#8ab4f8}
-.admin-apikey-info code{background:rgba(11,87,208,.08);padding:2px 6px;border-radius:4px;font-size:.82rem;overflow-wrap:break-word;word-break:break-all}
-[data-theme="dark"] .admin-apikey-info code{background:rgba(77,148,255,.15)}
+[data-theme="dark"] .admin-apikey-info{background:rgba(255,59,59,.08);border-color:rgba(255,59,59,.15);color:#8ab4f8}
+.admin-apikey-info code{background:rgba(230,32,32,.08);padding:2px 6px;border-radius:4px;font-size:.82rem;overflow-wrap:break-word;word-break:break-all}
+[data-theme="dark"] .admin-apikey-info code{background:rgba(255,59,59,.15)}
 .admin-apikey-check{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
-.btn-check-status{padding:8px 16px;border:1px solid #0B57D0;background:#fff;color:#0B57D0;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s}
-[data-theme="dark"] .btn-check-status{background:#1a1d27;border-color:#4d94ff;color:#4d94ff}
-.btn-check-status:hover{background:#e8f0fe}
-[data-theme="dark"] .btn-check-status:hover{background:rgba(77,148,255,.12)}
+.btn-check-status{padding:8px 16px;border:1px solid #E62020;background:#fff;color:#E62020;border-radius:8px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s}
+[data-theme="dark"] .btn-check-status{background:#1a1d27;border-color:#FF3B3B;color:#FF3B3B}
+.btn-check-status:hover{background:#FCE8E8}
+[data-theme="dark"] .btn-check-status:hover{background:rgba(255,59,59,.12)}
 .ds-status{font-size:.82rem;font-weight:600;padding:6px 0}
 .ds-status.ok{color:#11845b}
 [data-theme="dark"] .ds-status.ok{color:#22c55e}
@@ -642,10 +642,10 @@ const adminStyles = `
 [data-theme="dark"] .admin-tabs{border-bottom-color:#2d3044}
 .admin-tab{background:transparent;border:none;padding:10px 18px;font-size:.85rem;font-weight:600;color:#647086;cursor:pointer;border-radius:8px 8px 0 0;transition:all .15s;border-bottom:2px solid transparent;margin-bottom:-1px}
 [data-theme="dark"] .admin-tab{color:#8892a8}
-.admin-tab:hover{color:#0B57D0;background:rgba(11,87,208,.04)}
-[data-theme="dark"] .admin-tab:hover{color:#4d94ff;background:rgba(77,148,255,.08)}
-.admin-tab.active{color:#0B57D0;border-bottom-color:#0B57D0}
-[data-theme="dark"] .admin-tab.active{color:#4d94ff;border-bottom-color:#4d94ff}
+.admin-tab:hover{color:#E62020;background:rgba(230,32,32,.04)}
+[data-theme="dark"] .admin-tab:hover{color:#FF3B3B;background:rgba(255,59,59,.08)}
+.admin-tab.active{color:#E62020;border-bottom-color:#E62020}
+[data-theme="dark"] .admin-tab.active{color:#FF3B3B;border-bottom-color:#FF3B3B}
 .admin-section-desc{font-size:.85rem;color:#647086;margin:0 0 18px;line-height:1.5}
 [data-theme="dark"] .admin-section-desc{color:#8892a8}
 
@@ -663,11 +663,11 @@ const adminStyles = `
 [data-theme="dark"] .ds-status.no{color:#f87171}
 .btn-pw{padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;font-size:.72rem;font-weight:600;cursor:pointer;white-space:nowrap}
 [data-theme="dark"] .btn-pw{border-color:#2d3044;background:#1a1d27;color:#e8eaf0}
-.btn-pw:hover{border-color:#0B57D0;color:#0B57D0}
+.btn-pw:hover{border-color:#E62020;color:#E62020}
 .admin-pw-edit{display:flex;flex-direction:column;gap:4px;min-width:200px}
 .admin-pw-edit input{padding:4px 6px;border:1px solid #e2e8f0;border-radius:6px;font-size:.75rem;width:100%}
 [data-theme="dark"] .admin-pw-edit input{border-color:#2d3044;background:#1a1d27;color:#e8eaf0}
-.admin-pw-edit button{padding:3px 8px;border:none;border-radius:6px;font-size:.7rem;font-weight:600;cursor:pointer;background:#0B57D0;color:#fff;align-self:flex-start}
+.admin-pw-edit button{padding:3px 8px;border:none;border-radius:6px;font-size:.7rem;font-weight:600;cursor:pointer;background:#E62020;color:#fff;align-self:flex-start}
 .admin-pw-edit .btn-ghost{background:transparent;color:#647086;padding:3px 6px;align-self:flex-start}
 [data-theme="dark"] .admin-pw-edit .btn-ghost{color:#8892a8}
 .pw-msg{font-size:.7rem;font-weight:600;margin-top:2px;line-height:1.3}

@@ -217,7 +217,7 @@ function buildDocDefinition(quote: PremiumQuote, themeId: DocumentTemplateId = '
     pageMargins: [40, 40, 40, 50],
     info: {
       title: `Preventivo - ${quote.client?.name || 'preventivo'}`,
-      author: quote.issuer?.name || 'PrecisionQuote',
+      author: quote.issuer?.name || 'Quickbrand',
     },
   };
 

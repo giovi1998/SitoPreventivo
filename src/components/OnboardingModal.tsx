@@ -32,7 +32,7 @@ export default function OnboardingModal({ onComplete }: { onComplete: (data: Onb
   const [displayName, setDisplayName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [profession, setProfession] = useState<string>('');
-  const [defaultColor, setDefaultColor] = useState('#0B57D0');
+  const [defaultColor, setDefaultColor] = useState('#E62020');
   const [defaultVat, setDefaultVat] = useState(22);
 
   const next = () => {

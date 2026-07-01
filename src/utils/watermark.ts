@@ -2,7 +2,7 @@
  * Phase 5 — Tier system watermark utilities.
  *
  * For `free` users, all generated PDF/PNG deliverables get a
- * diagonal text watermark "PRECISIONQUOTE" + a footer promoting
+ * diagonal text watermark "QUICKBRAND" + a footer promoting
  * the platform. For `unlocked` users, the watermark is a no-op
  * and full quality is preserved.
  *
@@ -20,8 +20,8 @@ export const FREE_PNG_MAX_SIDE = 1200;
 export const UNLOCKED_PNG_MAX_SIDE = 4096;
 export const FREE_DOCUMENT_LIMIT = 3;
 
-export const WATERMARK_TEXT = 'PRECISIONQUOTE';
-export const WATERMARK_FOOTER = 'Crea il tuo con PrecisionQuote · precisionquote.vercel.app';
+export const WATERMARK_TEXT = 'QUICKBRAND';
+export const WATERMARK_FOOTER = 'Crea il tuo brand con Quickbrand';
 
 const WATERMARK_SPACING_X = 200;
 const WATERMARK_SPACING_Y = 80;

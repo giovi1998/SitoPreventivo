@@ -42,11 +42,11 @@ export default function PreviewWatermark({ tier, className }: PreviewWatermarkPr
             fontFamily="Helvetica, Arial, sans-serif"
             fontSize="22"
             fontWeight="700"
-            fill="#0B57D0"
-            fillOpacity="0.13"
+            fill="#1A1A1A"
+            fillOpacity="0.10"
             letterSpacing="1.5"
           >
-            PRECISIONQUOTE · FREE
+            QUICKBRAND · FREE
           </text>
         </pattern>
       </defs>

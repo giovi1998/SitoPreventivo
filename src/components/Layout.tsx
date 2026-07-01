@@ -31,8 +31,8 @@ export default function Layout({ children, view, setView, onLogout, onSave, user
           </div>
           {!collapsed && (
             <div>
-              <strong>PrecisionQuote</strong>
-              <small>Preventivi custom</small>
+              <strong>Quickbrand</strong>
+              <small>Logo · Biglietti · Stampa</small>
             </div>
           )}
         </div>
@@ -149,7 +149,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, user
           <button className="mobile-hamburger" onClick={() => setDrawerOpen(true)} aria-label="Apri menu">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
           </button>
-          <span className="mobile-brand">PrecisionQuote</span>
+          <span className="mobile-brand">Quickbrand</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <button className="mobile-theme-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Cambia tema">
               {theme === 'dark' ? (
@@ -175,8 +175,8 @@ export default function Layout({ children, view, setView, onLogout, onSave, user
                   <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><path d="M8 10h16M8 16h12M8 22h8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>
                 </div>
                 <div>
-                  <strong>PrecisionQuote</strong>
-                  <small>Preventivi custom</small>
+                  <strong>Quickbrand</strong>
+                  <small>Logo · Biglietti · Stampa</small>
                 </div>
               </div>
               <button className="drawer-close" onClick={() => setDrawerOpen(false)} aria-label="Chiudi menu">

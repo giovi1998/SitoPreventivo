@@ -9,7 +9,7 @@ interface TierLimitModalProps {
 }
 
 const CONTACT_EMAIL = 'admin@gmail.com';
-const CONTACT_SUBJECT = 'Richiesta%20sblocco%20PrecisionQuote';
+const CONTACT_SUBJECT = 'Richiesta%20sblocco%20Quickbrand';
 
 export default function TierLimitModal({ open, userEmail, onClose, onRedeemed }: TierLimitModalProps) {
   const [code, setCode] = useState('');

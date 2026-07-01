@@ -31,7 +31,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
           <p style={{ color: '#666', margin: '12px 0' }}>{this.state.error?.message}</p>
           <button
             onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
-            style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: '#0B57D0', color: '#fff', cursor: 'pointer' }}
+            style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: '#E62020', color: '#fff', cursor: 'pointer' }}
           >
             Ricarica
           </button>

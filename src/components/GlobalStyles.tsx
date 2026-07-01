@@ -1,7 +1,7 @@
 export default function GlobalStyles() {
   return <style>{`
     :root{color-scheme:light dark;
-      --accent:#0B57D0;
+      --accent:#E62020;
       --sidebar:#082033;
       --canvas:#F6F8FC;
       --ink:#07111f;
@@ -20,11 +20,11 @@ export default function GlobalStyles() {
       --red-border:#fca5a5;
       --green-bg:#f0fdf4;
       --green-border:#bbf7d0;
-      --blue-bg:#e8f0fe;
-      --blue-border:#b8d6ff;
-      --info-bg:#f0f7ff;
-      --info-border:#b8d6ff;
-      --info-text:#1e4a7a;
+      --blue-bg:#FCE8E8;
+      --blue-border:#F8BFBF;
+      --info-bg:#FFF1F1;
+      --info-border:#F8BFBF;
+      --info-text:#7A1414;
       --overlay:rgba(0,0,0,.3);
       --shadow-sm:0 2px 12px rgba(19,35,58,.04);
       --shadow-md:0 8px 24px rgba(19,35,58,.08);
@@ -52,7 +52,7 @@ export default function GlobalStyles() {
       --glass-blur:20px;
     }
     [data-theme="dark"]{
-      --accent:#4d94ff;
+      --accent:#FF3B3B;
       --sidebar:#082033;
       --canvas:#0f1117;
       --ink:#e8eaf0;
@@ -71,11 +71,11 @@ export default function GlobalStyles() {
       --red-border:rgba(248,113,113,.2);
       --green-bg:rgba(34,197,94,.1);
       --green-border:rgba(34,197,94,.2);
-      --blue-bg:rgba(77,148,255,.08);
-      --blue-border:rgba(77,148,255,.15);
-      --info-bg:rgba(77,148,255,.08);
-      --info-border:rgba(77,148,255,.15);
-      --info-text:#8ab4f8;
+      --blue-bg:rgba(255,59,59,.10);
+      --blue-border:rgba(255,59,59,.18);
+      --info-bg:rgba(255,59,59,.10);
+      --info-border:rgba(255,59,59,.18);
+      --info-text:#FF8A8A;
       --overlay:rgba(0,0,0,.6);
       --shadow-sm:0 2px 12px rgba(0,0,0,.2);
       --shadow-md:0 8px 24px rgba(0,0,0,.3);
@@ -86,7 +86,7 @@ export default function GlobalStyles() {
 
     [data-theme="dark"] body{background:linear-gradient(135deg,#0f1117,#1a1d27 54%,#151821);color:var(--ink)}
     [data-theme="dark"] button{background:var(--surface);color:var(--ink);border-color:var(--line)}
-    [data-theme="dark"] .admin-stat b{color:#4d94ff}
+    [data-theme="dark"] .admin-stat b{color:var(--ink)}
     [data-theme="dark"] .admin-stat span{color:#8892a8}
     [data-theme="dark"] input,[data-theme="dark"] textarea,[data-theme="dark"] select{background:var(--surface);color:var(--ink);border-color:var(--line)}
     [data-theme="dark"] select option{background:var(--surface);color:var(--ink)}
@@ -149,7 +149,7 @@ export default function GlobalStyles() {
     /* ─── SIDEBAR ───────────────────────────────────── */
     .sidebar{background:radial-gradient(circle at 10% 0%,rgba(255,255,255,.12),transparent 40%),linear-gradient(180deg,#0a1929 0%,#082033 100%);color:#fff;padding:24px 20px;display:flex;flex-direction:column;gap:24px;border-right:1px solid rgba(255,255,255,.06)}
     .brand{display:flex;align-items:center;gap:12px}
-    .brand-logo{display:grid;place-items:center;width:40px;height:40px;border-radius:var(--radius-md);background:linear-gradient(135deg,var(--accent),#3b82f6);color:#fff;flex-shrink:0}
+    .brand-logo{display:grid;place-items:center;width:40px;height:40px;border-radius:var(--radius-md);background:var(--accent);color:#fff;flex-shrink:0}
     .brand strong{display:block;font-size:.95rem;font-weight:var(--weight-extrabold);letter-spacing:-.02em}
     .brand small{display:block;color:#8896ab;margin-top:2px;font-size:.78rem}
     .sidebar nav{display:grid;gap:4px}

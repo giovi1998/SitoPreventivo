@@ -56,7 +56,7 @@ export default function LoginPage() {
               <circle cx="24" cy="22" r="4" fill="white" fillOpacity="0.3" stroke="white" strokeWidth="1.5"/>
             </svg>
           </div>
-          <h1 className="auth-brand-name">PrecisionQuote</h1>
+          <h1 className="auth-brand-name">Quickbrand</h1>
           <p className="auth-brand-tagline">Preventivi professionali in minuti, non in ore.</p>
 
           <div className="auth-features">
@@ -105,7 +105,7 @@ export default function LoginPage() {
                 <path d="M8 10h16M8 16h12M8 22h8" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
               </svg>
             </div>
-            <span>PrecisionQuote</span>
+            <span>Quickbrand</span>
           </div>
 
           <div className="auth-form-header">
@@ -232,7 +232,7 @@ export default function LoginPage() {
 
       <style>{`
         .auth-page{display:grid;grid-template-columns:1fr 1fr;min-height:100vh;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-        .auth-brand-panel{background:linear-gradient(160deg,#082033 0%,#0B57D0 50%,#3b82f6 100%);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:64px;position:relative;overflow:hidden}
+        .auth-brand-panel{background:linear-gradient(160deg,#082033 0%,#1A1A1A 50%,#0F0F0F 100%);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:64px;position:relative;overflow:hidden}
         .auth-brand-content{position:relative;z-index:2;max-width:420px}
         .auth-logo{width:56px;height:56px;background:rgba(255,255,255,0.12);border-radius:16px;display:grid;place-items:center;margin-bottom:24px;backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.15)}
         .auth-brand-name{font-size:2rem;font-weight:900;letter-spacing:-0.04em;margin:0 0 12px}
@@ -265,15 +265,15 @@ export default function LoginPage() {
         [data-theme="dark"] .auth-input-icon{color:var(--muted-lt)}
         .auth-input-wrap input{width:100%;height:48px;padding:0 44px 0 44px;border:2px solid #e2e8f0;border-radius:12px;font-size:.95rem;color:#07111f;background:#fff;outline:none;transition:border-color .2s,box-shadow .2s}
         [data-theme="dark"] .auth-input-wrap input{border-color:var(--line);color:var(--ink);background:var(--surface)}
-        .auth-input-wrap input:focus{border-color:#0B57D0;box-shadow:0 0 0 4px rgba(11,87,208,0.08)}
+        .auth-input-wrap input:focus{border-color:#E62020;box-shadow:0 0 0 4px rgba(230,32,32,0.10)}
         .auth-input-wrap input::placeholder{color:#94a3b8}
         [data-theme="dark"] .auth-input-wrap input::placeholder{color:var(--muted-lt)}
         .auth-eye-btn{position:absolute;right:8px;background:none;border:none;padding:8px;color:#94a3b8;cursor:pointer;display:grid;place-items:center;border-radius:8px;transition:color .15s}
         .auth-eye-btn:hover{color:#475569}
         .auth-error{display:flex;align-items:center;gap:8px;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;color:#dc2626;font-size:.85rem;font-weight:500}
         [data-theme="dark"] .auth-error{background:var(--red-bg);border-color:var(--red-border);color:var(--red)}
-        .auth-submit{width:100%;height:50px;background:linear-gradient(135deg,#0B57D0,#1d4ed8);color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 14px rgba(11,87,208,0.3)}
-        .auth-submit:hover{transform:translateY(-1px);box-shadow:0 8px 25px rgba(11,87,208,0.4)}
+        .auth-submit{width:100%;height:50px;background:#E62020;color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 14px rgba(230,32,32,0.28)}
+        .auth-submit:hover{transform:translateY(-1px);box-shadow:0 8px 25px rgba(230,32,32,0.38)}
         .auth-submit:active{transform:translateY(0)}
         .auth-submit:disabled{opacity:0.6;cursor:not-allowed;transform:none}
         .auth-spinner{width:20px;height:20px;border:3px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:auth-spin .7s linear infinite}
@@ -281,8 +281,8 @@ export default function LoginPage() {
         .auth-footer{margin-top:28px;display:flex;flex-direction:column;align-items:center;gap:16px}
         .auth-toggle{font-size:.9rem;color:#647086}
         [data-theme="dark"] .auth-toggle{color:var(--muted)}
-        .auth-toggle button{background:none;border:none;color:#0B57D0;font-weight:700;cursor:pointer;padding:0 4px;font-size:.9rem;transition:color .15s}
-        .auth-toggle button:hover{color:#1d4ed8}
+        .auth-toggle button{background:none;border:none;color:#E62020;font-weight:700;cursor:pointer;padding:0 4px;font-size:.9rem;transition:color .15s}
+        .auth-toggle button:hover{color:#B81818}
         .auth-back{display:inline-flex;align-items:center;gap:6px;color:#94a3b8;text-decoration:none;font-size:.85rem;font-weight:500;transition:color .15s}
         .auth-back:hover{color:#475569}
         @media(max-width:900px){
