@@ -3,7 +3,7 @@ import './QREditor.css';
 import PreviewWatermark from './PreviewWatermark';
 import { useDocumentSave } from '../hooks/useDocumentSave';
 import type { QRCode as QRCodeType, QrCodeData, QrStyle, QrDotStyle, QrErrorCorrection } from '../utils/documentSchemas';
-import { createEmptyQrCode, createGiovanniQrTemplate, mergeQrWithDefaults } from '../utils/documentSchemas';
+import { createEmptyQrCode, createGiovanniQrTemplate } from '../utils/documentSchemas';
 import {
   buildQrPayload,
   generateQrSvg,
@@ -54,12 +54,7 @@ interface QREditorProps {
 
 export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier = 'unlocked' }: QREditorProps) {
   const { save: saveDocumentGuarded } = useDocumentSave();
-  // Deep-merge with createEmptyQrCode() defaults: a saved QR without
-  // `style` (legacy, partial save, or schema drift) used to crash the
-  // first render with `Cannot read properties of undefined (reading
-  // 'fgColor')` at `qr.style.fgColor`. The Zod defaults are only applied
-  // by .parse(), so we apply them manually here.
-  const [qr, setQr] = useState<QRCodeType>(() => mergeQrWithDefaults(initialQr));
+  const [qr, setQr] = useState<QRCodeType>(initialQr || createEmptyQrCode());
   const [showTemplateBanner, setShowTemplateBanner] = useState<boolean>(() => !initialQr);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [svgPreview, setSvgPreview] = useState<string>('');
@@ -619,19 +614,12 @@ function ColorField({ id, label, value, onChange }: { id: string; label: string;
 }
 
 function sanitizeForSave(qr: QRCodeType, userEmail: string): QRCodeType {
-  // Merge with default style: ensures every saved QR has all
-  // required fields even if the state was reconstructed from a
-  // partial document. Also strips `logoOverlay` for non-wifi types
-  // (only wifi keeps the logo overlay, others always null).
-  const baseStyle = createEmptyQrCode().style;
   return {
     ...qr,
     userEmail,
-    style: {
-      ...baseStyle,
-      ...qr.style,
-      logoOverlay: qr.data.type === 'wifi' ? qr.style.logoOverlay : null,
-    },
+    style: qr.data.type === 'wifi'
+      ? { ...qr.style, logoOverlay: qr.style.logoOverlay }
+      : qr.style,
     updatedAt: new Date().toISOString(),
   };
 }

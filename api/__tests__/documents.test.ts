@@ -200,17 +200,125 @@ describe('documents API', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('POST /documents with unsupported document type returns 400', async () => {
+  it('POST /documents with valid businessCard returns 201', async () => {
+    // Regression: businessCard was rejected with 400 ("Tipo documento non
+    // supportato") because the API only supported qrCode. LogoEditor and
+    // CardEditor both rely on this path to persist in production.
     const res = await callHandler({
       method: 'POST',
       url: '/api/documents',
       headers: { origin: 'http://localhost' },
       body: {
         email: 'user@test.com',
-        document: { documentType: 'businessCard' as any, id: 'bc-1', title: '', data: {} as any },
+        document: {
+          documentType: 'businessCard',
+          id: 'bc-new-1',
+          title: 'Mio bigliettino',
+          data: { front: { name: 'Mario' }, back: { qrPayload: '' } },
+        },
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.documentType).toBe('businessCard');
+    expect(res.body.id).toBe('bc-new-1');
+    expect(res.body.data.front.name).toBe('Mario');
+  });
+
+  it('POST /documents with valid logo returns 201', async () => {
+    // Regression: logo save failed in production with 400 ("Tipo documento
+    // non supportato"). The LogoEditor's "Salva" button called the same
+    // /documents endpoint and got a hard error, so logos never persisted.
+    const res = await callHandler({
+      method: 'POST',
+      url: '/api/documents',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        document: {
+          documentType: 'logo',
+          id: 'logo-new-1',
+          title: 'Logo Acme',
+          data: { primaryText: 'Acme', iconName: 'stethoscope' },
+        },
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.documentType).toBe('logo');
+    expect(res.body.id).toBe('logo-new-1');
+  });
+
+  it('POST /documents with flyer returns 400 (fase 3 reserved, AGENTS.md "Skip fase 3")', async () => {
+    // The schema accepts the discriminator (so the API contract is stable
+    // for the future client) but the handler still rejects it until the
+    // flyer module is implemented.
+    const res = await callHandler({
+      method: 'POST',
+      url: '/api/documents',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        document: { documentType: 'flyer', id: 'fl-1', title: '', data: {} },
       },
     });
     expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/flyer|supportato/i);
+  });
+
+  it('POST /documents with unknown documentType returns 400 (discriminator guard)', async () => {
+    const res = await callHandler({
+      method: 'POST',
+      url: '/api/documents',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        document: { documentType: 'rubbish' as any, id: 'x-1', title: '', data: {} },
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /documents for businessCard UPDATE returns 200 with new data', async () => {
+    // First save: 201
+    mockDbState.selectResults = [[]]; // no existing
+    const create = await callHandler({
+      method: 'POST',
+      url: '/api/documents',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        document: { documentType: 'businessCard', id: 'bc-up', title: 'v1', data: { front: { name: 'Mario' } } },
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    // Second save (update): the existing row belongs to the same user, so 200
+    mockDbState.selectResults = [[{ id: 'bc-up', userEmail: 'user@test.com' }]];
+    // Mock the .returning() chain to surface the updated row with new title
+    mockDbState.nextReturning = [{ id: 'bc-up', userEmail: 'user@test.com', documentType: 'businessCard', title: 'v2', data: { front: { name: 'Luigi' } } }];
+    const update = await callHandler({
+      method: 'POST',
+      url: '/api/documents',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        document: { documentType: 'businessCard', id: 'bc-up', title: 'v2', data: { front: { name: 'Luigi' } } },
+      },
+    });
+    expect(update.statusCode).toBe(200);
+    expect(update.body.title).toBe('v2');
+  });
+
+  it('POST /documents for businessCard with ownership mismatch returns 403', async () => {
+    mockDbState.selectResults = [[{ id: 'bc-other', userEmail: 'other@user.com' }]];
+    const res = await callHandler({
+      method: 'POST',
+      url: '/api/documents',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'me@user.com',
+        document: { documentType: 'businessCard', id: 'bc-other', title: 'x', data: {} },
+      },
+    });
+    expect(res.statusCode).toBe(403);
   });
 
   it('DELETE /documents/:id without email returns 400', async () => {

@@ -312,10 +312,39 @@ const qrDocumentSchema = z.object({
   updatedAt: z.string().optional(),
 });
 
+// Business card / logo / flyer payloads are stored opaquely as
+// jsonb. We validate the discriminated key + id + title at the
+// boundary and trust the schema on the client (documentSchemas.ts)
+// for the deep shape. This keeps the API surface small and avoids
+// duplicating the Zod tree for nested card/grid style fields.
+const genericDocumentSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().default(''),
+  data: z.any().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+const businessCardDocumentSchema = genericDocumentSchema.extend({
+  documentType: z.literal('businessCard'),
+});
+const logoDocumentSchema = genericDocumentSchema.extend({
+  documentType: z.literal('logo'),
+});
+// Flyer schema is reserved for fase 3 (skipped in v1). The
+// discriminatedUnion still accepts it so a future client doesn't
+// break the API contract, but the handler returns 400 until
+// fase 3 lands. This matches the "skip fase 3" decision in AGENTS.md.
+const flyerDocumentSchema = genericDocumentSchema.extend({
+  documentType: z.literal('flyer'),
+});
+
 const DocumentBodySchema = z.object({
   email: z.string().email('Email non valida'),
   document: z.discriminatedUnion('documentType', [
     qrDocumentSchema,
+    businessCardDocumentSchema,
+    logoDocumentSchema,
+    flyerDocumentSchema,
   ]),
 });
 
@@ -795,48 +824,56 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, document } = v.data;
 
-    if (document.documentType === 'qrCode') {
-      const qr = document;
-      const existing = await db.select().from(documentsTable).where(eq(documentsTable.id, qr.id));
-      if (existing.length > 0) {
-        if (existing[0].userEmail !== email) {
-          return json(req, res, 403, { error: 'Non autorizzato' });
-        }
-        const [updated] = await db.update(documentsTable).set({
-          documentType: 'qrCode',
-          title: qr.title,
-          data: qr.data as never,
-          updatedAt: sql`now()`,
-        }).where(eq(documentsTable.id, qr.id)).returning();
-        return json(req, res, 200, updated);
-      }
-      const [saved] = await db.insert(documentsTable).values({
-        id: qr.id,
-        userEmail: email,
-        documentType: 'qrCode',
-        title: qr.title,
-        data: qr.data as never,
-        isTemplate: false,
-      }).returning();
-      // Phase 5: increment user document count (admin excluded, no-op)
-      if (email !== ADMIN_EMAIL) {
-        const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
-        if (settings) {
-          await db.update(userSettingsTable).set({
-            documentCount: sql`COALESCE(${userSettingsTable.documentCount}, 0) + 1`,
-          }).where(eq(userSettingsTable.userEmail, email));
-        } else {
-          await db.insert(userSettingsTable).values({
-            userEmail: email,
-            tier: 'free',
-            documentCount: 1,
-          });
-        }
-      }
-      return json(req, res, 201, saved);
+    // Fase 3 (flyer) is reserved: schema accepts the discriminator so
+    // the API contract is stable, but the handler still rejects it
+    // until the flyer module lands. AGENTS.md "Skip fase 3".
+    if (document.documentType === 'flyer') {
+      return json(req, res, 400, { error: 'Tipo documento non ancora supportato' });
     }
 
-    return json(req, res, 400, { error: 'Tipo documento non supportato' });
+    const isQr = document.documentType === 'qrCode';
+    const existing = await db.select().from(documentsTable).where(eq(documentsTable.id, document.id));
+    if (existing.length > 0) {
+      if (existing[0].userEmail !== email) {
+        return json(req, res, 403, { error: 'Non autorizzato' });
+      }
+      // For QR we still type-check the payload via qrPayloadDataSchema
+      // (the discriminated union above). For businessCard / logo the
+      // `data` is opaque jsonb, stored as-is.
+      const dataToStore = isQr ? (document.data as never) : ((document as any).data ?? null);
+      const [updated] = await db.update(documentsTable).set({
+        documentType: document.documentType,
+        title: document.title,
+        data: dataToStore as never,
+        updatedAt: sql`now()`,
+      }).where(eq(documentsTable.id, document.id)).returning();
+      return json(req, res, 200, updated);
+    }
+    const dataToStore = isQr ? (document.data as never) : ((document as any).data ?? null);
+    const [saved] = await db.insert(documentsTable).values({
+      id: document.id,
+      userEmail: email,
+      documentType: document.documentType,
+      title: document.title,
+      data: dataToStore as never,
+      isTemplate: false,
+    }).returning();
+    // Phase 5: increment user document count (admin excluded, no-op)
+    if (email !== ADMIN_EMAIL) {
+      const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+      if (settings) {
+        await db.update(userSettingsTable).set({
+          documentCount: sql`COALESCE(${userSettingsTable.documentCount}, 0) + 1`,
+        }).where(eq(userSettingsTable.userEmail, email));
+      } else {
+        await db.insert(userSettingsTable).values({
+          userEmail: email,
+          tier: 'free',
+          documentCount: 1,
+        });
+      }
+    }
+    return json(req, res, 201, saved);
   }
 
   if (path.startsWith('/documents/') && method === 'DELETE') {
