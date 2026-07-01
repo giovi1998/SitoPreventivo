@@ -123,7 +123,9 @@ describe('QREditor', () => {
     render(<QREditor userEmail="user@test.com" initialQr={{ ...createEmptyQrCode(), data: { type: 'url', payload: 'https://example.com' } }} />);
     const saveBtn = screen.getByRole('button', { name: /^Salva$/i });
     fireEvent.click(saveBtn);
-    const dialogHeading = await screen.findByRole('heading', { name: /Salva preventivo/i });
+    // Phase 7: the dialog now labels the document by type, not hardcoded
+    // "preventivo". QREditor passes documentLabel="QR Code".
+    const dialogHeading = await screen.findByRole('heading', { name: /Salva QR Code/i });
     expect(dialogHeading).toBeInTheDocument();
   });
 
@@ -131,6 +133,6 @@ describe('QREditor', () => {
     render(<QREditor userEmail="user@test.com" initialQr={createEmptyQrCode()} />);
     const saveBtn = screen.getByRole('button', { name: /^Salva$/i });
     fireEvent.click(saveBtn);
-    expect(screen.queryByRole('heading', { name: /Salva preventivo/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Salva QR Code/i })).not.toBeInTheDocument();
   });
 });

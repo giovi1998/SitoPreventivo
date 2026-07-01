@@ -230,6 +230,8 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
       <SaveDialog
         open={showSaveDialog}
         defaultName={logo.title || 'Logo'}
+        documentLabel="logo"
+        placeholder="Es. Logo - Acme Srl"
         onSave={handleSave}
         onCancel={() => setShowSaveDialog(false)}
       />

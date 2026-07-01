@@ -114,11 +114,11 @@ describe('CollectionView, tabs (phase 6)', () => {
     expect(within(tablist).getByRole('tab', { name: /Loghi.*0/ })).toBeInTheDocument();
   });
 
-  it('non-admin with at least one quote: Preventivi tab is visible (read-only) so the user can find their saved quotes', async () => {
-    // Regression: Phase 7 fix to expose the "Preventivi" tab to non-admin
-    // when they actually have preventivi (legacy or admin-shared). Before
-    // the fix, the tab was hidden, leaving the user with no way to access
-    // quotes still present in their localStorage / DB.
+  it('non-admin: Preventivi tab is always hidden (admin-only data)', async () => {
+    // Phase 7 hotfix: preventivi are admin-only. The tab is hidden for
+    // non-admin in all cases, even if quotes exist in the local storage
+    // (legacy data, admin-shared). The TABS filter strips it
+    // unconditionally. The "Tutti" count also excludes quotes.
     seedDocumentsLocalStorage([
       makeDocument({ id: 'q1', documentType: 'quote' }),
       makeDocument({ id: 'qr1', documentType: 'qrCode' }),
@@ -126,16 +126,16 @@ describe('CollectionView, tabs (phase 6)', () => {
     ]);
     await renderCollection({}, { role: 'user' });
     const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
-    // 3 total (1 quote + 1 qr + 1 card): quote counted in "Tutti" AND shown as its own tab
-    expect(within(tablist).getByRole('tab', { name: /Tutti.*3/ })).toBeInTheDocument();
-    expect(within(tablist).getByRole('tab', { name: /Preventivi.*1/ })).toBeInTheDocument();
+    // Quote filtered out: "Tutti" shows 2 (qr + card), no Preventivi tab
+    expect(within(tablist).getByRole('tab', { name: /Tutti.*2/ })).toBeInTheDocument();
+    expect(within(tablist).queryByRole('tab', { name: /Preventivi/ })).toBeNull();
     expect(within(tablist).getByRole('tab', { name: /QR Code.*1/ })).toBeInTheDocument();
     expect(within(tablist).getByRole('tab', { name: /Bigliettini.*1/ })).toBeInTheDocument();
   });
 
-  it('non-admin with NO quotes: Preventivi tab stays hidden', async () => {
-    // No quotes saved -> tab is hidden, the user has no use for it.
-    // The default "non-admin" test fixture is an empty storage: same shape.
+  it('non-admin with no quotes: Preventivi tab is hidden (no tab at all)', async () => {
+    // Same expectation as above, just with empty quotes to make the
+    // count cleaner. The filter does not depend on counts.quote.
     seedDocumentsLocalStorage([
       makeDocument({ id: 'qr1', documentType: 'qrCode' }),
       makeDocument({ id: 'card1', documentType: 'businessCard' }),
@@ -171,15 +171,54 @@ describe('CollectionView, tabs (phase 6)', () => {
     expect(qrTab.getAttribute('aria-selected')).toBe('true');
   });
 
+  it('non-admin: "Tutti" panel excludes quotes (phase 7 hotfix, regression)', async () => {
+    // Phase 7 hotfix: preventivi are admin-only. Non-admin users must
+    // not see quote cards in the "Tutti" tab, even if the data is in
+    // localStorage (legacy or admin-shared). The hook filters them
+    // out before setDocuments. The previous behaviour counted them
+    // in "Tutti" but hid the tab, which read as a bug to users.
+    seedDocumentsLocalStorage([
+      makeDocument({ id: 'q1', documentType: 'quote', title: 'Vecchio preventivo' }),
+      makeDocument({ id: 'qr1', documentType: 'qrCode', title: 'QR uno' }),
+      makeDocument({ id: 'card1', documentType: 'businessCard', title: 'Card uno' }),
+    ]);
+    await renderCollection({}, { role: 'user' });
+    const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
+    expect(within(tablist).getByRole('tab', { name: /Tutti.*2/ })).toBeInTheDocument();
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).queryByText('Vecchio preventivo')).toBeNull();
+    expect(within(panel).getByText('QR uno')).toBeInTheDocument();
+    expect(within(panel).getByText('Card uno')).toBeInTheDocument();
+  });
+
+  it('admin: "Tutti" panel includes quotes (no regression for the admin path)', async () => {
+    // Counter-test: the filter must not strip quotes for admin users.
+    // Without this guard, a future refactor of the isAdmin filter could
+    // accidentally hide quotes from admin too.
+    seedDocumentsLocalStorage([
+      makeDocument({ id: 'q1', documentType: 'quote', title: 'Mio preventivo' }),
+      makeDocument({ id: 'qr1', documentType: 'qrCode', title: 'QR uno' }),
+    ]);
+    await renderCollection({}, { role: 'admin' });
+    const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
+    expect(within(tablist).getByRole('tab', { name: /Tutti.*2/ })).toBeInTheDocument();
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getByText('Mio preventivo')).toBeInTheDocument();
+    expect(within(panel).getByText('QR uno')).toBeInTheDocument();
+  });
+
   it('free user sees a "Free" tier badge on documents (AC-012)', async () => {
-    seedDocumentsLocalStorage([makeDocument({ id: 'q1', documentType: 'quote', title: 'Mio preventivo' })]);
+    // Phase 7: non-admin cannot see quotes. Use businessCard to test
+    // the tier badge on a document the non-admin can actually see.
+    seedDocumentsLocalStorage([makeDocument({ id: 'c1', documentType: 'businessCard', title: 'Mio bigliettino' })]);
     await renderCollection({ tier: 'free' });
     const panel = screen.getByRole('tabpanel');
     expect(within(panel).getByText(/Free/)).toBeInTheDocument();
   });
 
   it('unlocked user: no "Free" badge (or "Pro" subtle badge)', async () => {
-    seedDocumentsLocalStorage([makeDocument({ id: 'q1', documentType: 'quote', title: 'Mio preventivo' })]);
+    // Phase 7: non-admin cannot see quotes. Use businessCard instead.
+    seedDocumentsLocalStorage([makeDocument({ id: 'c1', documentType: 'businessCard', title: 'Mio bigliettino' })]);
     await renderCollection({ tier: 'unlocked' });
     const panel = screen.getByRole('tabpanel');
     expect(within(panel).queryByText(/^Free$/)).toBeNull();
@@ -197,6 +236,12 @@ describe('CollectionView, tabs (phase 6)', () => {
   });
 
   it('non-admin: clicking the new Preventivi tab filters the panel to quotes only (AC-003 with read-only)', async () => {
+    // Phase 7 hotfix: the tab is hidden for non-admin, so this scenario
+    // is now unobservable in the UI. We keep the test as a regression
+    // guard for the legacy code path: if the tab is somehow shown (e.g.
+    // a future refactor reintroduces it), this test catches it.
+    // The test now asserts that the Preventivi tab is NOT clickable
+    // because it's not in the DOM.
     seedDocumentsLocalStorage([
       makeDocument({ id: 'q1', documentType: 'quote', title: 'Vecchio preventivo' }),
       makeDocument({ id: 'qr1', documentType: 'qrCode', title: 'QR uno' }),
@@ -204,10 +249,14 @@ describe('CollectionView, tabs (phase 6)', () => {
     ]);
     await renderCollection({}, { role: 'user' });
     const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
-    fireEvent.click(within(tablist).getByRole('tab', { name: /Preventivi/ }));
+    // Non-admin: the Preventivi tab does not exist, so a click on the
+    // tablist (Tutti) shows only non-quote documents. "Vecchio preventivo"
+    // is filtered out from the panel as well.
+    const tuttiTab = within(tablist).getByRole('tab', { name: /Tutti/ });
+    fireEvent.click(tuttiTab);
     const panel = screen.getByRole('tabpanel');
-    expect(within(panel).getByText('Vecchio preventivo')).toBeInTheDocument();
-    expect(within(panel).queryByText('QR uno')).toBeNull();
-    expect(within(panel).queryByText('Card uno')).toBeNull();
+    expect(within(panel).queryByText('Vecchio preventivo')).toBeNull();
+    expect(within(panel).getByText('QR uno')).toBeInTheDocument();
+    expect(within(panel).getByText('Card uno')).toBeInTheDocument();
   });
 });

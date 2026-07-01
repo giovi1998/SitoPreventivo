@@ -194,11 +194,22 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
         if (migratedIds.has(`migrate_${q.id}`)) continue;
         mergedDocs.push({ ...q, documentType: 'quote', data: null });
       }
-      setDocuments(mergedDocs);
+      // Phase 7 hotfix: non-admin users cannot see preventivi at all
+      // (not in the "Tutti" tab, not in any other tab). Phase 5 made
+      // the quote editor admin-only, so any quote in a non-admin's
+      // collection is either legacy data or admin-shared content, and
+      // we want it completely out of their view. The `quote` tab is
+      // already hidden for non-admin in the TABS filter below; the
+      // `mergedDocs` filter here removes the cards from "Tutti" too.
+      // Admin users keep everything as before.
+      const visibleDocs = isAdmin
+        ? mergedDocs
+        : mergedDocs.filter((d) => d.documentType !== 'quote');
+      setDocuments(visibleDocs);
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [userEmail, refreshKey, ctx?.documentsVersion]);
+  }, [userEmail, refreshKey, ctx?.documentsVersion, isAdmin]);
 
   // Refresh when collection re-mounts or context changes.
   useEffect(() => {
@@ -308,16 +319,16 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
         <span>
           {isAdmin
             ? 'Tutti i tuoi documenti: preventivi, QR, bigliettini e loghi.'
-            : 'Tutti i tuoi documenti: QR, bigliettini e loghi. Se hai preventivi salvati in passato li trovi nella tab "Preventivi".'}
+            : 'Tutti i tuoi documenti: QR, bigliettini e loghi.'}
         </span>
       </div>
 
       <div role="tablist" aria-label="Tipo documento" className="collection-tabs">
-        {/* Non-admin users can see the "Preventivi" tab only if they
-            actually have at least one quote saved (legacy or admin-shared).
-            Admin always sees it. The tab is read-only: there's no
-            "Nuovo preventivo" CTA for non-admin. */}
-        {TABS.filter((t) => isAdmin || t.type !== 'quote' || counts.quote > 0).map((t) => (
+        {/* Phase 7: preventivi are admin-only. The "Preventivi" tab is
+            hidden for non-admin in all cases (no legacy fallback, no
+            read-only access). The TABS filter below makes this
+            unconditional. The header copy above reflects it. */}
+        {TABS.filter((t) => isAdmin || t.type !== 'quote').map((t) => (
           <button
             key={t.id}
             type="button"

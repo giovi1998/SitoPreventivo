@@ -124,14 +124,16 @@ describe('LogoEditor', () => {
     render(<LogoEditor userEmail="user@test.com" initialLogo={{ ...createEmptyLogo(), builder: { ...createEmptyLogo().builder, primaryText: 'Acme' } }} />);
     const saveBtn = screen.getByRole('button', { name: /^Salva$/i });
     fireEvent.click(saveBtn);
-    expect(screen.getByRole('heading', { name: /Salva preventivo/i })).toBeInTheDocument();
+    // Phase 7: the dialog labels the document by type, no longer hardcoded
+    // "Salva preventivo". LogoEditor passes documentLabel="logo".
+    expect(screen.getByRole('heading', { name: /Salva logo/i })).toBeInTheDocument();
   });
 
   it('does NOT open SaveDialog when content is empty', () => {
     render(<LogoEditor userEmail="user@test.com" initialLogo={createEmptyLogo()} />);
     const saveBtn = screen.getByRole('button', { name: /^Salva$/i });
     fireEvent.click(saveBtn);
-    expect(screen.queryByRole('heading', { name: /Salva preventivo/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Salva logo/i })).not.toBeInTheDocument();
   });
 
   it('sector template click loads that template into the editor', () => {

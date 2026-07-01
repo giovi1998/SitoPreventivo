@@ -139,8 +139,10 @@ describe('CollectionView, filters (phase 6, AC-005/AC-006)', () => {
   });
 
   it('sort "type" groups by documentType', async () => {
+    // Phase 7: non-admin cannot see quotes. Use a businessCard so
+    // the test still has 3 different types visible to non-admin.
     seedDocumentsLocalStorage([
-      makeDocument({ id: 'q1', documentType: 'quote' }),
+      makeDocument({ id: 'c1', documentType: 'businessCard' }),
       makeDocument({ id: 'qr1', documentType: 'qrCode' }),
       makeDocument({ id: 'l1', documentType: 'logo' }),
     ]);
@@ -150,7 +152,7 @@ describe('CollectionView, filters (phase 6, AC-005/AC-006)', () => {
       const cards = Array.from(document.querySelectorAll('.collection-card')) as HTMLElement[];
       const types = cards.map((c) => c.getAttribute('data-type'));
       // alphabetical: businessCard < flyer < logo < qrCode < quote
-      expect(types).toEqual(['logo', 'qrCode', 'quote']);
+      expect(types).toEqual(['businessCard', 'logo', 'qrCode']);
     });
   });
 

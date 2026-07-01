@@ -39,10 +39,26 @@ async function renderCollection(ctxOverrides: Record<string, any> = {}) {
 
 describe('CollectionView, actions (phase 6, AC-007/008/009/010)', () => {
   it('"Apri" on a quote calls openDocument (AC-007)', async () => {
+    // Phase 7: quotes are admin-only in the Collection, so this test
+    // needs admin role to see the quote card. The action under test
+    // (openDocument dispatch) is the same regardless of role.
     seedDocumentsLocalStorage([
       makeDocument({ id: 'q1', documentType: 'quote', title: 'My quote' }),
     ]);
-    const ctx = await renderCollection();
+    const ctx = buildContextValue();
+    const authValue = { ...AUTH_VALUE, user: { email: 'user@test.com', role: 'admin' as const } };
+    render(
+      <AuthContext.Provider value={authValue as any}>
+        <AppContext.Provider value={ctx as any}>
+          <MemoryRouter>
+            <CollectionViewForTest />
+          </MemoryRouter>
+        </AppContext.Provider>
+      </AuthContext.Provider>,
+    );
+    await waitFor(() => {
+      expect(screen.queryByText(/Caricamento documenti/i)).toBeNull();
+    });
     fireEvent.click(screen.getByTestId('open-q1'));
     await waitFor(() => {
       expect(ctx.openDocument).toHaveBeenCalled();
@@ -124,13 +140,20 @@ describe('CollectionView, actions (phase 6, AC-007/008/009/010)', () => {
   });
 
   it('"Elimina" shows confirm modal, then calls deleteDocument and refreshes (AC-010)', async () => {
+    // Phase 7: quotes are admin-only, so we use a businessCard as
+    // the test document. The action under test (deleteDocument call
+    // after confirm) is the same regardless of document type.
     const deleteSpy = vi.spyOn(dataService, 'deleteDocument').mockResolvedValue({ success: true } as any);
     seedDocumentsLocalStorage([
-      makeDocument({ id: 'q1', documentType: 'quote' }),
-      makeDocument({ id: 'q2', documentType: 'quote' }),
+      makeDocument({ id: 'c1', documentType: 'businessCard' }),
+      makeDocument({ id: 'c2', documentType: 'businessCard' }),
     ]);
     const ctx = await renderCollection();
-    fireEvent.click(screen.getByTestId('delete-q1'));
+    fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Bigliettini/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-c1')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('delete-c1'));
     // confirm modal appears
     await waitFor(() => {
       expect(screen.getByText(/Stai per eliminare/i)).toBeInTheDocument();
@@ -140,7 +163,7 @@ describe('CollectionView, actions (phase 6, AC-007/008/009/010)', () => {
     expect(confirmBtn).toBeTruthy();
     fireEvent.click(confirmBtn);
     await waitFor(() => {
-      expect(deleteSpy).toHaveBeenCalledWith('q1', 'user@test.com');
+      expect(deleteSpy).toHaveBeenCalledWith('c1', 'user@test.com');
     });
     expect(ctx.refreshDocuments).toHaveBeenCalled();
     deleteSpy.mockRestore();
@@ -149,10 +172,14 @@ describe('CollectionView, actions (phase 6, AC-007/008/009/010)', () => {
   it('"Elimina" cancel does NOT call deleteDocument', async () => {
     const deleteSpy = vi.spyOn(dataService, 'deleteDocument').mockResolvedValue({ success: true } as any);
     seedDocumentsLocalStorage([
-      makeDocument({ id: 'q1', documentType: 'quote' }),
+      makeDocument({ id: 'c1', documentType: 'businessCard' }),
     ]);
-    await renderCollection();
-    fireEvent.click(screen.getByTestId('delete-q1'));
+    const ctx = await renderCollection();
+    fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Bigliettini/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId('delete-c1')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('delete-c1'));
     await waitFor(() => {
       expect(screen.getByText(/Stai per eliminare/i)).toBeInTheDocument();
     });

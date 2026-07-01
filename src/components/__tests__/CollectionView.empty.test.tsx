@@ -3,7 +3,7 @@ import { render, screen, cleanup, within, fireEvent, waitFor } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 import { AuthContext, AppContext } from '../../contexts';
-import { seedDocumentsLocalStorage, buildContextValue, AUTH_VALUE } from './collectionTestUtils';
+import { seedDocumentsLocalStorage, makeDocument, buildContextValue, AUTH_VALUE } from './collectionTestUtils';
 import CollectionViewForTest from '../CollectionView';
 
 const originalLocation = window.location;
@@ -112,8 +112,10 @@ describe('CollectionView, empty states (phase 6, AC-011)', () => {
   });
 
   it('search with no match shows "Nessun risultato" (not the empty-tab CTA)', async () => {
+    // Phase 7: non-admin cannot see quotes. Use businessCard so the
+    // test still has a document the user can search.
     seedDocumentsLocalStorage([
-      { id: 'q1', documentType: 'quote', title: 'Foo', userEmail: 'user@test.com', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      makeDocument({ id: 'c1', documentType: 'businessCard', title: 'Foo' }),
     ]);
     await renderCollection();
     fireEvent.change(screen.getByTestId('collection-search'), { target: { value: 'NOMATCH' } });

@@ -64,19 +64,29 @@ describe('CollectionView, migration integration (phase 6, AC-001/AC-002/AC-015)'
     expect(screen.queryByTestId('card-q2')).toBeNull();
   });
 
-  it('legacy quotes that have NO migrated counterpart still appear in "Tutti" tab for non-admin', async () => {
-    // Non-admin users don't have the Preventivi tab, so the orphan quote
-    // is visible in the "Tutti" tab (where it appears together with the
-    // other types).
+  it('legacy quotes that have NO migrated counterpart are HIDDEN for non-admin (phase 7 hotfix)', async () => {
+    // Phase 7 hotfix: non-admin users cannot see preventivi at all,
+    // not even orphan legacy ones. The data is still in localStorage
+    // (readable via the API path) but the UI filter strips it out
+    // before setDocuments. The "Tutti" tab shows zero cards. This is
+    // the regression guard: a future refactor of the isAdmin filter
+    // that re-introduces legacy quote visibility for non-admin fails
+    // this test.
     localStorage.setItem('precisionQuote_quotes', JSON.stringify([
       { id: 'q-orphan', owner: 'user@test.com', title: 'Orphan quote' },
     ]));
-    seedDocumentsLocalStorage([]);
+    seedDocumentsLocalStorage([
+      makeDocument({ id: 'qr-1', documentType: 'qrCode', title: 'Un QR' }),
+    ]);
     await renderCollection({}, { role: 'user' });
-    // "Tutti" tab is the default and shows the orphan quote
     await waitFor(() => {
-      expect(screen.getByTestId('card-q-orphan')).toBeInTheDocument();
+      // The QR is visible, the orphan quote is NOT
+      expect(screen.getByTestId('card-qr-1')).toBeInTheDocument();
     });
+    expect(screen.queryByTestId('card-q-orphan')).toBeNull();
+    // The "Tutti" tab badge is 1, not 2
+    const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
+    expect(within(tablist).getByRole('tab', { name: /Tutti.*1/ })).toBeInTheDocument();
   });
 
   it('legacy quotes that have NO migrated counterpart still appear (backward-compat, admin)', async () => {
