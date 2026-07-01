@@ -113,8 +113,10 @@ describe('AppShell onboarding integration (regression: modal must close after su
     // Step 3: color is preselected, just continue
     fireEvent.click(screen.getByRole('button', { name: /Continua/i }));
 
-    // Step 4: VAT is preselected, click "Inizia"
-    fireEvent.click(screen.getByRole('button', { name: /Inizia/i }));
+    // Phase 7 polish, non-admin wizard: 5 steps total (no VAT). After
+    // the 4th "Continua" we are on the preference step. Click "Salta"
+    // so the modal closes with default view per AC-003.
+    fireEvent.click(screen.getByRole('button', { name: /^Salta$/i }));
 
     // save should have been called
     await waitFor(() => {
@@ -165,7 +167,10 @@ describe('AppShell onboarding integration (regression: modal must close after su
     fireEvent.click(profButton!);
     fireEvent.click(screen.getByRole('button', { name: /Continua/i }));
     fireEvent.click(screen.getByRole('button', { name: /Continua/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Inizia/i }));
+    // Phase 7 polish, non-admin wizard: 5 steps total (no VAT). After
+    // the 4th "Continua" we are on the preference step. Use "Inizia"
+    // to submit with no preference picked.
+    fireEvent.click(screen.getByRole('button', { name: /^Inizia$/i }));
 
     await waitFor(() => {
       expect(saveSpy).toHaveBeenCalled();
@@ -178,7 +183,7 @@ describe('AppShell onboarding integration (regression: modal must close after su
 
   it('REGRESSION: modal closes even if applying settings to quote throws (AC-FIX)', async () => {
     // Simulate a production scenario where the quote state is malformed
-    // (e.g. options[].items is undefined) — the setQuote updater would
+    // (e.g. options[].items is undefined), the setQuote updater would
     // throw. Before the fix, setShowOnboarding(false) was AFTER the
     // setQuote calls, so the modal stayed open. Now it's BEFORE.
     const saveSpy = vi.spyOn(dataService, 'saveUserSettings').mockResolvedValue({
@@ -220,7 +225,11 @@ describe('AppShell onboarding integration (regression: modal must close after su
     fireEvent.click(profButton!);
     fireEvent.click(screen.getByRole('button', { name: /Continua/i }));
     fireEvent.click(screen.getByRole('button', { name: /Continua/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Inizia/i }));
+    // Phase 7 polish, non-admin wizard: 5 steps total (no VAT). After
+    // the 4th "Continua" we are on the preference step. "Inizia"
+    // submits with default (no preference) so the user lands on the
+    // editor view.
+    fireEvent.click(screen.getByRole('button', { name: /^Inizia$/i }));
 
     await waitFor(() => {
       expect(saveSpy).toHaveBeenCalled();

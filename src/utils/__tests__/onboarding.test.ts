@@ -18,12 +18,31 @@ describe('shouldShowOnboarding', () => {
     expect(shouldShowOnboarding({ email: 'user@test.com' }, undefined)).toBe(true);
   });
 
-  it('returns true for a regular user with incomplete settings', () => {
+  // Phase 7 polish. The wizard is a one-shot: once the user clicks
+  // "Inizia" or "Salta", onboardingDone is persisted and the wizard
+  // never re-appears, even if some fields are empty (the user may
+  // have skipped them). This avoids trapping the user in a loop.
+  it('returns true for a regular user with incomplete settings (no onboardingDone)', () => {
     expect(shouldShowOnboarding({ email: 'user@test.com' }, { displayName: 'Mario' })).toBe(true);
     expect(shouldShowOnboarding({ email: 'user@test.com' }, { displayName: '', companyName: 'SRL' })).toBe(true);
   });
 
-  it('returns false for a regular user with all required fields filled', () => {
+  it('returns false for a regular user once onboardingDone is true', () => {
+    expect(shouldShowOnboarding({ email: 'user@test.com' }, { onboardingDone: true })).toBe(false);
+    // onboardingDone=true is enough even with empty fields (user clicked "Salta")
+    expect(
+      shouldShowOnboarding(
+        { email: 'user@test.com' },
+        { onboardingDone: true, displayName: '', companyName: '', profession: '' }
+      )
+    ).toBe(false);
+  });
+
+  it('returns true when onboardingDone is explicitly false', () => {
+    expect(shouldShowOnboarding({ email: 'user@test.com' }, { onboardingDone: false })).toBe(true);
+  });
+
+  it('returns false for a regular user with full legacy data and onboardingDone true', () => {
     expect(
       shouldShowOnboarding(
         { email: 'user@test.com' },
@@ -34,53 +53,7 @@ describe('shouldShowOnboarding', () => {
           defaultColor: '#01696F',
           defaultVat: 22,
           documentTheme: 'corporate',
-        }
-      )
-    ).toBe(false);
-  });
-
-  it('treats null and empty string as missing', () => {
-    expect(
-      shouldShowOnboarding(
-        { email: 'user@test.com' },
-        {
-          displayName: null as unknown as string,
-          companyName: 'SRL',
-          profession: 'dev',
-          defaultColor: '#000',
-          defaultVat: 22,
-          documentTheme: 'corporate',
-        }
-      )
-    ).toBe(true);
-    expect(
-      shouldShowOnboarding(
-        { email: 'user@test.com' },
-        {
-          displayName: '',
-          companyName: 'SRL',
-          profession: 'dev',
-          defaultColor: '#000',
-          defaultVat: 22,
-          documentTheme: 'corporate',
-        }
-      )
-    ).toBe(true);
-  });
-
-  it('ignores extra fields not in requiredFields', () => {
-    expect(
-      shouldShowOnboarding(
-        { email: 'user@test.com' },
-        {
-          displayName: 'Mario',
-          companyName: 'SRL',
-          profession: 'dev',
-          defaultColor: '#000',
-          defaultVat: 22,
-          documentTheme: 'corporate',
-          logoUrl: 'https://example.com/logo.png', // extra
-          onboardingDone: true,                  // extra
+          onboardingDone: true,
         }
       )
     ).toBe(false);

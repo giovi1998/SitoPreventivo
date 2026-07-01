@@ -32,10 +32,10 @@ function generateId() {
 }
 
 const STARTER_OPTIONS_LEGACY = [
-  { id: 'opt-1', title: "OPZIONE 1 — Sito Vetrina WordPress · Con Manutenzione", description: "Sito vetrina professionale realizzato con WordPress.", oneTimeCost: 750, monthlyCost: 50, includesMaintenance: true },
-  { id: 'opt-2', title: "OPZIONE 2 — Sito Vetrina WordPress · Senza Manutenzione", description: "Stessa realizzazione dell'Opzione 1.", oneTimeCost: 950, monthlyCost: 0, includesMaintenance: false },
-  { id: 'opt-3', title: "OPZIONE 3 — Sito Vetrina su Misura · Con Manutenzione", description: "Sito sviluppato su misura in HTML, CSS e JavaScript.", oneTimeCost: 550, monthlyCost: 50, includesMaintenance: true },
-  { id: 'opt-4', title: "OPZIONE 4 — Sito Vetrina su Misura · Senza Manutenzione", description: "Stessa realizzazione dell'Opzione 3.", oneTimeCost: 700, monthlyCost: 0, includesMaintenance: false },
+  { id: 'opt-1', title: "OPZIONE 1, Sito Vetrina WordPress · Con Manutenzione", description: "Sito vetrina professionale realizzato con WordPress.", oneTimeCost: 750, monthlyCost: 50, includesMaintenance: true },
+  { id: 'opt-2', title: "OPZIONE 2, Sito Vetrina WordPress · Senza Manutenzione", description: "Stessa realizzazione dell'Opzione 1.", oneTimeCost: 950, monthlyCost: 0, includesMaintenance: false },
+  { id: 'opt-3', title: "OPZIONE 3, Sito Vetrina su Misura · Con Manutenzione", description: "Sito sviluppato su misura in HTML, CSS e JavaScript.", oneTimeCost: 550, monthlyCost: 50, includesMaintenance: true },
+  { id: 'opt-4', title: "OPZIONE 4, Sito Vetrina su Misura · Senza Manutenzione", description: "Stessa realizzazione dell'Opzione 3.", oneTimeCost: 700, monthlyCost: 0, includesMaintenance: false },
 ];
 
 const STARTER_CLAUSES_LEGACY = [
@@ -75,7 +75,7 @@ export default function AppShell() {
   const [docxLoading, setDocxLoading] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showPdfImport, setShowPdfImport] = useState(false);
-  // Phase 6 — unified collection. Each editor receives the document
+  // Phase 6, unified collection. Each editor receives the document
   // currently being edited as `initial*` prop. Setters are exposed
   // via context so the CollectionView can dispatch the right editor.
   const [qrDocument, setQrDocument] = useState<any>(null);
@@ -85,7 +85,7 @@ export default function AppShell() {
     (localStorage.getItem('documentTheme') as DocumentTemplateId) || 'corporate'
   );
   const [theme, setThemeState] = useState(() => localStorage.getItem('theme') || 'light');
-  // Phase 5 — tier system
+  // Phase 5, tier system
   const [tier, setTier] = useState<'free' | 'unlocked' | 'loading'>('loading');
   const [documentCount, setDocumentCount] = useState<number>(0);
   const [showTierLimitModal, setShowTierLimitModal] = useState(false);
@@ -193,7 +193,7 @@ export default function AppShell() {
         addToast('error', 'Errore salvataggio impostazioni: ' + result.error);
         return;
       }
-      // Close the modal IMMEDIATELY after a successful save — before
+      // Close the modal IMMEDIATELY after a successful save, before
       // applying settings to the quote state. If any of the setQuote
       // updaters below throws (e.g. options[].items undefined), the
       // modal is already closed and the user isn't stuck. The settings
@@ -219,6 +219,15 @@ export default function AppShell() {
         if (settings.profession === 'altro') {
           const francesca = toLegacyFormat(STARTER_QUOTE_PREMIUM);
           setQuote(migrateFromLegacy(francesca));
+        }
+        // Phase 7, spec REQ-002. Honour the preferred document type
+        // picked in step 5 of the onboarding. We navigate AFTER the
+        // state updates so the user lands on the chosen editor already
+        // mounted. Admin keeps the default (editor) per the route
+        // guard in main.tsx, but admin skips onboarding anyway.
+        const preferred = settings.preferredDocumentType as string | undefined;
+        if (preferred && ['editor', 'qr', 'card', 'logo'].includes(preferred)) {
+          setView(preferred);
         }
       } catch (err) {
         console.error('[Onboarding] Non-critical: failed to apply settings to quote', err);
@@ -298,7 +307,7 @@ export default function AppShell() {
         addToast(
           'info',
           wasAnalysis
-            ? 'AI: nessuna modifica applicata — vedi log per la risposta testuale'
+            ? 'AI: nessuna modifica applicata, vedi log per la risposta testuale'
             : 'AI: nessuna modifica riconosciuta dal prompt. Riformula più specificamente?',
           5000
         );
@@ -475,7 +484,7 @@ export default function AppShell() {
   };
 
   // Phase 6: dispatch a document of any type to its editor. Volantini
-  // (flyers) are not yet available (phase 3 skipped) — we surface a
+  // (flyers) are not yet available (phase 3 skipped), we surface a
   // toast and stay on the collection.
   const openDocument = (doc: any) => {
     if (!doc) return;
@@ -574,12 +583,12 @@ export default function AppShell() {
     previewRef, aiLogs, isProcessing, availableModels, resetChat,
     isDirty, lastSaveTime, pdfLoading, docxLoading, documentTheme, setDocumentTheme,
     onImportPDF: () => setShowPdfImport(true),
-    // Phase 5 — tier system
+    // Phase 5, tier system
     tier,
     documentCount,
     refreshTier,
     checkDocumentLimit,
-    // Phase 6 — unified collection
+    // Phase 6, unified collection
     qrDocument, setQrDocument,
     cardDocument, setCardDocument,
     logoDocument, setLogoDocument,
@@ -636,7 +645,12 @@ export default function AppShell() {
         }}
         onCancel={() => setDeleteTarget(null)}
       />
-      {showOnboarding && <OnboardingModal onComplete={handleOnboardingComplete} />}
+      {showOnboarding && (
+        <OnboardingModal
+          onComplete={handleOnboardingComplete}
+          isAdmin={user?.role === 'admin'}
+        />
+      )}
       {showPdfImport && (
         <PdfImportModal
           onClose={() => setShowPdfImport(false)}
@@ -647,7 +661,7 @@ export default function AppShell() {
           }}
         />
       )}
-      {/* Phase 5 — Tier limit modal (shown when free user hits the 3-doc cap) */}
+      {/* Phase 5, Tier limit modal (shown when free user hits the 3-doc cap) */}
       <TierLimitModal
         open={showTierLimitModal}
         userEmail={user?.email || ''}

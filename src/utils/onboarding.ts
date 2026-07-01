@@ -8,8 +8,17 @@
  *   save attempt that hits a foreign-key violation on user_settings.userEmail.
  *   The server already short-circuits admin in handleUserSettings (see
  *   api/index.ts), but the client should not even open the wizard.
- * - Returns false if settings are present and all required fields are filled.
- * - Returns true otherwise.
+ * - Returns false if `onboardingDone` is true. The wizard is a one-shot:
+ *   once the user clicks "Inizia" or "Salta" (admin or non-admin),
+ *   `onboardingDone` is persisted and the wizard never re-appears, even
+ *   if some fields are still empty (the user may have skipped some).
+ * - Returns true otherwise (first login, settings missing, or
+ *   onboarding never completed).
+ *
+ * Phase 7 polish: the previous version re-prompted the wizard whenever
+ * any required field was empty, which trapped users in a loop if they
+ * clicked "Salta" without filling anything. The new logic trusts the
+ * `onboardingDone` flag.
  */
 
 export interface UserSettingsShape {
@@ -20,6 +29,7 @@ export interface UserSettingsShape {
   defaultVat?: number;
   documentTheme?: string;
   onboardingDone?: boolean;
+  preferredDocumentType?: string;
   [key: string]: unknown;
 }
 
@@ -29,17 +39,6 @@ export function shouldShowOnboarding(
 ): boolean {
   if (!user) return false;
   if (user.email === 'admin@gmail.com') return false;
-  if (!settings) return true;
-  const requiredFields: (keyof UserSettingsShape)[] = [
-    'displayName',
-    'companyName',
-    'profession',
-    'defaultColor',
-    'defaultVat',
-    'documentTheme',
-  ];
-  return !requiredFields.every((f) => {
-    const v = settings[f];
-    return v != null && v !== '';
-  });
+  if (settings?.onboardingDone) return false;
+  return true;
 }
