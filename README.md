@@ -1,6 +1,6 @@
-# PrecisionQuote — Preventivi Web Professionali
+# PrecisionQuote, Suite branding per piccole attività
 
-App React/TypeScript + Vite per creare preventivi multi-opzione per servizi digitali. Layout PDF professionale con 4 opzioni, IVA, acconto/saldo, clausole e riepilogo comparativo. Moduli aggiuntivi: QR Code, Bigliettini da visita, **Logo Builder**. Integrazione AI DeepSeek per modifiche rapide.
+App React/TypeScript + Vite per creare preventivi multi-opzione per servizi digitali. Layout PDF professionale con 4 opzioni, IVA, acconto/saldo, clausole e riepilogo comparativo. Moduli aggiuntivi: QR Code, Bigliettini da visita, **Logo Builder**, sistema di tier (free / unlocked) con watermark e codici sblocco, collection unificata multi-documento. Integrazione AI DeepSeek per modifiche rapide.
 
 ## Requisiti di sistema
 
@@ -19,7 +19,7 @@ npm run dev      # Vite + headroom proxy (best-effort) + caveman skill attiva
 
 Server su `http://localhost:8000`
 
-> **Phase 2.2 — DX**: `npm run dev` ora lancia automaticamente
+> **Phase 2.2, DX**: `npm run dev` ora lancia automaticamente
 > [`scripts/dev.mjs`](./scripts/dev.mjs): avvia il proxy headroom
 > (degradando con grazia se assente) + Vite in foreground + caveman
 > auto-attiva via skill. Usa `npm run dev:app` per il solo Vite.
@@ -35,13 +35,13 @@ Server su `http://localhost:8000`
 | Funzione | Descrizione |
 |----------|-------------|
 | **Multi-opzione** | 4 preventivi preimpostati (WordPress/su misura, con/senza manutenzione) |
-| **AI Co-Editor** | Modifica testi, prezzi, clausole con AI — chiave condivisa gestita dall'admin |
+| **AI Co-Editor** | Modifica testi, prezzi, clausole con AI, chiave condivisa gestita dall'admin |
 | **Log AI visibili** | Pannello log in tempo reale con risposta DeepSeek raw |
 | **Pannelli collassabili** | Pannelli AI e Manuale si collassano in tabs sempre visibili (AI/Man) sul bordo, per vedere il PDF a pieno schermo |
 | **Salva con nome** | Dialog che chiede un nome personalizzato prima del salvataggio |
 | **Admin Dashboard** | Gestione utenti, limiti token, chiave DeepSeek condivisa |
 | **Token tracking** | Monitoraggio token AI usati per utente, con limite configurabile |
-| **PDF export** | Genera PDF con **pdfmake** — tabelle, page break, header/footers automatici |
+| **PDF export** | Genera PDF con **pdfmake**, tabelle, page break, header/footers automatici |
 | **Riepilogo economico** | Tabella Imponibile / IVA / Totale per ogni opzione |
 | **Acconto/Saldo** | 50% acconto sviluppo, 50% saldo a consegna |
 | **Riepilogo comparativo** | Confronto tra tutte le opzioni |
@@ -52,9 +52,13 @@ Server su `http://localhost:8000`
 | **Bigliettini da Visita** | Editor fronte/retro con 3 layout, 3 formati (EU/US/square), grid editor con master switch (REQ-E01), AI Design Mode, parità mobile completa, scala font (0.7–1.5), export PDF 10-up/PNG/SVG/JSON |
 | **AI Design Mode (Card)** | 7 quick actions per bigliettini (premium, minimal, compila, palette, stampa, sposta QR, allarga foto) + prompt personalizzato |
 | **Logo Builder** | Generatore di loghi SVG da testo + icona (lucide 48 icone allowlist) + 4 forme + 3 layout. AI disabilitata nella v1 (placeholder per Replicate). Export SVG + PNG 512/1024/2048. Zero costo AI, output editabile in Illustrator/Inkscape. |
+| **Tier System** | Free con watermark + limite 3 documenti + export 150/72 DPI. Sblocco via codice (admin emette, utente redime) → piano unlocked con export 300/4096 DPI e documenti illimitati. |
+| **Unified Collection** | Una sola tabella `documents` con discriminatore `documentType` (quote, qrCode, businessCard, logo). Migration automatica dal legacy `quotes` a `documents:v1`. |
+| **Onboarding 6 step** | Wizard nuovo utente con displayName, company, settore, colore brand, IVA predefinita, preferenza documento di partenza. Step 5 naviga direttamente all'editor scelto. |
+| **HomePage "Perché Quickbrand"** | Sezione differenziazione vs web agency / Canva / Looka. H1 disruptor, pacchetti (Free, Pro, Starter, Apertura, Presenza), Manutenzione. |
 | **Responsive** | Layout adattivo desktop (3-col), tablet e mobile (tab system + FAB AI + zoom preview) |
 
-## Bigliettino — Phase 2.2 features
+## Bigliettino, Phase 2.2 features
 
 | Feature | Descrizione |
 |---------|-------------|
@@ -73,7 +77,7 @@ Server su `http://localhost:8000`
 
 ## AI Coding Agent Optimization (solo sviluppatori)
 
-Tool per **ridurre i token** scambiati tra te e l'agente AI (opencode) durante lo sviluppo. **Non** fanno parte dell'app — sono solo per la produttività dello sviluppatore.
+Tool per **ridurre i token** scambiati tra te e l'agente AI (opencode) durante lo sviluppo. **Non** fanno parte dell'app, sono solo per la produttività dello sviluppatore.
 
 | Tool | Direzione | Effetto tipico | Installazione |
 |------|-----------|----------------|---------------|
@@ -99,7 +103,7 @@ headroom perf
 
 Il proxy è **persistente** tra le sessioni (resta attivo dopo l'uscita di opencode). Log in `.headroom.log` (gitignored). Sorgente: `scripts/start-agent.mjs`.
 
-> `headroom wrap opencode` **non esiste** in v0.27.0 (nonostante la tabella README upstream lo listi come ✅). I wrapper built-in sono: `claude`, `codex`, `copilot`, `aider`, `cursor`, `cline`, `continue`, `goose`, `openhands`, `openclaw`. Per opencode il workflow canonico è: `headroom proxy` + `OPENAI_BASE_URL` — automatizzato qui da `npm run agent`.
+> `headroom wrap opencode` **non esiste** in v0.27.0 (nonostante la tabella README upstream lo listi come ✅). I wrapper built-in sono: `claude`, `codex`, `copilot`, `aider`, `cursor`, `cline`, `continue`, `goose`, `openhands`, `openclaw`. Per opencode il workflow canonico è: `headroom proxy` + `OPENAI_BASE_URL`, automatizzato qui da `npm run agent`.
 
 ### Caveman (compressione output)
 
@@ -121,7 +125,7 @@ La skill **si auto-disattiva** in caso di: warning di sicurezza, conferme di azi
 
 1. **Produzione (Vercel)**: vai su **Vercel Dashboard → Settings → Environment Variables** e aggiungi `DEEPSEEK_API_KEY` con scope **Production, Preview**. La chiave viene letta solo dalla Serverless Function e non deve essere esposta come variabile `VITE_*`.
 2. **Locale (`npm run dev`)**: nella Dashboard Admin (sidebar → Admin), incolla la chiave nel campo "Chiave DeepSeek" e salva (viene conservata in localStorage)
-3. Tutti gli utenti usano la stessa chiave condivisa — l'admin controlla i **limiti token** per ogni utente
+3. Tutti gli utenti usano la stessa chiave condivisa, l'admin controlla i **limiti token** per ogni utente
 4. Gli utenti vedono selettore "Modello AI" e stato connessione nel pannello
 
 ### Token e Limiti
@@ -212,7 +216,7 @@ Editor completo per bigliettini da visita professionali con anteprima live front
 
 ### Grid editor per lato (Phase 2.1)
 
-A partire dalla fase 2.1, l'editor griglia è **per lato** (Fronte / Retro) — non
+A partire dalla fase 2.1, l'editor griglia è **per lato** (Fronte / Retro), non
 si possono spostare elementi del front nel retro o viceversa.
 
 - **Lato Fronte**: mostra solo `Foto`, `Logo`, `Nome`, `Ruolo`, `Azienda`
@@ -300,6 +304,8 @@ al sito personale, GitHub social, layout split). Da `src/utils/documentSchemas.t
 ## Logo Builder
 
 Generatore di loghi vettoriali componibile. **Nessuna AI nella v1**: l'utente compone il logo da testo + icona + forma + colore + layout. Output SVG pulito e modificabile in Illustrator/Inkscape.
+
+> La fase 3 (Volantino) è stata skippata per dare priorità al logo (input di fase 2 `card.front.logoUrl`). Vedi `AGENTS.md`, sezione "Phase Status & Roadmap" e `spec/spec-tool-phase4-logo-builder.md` sezione 7 (Rationale).
 
 > La fase 3 (Volantino) è stata **skippata** per dare priorità al logo (input di fase 2 `card.front.logoUrl`). Vedi `AGENTS.md` → "Phase Status & Roadmap" e `spec/spec-tool-phase4-logo-builder.md` §7 (Rationale).
 
@@ -405,16 +411,18 @@ cp .env.example .env
 
 | Chiave | Descrizione |
 |--------|-------------|
-| `registeredUsers` | Array JSON utenti registrati |
+| `registeredUsers` | Array JSON utenti registrati (dev only fallback) |
 | `authToken` | Token sessione |
 | `userEmail` | Email utente corrente |
 | `username` | Username |
 | `userRole` | Ruolo utente (admin / user) |
 | `dataRegistrazione` | Data registrazione |
 | `deepseekApiKey` | API Key DeepSeek (solo dev) |
-| `precisionQuote_quotes:v1` | Preventivi salvati |
-| `precisionQuote_documents:v1` | Documenti unificati (QR, card, logo) |
-| `userSettings_<email>` | Impostazioni utente (default color, VAT, theme) |
+| `precisionQuote_quotes` | Preventivi legacy (pre-fase 6, deprecata) |
+| `precisionQuote_documents:v1` | **Phase 6**: documenti unificati (quote, QR, card, logo) |
+| `pq_migration_v1_done_<email>` | **Phase 6**: flag migrazione legacy → documents:v1 |
+| `unlock_codes` | Codici sblocco tier (solo dev, popolato dall'admin) |
+| `userSettings_<email>` | Impostazioni utente (default color, VAT, theme, **tier**, **unlockCode**, **documentCount** da fase 5, **preferredDocumentType** da fase 7) |
 | `theme` | Tema corrente (light / dark) |
 | `documentTheme` | Tema documento (minimal / corporate / creative) |
 
@@ -434,24 +442,61 @@ cp .env.example .env
 | `token_limit` | bigint | Limite token (default 1.000.000) |
 | `created_at` | timestamp | DEFAULT now() |
 
-### Tabella `quotes`
+### Tabella `documents` (Phase 6, unificata)
 
 | Colonna | Tipo | Note |
 |---------|------|------|
-| `id` | varchar(50) PK | Es. PRV-2026-042 |
+| `id` | varchar(50) PK | Es. PRV-2026-042, QR-..., CARD-..., LOGO-... |
 | `user_email` | varchar(255) | FK users.email, NOT NULL |
-| `title` | varchar(255) | Titolo preventivo |
-| `client` | varchar(255) | Nome cliente |
-| `date` | varchar(50) | Data preventivo |
-| `intro` | text | Testo introduttivo |
+| `document_type` | varchar(30) | `quote` / `qrCode` / `businessCard` / `logo` |
+| `title` | varchar(255) | Titolo documento |
+| `client` | varchar(255) | Nome cliente (quote) |
+| `date` | varchar(50) | Data |
+| `intro` | text | Intro (quote) |
 | `color` | varchar(50) | Colore brand |
 | `vat` | integer | DEFAULT 22 |
 | `status` | varchar(50) | DEFAULT 'BOZZA' |
 | `owner` | varchar(255) | |
-| `options` | jsonb | Array opzioni |
-| `clauses` | jsonb | Array clausole |
+| `options` | jsonb | Opzioni preventivo |
+| `clauses` | jsonb | Clausole |
+| `is_template` | boolean | DEFAULT false |
+| `share_token` | varchar(255) | Token pubblico condivisione |
+| `is_shared` | boolean | DEFAULT false |
+| `pdf_url` | text | URL PDF (futuro) |
+| `document_theme` | varchar(50) | minimal / corporate / creative |
+| `data` | jsonb | Payload specifico per tipo (QR payload, card grid, logo builder) |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
+
+### Tabella `user_settings`
+
+| Colonna | Tipo | Note |
+|---------|------|------|
+| `user_email` | varchar(255) PK | FK users.email |
+| `display_name` | varchar(255) | Da onboarding step 0 |
+| `company_name` | varchar(255) | Da onboarding step 1 |
+| `profession` | varchar(100) | Da onboarding step 2 |
+| `default_color` | varchar(50) | Da onboarding step 3 |
+| `default_vat` | integer | Da onboarding step 4 |
+| `logo_url` | text | Logo utente |
+| `document_theme` | varchar(50) | minimal / corporate / creative |
+| `onboarding_done` | boolean | DEFAULT false |
+| `tier` | varchar(20) | `free` / `unlocked` (Phase 5) |
+| `unlock_code` | varchar(50) | Codice sblocco (Phase 5) |
+| `unlocked_at` | timestamp | Data sblocco (Phase 5) |
+| `document_count` | integer | DEFAULT 0, counter per tier guard (Phase 5) |
+| `preferred_document_type` | varchar(30) | **Phase 7**: editor / qr / card / logo, da onboarding step 5 |
+
+### Tabella `unlock_codes` (Phase 5)
+
+| Colonna | Tipo | Note |
+|---------|------|------|
+| `code` | varchar(50) PK | Es. `STARTER-X7K2`, `APERTURA-M9P4` |
+| `package` | varchar(50) | `starter` / `apertura` / `presenza` / `custom` |
+| `used_by` | varchar(255) | Email utente che ha riscattato (null se disponibile) |
+| `used_at` | timestamp | Data riscatto |
+| `created_by` | varchar(255) | Admin email |
+| `created_at` | timestamp | DEFAULT now() |
 
 ## Sviluppo Database
 
@@ -495,6 +540,8 @@ Dopo il deploy, vai su **Vercel Dashboard → Settings → Environment Variables
 | `DATABASE_URL` | `postgresql://...` da Neon | Production, Preview |
 | `DEEPSEEK_API_KEY` | La tua chiave DeepSeek | Production, Preview |
 | `ADMIN_PASSWORD` | Password admin (admin@gmail.com) | Production, Preview |
+| `ALLOWED_ORIGIN` | (opzionale) `https://tuodominio.com` | Production, Preview |
+| `REPLICATE_API_TOKEN` | (opzionale, v2) token Replicate per AI logo | Production, Preview |
 
 ## Struttura file
 
@@ -529,14 +576,16 @@ SitoPreventivo/
 │   │   ├── useAICard.ts       # Hook AI per card (no tools, JSON round-trip)
 │   │   ├── useCardAIFloating.tsx # Provider + hook stato AI panel mobile
 │   │   ├── useCardPreviewZoom.ts # Hook zoom anteprima (50-150%)
+│   │   ├── useDocumentSave.ts # Hook save documenti con tier guard
 │   │   ├── useMediaQuery.ts   # Hook responsive
 │   │   ├── useRouteView.ts    # Bridge hook pathname ↔ view
 │   │   └── useToast.ts        # Toast notifications
 │   ├── pages/
-│   │   ├── HomePage.tsx       # Landing page pubblica
+│   │   ├── HomePage.tsx       # Landing page pubblica (hero, features, pricing, perché noi)
+│   │   ├── LogoAiDocsPage.tsx # ← fase 7: docs pubblica per AI logo
 │   │   ├── LoginPage.tsx      # Login/registrazione
-│   │   ├── SettingsPage.tsx   # Cambio password, tema, ecc.
-│   │   ├── AdminDashboard.tsx # Gestione utenti/token/chiave AI
+│   │   ├── SettingsPage.tsx   # Cambio password, tema, tier
+│   │   ├── AdminDashboard.tsx # Gestione utenti/token/chiave AI/codici sblocco
 │   │   ├── NotFoundPage.tsx   # 404
 │   │   └── app/               # Page wrappers protetti da /app
 │   │       ├── EditorPage.tsx
@@ -551,6 +600,8 @@ SitoPreventivo/
 │   │   ├── Layout.tsx         # Sidebar (Loghi, QR Code, Bigliettini, Editor, Collection, Settings, Admin)
 │   │   ├── Topbar.tsx         # Salva/Esporta per view corrente
 │   │   ├── EditorView.tsx     # AI panel + controlli
+│   │   ├── OnboardingModal.tsx # ← fase 7: 6 step wizard (include preferenza doc)
+│   │   ├── TierLimitModal.tsx # ← fase 5: modale limite free tier
 │   │   ├── QREditor.tsx       # Generatore QR Code
 │   │   ├── CardEditor.tsx     # Editor bigliettini
 │   │   ├── CardPreview.tsx    # Anteprima card (flexbox + CSS Grid mode)
@@ -561,7 +612,7 @@ SitoPreventivo/
 │   │   ├── CardPreviewZoomControls.tsx
 │   │   ├── LogoEditor.tsx     # ← fase 4: Logo Builder (tabs Builder + AI)
 │   │   ├── BuilderPanel.tsx   # ← fase 4: form + lucide picker + live preview
-│   │   ├── CollectionView.tsx # Griglia preventivi
+│   │   ├── CollectionView.tsx # ← fase 6: griglia documenti unificata
 │   │   ├── SaveDialog.tsx     # Modale nome personalizzato
 │   │   ├── GlobalStyles.tsx   # Tutti i CSS
 │   │   └── ...                # altri
@@ -581,10 +632,12 @@ SitoPreventivo/
 │       ├── qrGenerator.ts     # QR Code SVG/PNG generation
 │       ├── logoGenerator.ts   # ← fase 4: SVG builder + sanitize + export PNG
 │       ├── lucideIconPaths.ts # ← fase 4: path SVG icone lucide (auto-generato)
+│       ├── watermark.ts       # ← fase 5: tier-aware watermark
 │       ├── documentSchemas.ts # Zod schema (quote, QR, card, logo, grid presets)
 │       ├── documentThemes.ts
 │       ├── quoteSchema.ts
 │       ├── quoteTools.ts
+│       ├── onboarding.ts      # Helpers onboarding (shouldShowOnboarding)
 │       └── logger.ts          # Client logger (sendBeacon → /api/logs)
 └── scripts/
     └── extract-lucide-paths.mjs # ← fase 4: estrae path SVG da lucide-react
@@ -604,12 +657,13 @@ npm run typecheck  # tsc --noEmit
 
 | Fase | Stato | Descrizione |
 |------|-------|-------------|
-| 0 — Auto-save fix | ✅ | Reset timer su modifiche quote |
-| 1 — QR Code | ✅ | 7 tipi, stili, logo overlay, export SVG/PNG |
-| 2 — Bigliettini | ✅ | 3 layout, 3 formati, AI Design Mode, grid editor |
-| 2.1 — Card polish | ✅ | Collision detection BLOCK, logo in grid (~30%), backGrid separato, showGrid toggle, AI merge protection, template Giovanni con foto+logo trasparente |
-| 3 — Volantino | ⏭️ **skipped** | Rimandato per prioritizzare il Logo Builder (vedi AGENTS.md) |
-| 4 — **Logo Builder** | ✅ | SVG builder templated, 48 icone lucide, 4 template settore, 3 layout, export SVG + PNG 512/1024/2048 |
-| 5 — Tier System | ⏳ pending | Watermark free, unlock code |
-| 6 — Unified Collection | ⏳ pending | Visualizzazione documenti misti (preventivi, QR, card, logo) |
-| 7 — Polish | ⏳ pending | Ottimizzazioni finali |
+| 0, Auto-save fix | ✅ | Reset timer su modifiche quote |
+| 1, QR Code | ✅ | 7 tipi, stili, logo overlay, export SVG/PNG |
+| 2, Bigliettini | ✅ | 3 layout, 3 formati, AI Design Mode, grid editor |
+| 2.1, Card polish | ✅ | Collision detection BLOCK, logo in grid (~30%), backGrid separato, showGrid toggle, AI merge protection, template Giovanni con foto+logo trasparente |
+| 2.2, Card refactor | ✅ | Master switch griglia, init-from-layout, QR sizing, fontScale, servicesLabel, parità mobile, AI parity |
+| 3, Volantino | ⏭️ **skipped** | Rimandato per prioritizzare il Logo Builder (vedi AGENTS.md) |
+| 4, **Logo Builder** | ✅ | SVG builder templated, 48 icone lucide, 4 template settore, 3 layout, export SVG + PNG 512/1024/2048 |
+| 5, Tier System | ✅ | Watermark free (150/72 DPI), unlock code via admin, tier guard su save (3 doc free) |
+| 6, Unified Collection | ✅ | Tabella `documents` rinominata, migration legacy, tab per tipo documento |
+| 7, Polish | ✅ | Onboarding 6 step, HomePage refactor (perché noi), Collection accessibile a tutti, `preferredDocumentType`, docs/logo-ai.md privato, docs aggiornate |

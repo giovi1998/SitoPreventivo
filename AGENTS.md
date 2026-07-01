@@ -1,4 +1,4 @@
-# AGENTS.md — PrecisionQuote
+# AGENTS.md, PrecisionQuote
 
 ## Quick Commands
 
@@ -60,8 +60,8 @@ sempre attivo (anche dopo reboot, anche se non lanci opencode), installa
 uno dei due:
 
 ```bash
-npm run agent:autostart          # Task Scheduler (ONLOGON) — richiede admin
-npm run agent:autostart:startup  # script .bat in shell:startup — no admin, solo utente corrente
+npm run agent:autostart          # Task Scheduler (ONLOGON), richiede admin
+npm run agent:autostart:startup  # script .bat in shell:startup, no admin, solo utente corrente
 # Rimozione:
 npm run agent:autostart:disable          # disinstalla task
 npm run agent:autostart:startup:disable  # rimuove .bat
@@ -88,7 +88,7 @@ Da quel momento headroom comprime ciò che tu **leggi** (tool output, file, log,
 
 `headroom wrap opencode` non esiste. I wrapper built-in di headroom sono: `claude`, `codex`, `copilot`, `aider`, `cursor`, `cline`, `continue`, `goose`, `openhands`, `openclaw`. Per opencode il workflow corretto è `headroom proxy` + env var `OPENAI_BASE_URL`.
 
-### Caveman — regole di auto-clarity
+### Caveman, regole di auto-clarity
 
 La skill si **disattiva automaticamente** in questi casi (vedi `Auto-Clarity` in SKILL.md):
 - warning di sicurezza
@@ -96,7 +96,7 @@ La skill si **disattiva automaticamente** in questi casi (vedi `Auto-Clarity` in
 - sequenze multi-step dove l'ordine dei frammenti può generare ambiguità
 - utente chiede chiarimento o ripete la domanda
 
-Quindi: se una risposta è più verbosa del solito, è un caso coperto da auto-clarity. Non cercare di "forzare" lo stile terso in quei casi — la skill sa quando tacere.
+Quindi: se una risposta è più verbosa del solito, è un caso coperto da auto-clarity. Non cercare di "forzare" lo stile terso in quei casi, la skill sa quando tacere.
 
 ### Metriche
 
@@ -107,10 +107,10 @@ headroom perf           # savings real-time del proxy (richiede proxy attivo)
 
 ### Riferimenti
 
-- `headroom --help` / `headroom wrap --help` — wrapper elenco
-- `.agents/skills/caveman/SKILL.md` — regole complete della skill caveman
-- `skills-lock.json` — registro versionato delle skill installate (incluso `caveman`)
-- `scripts/start-agent.mjs` — sorgente del wrapper `npm run agent*`
+- `headroom --help` / `headroom wrap --help`, wrapper elenco
+- `.agents/skills/caveman/SKILL.md`, regole complete della skill caveman
+- `skills-lock.json`, registro versionato delle skill installate (incluso `caveman`)
+- `scripts/start-agent.mjs`, sorgente del wrapper `npm run agent*`
 
 ### Session Start Protocol (OBBLIGATORIO)
 
@@ -127,7 +127,7 @@ All'avvio di **ogni** session opencode su questo progetto, **prima** di accettar
    ```bash
    node scripts/start-agent.mjs proxy
    ```
-   Il proxy è **persistente** — resta attivo anche dopo l'uscita di opencode, quindi questo step di solito è un no-op dalla seconda sessione in poi.
+   Il proxy è **persistente**, resta attivo anche dopo l'uscita di opencode, quindi questo step di solito è un no-op dalla seconda sessione in poi.
 
 3. **Verifica che la sessione corrente sia instradata attraverso il proxy**:
    ```bash
@@ -136,11 +136,11 @@ All'avvio di **ogni** session opencode su questo progetto, **prima** di accettar
    ```
    - Se ritorna `http://127.0.0.1:8787` → headroom attivo per questa sessione ✓. Procedi col task.
    - Se è vuoto o diverso → la sessione **NON** sta usando headroom. Avvisa subito l'utente con questo messaggio esatto (poi procedi comunque col task, non bloccare):
-     > ⚠️ Sessione corrente non connessa a headroom (proxy attivo ma `OPENAI_BASE_URL` non settato al lancio). Per ridurre i token di input, la prossima volta lancia opencode con `npm run agent` invece di cliccare l'icona — avvia proxy + setta `OPENAI_BASE_URL` + lancia opencode in un solo comando. Il proxy è già attivo adesso, manca solo l'env var che va settata a processo avviato.
+     > ⚠️ Sessione corrente non connessa a headroom (proxy attivo ma `OPENAI_BASE_URL` non settato al lancio). Per ridurre i token di input, la prossima volta lancia opencode con `npm run agent` invece di cliccare l'icona, avvia proxy + setta `OPENAI_BASE_URL` + lancia opencode in un solo comando. Il proxy è già attivo adesso, manca solo l'env var che va settata a processo avviato.
 
-**Non skippare questo protocollo** neanche per task rapidi — è il modo per garantire che l'utente beneficia della compressione. Il check costa <1s. Il proxy è persistente quindi dopo il primo avvio è sempre ready.
+**Non skippare questo protocollo** neanche per task rapidi, è il modo per garantire che l'utente beneficia della compressione. Il check costa <1s. Il proxy è persistente quindi dopo il primo avvio è sempre ready.
 
-**Perché non posso attivare headroom mid-session**: headroom è un proxy HTTP. opencode legge `OPENAI_BASE_URL` solo a processo avviato. Una sessione già in corso non può essere reindirizzata through il proxy — va rilanciata con l'env var corretta. Questo protocollo ensuring il proxy sia sempre up così la prossima sessione `npm run agent` parte subito.
+**Perché non posso attivare headroom mid-session**: headroom è un proxy HTTP. opencode legge `OPENAI_BASE_URL` solo a processo avviato. Una sessione già in corso non può essere reindirizzata through il proxy, va rilanciata con l'env var corretta. Questo protocollo ensuring il proxy sia sempre up così la prossima sessione `npm run agent` parte subito.
 
 ## Token Optimization Stack
 
@@ -176,7 +176,7 @@ Il proxy parte **sempre** con il profilo più aggressivo di headroom per ridurre
 
 Override del budget: `HEADROOM_BUDGET_USD=10.0 npm run agent:proxy` (default 5.0).
 
-### Caveman — regole di auto-clarity
+### Caveman, regole di auto-clarity
 
 La skill si **disattiva automaticamente** in questi casi (vedi `Auto-Clarity` in SKILL.md):
 - warning di sicurezza
@@ -184,7 +184,7 @@ La skill si **disattiva automaticamente** in questi casi (vedi `Auto-Clarity` in
 - sequenze multi-step dove l'ordine dei frammenti può generare ambiguità
 - utente chiede chiarimento o ripete la domanda
 
-Quindi: se una risposta è più verbosa del solito, è un caso coperto da auto-clarity. Non cercare di "forzare" lo stile terso in quei casi — la skill sa quando tacere.
+Quindi: se una risposta è più verbosa del solito, è un caso coperto da auto-clarity. Non cercare di "forzare" lo stile terso in quei casi, la skill sa quando tacere.
 
 ### Metriche
 
@@ -195,10 +195,10 @@ headroom perf           # savings real-time del proxy (richiede proxy attivo)
 
 ### Riferimenti
 
-- `headroom --help` / `headroom wrap --help` — wrapper elenco
-- `.agents/skills/caveman/SKILL.md` — regole complete della skill caveman
-- `skills-lock.json` — registro versionato delle skill installate (incluso `caveman`)
-- `scripts/start-agent.mjs` — sorgente del wrapper `npm run agent*`
+- `headroom --help` / `headroom wrap --help`, wrapper elenco
+- `.agents/skills/caveman/SKILL.md`, regole complete della skill caveman
+- `skills-lock.json`, registro versionato delle skill installate (incluso `caveman`)
+- `scripts/start-agent.mjs`, sorgente del wrapper `npm run agent*`
 
 Prima di consigliare un push, esegui e conferma tutto verde:
 
@@ -212,7 +212,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 ## Architecture
 
 - **Frontend**: React 18 + Vite + React Router v6
-- **Backend**: Single Vercel Serverless Function (`api/index.ts`) — monolithic, all routes in one file (intentional pattern, see Vercel routing below)
+- **Backend**: Single Vercel Serverless Function (`api/index.ts`), monolithic, all routes in one file (intentional pattern, see Vercel routing below)
 - **Database**: Drizzle ORM → Neon Postgres
 - **Storage split**: `localhost` = localStorage, production = API + Postgres. Detection is automatic via `IS_LOCAL` in `src/utils/dataService.js`
 - **Auth**: bcrypt + localStorage (dev) / Drizzle + Neon (prod). Admin: `admin@gmail.com` validated against `ADMIN_PASSWORD` env var, never saved to DB.
@@ -224,22 +224,26 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 |------|------|
 | `App.tsx` (root, not src/) | Thin re-export of `AppShell` (default) + `AuthProvider`/`AuthContext` (named) |
 | `src/main.tsx` | React Router setup: `/login`, `/` (HomePage), `/app/*` (6 child routes), `*` (404) |
-| `src/components/AppShell.tsx` | Global state shell (quote, AI, toasts, exports, theme) — renders `<Outlet/>` |
+| `src/components/AppShell.tsx` | Global state shell (quote, AI, toasts, exports, theme), renders `<Outlet/>` |
 | `src/components/AdminRoute.tsx` | Guard: `user.role === 'admin'` required, else `navigate('/app/editor')` |
-| `src/hooks/useRouteView.ts` | Bridge hook: `pathname ↔ view` (editor\|collection\|qr\|card\|settings\|admin), `setView` calls `navigate()` |
-| `src/pages/app/*` | Thin page wrappers (Editor/Collection/Qr/Card/Settings/Admin) — read state from `AppContext` |
-| `api/index.ts` | Single Vercel serverless function — entire REST API (monolith, intentional) |
-| `db/schema.ts` | Drizzle schema (users, quotes, user_settings) |
-| `src/utils/dataService.js` | Data layer — routes to API or localStorage |
+| `src/hooks/useRouteView.ts` | Bridge hook: `pathname ↔ view` (editor\|collection\|qr\|card\|logo\|settings\|admin), `setView` calls `navigate()` |
+| `src/pages/app/*` | Thin page wrappers (Editor/Collection/Qr/Card/Logo/Settings/Admin), read state from `AppContext` |
+| `src/pages/LogoAiDocsPage.tsx` | **Phase 7**: public docs page explaining the disabled "AI Generation" tab. Lazy-loaded. |
+| `api/index.ts` | Single Vercel serverless function, entire REST API (monolith, intentional) |
+| `db/schema.ts` | Drizzle schema (users, documents, user_settings, unlock_codes) |
+| `src/utils/dataService.js` | Data layer, routes to API or localStorage |
 | `src/utils/logger.ts` | Client-side logger (sendBeacon → /api/logs) |
 | `src/utils/generatePDF.ts` | PDF generation with pdfmake (preventivi) |
 | `src/utils/cardGenerator.ts` | Card PDF/PNG/SVG export + `buildCardSvg` |
 | `src/utils/qrGenerator.ts` | QR Code SVG/PNG generation (`qrcode` lib) |
-| `src/utils/documentSchemas.ts` | Zod schema: quote, QR, businessCard, cardGrid + presets |
+| `src/utils/logoGenerator.ts` | **Phase 4**: SVG builder + sanitize + export PNG for logos |
+| `src/utils/watermark.ts` | **Phase 5**: tier-aware watermark (free vs unlocked) for PDF/PNG/SVG export |
+| `src/utils/documentSchemas.ts` | Zod schema: quote, QR, businessCard, cardGrid, logo, presets |
 | `src/utils/gridUtils.ts` | Grid collision helpers (BLOCK su sovrapposizione, edge bounds) |
 | `src/components/CardEditor.tsx` | Editor bigliettini: 3-col desktop / tabs mobile, FAB AI, zoom |
 | `src/components/CardPreview.tsx` | Anteprima card: flexbox + CSS Grid mode (grid-based rendering) |
 | `src/components/QREditor.tsx` | Generatore QR Code (7 tipi, stili, logo overlay) |
+| `src/components/LogoEditor.tsx` | **Phase 4**: Logo Builder (tabs Builder + AI, lucide picker, 3 export sizes) |
 | `src/hooks/useAICard.ts` | Hook AI card (streaming, token tracking, error recovery) |
 | `src/hooks/useMediaQuery.ts` | Hook responsive (breakpoint detection via matchMedia) |
 | `src/ai/cardOrchestrator.ts` | AI orchestrator card (no tools, JSON round-trip) |
@@ -253,15 +257,16 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 
 | Path | Component | Guard |
 |------|-----------|-------|
-| `/login` | `LoginPage` | — |
-| `/` | `HomePage` | — |
+| `/login` | `LoginPage` |, |
+| `/` | `HomePage` |, |
 | `/app` → `/app/editor` (redirect) | `EditorPage` → `EditorView` | login |
 | `/app/collection` | `CollectionPage` → `CollectionView` | login |
 | `/app/qr` | `QrPage` → `QREditor` (lazy) | login |
 | `/app/card` | `CardPage` → `CardEditor` (lazy) | login |
+| `/app/logo` | `LogoPage` → `LogoEditor` (lazy) | login (**Phase 4**) |
 | `/app/settings` | `SettingsRoute` → `SettingsPage` | login |
 | `/app/admin` | `AdminPage` → `AdminDashboard` (lazy) | `user.role==='admin'` (via `AdminRoute`) |
-| `*` | `NotFoundPage` | — |
+| `*` | `NotFoundPage` |, |
 
 - `Layout`/`Topbar` still receive `view: string` (back-compat with existing tests).
 - `CollectionView.openQuote()` calls `setView('editor')` from `AppContext` → `navigate('/app/editor')`.
@@ -269,11 +274,11 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 
 ## Business Card Module
 
-- **AI = Option B (dedicated module)**, not generic refactor — zero risk to quote AI
-- **No new API endpoints** — reuses `providerRegistry` DeepSeek, same `/api/ai/chat`
-- **Card AI has NO tools** (no prices/discounts) — simpler than quote AI
+- **AI = Option B (dedicated module)**, not generic refactor, zero risk to quote AI
+- **No new API endpoints**, reuses `providerRegistry` DeepSeek, same `/api/ai/chat`
+- **Card AI has NO tools** (no prices/discounts), simpler than quote AI
 - **Phase 2.2 master switch griglia (REQ-E01)**: il toggle "Griglia ON/OFF" (`showGrid`) è il **controllo unico** del grid-mode. `isGridMode = showGrid && hasGridElements(side)`. `useGrid` resta persistito per reload/export.
-- **Init-from-layout (REQ-E03)**: attivare il master switch su un lato senza grid lo inizializza dal layout corrente (`deriveGridFromLayout`) — niente "salto" dell'intera card.
+- **Init-from-layout (REQ-E03)**: attivare il master switch su un lato senza grid lo inizializza dal layout corrente (`deriveGridFromLayout`), niente "salto" dell'intera card.
 - **QR sizing (REQ-E02)**: in flexbox-mode `back.qrSize` (`small` 84px / `medium` 120px / `large` 160px). In grid-mode la dimensione deriva dalla cella.
 - **Grid elements**: `photo`, `name`, `title`, `company`, `logo`, `qr`, `contacts`, `socials`. Ognuno ha `x,y,w,h` in `card.grid` (fronte) o `card.backGrid` (retro).
 - **`cardMerge.ts`** instrada elementi per lato (front→`grid`, back→`backGrid`), clampa collisioni con `stepMove`/`stepResize` graduali (REQ-A06), non sovrascrive `photoUrl`/`logoUrl` (base64 user-uploaded). Parity AI: supporta `services`, `servicesLabel`, `qrSize`, `fontScale` (clamp 0.7–1.5), `grid.elements.logo`.
@@ -290,7 +295,7 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 ## QR Code Module
 
 - **7 tipi**: URL, text, email, phone, vCard, WiFi, SMS
-- **Stili**: square, rounded, dots — via `qrcode` lib
+- **Stili**: square, rounded, dots, via `qrcode` lib
 - **Logo overlay**: base64 opzionale, max 20% area QR
 - **Export**: SVG (vettoriale), PNG (raster)
 - **Auto-save**: in collection come documento `qrCode`
@@ -302,14 +307,14 @@ Stato corrente delle fasi di sviluppo (commit di riferimento: `126c9d1`).
 
 | Fase | Stato | Spec | Note |
 |------|-------|------|------|
-| 0 — Auto-save fix | ✅ done | `spec/spec-process-phase0-autosave-fix.md` | — |
-| 1 — QR Code | ✅ done | `spec/spec-tool-phase1-qr-code.md` | — |
-| 2 — Business Card | ✅ done (2.2 refactor) | `spec/spec-design-phase2-business-card.md`, `spec/spec-design-phase2-2-card-refactor.md` | Master switch, init-from-layout, QR sizing, fontScale, servicesLabel, parity mobile, AI parity. |
-| 3 — Volantino | ⏭️ **SKIPPED** | `spec/spec-design-phase3-flyer.md` | Vedi nota skip sotto |
-| 4 — Logo SVG Builder | ✅ done | `spec/spec-tool-phase4-logo-builder.md` | v1 senza AI (Replicate deferred a v2/Pro). Tab "AI Generation" disabilitato con messaggio. |
-| 5 — Tier System | ⏳ pending | `spec/spec-data-phase5-tier-system.md` | Da rivalutare post-fase 4 |
-| 6 — Unified Collection | ⏳ pending | `spec/spec-architecture-phase6-unified-collection.md` | — |
-| 7 — Polish | ⏳ pending | `spec/spec-process-phase7-polish.md` | — |
+| 0, Auto-save fix | ✅ done | `spec/spec-process-phase0-autosave-fix.md` |, |
+| 1, QR Code | ✅ done | `spec/spec-tool-phase1-qr-code.md` |, |
+| 2, Business Card | ✅ done (2.2 refactor) | `spec/spec-design-phase2-business-card.md`, `spec/spec-design-phase2-2-card-refactor.md` | Master switch, init-from-layout, QR sizing, fontScale, servicesLabel, parity mobile, AI parity. |
+| 3, Volantino | ⏭️ **SKIPPED** | `spec/spec-design-phase3-flyer.md` | Vedi nota skip sotto |
+| 4, Logo SVG Builder | ✅ done | `spec/spec-tool-phase4-logo-builder.md` | v1 senza AI (Replicate deferred a v2/Pro). Tab "AI Generation" disabilitato con messaggio. |
+| 5, Tier System | ✅ done | `spec/spec-data-phase5-tier-system.md` | Watermark free, unlock code via admin, tier guard su save. |
+| 6, Unified Collection | ✅ done | `spec/spec-architecture-phase6-unified-collection.md` | `documents` table rinominata, collection unificata. |
+| 7, Polish | ✅ done | `spec/spec-process-phase7-polish.md` | Onboarding step 5, HomePage "Perché noi", `LogoAiDocsPage` pubblica, `preferredDocumentType` in DB, docs aggiornate. |
 
 ### ⏭️ Skip fase 3 (Volantino)
 
@@ -366,7 +371,7 @@ sarà cambiato.
   via `dataService.saveDocument` con `documentType='logo'`, lazy-load
   componente in `App.tsx`.
 
-## Known Issues — Card Module (fase 2)
+## Known Issues, Card Module (fase 2)
 
 **Stato (post fase 2.2)**: tutti i bug bloccanti sono chiusi e le
 funzionalità nuove (master switch, init-from-layout, QR sizing,
@@ -379,13 +384,13 @@ e coperte da test. Restano aperte due questioni di scope minore
 Helper `src/utils/gridUtils.ts` con `collides/wouldCollideOnMove/
 wouldCollideOnResize/canMove/canResize/clampMove/clampResize`. Usato da:
 
-- `CardEditor.tsx` (desktop) — `moveSelectedElement` e `resizeSelectedElement`
+- `CardEditor.tsx` (desktop), `moveSelectedElement` e `resizeSelectedElement`
   clampano alla posizione valida più vicina; bottoni frecce
   disabilitati in entrambi i casi (edge + collisione).
-- `MobileGridEditor.tsx` (mobile) — `move()` delega a `clampMove`;
+- `MobileGridEditor.tsx` (mobile), `move()` delega a `clampMove`;
   frecce popup con `title="Limite (collisione)"` se il blocco è per
   sovrapposizione, altrimenti "Limite raggiunto".
-- `cardMerge.ts` (AI) — `clampMove`/`clampResize` sanificano la mossa
+- `cardMerge.ts` (AI), `clampMove`/`clampResize` sanificano la mossa
   richiesta dall'AI prima di applicarla, così l'AI non può generare
   grid con elementi sovrapposti. Il system prompt
   (`src/ai/prompts/cardSystem.ts`) è stato esteso con regole
@@ -453,7 +458,7 @@ condition `card.back.website && !qrPayload`.
 
 ### ⏳ Aperto (scope minore, non bloccante)
 
-- **Mobile grid editor — drag-and-drop**: `MobileGridEditor` usa
+- **Mobile grid editor, drag-and-drop**: `MobileGridEditor` usa
   frecce ←↑→↓ + +/−. Su schermi piccoli le 4 direzioni × 2 resize × N
   elementi diventano molti tap. Valutare drag-and-drop diretto.
 - **Selezione elemento persistente**: `selectedGridElement` è
@@ -501,12 +506,13 @@ condition `card.back.website && !qrPayload`.
 | `ADMIN_PASSWORD` | Vercel (Production+Preview) | Admin login (admin@gmail.com) |
 | `VITE_ADMIN_PASSWORD` | .env (local only) | Admin login in dev |
 | `ALLOWED_ORIGIN` | Vercel (Production+Preview) | CORS origin (es. `https://tuodominio.vercel.app`). Se vuoto accetta solo `*.vercel.app`. |
+| `REPLICATE_API_TOKEN` | Vercel (opzionale, v2) | **Phase 4 / Phase 7**: token Replicate per generazione logo AI. **Non** letto nella v1 (tab "AI Generation" mostra messaggio e link a `/docs/logo-ai`). Da configurare in v2 con Vercel Pro per abilitare il flusso AI. |
 
 **Never expose `DEEPSEEK_API_KEY` to the browser.** The frontend calls the serverless function proxy, which holds the key server-side.
 
-### PDF Generation — Client-Side Only
+### PDF Generation, Client-Side Only
 
-PDF generation happens entirely in the browser via `pdfmake` (in `src/utils/generatePDF.ts`). No server upload, no Vercel Blob, no `BLOB_READ_WRITE_TOKEN` needed. This keeps the app free-tier friendly.
+PDF generation happens entirely in the browser via `pdfmake` (in `src/utils/generatePDF.ts`). No server upload, no Vercel Blob needed. This keeps the app free-tier friendly.
 
 - `App.tsx` `exportPDF()` → download locale
 
@@ -514,21 +520,21 @@ PDF generation happens entirely in the browser via `pdfmake` (in `src/utils/gene
 
 `api/index.ts` inlines the Drizzle schema for Vercel compatibility. If you modify `db/schema.ts`, you must also update the corresponding tables in `api/index.ts` (lines 9-52).
 
-## Vercel Routing — CRITICAL
+## Vercel Routing, CRITICAL
 
 `api/index.ts` is the **only** Vercel serverless function. It handles every `/api/*` request via internal routing. This is a deliberate monolith (see "Lessons learned" below).
 
 **DO NOT**:
-- Split `api/index.ts` into multiple files. Vercel's `_` prefix (`api/_lib/`, `api/_routes/`) is **NOT** the shared-code trick it appears to be — files starting with `_` are excluded from **both** the serverless-function count AND the function bundle, so any function in `api/` that imports from `api/_*/...` crashes at runtime with `ERR_MODULE_NOT_FOUND` ("Cannot find module '/var/task/api/_lib/handler'"). This was the bug from commit `036ae25` that broke production for hours.
+- Split `api/index.ts` into multiple files. Vercel's `_` prefix (`api/_lib/`, `api/_routes/`) is **NOT** the shared-code trick it appears to be, files starting with `_` are excluded from **both** the serverless-function count AND the function bundle, so any function in `api/` that imports from `api/_*/...` crashes at runtime with `ERR_MODULE_NOT_FOUND` ("Cannot find module '/var/task/api/_lib/handler'"). This was the bug from commit `036ae25` that broke production for hours.
 - Add other `.ts` files directly in `api/`. Each one counts toward the Hobby plan's 12-function limit.
 - Use `vercel.json` `functions.includeFiles` to copy `*.ts` from outside `api/`. Vercel copies the files as static assets but does not transpile them, so Node ESM still can't resolve them.
-- Use `vercel.json` rewrites to split the API into multiple functions. With the monolith, no `/api/*` rewrites are needed — the single `api/index.ts` handles everything.
+- Use `vercel.json` rewrites to split the API into multiple functions. With the monolith, no `/api/*` rewrites are needed, the single `api/index.ts` handles everything.
 
 **DO**:
 - Keep all server-side logic inline in `api/index.ts`. The file is intentionally large (~750 lines). Modularity is achieved through internal `handleXxx` functions and helper utilities defined at the top of the file.
 - If you need to share types or pure functions with the client, put them in `src/` and have `api/index.ts` import from there. The `src/` directory is bundled correctly.
 
-## Lessons learned — Vercel function bundling (read before splitting)
+## Lessons learned, Vercel function bundling (read before splitting)
 
 Four commits attempted to refactor the API structure; all four broke production. The root causes were different each time. Read all four before touching `api/`.
 
@@ -548,7 +554,7 @@ Four commits attempted to refactor the API structure; all four broke production.
 }
 ```
 
-The order is **critical**: `/api/(.*) -> /api` MUST come **before** the SPA catch-all. Vercel evaluates rewrites top-to-bottom and uses the first match. There is a regression test in `src/__tests__/vercelConfig.test.ts` that asserts both the presence and the order of these rewrites. Future investigation of `drizzle-orm/neon-serverless` (WebSocket driver) is still pending — see "Backend" section above.
+The order is **critical**: `/api/(.*) -> /api` MUST come **before** the SPA catch-all. Vercel evaluates rewrites top-to-bottom and uses the first match. There is a regression test in `src/__tests__/vercelConfig.test.ts` that asserts both the presence and the order of these rewrites. Future investigation of `drizzle-orm/neon-serverless` (WebSocket driver) is still pending, see "Backend" section above.
 
 ## Streaming AI
 
@@ -557,7 +563,7 @@ The order is **critical**: `/api/(.*) -> /api` MUST come **before** the SPA catc
 - Token usage viene accumulato tra le due chiamate e mostrato in `result.response.usage`.
 - Log "a blocchi": `useAI.ts` emette un'entry di log ogni 400ms con preview del contenuto ricevuto.
 
-## Test — OBBLIGATORI
+## Test, OBBLIGATORI
 
 **Ogni modifica al codice di produzione (`src/`, `api/`, `db/`) DEVE essere accompagnata da test.**
 
@@ -569,7 +575,7 @@ Regole:
 4. **Refactor → test invariati ma verdi.** Se il refactor rompe test esistenti, il refactor è sbagliato (o i test erano incompleti).
 5. **Coverage minima per nuovi file: 60%** (target progetto). File sotto soglia vanno motivati con commento.
 6. **Mai** skippare un test con `.skip` o `xit` per far passare la CI. Se è flaky, fixalo.
-7. **Prima di proporre un push** (vedi sezione *Pre-push Checklist* in cima): `npm run typecheck && npm run test` devono essere verdi. Se falliscono, risolvi prima — non proporre il push.
+7. **Prima di proporre un push** (vedi sezione *Pre-push Checklist* in cima): `npm run typecheck && npm run test` devono essere verdi. Se falliscono, risolvi prima, non proporre il push.
 
 Posizione test:
 - Componenti React → `src/components/__tests__/` o `src/pages/__tests__/`
@@ -580,7 +586,7 @@ Posizione test:
 ## Admin User
 
 - Email: `admin@gmail.com`
-- Never saved to database — password validated against `ADMIN_PASSWORD` env var
+- Never saved to database, password validated against `ADMIN_PASSWORD` env var
 - Has unlimited tokens (`tokenLimit: 999999999`)
 - Endpoint admin (`GET /users`, `GET /quotes/all`, `PATCH /users/limits`) richiedono `adminEmail=admin@gmail.com` come query param o body field. Se assente → 403.
 
@@ -597,19 +603,21 @@ Tutte le chiavi localStorage devono essere **versionate**: `nome:vN` (es. `users
 Quando cambi schema, aggiungi `v(N+1)` e lascia un fallback di lettura per la `vN` precedente.
 Vedi `.agents/skills/vercel-react-best-practices/rules/client-localstorage-schema.md`.
 
-Chiavi attuali (senza prefisso, da versionare in prossima migrazione):
-- `precisionQuote_quotes` — array preventivi legacy
-- `precisionQuote_documents` — documenti unificati (preventivi, QR, card, flyer, logo)
-- `registeredUsers` — array utenti
-- `userSettings_<email>` — impostazioni utente
-- `deepseekApiKey` — chiave DeepSeek (solo dev)
-- `authToken`, `userEmail`, `username`, `userRole`, `dataRegistrazione` — sessione
+Chiavi attuali:
+- `precisionQuote_quotes`, array preventivi legacy (pre-fase 6, deprecata)
+- `precisionQuote_documents:v1`, **Phase 6**: documenti unificati (preventivi, QR, card, logo)
+- `pq_migration_v1_done_<email>`, **Phase 6**: flag migrazione da legacy `quotes` → `documents:v1`
+- `userSettings_<email>`, impostazioni utente (include `tier`, `documentCount`, `unlockCode` da fase 5 e `preferredDocumentType` da fase 7)
+- `unlock_codes`, codici sblocco tier (solo dev, popolato dall'admin)
+- `registeredUsers`, array utenti (dev only fallback)
+- `deepseekApiKey`, chiave DeepSeek (solo dev)
+- `authToken`, `userEmail`, `username`, `userRole`, `dataRegistrazione`, sessione
 
 ## Testing
 
 - Framework: Vitest + React Testing Library + jsdom
 - Run single test: `npx vitest run path/to/file.test.ts`
-- No test database needed — local tests use localStorage path
+- No test database needed, local tests use localStorage path
 - Coverage attuale: ~10% (4 file). Target: 60%. Attualmente 844 test su 76 file.
 
 ## Logging
@@ -642,31 +650,31 @@ Always run `git status` before any git operation. See `.agents/guardrails/git-gu
    ```json
    { "source": "/(.*)", "destination": "/index.html" }
    ```
-    The `/api/*` path is served directly by the single `api/index.ts` function. Do **not** add per-route `/api/*` rewrites — they break the monolithic function and cause `ERR_MODULE_NOT_FOUND` on shared imports.
-3. **Before pushing features that require Vercel env vars** (DEEPSEEK_API_KEY, DATABASE_URL, ADMIN_PASSWORD, ALLOWED_ORIGIN), confirm the variables are set in the Vercel dashboard. Missing env vars cause 503/500 errors in production. `BLOB_READ_WRITE_TOKEN` is no longer used (PDF generation is fully client-side).
+    The `/api/*` path is served directly by the single `api/index.ts` function. Do **not** add per-route `/api/*` rewrites, they break the monolithic function and cause `ERR_MODULE_NOT_FOUND` on shared imports.
+3. **Before pushing features that require Vercel env vars** (DEEPSEEK_API_KEY, DATABASE_URL, ADMIN_PASSWORD, ALLOWED_ORIGIN), confirm the variables are set in the Vercel dashboard. Missing env vars cause 503/500 errors in production. `REPLICATE_API_TOKEN` is **optional** in v1 (logo AI tab mostra docs page).
 
 ## Active Skills
 
 Queste skill vengono caricate automaticamente. Quando modifichi il codice riferito a esse, **leggi la skill prima** (`.agents/skills/<name>/SKILL.md`).
 
-- `vercel-react-best-practices` — performance React (sempre attiva)
-- `vercel-composition-patterns` — component design
-- `web-design-guidelines` — review UI/accessibilità
-- `web-security` — security review
-- `writing-guidelines` — docs/prose style
-- `test-driven-development` (obra/superpowers) — disciplina TDD per Blocco 3+
-- `frontend-design` (anthropics/skills) — design opinionale per UI
-- `caveman` ([juliusbrussee/caveman](https://github.com/juliusbrussee/caveman)) — **compressione output** (stile terso, ~-65% token risposta). Sempre attiva, vedi sezione *Token Optimization Stack* sopra. Disattivazione solo con "normal mode" o in casi di auto-clarity.
+- `vercel-react-best-practices`, performance React (sempre attiva)
+- `vercel-composition-patterns`, component design
+- `web-design-guidelines`, review UI/accessibilità
+- `web-security`, security review
+- `writing-guidelines`, docs/prose style
+- `test-driven-development` (obra/superpowers), disciplina TDD per Blocco 3+
+- `frontend-design` (anthropics/skills), design opinionale per UI
+- `caveman` ([juliusbrussee/caveman](https://github.com/juliusbrussee/caveman)), **compressione output** (stile terso, ~-65% token risposta). Sempre attiva, vedi sezione *Token Optimization Stack* sopra. Disattivazione solo con "normal mode" o in casi di auto-clarity.
 
 **Skill on-demand** (caricare solo se il task lo richiede esplicitamente):
-- `deploy-to-vercel` — solo quando l'utente chiede deploy
-- `vercel-cli-with-tokens` — solo per setup CLI con token
-- `vercel-optimize` — solo per audit costi/performance (richiede Vercel CLI autenticato)
-- `git-guardrails-claude-code` — solo per setup hook
+- `deploy-to-vercel`, solo quando l'utente chiede deploy
+- `vercel-cli-with-tokens`, solo per setup CLI con token
+- `vercel-optimize`, solo per audit costi/performance (richiede Vercel CLI autenticato)
+- `git-guardrails-claude-code`, solo per setup hook
 
 **Skill rimosse** (non usate da questo progetto):
-- `vercel-react-native-skills` — non è un'app React Native
-- `vercel-react-view-transitions` — non usiamo View Transitions API
+- `vercel-react-native-skills`, non è un'app React Native
+- `vercel-react-view-transitions`, non usiamo View Transitions API
 
 ## API Design Principles (REST)
 
@@ -676,7 +684,7 @@ Queste skill vengono caricate automaticamente. Quando modifichi il codice riferi
 - **Auth**: verificata in ogni handler, non solo middleware
 - **Rate-limit**: scope dedicato per categoria (`login`, `ai`, `tokens`, `logs`)
 - **Admin endpoints**: `adminEmail=admin@gmail.com` sempre richiesto
-- **`adminEmail` transport**: **query string** per GET (`?adminEmail=...`), **body** per PATCH/POST. Non mischiare — vedi `api/__tests__/users.test.ts` (regression per bug 51d84a5: `GET /users` leggeva da body mentre il client mandava query string, risultato tabella admin vuota in prod).
+- **`adminEmail` transport**: **query string** per GET (`?adminEmail=...`), **body** per PATCH/POST. Non mischiare, vedi `api/__tests__/users.test.ts` (regression per bug 51d84a5: `GET /users` leggeva da body mentre il client mandava query string, risultato tabella admin vuota in prod).
 - **Idempotenza**: GET, PUT, DELETE idempotenti; POST no
 
 ## OWASP Top 10 (stato corrente)
@@ -698,6 +706,6 @@ Queste skill vengono caricate automaticamente. Quando modifichi il codice riferi
 |------|----------|
 | `.agents/skills/` | Installed agent skills (10 attive) |
 | `.agents/guardrails/` | Git safety rules and block scripts |
-| `api/index.ts` | Single Vercel serverless function — entire REST API (monolith) |
+| `api/index.ts` | Single Vercel serverless function, entire REST API (monolith) |
 | `src/utils/` | Client-side utilities (logger, errors) |
 

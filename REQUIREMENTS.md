@@ -1,4 +1,4 @@
-# PrecisionQuote — Prerequisiti e Setup
+# PrecisionQuote, Prerequisiti e Setup
 
 ## Requisiti di Sistema
 
@@ -58,13 +58,19 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 | Pacchetto | Scopo |
 |-----------|-------|
 | `react` + `react-dom` | Framework UI |
-| `react-router-dom` | Routing SPA |
+| `react-router-dom` | Routing SPA (multipage con `/`, `/login`, `/docs/logo-ai`, `/app/*`) |
 | `pdfmake` | Generazione PDF da dati JSON (zero canvas) |
+| `lucide-react` | **Phase 4**: libreria icone SVG usata dal Logo Builder (48 nomi allowlist) |
+| `qrcode` | **Phase 1**: generazione QR Code SVG/PNG |
+| `bcryptjs` | Hash password server-side |
+| `drizzle-orm` | **Produzione**: ORM per Neon Postgres |
+| `zod` | Validazione input su tutti gli endpoint |
 | `vite` + `@vitejs/plugin-react` | Bundler e dev server |
 
 ### Rimosso
 
-- `html2pdf.js` — sostituito da pdfmake
+- `html2pdf.js`, sostituito da pdfmake
+- `BLOB_READ_WRITE_TOKEN` (env), mai usata, PDF è client-side
 
 ## Archiviazione Dati (Ibrido)
 
@@ -84,13 +90,17 @@ L'admin `admin@gmail.com` viene autenticato direttamente dalla variabile d'ambie
 
 | Chiave | Descrizione |
 |--------|-------------|
-| `registeredUsers` | Array JSON utenti registrati |
+| `registeredUsers` | Array JSON utenti registrati (dev only fallback) |
 | `authToken` | Token sessione |
 | `userEmail` | Email utente corrente |
 | `username` | Username |
 | `dataRegistrazione` | Data registrazione |
 | `deepseekKey` | API Key DeepSeek |
-| `precisionQuote_quotes` | Preventivi salvati |
+| `precisionQuote_quotes` | Preventivi legacy (pre-fase 6, deprecata) |
+| `precisionQuote_documents:v1` | **Phase 6**: documenti unificati (quote, qrCode, businessCard, logo) |
+| `pq_migration_v1_done_<email>` | **Phase 6**: flag migrazione legacy → documents:v1 |
+| `unlock_codes` | **Phase 5**: codici sblocco tier (solo dev) |
+| `userSettings_<email>` | Impostazioni utente (displayName, companyName, profession, defaultColor, defaultVat, documentTheme, **tier**, **unlockCode**, **documentCount** da fase 5, **preferredDocumentType** da fase 7) |
 
 ## Deploy su Vercel
 
@@ -109,8 +119,8 @@ Vercel rileva automaticamente il progetto Vite e deploya sia il frontend che le 
 2. Connetti il repo `giovi1998/SitoPreventivo`
 3. Vercel rileva automaticamente Vite e configura build
 4. Aggiungi le variabili d'ambiente su **Settings → Environment Variables**:
-   - `DATABASE_URL` — connection string Neon
-   - `DEEPSEEK_API_KEY` — chiave DeepSeek
+   - `DATABASE_URL`, connection string Neon
+   - `DEEPSEEK_API_KEY`, chiave DeepSeek
 5. Ogni push sul branch collegato fa deploy automatico
 
 ## Sviluppo Database
@@ -140,7 +150,9 @@ npm run preview    # Preview del build
 |----------|-----------|
 | `npm run dev` fallisce | Esegui `Set-ExecutionPolicy` come admin |
 | Build fallisce | Cancella `node_modules` e `npm install` |
-| DeepSeek 402 | Account senza credito — ricarica su platform.deepseek.com |
+| DeepSeek 402 | Account senza credito, ricarica su platform.deepseek.com |
 | PDF non si esporta | Controlla console F12 per errori pdfmake |
 | CSS non caricato | Hard refresh (Ctrl+F5) |
 | Pagina bianca | Controlla console del browser per errori |
+| Logo AI tab dice "non disponibile" | È il comportamento v1. Vedi `/docs/logo-ai` per come attivarlo in v2 con Vercel Pro + `REPLICATE_API_TOKEN` |
+| Tab "Volantino" assente | La fase 3 è stata skippata (vedi AGENTS.md → "Phase Status & Roadmap"). Prevista in v2 |
