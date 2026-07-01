@@ -20,10 +20,14 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-async function renderCollection(ctxOverrides: Record<string, any> = {}) {
+async function renderCollection(ctxOverrides: Record<string, any> = {}, opts: { role?: 'user' | 'admin' } = {}) {
   const ctx = buildContextValue(ctxOverrides);
+  const authValue = {
+    ...AUTH_VALUE,
+    user: { email: 'user@test.com', role: opts.role ?? 'user' },
+  };
   render(
-    <AuthContext.Provider value={AUTH_VALUE as any}>
+    <AuthContext.Provider value={authValue as any}>
       <AppContext.Provider value={ctx as any}>
         <MemoryRouter>
           <CollectionViewForTest />
@@ -37,8 +41,8 @@ async function renderCollection(ctxOverrides: Record<string, any> = {}) {
   return ctx;
 }
 
-describe('CollectionView — migration integration (phase 6, AC-001/AC-002/AC-015)', () => {
-  it('legacy quotes in precisionQuote_quotes are visible in "Preventivi" tab', async () => {
+describe('CollectionView, migration integration (phase 6, AC-001/AC-002/AC-015)', () => {
+  it('legacy quotes in precisionQuote_quotes are visible in "Preventivi" tab (admin)', async () => {
     // Simulate the post-migration state: legacy is intact AND new
     // documents store has the migrated copies.
     localStorage.setItem('precisionQuote_quotes', JSON.stringify([
@@ -49,7 +53,7 @@ describe('CollectionView — migration integration (phase 6, AC-001/AC-002/AC-01
       makeDocument({ id: 'migrate_q1', documentType: 'quote', title: 'Legacy one' }),
       makeDocument({ id: 'migrate_q2', documentType: 'quote', title: 'Legacy two' }),
     ]);
-    await renderCollection();
+    await renderCollection({}, { role: 'admin' });
     fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Preventivi/ }));
     await waitFor(() => {
       expect(screen.getByTestId('card-migrate_q1')).toBeInTheDocument();
@@ -60,12 +64,27 @@ describe('CollectionView — migration integration (phase 6, AC-001/AC-002/AC-01
     expect(screen.queryByTestId('card-q2')).toBeNull();
   });
 
-  it('legacy quotes that have NO migrated counterpart still appear (backward-compat)', async () => {
+  it('legacy quotes that have NO migrated counterpart still appear in "Tutti" tab for non-admin', async () => {
+    // Non-admin users don't have the Preventivi tab, so the orphan quote
+    // is visible in the "Tutti" tab (where it appears together with the
+    // other types).
     localStorage.setItem('precisionQuote_quotes', JSON.stringify([
       { id: 'q-orphan', owner: 'user@test.com', title: 'Orphan quote' },
     ]));
     seedDocumentsLocalStorage([]);
-    await renderCollection();
+    await renderCollection({}, { role: 'user' });
+    // "Tutti" tab is the default and shows the orphan quote
+    await waitFor(() => {
+      expect(screen.getByTestId('card-q-orphan')).toBeInTheDocument();
+    });
+  });
+
+  it('legacy quotes that have NO migrated counterpart still appear (backward-compat, admin)', async () => {
+    localStorage.setItem('precisionQuote_quotes', JSON.stringify([
+      { id: 'q-orphan', owner: 'user@test.com', title: 'Orphan quote' },
+    ]));
+    seedDocumentsLocalStorage([]);
+    await renderCollection({}, { role: 'admin' });
     fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Preventivi/ }));
     await waitFor(() => {
       expect(screen.getByTestId('card-q-orphan')).toBeInTheDocument();
@@ -113,7 +132,7 @@ describe('CollectionView — migration integration (phase 6, AC-001/AC-002/AC-01
     expect(addToast).not.toHaveBeenCalled();
   });
 
-  it('migration failure (mock) → error toast + legacy quotes still accessible (AC-015)', async () => {
+  it('migration failure (mock) → error toast + legacy quotes still accessible (AC-015, admin)', async () => {
     // Simulate QuotaExceeded on DOCS write
     localStorage.setItem('precisionQuote_quotes', JSON.stringify([
       { id: 'q1', owner: 'user@test.com', title: 'A' },
@@ -142,7 +161,7 @@ describe('CollectionView — migration integration (phase 6, AC-001/AC-002/AC-01
     const legacy = JSON.parse(localStorage.getItem('precisionQuote_quotes') || '[]');
     expect(legacy).toHaveLength(1);
     // legacy still appears in collection (no migrated copy in docs)
-    await renderCollection();
+    await renderCollection({}, { role: 'admin' });
     fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Preventivi/ }));
     await waitFor(() => {
       expect(screen.getByTestId('card-q1')).toBeInTheDocument();

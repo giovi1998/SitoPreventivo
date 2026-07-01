@@ -22,10 +22,14 @@ beforeEach(() => {
 // Lazy import so the location mock is in place before module init.
 import CollectionViewForTest from '../CollectionView';
 
-async function renderCollection(ctxOverrides: Record<string, any> = {}) {
+async function renderCollection(ctxOverrides: Record<string, any> = {}, opts: { role?: 'user' | 'admin' } = {}) {
   const ctx = buildContextValue(ctxOverrides);
+  const authValue = {
+    ...AUTH_VALUE,
+    user: { email: 'user@test.com', role: opts.role ?? 'user' },
+  };
   const utils = render(
-    <AuthContext.Provider value={AUTH_VALUE as any}>
+    <AuthContext.Provider value={authValue as any}>
       <AppContext.Provider value={ctx as any}>
         <MemoryRouter>
           <CollectionViewForTest />
@@ -40,10 +44,10 @@ async function renderCollection(ctxOverrides: Record<string, any> = {}) {
   return { ctx, ...utils };
 }
 
-describe('CollectionView — tabs (phase 6)', () => {
-  it('renders all 6 tabs with labels in the order: Tutti, Preventivi, QR Code, Bigliettini, Volantini, Loghi', async () => {
+describe('CollectionView, tabs (phase 6)', () => {
+  it('admin renders all 6 tabs with labels in the order: Tutti, Preventivi, QR Code, Bigliettini, Volantini, Loghi', async () => {
     seedDocumentsLocalStorage([]);
-    await renderCollection();
+    await renderCollection({}, { role: 'admin' });
     const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
     const tabs = within(tablist).getAllByRole('tab');
     expect(tabs).toHaveLength(6);
@@ -54,6 +58,21 @@ describe('CollectionView — tabs (phase 6)', () => {
     expect(labels[3]).toMatch(/Bigliettini/);
     expect(labels[4]).toMatch(/Volantini/);
     expect(labels[5]).toMatch(/Loghi/);
+  });
+
+  it('non-admin renders 5 tabs (no "Preventivi") in the order: Tutti, QR Code, Bigliettini, Volantini, Loghi', async () => {
+    seedDocumentsLocalStorage([]);
+    await renderCollection({}, { role: 'user' });
+    const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
+    const tabs = within(tablist).getAllByRole('tab');
+    expect(tabs).toHaveLength(5);
+    const labels = tabs.map((t) => t.textContent || '');
+    expect(labels[0]).toMatch(/Tutti/);
+    expect(labels[1]).toMatch(/QR Code/);
+    expect(labels[2]).toMatch(/Bigliettini/);
+    expect(labels[3]).toMatch(/Volantini/);
+    expect(labels[4]).toMatch(/Loghi/);
+    expect(labels.some((l) => /Preventivi/.test(l))).toBe(false);
   });
 
   it('"Tutti" is the default active tab', async () => {
@@ -75,7 +94,7 @@ describe('CollectionView — tabs (phase 6)', () => {
     expect(panel.getAttribute('aria-labelledby')).toBe(qrTab.id);
   });
 
-  it('each tab shows a count badge with the number of documents of that type', async () => {
+  it('admin: each tab shows a count badge with the number of documents of that type', async () => {
     seedDocumentsLocalStorage([
       makeDocument({ id: 'q1', documentType: 'quote' }),
       makeDocument({ id: 'q2', documentType: 'quote' }),
@@ -84,7 +103,7 @@ describe('CollectionView — tabs (phase 6)', () => {
       makeDocument({ id: 'qr2', documentType: 'qrCode' }),
       makeDocument({ id: 'card1', documentType: 'businessCard' }),
     ]);
-    await renderCollection();
+    await renderCollection({}, { role: 'admin' });
     const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
     // 3 quote + 2 qr + 1 card = 6 total
     expect(within(tablist).getByRole('tab', { name: /Tutti.*6/ })).toBeInTheDocument();
@@ -93,6 +112,21 @@ describe('CollectionView — tabs (phase 6)', () => {
     expect(within(tablist).getByRole('tab', { name: /Bigliettini.*1/ })).toBeInTheDocument();
     expect(within(tablist).getByRole('tab', { name: /Volantini.*0/ })).toBeInTheDocument();
     expect(within(tablist).getByRole('tab', { name: /Loghi.*0/ })).toBeInTheDocument();
+  });
+
+  it('non-admin: count badges exclude quotes (no Preventivi tab)', async () => {
+    seedDocumentsLocalStorage([
+      makeDocument({ id: 'q1', documentType: 'quote' }),
+      makeDocument({ id: 'qr1', documentType: 'qrCode' }),
+      makeDocument({ id: 'card1', documentType: 'businessCard' }),
+    ]);
+    await renderCollection({}, { role: 'user' });
+    const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
+    // 3 total (1 quote + 1 qr + 1 card) - quote still counted in "Tutti" but tab is hidden
+    expect(within(tablist).getByRole('tab', { name: /Tutti.*3/ })).toBeInTheDocument();
+    expect(within(tablist).getByRole('tab', { name: /QR Code.*1/ })).toBeInTheDocument();
+    expect(within(tablist).getByRole('tab', { name: /Bigliettini.*1/ })).toBeInTheDocument();
+    expect(within(tablist).queryByRole('tab', { name: /Preventivi/ })).toBeNull();
   });
 
   it('clicking a per-type tab filters the panel to only that type (AC-003)', async () => {

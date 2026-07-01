@@ -18,10 +18,14 @@ beforeEach(() => {
   cleanup();
 });
 
-async function renderCollection() {
+async function renderCollection(opts: { role?: 'user' | 'admin' } = {}) {
   const ctx = buildContextValue();
+  const authValue = {
+    ...AUTH_VALUE,
+    user: { email: 'user@test.com', role: opts.role ?? 'user' },
+  };
   render(
-    <AuthContext.Provider value={AUTH_VALUE as any}>
+    <AuthContext.Provider value={authValue as any}>
       <AppContext.Provider value={ctx as any}>
         <MemoryRouter>
           <CollectionViewForTest />
@@ -35,32 +39,32 @@ async function renderCollection() {
   return ctx;
 }
 
-describe('CollectionView — filters (phase 6, AC-005/AC-006)', () => {
-  it('status filter is only visible on the "Preventivi" tab', async () => {
+describe('CollectionView, filters (phase 6, AC-005/AC-006)', () => {
+  it('status filter is only visible on the "Preventivi" tab (admin)', async () => {
     seedDocumentsLocalStorage([
       makeDocument({ id: 'q1', documentType: 'quote', status: 'BOZZA' }),
       makeDocument({ id: 'qr1', documentType: 'qrCode' }),
     ]);
-    await renderCollection();
+    await renderCollection({ role: 'admin' });
     // Preventivi active by default? No, "Tutti" is default. Click Preventivi.
     fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Preventivi/ }));
     await waitFor(() => {
       expect(screen.getByTestId('collection-status')).toBeInTheDocument();
     });
-    // Switch to QR Code — status filter disappears
+    // Switch to QR Code, status filter disappears
     fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /QR Code/ }));
     await waitFor(() => {
       expect(screen.queryByTestId('collection-status')).toBeNull();
     });
   });
 
-  it('status filter "ACCETTATO" hides quotes with other statuses (AC-005)', async () => {
+  it('status filter "ACCETTATO" hides quotes with other statuses (AC-005, admin)', async () => {
     seedDocumentsLocalStorage([
       makeDocument({ id: 'q1', documentType: 'quote', status: 'BOZZA' }),
       makeDocument({ id: 'q2', documentType: 'quote', status: 'ACCETTATO' }),
       makeDocument({ id: 'q3', documentType: 'quote', status: 'RIFIUTATO' }),
     ]);
-    await renderCollection();
+    await renderCollection({ role: 'admin' });
     fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Preventivi/ }));
     const statusSel = await screen.findByTestId('collection-status');
     fireEvent.change(statusSel, { target: { value: 'ACCETTATO' } });
@@ -71,7 +75,7 @@ describe('CollectionView — filters (phase 6, AC-005/AC-006)', () => {
     expect(screen.queryByTestId('card-q3')).toBeNull();
   });
 
-  it('date filter "week" hides documents older than 7 days', async () => {
+  it('date filter "week" hides documents older than 7 days (admin)', async () => {
     const now = new Date();
     const old = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString();
     const recent = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString();
@@ -79,7 +83,7 @@ describe('CollectionView — filters (phase 6, AC-005/AC-006)', () => {
       makeDocument({ id: 'r1', documentType: 'quote', createdAt: recent }),
       makeDocument({ id: 'o1', documentType: 'quote', createdAt: old }),
     ]);
-    await renderCollection();
+    await renderCollection({ role: 'admin' });
     const dateSel = screen.getByTestId('collection-date');
     fireEvent.change(dateSel, { target: { value: 'week' } });
     await waitFor(() => {
@@ -88,7 +92,7 @@ describe('CollectionView — filters (phase 6, AC-005/AC-006)', () => {
     expect(screen.queryByTestId('card-o1')).toBeNull();
   });
 
-  it('date filter "month" hides documents older than 30 days', async () => {
+  it('date filter "month" hides documents older than 30 days (admin)', async () => {
     const now = new Date();
     const old = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
     const recent = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
@@ -96,7 +100,7 @@ describe('CollectionView — filters (phase 6, AC-005/AC-006)', () => {
       makeDocument({ id: 'r1', documentType: 'quote', createdAt: recent }),
       makeDocument({ id: 'o1', documentType: 'quote', createdAt: old }),
     ]);
-    await renderCollection();
+    await renderCollection({ role: 'admin' });
     fireEvent.change(screen.getByTestId('collection-date'), { target: { value: 'month' } });
     await waitFor(() => {
       expect(screen.getByTestId('card-r1')).toBeInTheDocument();
@@ -104,14 +108,14 @@ describe('CollectionView — filters (phase 6, AC-005/AC-006)', () => {
     expect(screen.queryByTestId('card-o1')).toBeNull();
   });
 
-  it('date filter "all" shows everything', async () => {
+  it('date filter "all" shows everything (admin)', async () => {
     const now = new Date();
     const veryOld = new Date(now.getTime() - 800 * 24 * 60 * 60 * 1000).toISOString();
     seedDocumentsLocalStorage([
       makeDocument({ id: 'r1', documentType: 'quote', createdAt: now.toISOString() }),
       makeDocument({ id: 'o1', documentType: 'quote', createdAt: veryOld }),
     ]);
-    await renderCollection();
+    await renderCollection({ role: 'admin' });
     fireEvent.change(screen.getByTestId('collection-date'), { target: { value: 'all' } });
     expect(screen.getByTestId('card-r1')).toBeInTheDocument();
     expect(screen.getByTestId('card-o1')).toBeInTheDocument();
@@ -123,7 +127,7 @@ describe('CollectionView — filters (phase 6, AC-005/AC-006)', () => {
       makeDocument({ id: 'q2', documentType: 'quote', title: 'Alpha' }),
       makeDocument({ id: 'q3', documentType: 'quote', title: 'Mike' }),
     ]);
-    await renderCollection();
+    await renderCollection({ role: 'admin' });
     fireEvent.change(screen.getByTestId('collection-sort'), { target: { value: 'title' } });
     await waitFor(() => {
       const cards = Array.from(document.querySelectorAll('.collection-card')) as HTMLElement[];
@@ -159,7 +163,7 @@ describe('CollectionView — filters (phase 6, AC-005/AC-006)', () => {
       makeDocument({ id: 'mid1', documentType: 'quote', createdAt: mid }),
       makeDocument({ id: 'recent1', documentType: 'quote', createdAt: recent }),
     ]);
-    await renderCollection();
+    await renderCollection({ role: 'admin' });
     fireEvent.change(screen.getByTestId('collection-sort'), { target: { value: 'created' } });
     await waitFor(() => {
       const cards = Array.from(document.querySelectorAll('.collection-card')) as HTMLElement[];

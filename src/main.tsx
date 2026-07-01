@@ -16,7 +16,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function IndexRedirect() {
   const { user } = React.useContext(AuthContext);
-  // Admin → editor (preventivi), user normali → qr (entry point pratico)
+  // Admin lands on the editor (preventivi), normal users land on the QR
+  // editor (the most common entry point). They can reach the Collection
+  // from the sidebar in both cases.
   const target = user?.role === 'admin' ? 'editor' : 'qr';
   return <Navigate to={target} replace />;
 }
@@ -47,7 +49,7 @@ function AppWrapper() {
           }>
             <Route index element={<IndexRedirect />} />
             <Route path="editor" element={<AdminEditorRoute><EditorPage /></AdminEditorRoute>} />
-            <Route path="collection" element={<AdminEditorRoute><CollectionPage /></AdminEditorRoute>} />
+            <Route path="collection" element={<CollectionPage />} />
             <Route path="qr" element={<QrPage />} />
             <Route path="card" element={<CardPage />} />
             <Route path="logo" element={<LogoPage />} />

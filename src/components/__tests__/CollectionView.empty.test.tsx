@@ -18,10 +18,14 @@ beforeEach(() => {
   cleanup();
 });
 
-async function renderCollection() {
+async function renderCollection(opts: { role?: 'user' | 'admin' } = {}) {
   const ctx = buildContextValue();
+  const authValue = {
+    ...AUTH_VALUE,
+    user: { email: 'user@test.com', role: opts.role ?? 'user' },
+  };
   render(
-    <AuthContext.Provider value={AUTH_VALUE as any}>
+    <AuthContext.Provider value={authValue as any}>
       <AppContext.Provider value={ctx as any}>
         <MemoryRouter>
           <CollectionViewForTest />
@@ -35,20 +39,42 @@ async function renderCollection() {
   return ctx;
 }
 
-describe('CollectionView — empty states (phase 6, AC-011)', () => {
-  it('empty "Tutti" tab shows "Nessun documento" with CTA (AC-006/AC-011)', async () => {
+describe('CollectionView, empty states (phase 6, AC-011)', () => {
+  it('empty "Tutti" tab shows "Nessun documento" with QR Code CTA for non-admin (Phase 7)', async () => {
     seedDocumentsLocalStorage([]);
-    await renderCollection();
+    await renderCollection({ role: 'user' });
     expect(screen.getByTestId('empty-tab')).toBeInTheDocument();
     expect(screen.getByText(/Nessun documento ancora/i)).toBeInTheDocument();
-    // CTA navigates to editor
+    // Non-admin users can't create preventivi, so the CTA offers
+    // a QR code (the most common entry point).
+    const cta = screen.getByRole('button', { name: /Crea un QR Code/i });
+    expect(cta).toBeInTheDocument();
+  });
+
+  it('empty "Tutti" tab shows "Crea un preventivo" CTA for admin (Phase 7)', async () => {
+    seedDocumentsLocalStorage([]);
+    await renderCollection({ role: 'admin' });
     const cta = screen.getByRole('button', { name: /Crea un preventivo/i });
     expect(cta).toBeInTheDocument();
   });
 
-  it('empty "Preventivi" tab shows "Nessun preventivo ancora"', async () => {
+  it('non-admin does NOT see the "Preventivi" tab (Phase 7)', async () => {
     seedDocumentsLocalStorage([]);
-    await renderCollection();
+    await renderCollection({ role: 'user' });
+    const tablist = screen.getByRole('tablist');
+    expect(within(tablist).queryByRole('tab', { name: /Preventivi/ })).toBeNull();
+  });
+
+  it('admin DOES see the "Preventivi" tab (Phase 7)', async () => {
+    seedDocumentsLocalStorage([]);
+    await renderCollection({ role: 'admin' });
+    const tablist = screen.getByRole('tablist');
+    expect(within(tablist).getByRole('tab', { name: /Preventivi/ })).toBeInTheDocument();
+  });
+
+  it('empty "Preventivi" tab shows "Nessun preventivo ancora" for admin', async () => {
+    seedDocumentsLocalStorage([]);
+    await renderCollection({ role: 'admin' });
     fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Preventivi/ }));
     expect(await screen.findByText(/Nessun preventivo ancora/i)).toBeInTheDocument();
   });

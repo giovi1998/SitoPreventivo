@@ -55,7 +55,7 @@ const DATE_OPTIONS: { value: 'all' | 'week' | 'month' | 'year'; label: string }[
   { value: 'year', label: "Quest'anno" },
 ];
 
-// Phase 6 — REQ-004 cross-type search. Substring match (no regex
+// Phase 6, REQ-004 cross-type search. Substring match (no regex
 // escape needed) over the per-type "content" fields. Title is searched
 // in all types; other fields are type-specific.
 function getSearchHaystack(doc: any): string {
@@ -147,6 +147,10 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   const { addToast } = useToast();
   const userEmail = user?.email || '';
   const tier: 'free' | 'unlocked' | 'loading' = ctx?.tier ?? 'loading';
+  // Phase 7, preventivi are admin-only. Non-admin users can still
+  // create QR Code, bigliettini, loghi. The Collection view hides
+  // the "Preventivi" tab for them and the empty state copy adapts.
+  const isAdmin = user?.role === 'admin';
 
   const [activeTab, setActiveTab] = useState<TabId>('all');
   const [searchInput, setSearchInput] = useState('');
@@ -301,11 +305,15 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
       <div className="collection-head">
         <p>Documenti salvati</p>
         <h2>Collection</h2>
-        <span>Tutti i tuoi documenti — preventivi, QR, bigliettini, loghi.</span>
+        <span>
+          {isAdmin
+            ? 'Tutti i tuoi documenti: preventivi, QR, bigliettini e loghi.'
+            : 'Tutti i tuoi documenti: QR, bigliettini e loghi.'}
+        </span>
       </div>
 
       <div role="tablist" aria-label="Tipo documento" className="collection-tabs">
-        {TABS.map((t) => (
+        {TABS.filter((t) => isAdmin || t.type !== 'quote').map((t) => (
           <button
             key={t.id}
             type="button"
@@ -390,7 +398,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
           </div>
 
           {filtered.length === 0 ? (
-            <EmptyState tabId={activeTab} totalCount={documents.length} onOpen={onOpen} ctx={ctx} />
+            <EmptyState tabId={activeTab} totalCount={documents.length} onOpen={onOpen} ctx={ctx} isAdmin={isAdmin} />
           ) : (
             <div className="collection-grid" data-testid="collection-grid">
               {filtered.map((doc) => {
@@ -455,7 +463,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   );
 }
 
-function EmptyState({ tabId, totalCount, onOpen, ctx }: { tabId: TabId; totalCount: number; onOpen: (d: any) => void; ctx: any }) {
+function EmptyState({ tabId, totalCount, onOpen, ctx, isAdmin }: { tabId: TabId; totalCount: number; onOpen: (d: any) => void; ctx: any; isAdmin: boolean }) {
   if (totalCount > 0) {
     return (
       <div className="collection-empty" data-testid="empty-search" style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted)' }}>
@@ -463,24 +471,40 @@ function EmptyState({ tabId, totalCount, onOpen, ctx }: { tabId: TabId; totalCou
       </div>
     );
   }
-  const emptyMessages: Record<TabId, { title: string; cta: string; docType: DocumentType | null }> = {
-    all: { title: 'Nessun documento ancora', cta: 'Crea un preventivo', docType: 'quote' },
-    quote: { title: 'Nessun preventivo ancora', cta: 'Crea un preventivo', docType: 'quote' },
-    qrCode: { title: 'Nessun QR Code ancora', cta: 'Crea un QR Code', docType: 'qrCode' },
-    businessCard: { title: 'Nessun bigliettino ancora', cta: 'Crea un bigliettino', docType: 'businessCard' },
-    flyer: { title: 'Nessun volantino ancora', cta: 'I volantini non sono ancora disponibili', docType: 'flyer' },
-    logo: { title: 'Nessun logo ancora', cta: 'Crea un logo', docType: 'logo' },
-  };
+  // Phase 7, non-admin users can't create preventivi, so the
+  // generic empty state offers a QR code or a logo instead.
+  const emptyMessages: Record<TabId, { title: string; cta: string; docType: DocumentType | null }> = isAdmin
+    ? {
+        all: { title: 'Nessun documento ancora', cta: 'Crea un preventivo', docType: 'quote' },
+        quote: { title: 'Nessun preventivo ancora', cta: 'Crea un preventivo', docType: 'quote' },
+        qrCode: { title: 'Nessun QR Code ancora', cta: 'Crea un QR Code', docType: 'qrCode' },
+        businessCard: { title: 'Nessun bigliettino ancora', cta: 'Crea un bigliettino', docType: 'businessCard' },
+        flyer: { title: 'Nessun volantino ancora', cta: 'I volantini non sono ancora disponibili', docType: 'flyer' },
+        logo: { title: 'Nessun logo ancora', cta: 'Crea un logo', docType: 'logo' },
+      }
+    : {
+        all: { title: 'Nessun documento ancora', cta: 'Crea un QR Code', docType: 'qrCode' },
+        quote: { title: 'Nessun preventivo ancora', cta: 'Crea un preventivo', docType: 'quote' },
+        qrCode: { title: 'Nessun QR Code ancora', cta: 'Crea un QR Code', docType: 'qrCode' },
+        businessCard: { title: 'Nessun bigliettino ancora', cta: 'Crea un bigliettino', docType: 'businessCard' },
+        flyer: { title: 'Nessun volantino ancora', cta: 'I volantini non sono ancora disponibili', docType: 'flyer' },
+        logo: { title: 'Nessun logo ancora', cta: 'Crea un logo', docType: 'logo' },
+      };
   const msg = emptyMessages[tabId];
+  // The "quote" tab is hidden for non-admin via the TABS filter above,
+  // so it never reaches here. Guard anyway.
+  const cta = !isAdmin && tabId === 'quote'
+    ? { title: msg.title, cta: 'Crea un QR Code', docType: 'qrCode' as DocumentType | null }
+    : msg;
   return (
     <div className="collection-empty" data-testid="empty-tab" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', padding: '60px 20px', textAlign: 'center',
     }}>
       <div style={{ fontSize: '3rem', marginBottom: '16px', opacity: 0.4 }}>
-        <Icon name={(msg.docType && TYPE_ICONS[msg.docType]) || 'doc'} />
+        <Icon name={(cta.docType && TYPE_ICONS[cta.docType]) || 'doc'} />
       </div>
-      <h3 style={{ margin: '0 0 8px', color: 'var(--ink)' }}>{msg.title}</h3>
+      <h3 style={{ margin: '0 0 8px', color: 'var(--ink)' }}>{cta.title}</h3>
       <p style={{ margin: '0 0 24px', color: 'var(--muted)', fontSize: '.9rem' }}>
         Crea il tuo primo documento dalla sidebar.
       </p>
@@ -488,7 +512,12 @@ function EmptyState({ tabId, totalCount, onOpen, ctx }: { tabId: TabId; totalCou
         type="button"
         onClick={() => {
           if (tabId === 'flyer') {
-            // flyer's editor doesn't exist (phase 3 skipped) — no-op
+            // flyer's editor doesn't exist (phase 3 skipped), no-op
+            return;
+          }
+          if (tabId === 'quote' && !isAdmin) {
+            // Non-admin users land on the QR editor instead
+            if (ctx?.setView) ctx.setView('qr');
             return;
           }
           if (ctx?.setView) ctx.setView(tabId === 'quote' ? 'editor' : tabId);
@@ -500,7 +529,7 @@ function EmptyState({ tabId, totalCount, onOpen, ctx }: { tabId: TabId; totalCou
           opacity: tabId === 'flyer' ? 0.5 : 1,
         }}
         disabled={tabId === 'flyer'}
-      >{msg.cta}</button>
+      >{cta.cta}</button>
     </div>
   );
 }
