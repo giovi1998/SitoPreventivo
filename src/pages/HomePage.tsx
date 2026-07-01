@@ -168,7 +168,29 @@ export default function HomePage({ user }: HomePageProps) {
         </ol>
       </section>
 
-      {/* ─── Pricing — Subscription mensile ──────────────── */}
+      {/* ─── Perché noi (Phase 7, spec REQ-008) ─────────── */}
+      <section className="hp-section hp-why-section" aria-labelledby="hp-why-h">
+        <h2 id="hp-why-h" className="hp-section-h">Perché Quickbrand</h2>
+        <p className="hp-section-sub">
+          Tre differenze concrete rispetto a web agency, Canva e Looka.
+        </p>
+        <div className="hp-why-grid">
+          <article className="hp-why-card">
+            <h3>Più veloce di una web agency</h3>
+            <p>72 ore per logo, bigliettino e volantino coordinati. Una web agency chiede 2-4 settimane e 2.500-8.000€ per lo stesso output.</p>
+          </article>
+          <article className="hp-why-card">
+            <h3>Più completo di Canva</h3>
+            <p>Tu non fai niente. L'editor compone il file e tu esporti PDF pronto tipografia. Su Canva rifai il layout ogni volta.</p>
+          </article>
+          <article className="hp-why-card">
+            <h3>Più personalizzato di Looka</h3>
+            <p>Logo, bigliettino, volantino, preventivo e QR sono un unico sistema coordinato. Su Looka sono strumenti scollegati.</p>
+          </article>
+        </div>
+      </section>
+
+      {/* ─── Pricing, Subscription mensile ──────────────── */}
       <section className="hp-section hp-pricing-section" id="pricing">
         <h2 className="hp-section-h">Un piano. Tutto incluso.</h2>
         <p className="hp-section-sub">
@@ -400,6 +422,15 @@ export default function HomePage({ user }: HomePageProps) {
         .hp-step h3{font-size:1.05rem;font-weight:800;margin:0 0 6px;color:var(--qb-ink)}
         .hp-step p{font-size:.9rem;color:var(--qb-muted);line-height:1.55;margin:0}
 
+        /* ─── Perché noi (Phase 7) ───────────────────── */
+        .hp-why-section{background:var(--qb-surface);max-width:none;padding-left:24px;padding-right:24px}
+        .hp-why-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;max-width:1000px;margin:0 auto}
+        .hp-why-card{background:var(--qb-paper);border:1px solid var(--qb-border);border-radius:14px;padding:24px;transition:transform .2s,box-shadow .2s,border-color .2s}
+        .hp-why-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.06);border-color:var(--qb-ink)}
+        [data-theme="dark"] .hp-why-card:hover{box-shadow:0 6px 18px rgba(0,0,0,.4)}
+        .hp-why-card h3{font-size:1.02rem;font-weight:800;margin:0 0 8px;color:var(--qb-ink);letter-spacing:-.01em}
+        .hp-why-card p{font-size:.9rem;color:var(--qb-muted);line-height:1.55;margin:0}
+
         /* ─── Pricing ─────────────────────────────────── */
         .hp-pricing-section{padding-top:64px;padding-bottom:64px}
         .hp-pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;max-width:1080px;margin:0 auto}
@@ -436,9 +467,10 @@ export default function HomePage({ user }: HomePageProps) {
         @media(max-width:640px){
           .hp-hero{padding:48px 20px 40px}
           .hp-section{padding:48px 20px}
-          .hp-demo-section,.hp-steps-section,.hp-pricing-section{padding-left:20px;padding-right:20px}
+          .hp-demo-section,.hp-steps-section,.hp-pricing-section,.hp-why-section{padding-left:20px;padding-right:20px}
           .hp-create-grid{grid-template-columns:1fr}
           .hp-pricing-grid{grid-template-columns:1fr}
+          .hp-why-grid{grid-template-columns:1fr}
           .hp-steps{grid-template-columns:1fr;gap:24px}
           .hp-flip{width:min(340px,92vw)}
           .hp-cta-row{flex-direction:column;align-items:stretch}
