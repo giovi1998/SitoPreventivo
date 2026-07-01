@@ -60,7 +60,7 @@ export function mergeCardAIResponse(
   // ─── Sanitizzazione Zod ────────────────────────────────────
   // Phase 2.2 REQ-I01: usiamo `aiCardInputSchema` (più permissivo) invece
   // di `businessCardSchema.partial()` per permettere all'AI di inviare
-  // valori fuori range per `fontScale` (es. 3.0) — il clamp a [0.7, 1.5]
+  // valori fuori range per `fontScale` (es. 3.0), il clamp a [0.7, 1.5]
   // è applicato qui sotto nel merge. Lo schema AI strippa comunque
   // `visible`, `enabled` e altri campi inventati.
   const preprocessed: Record<string, unknown> = { ...modified };
@@ -307,13 +307,13 @@ export function mergeCardAIResponse(
 
         if (sameAsCurrent) {
           // Nessuna modifica effettiva: richiesta impossibile per collisione/bordi.
-          changes.push(`Griglia: ${key} bloccato (collisione) — posizione richiesta non raggiungibile`);
+          changes.push(`Griglia: ${key} bloccato (collisione), posizione richiesta non raggiungibile`);
         } else {
           updated[target] = newTargetGrid;
           if (sameAsRequested) {
             changes.push(`Griglia: ${key} posizionato a (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}`);
           } else {
-            changes.push(`Griglia: ${key} parziale (collisione) — richiesto (${el.x}, ${el.y}) ${el.w}×${el.h}, applicato (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}`);
+            changes.push(`Griglia: ${key} parziale (collisione), richiesto (${el.x}, ${el.y}) ${el.w}×${el.h}, applicato (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}`);
           }
         }
       }

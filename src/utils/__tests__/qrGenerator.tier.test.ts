@@ -36,7 +36,7 @@ afterEach(() => {
   spyWatermarkCanvas.mockRestore();
 });
 
-describe('generateQrPng — tier integration', () => {
+describe('generateQrPng, tier integration', () => {
   it('free tier → output is a non-empty Uint8Array', async () => {
     const qr = createGiovanniQrTemplate();
     qr.style.size = 1024;

@@ -123,7 +123,7 @@ function buildDocDefinition(quote: PremiumQuote, themeId: DocumentTemplateId = '
           text: [
             { text: `${ps.label} (${ps.percentage}%): `, bold: true },
             { text: money((option.summary?.totalGross || 0) * ps.percentage / 100), color: accent, bold: true },
-            { text: ` IVA inclusa — ${ps.notes || `Entro ${ps.dueDaysFromIssue} giorni`}` },
+            { text: ` IVA inclusa, ${ps.notes || `Entro ${ps.dueDaysFromIssue} giorni`}` },
           ],
           style: 'accontoText',
           margin: [0, 0, 0, 4],
@@ -160,7 +160,7 @@ function buildDocDefinition(quote: PremiumQuote, themeId: DocumentTemplateId = '
 
     const compHeader = [
       { text: 'Caratteristica', style: 'tableHeader' },
-      ...opts.map((o) => ({ text: o.label.split('—')[0].trim(), style: 'tableHeader' })),
+      ...opts.map((o) => ({ text: o.label.split(':')[0].trim(), style: 'tableHeader' })),
     ];
 
     const compRows: any[][] = [

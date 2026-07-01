@@ -193,7 +193,7 @@ export default function EditorView({
             <label>Modello AI</label>
             <select value={aiModel} onChange={(e) => onAiModelChange(e.target.value)}>
               {availableModels.length > 0 ? availableModels.map((m) => (
-                <option key={m.id} value={m.id}>{m.name} — {m.model}</option>
+                <option key={m.id} value={m.id}>{m.name}, {m.model}</option>
               )) : (
                 <option value="deepseek-chat">DeepSeek Chat</option>
               )}

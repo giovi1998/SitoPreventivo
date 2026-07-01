@@ -139,7 +139,7 @@ describe('GET /api/users (admin list users)', () => {
     expect(res.body[1].email).toBe('test2@gmail.com');
   });
 
-  it('returns 403 when adminEmail is only in body (the broken behavior) — guards against regression to body-based auth', async () => {
+  it('returns 403 when adminEmail is only in body (the broken behavior), guards against regression to body-based auth', async () => {
     const res = await callHandler({
       method: 'GET',
       url: '/api/users',

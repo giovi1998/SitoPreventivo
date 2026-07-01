@@ -79,7 +79,7 @@ function CardPreview({ side, card, showGrid = false, tier = 'unlocked' }: CardPr
   const qrPayload = resolveCardQrPayload(card);
 
   // QR generato sincronamente (la libreria qrcode è sync, niente Promise
-  // inutili). Così il QR è visibile al primo render — coerente con export.
+  // inutili). Così il QR è visibile al primo render, coerente con export.
   const qrSvg = useMemo(() => {
     if (side !== 'back' || !qrPayload) return '';
     const qrObj: any = {
@@ -343,7 +343,7 @@ const BackPreview = React.memo(function BackPreview({ card, qrSvg, qrPayload, gr
     <>
       {card.back.phone && <div className="card-back-line"><span className="card-back-key">Telefono</span><span className="card-back-val">{card.back.phone}</span></div>}
       {card.back.email && <div className="card-back-line"><span className="card-back-key">Email</span><span className="card-back-val" data-testid="card-back-email-val">{card.back.email}</span></div>}
-      {/* Phase 2.1: WEB row omessa se QR presente (ridondante — il QR codifica già l'URL) */}
+      {/* Phase 2.1: WEB row omessa se QR presente (ridondante, il QR codifica già l'URL) */}
       {card.back.website && !qrPayload && (
         <div className="card-back-line">
           <span className="card-back-key">Web</span>

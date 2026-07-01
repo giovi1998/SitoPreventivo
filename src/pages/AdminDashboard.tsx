@@ -27,7 +27,7 @@ interface AdminQuote {
   [key: string]: unknown;
 }
 
-function safeStr(v: unknown, fallback: string = '—'): string {
+function safeStr(v: unknown, fallback: string = ':'): string {
   if (v === null || v === undefined) return fallback;
   if (typeof v === 'string') return v || fallback;
   if (typeof v === 'number') return String(v);
@@ -40,8 +40,8 @@ function safeStr(v: unknown, fallback: string = '—'): string {
 }
 
 function formatDate(v: unknown): string {
-  if (!v) return '—';
-  if (typeof v !== 'string') return '—';
+  if (!v) return ':';
+  if (typeof v !== 'string') return ':';
   if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
   return v;
 }
@@ -51,12 +51,12 @@ function getQuoteTitle(q: AdminQuote): string {
 }
 
 function getQuoteClient(q: AdminQuote): string {
-  if (!q.client) return '—';
-  if (typeof q.client === 'string') return q.client || '—';
+  if (!q.client) return ':';
+  if (typeof q.client === 'string') return q.client || ':';
   if (typeof q.client === 'object') {
     return safeStr(q.client.name || q.client.contactPerson);
   }
-  return '—';
+  return ':';
 }
 
 function getQuoteOwner(q: AdminQuote): string {
@@ -95,7 +95,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<AdminTab>('overview');
-  // Phase 5 — unlock codes state
+  // Phase 5, unlock codes state
   const [unlockCodes, setUnlockCodes] = useState<any[]>([]);
   const [selectedPackage, setSelectedPackage] = useState<string>('starter');
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
@@ -536,8 +536,8 @@ export default function AdminDashboard() {
                     return (
                       <tr key={code} data-testid="admin-code-row">
                         <td><code>{code}</code></td>
-                        <td>{c.package || '—'}</td>
-                        <td>{c.usedBy || '—'}</td>
+                        <td>{c.package || ':'}</td>
+                        <td>{c.usedBy || ':'}</td>
                         <td>{formatDate(c.usedAt)}</td>
                         <td>{formatDate(c.createdAt)}</td>
                         <td>
@@ -637,7 +637,7 @@ const adminStyles = `
 .ds-status.ok{color:#11845b}
 [data-theme="dark"] .ds-status.ok{color:#22c55e}
 
-/* Phase 5 — Tabs (Panoramica / Codici sblocco) */
+/* Phase 5, Tabs (Panoramica / Codici sblocco) */
 .admin-tabs{display:flex;gap:6px;margin:0 0 24px;border-bottom:1px solid #e2e8f0;padding:0 0 1px}
 [data-theme="dark"] .admin-tabs{border-bottom-color:#2d3044}
 .admin-tab{background:transparent;border:none;padding:10px 18px;font-size:.85rem;font-weight:600;color:#647086;cursor:pointer;border-radius:8px 8px 0 0;transition:all .15s;border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -649,7 +649,7 @@ const adminStyles = `
 .admin-section-desc{font-size:.85rem;color:#647086;margin:0 0 18px;line-height:1.5}
 [data-theme="dark"] .admin-section-desc{color:#8892a8}
 
-/* Phase 5 — Code generation form */
+/* Phase 5, Code generation form */
 .admin-code-form{display:flex;align-items:flex-end;gap:12px;margin-bottom:18px;flex-wrap:wrap}
 .admin-code-label{font-size:.78rem;font-weight:600;color:#07111f;display:block;margin-bottom:4px}
 [data-theme="dark"] .admin-code-label{color:#e8eaf0}

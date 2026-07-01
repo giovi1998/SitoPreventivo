@@ -37,7 +37,7 @@ async function renderCollection(ctxOverrides: Record<string, any> = {}) {
   return ctx;
 }
 
-describe('CollectionView — actions (phase 6, AC-007/008/009/010)', () => {
+describe('CollectionView, actions (phase 6, AC-007/008/009/010)', () => {
   it('"Apri" on a quote calls openDocument (AC-007)', async () => {
     seedDocumentsLocalStorage([
       makeDocument({ id: 'q1', documentType: 'quote', title: 'My quote' }),

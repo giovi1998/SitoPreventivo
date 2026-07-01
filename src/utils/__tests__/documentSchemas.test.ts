@@ -378,7 +378,7 @@ describe('documentSchemas', () => {
       expect((card as any).grid).toBeUndefined();
     });
 
-    it('logo is a valid grid element (Phase 2.1 — card-logo in grid mode)', () => {
+    it('logo is a valid grid element (Phase 2.1, card-logo in grid mode)', () => {
       const grid = {
         cols: 4,
         rows: 4,

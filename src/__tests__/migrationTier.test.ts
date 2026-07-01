@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { userSettings, unlockCodes } from '../../db/schema';
 
-describe('Phase 5 migration — schema structure', () => {
+describe('Phase 5 migration, schema structure', () => {
   it('userSettings has 4 new tier columns', () => {
     const cols = userSettings as unknown as Record<string, { name: string }>;
     const names = Object.values(cols).map((c) => c?.name).filter(Boolean);

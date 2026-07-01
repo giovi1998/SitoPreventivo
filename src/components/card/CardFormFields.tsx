@@ -47,7 +47,7 @@ export const QR_SIZE_LABELS: Record<BusinessCardQrSize, string> = {
 };
 
 export const SOCIAL_PLATFORMS = [
-  { value: '', label: '—' },
+  { value: '', label: ':' },
   { value: 'LinkedIn', label: 'LinkedIn' },
   { value: 'GitHub', label: 'GitHub' },
   { value: 'X', label: 'X (Twitter)' },
@@ -288,7 +288,7 @@ export function CardServicesFields({
     <div className="card-field" data-testid="card-services-field">
       <span>Servizi offerti (max 8)</span>
       <p className="card-field-hint" style={{ fontSize: '.72rem', color: '#647086', margin: '2px 0 6px' }}>
-        Es. "Web Design", "SEO", "Consulenza" — visualizzati sul retro
+        Es. "Web Design", "SEO", "Consulenza", visualizzati sul retro
       </p>
       <label className="card-field" style={{ marginTop: 4 }}>
         <span>Etichetta sopra i servizi</span>

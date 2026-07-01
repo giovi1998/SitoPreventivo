@@ -146,7 +146,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
           const tokens = result.response.usage?.totalTokens ?? 0;
           updateLog(streamId, {
             status: 'done',
-            msg: `✅ Risposta ricevuta — ${tokens.toLocaleString('it-IT')} token · ${elapsed}s`,
+            msg: `✅ Risposta ricevuta, ${tokens.toLocaleString('it-IT')} token · ${elapsed}s`,
             detail: result.rawResponse,
           });
         }

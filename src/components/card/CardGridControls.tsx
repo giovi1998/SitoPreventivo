@@ -74,7 +74,7 @@ export function getAvailableGridElements(side: GridSide, card: BusinessCard): Ar
 }
 
 // Phase 2.2 REQ-B02: controlli grid condivisi desktop/mobile. Render inline
-// (usato in desktop) — il wrapping con popup è responsabilità di MobileGridEditor.
+// (usato in desktop), il wrapping con popup è responsabilità di MobileGridEditor.
 export function CardGridControls({
   card,
   side,
@@ -99,7 +99,7 @@ export function CardGridControls({
   const selectedEl = selected ? activeGrid.elements[selected] : undefined;
 
   // Fix: il preset selezionato deve restare visibile nel dropdown (prima
-  // si resettava subito a "— seleziona preset —"). Stato locale persistente,
+  // si resettava subito a ", seleziona preset:"). Stato locale persistente,
   // resettato quando cambia il lato (i preset differiscono fronte/retro).
   const [presetChoice, setPresetChoice] = useState<string>('');
   useEffect(() => { setPresetChoice(''); }, [side]);
@@ -120,7 +120,7 @@ export function CardGridControls({
     && !wouldCollideOnResize(activeGrid, selected, 0, 1);
 
   const isSideDisabled = !gridEnabled;
-  const disabledTitle = gridEnabled ? '' : 'Griglia OFF — attivala per spostare elementi';
+  const disabledTitle = gridEnabled ? '' : 'Griglia OFF, attivala per spostare elementi';
 
   const handleMove = (dx: number, dy: number) => {
     if (!selected) return;
@@ -228,7 +228,7 @@ export function CardGridControls({
           aria-label="Preset griglia"
           data-testid="grid-editor-preset"
         >
-          <option value="">— seleziona preset —</option>
+          <option value="">, seleziona preset:</option>
           {side === 'front' ? (
             <>
               <option value="left">Sinistra (foto a sx)</option>
@@ -247,11 +247,11 @@ export function CardGridControls({
           onChange={(e) => onSelect(e.target.value as keyof CardGrid['elements'] | '')}
           // FIX: il selettore deve essere abilitato quando la griglia è ON,
           // anche se nessun elemento è ancora selezionato (altrimenti è
-          // impossibile selezionare il primo — chicken-and-egg).
+          // impossibile selezionare il primo, chicken-and-egg).
           disabled={isSideDisabled}
           aria-label="Elemento selezionato"
         >
-          <option value="">—</option>
+          <option value="">:</option>
           {availableElements.map((el) => (
             <option key={el.value} value={el.value}>{el.label}</option>
           ))}

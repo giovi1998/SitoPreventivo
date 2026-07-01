@@ -9,7 +9,7 @@ interface PreviewWatermarkProps {
 /**
  * In-page watermark overlay applied to live previews (card, QR, logo).
  * Renders a diagonal repeating text pattern via SVG so users cannot
- * "screenshot to bypass" — even DOM-screenshots include the watermark
+ * "screenshot to bypass", even DOM-screenshots include the watermark
  * baked into the visible rendering.
  *
  * The watermark is rendered on a transparent layer above the preview

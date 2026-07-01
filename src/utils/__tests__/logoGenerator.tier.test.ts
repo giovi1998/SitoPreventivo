@@ -64,7 +64,7 @@ afterEach(() => {
   spyWatermarkCanvas.mockRestore();
 });
 
-describe('svgToPng — tier integration', () => {
+describe('svgToPng, tier integration', () => {
   it('free tier → applyWatermarkToCanvas is called with tier="free"', async () => {
     const svg = builderToSvg(createEmptyLogo().builder);
     const restore = setupJsdomMocks();

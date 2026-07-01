@@ -141,7 +141,7 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
                     <p key={i}>
                       <strong style={{ color: accent }}>{ps.label} ({ps.percentage}%):</strong>{' '}
                       {money((option.summary?.totalGross || 0) * ps.percentage / 100)} IVA inclusa
-                      {' — '}{ps.notes || `Entro ${ps.dueDaysFromIssue} giorni`}
+                      {', '}{ps.notes || `Entro ${ps.dueDaysFromIssue} giorni`}
                     </p>
                   ))}
                 </div>
@@ -170,7 +170,7 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
                 <thead>
                   <tr>
                     <th>Caratteristica</th>
-                    {opts.map((o) => <th key={o.id}>{o.label.split('—')[0].trim()}</th>)}
+                    {opts.map((o) => <th key={o.id}>{o.label.split(':')[0].trim()}</th>)}
                   </tr>
                 </thead>
                 <tbody>

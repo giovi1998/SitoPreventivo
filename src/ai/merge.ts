@@ -250,7 +250,7 @@ export function mergeAIResponse(
   if (modified.notes !== undefined) {
     updated.notes = { ...updated.notes };
     if (typeof modified.notes === 'string') {
-      // AI often sends notes as a plain string — treat as clientVisible
+      // AI often sends notes as a plain string, treat as clientVisible
       updated.notes.clientVisible = modified.notes;
       changes.push('Note cliente modificate');
     } else {

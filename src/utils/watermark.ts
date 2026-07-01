@@ -1,5 +1,5 @@
 /**
- * Phase 5 — Tier system watermark utilities.
+ * Phase 5, Tier system watermark utilities.
  *
  * For `free` users, all generated PDF/PNG deliverables get a
  * diagonal text watermark "QUICKBRAND" + a footer promoting
@@ -99,7 +99,7 @@ function pdfWatermarkFooter() {
  * raster surface (used for PNG exports).
  *
  * Caller MUST have finished drawing the actual content before
- * invoking this — we paint on top.
+ * invoking this, we paint on top.
  */
 export function applyWatermarkToCanvas(
   ctx: CanvasRenderingContext2D,

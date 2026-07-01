@@ -56,7 +56,7 @@ export default function CardAIControls({
     <select value={aiModel} onChange={(e) => onModelChange(e.target.value)} aria-label="Modello AI">
       {availableModels.length > 0 ? (
         availableModels.map((m) => (
-          <option key={m.id} value={m.id}>{m.name} — {m.model}</option>
+          <option key={m.id} value={m.id}>{m.name}, {m.model}</option>
         ))
       ) : (
         <option value="deepseek-chat">DeepSeek Chat</option>

@@ -56,7 +56,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('AppShell — tier integration (Phase 5)', () => {
+describe('AppShell, tier integration (Phase 5)', () => {
   it('free user: fetches tier on mount and exposes it in AppContext', async () => {
     vi.spyOn(dataService, 'getUserSettings').mockResolvedValue({ userEmail: 'u@t.com' } as any);
     vi.spyOn(dataService, 'getUserTier').mockResolvedValue({ tier: 'free', documentCount: 1, documentLimit: 3 } as any);

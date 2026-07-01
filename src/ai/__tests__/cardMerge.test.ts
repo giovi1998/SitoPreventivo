@@ -108,7 +108,7 @@ describe('mergeCardAIResponse', () => {
     expect(changes.length).toBeGreaterThanOrEqual(6);
   });
 
-  it('merges grid.elements.qr position (C - AI grid move) — Phase 2.2 routes to backGrid', () => {
+  it('merges grid.elements.qr position (C - AI grid move), Phase 2.2 routes to backGrid', () => {
     const card = createEmptyCard();
     const { card: merged, changes } = mergeCardAIResponse(card, {
       grid: {
@@ -223,7 +223,7 @@ describe('mergeCardAIResponse', () => {
       rows: 4,
       elements: {
         name: { x: 0, y: 1, w: 1, h: 1 },
-        // "block" — uso `logo` come blocco fittizio per testare la collisione
+        // "block", uso `logo` come blocco fittizio per testare la collisione
         logo: { x: 3, y: 1, w: 1, h: 1 },
       },
     };
@@ -488,7 +488,7 @@ describe('mergeCardAIResponse', () => {
       // L'AI invia null per gli elementi non menzionati. Il merge deve
       // accettarli (filtro null nel preprocessore) e applicare le modifiche
       // non-grid (nome, titolo, accento, useGrid). Il logo è bloccato perché
-      // la posizione richiesta (0,0,4,1) collide con photo (0,0,2,4) — il
+      // la posizione richiesta (0,0,4,1) collide con photo (0,0,2,4), il
       // merge lo reporta come "bloccato" invece di fingere di averlo mosso.
       const card = createGiovanniCardTemplate();
       const { card: merged, changes } = mergeCardAIResponse(card, {
@@ -525,7 +525,7 @@ describe('mergeCardAIResponse', () => {
           },
         },
       };
-      // Sposta logo a (2, 3, 2, 1) — spazio libero a destra
+      // Sposta logo a (2, 3, 2, 1), spazio libero a destra
       const { card: merged, changes } = mergeCardAIResponse(card, {
         grid: { cols: 4, rows: 4, elements: { logo: { x: 2, y: 3, w: 2, h: 1 } } },
       } as unknown as Record<string, unknown>);
@@ -591,7 +591,7 @@ describe('mergeCardAIResponse', () => {
 
     it('detects AI hallucination: all back elements at (0,0,1,1) is rejected', () => {
       // Caso reale: AI "Rendi premium" ha inviato TUTTI gli elementi del
-      // back a (0,0,1,1) — segnale di output casuale. Il merge deve
+      // back a (0,0,1,1), segnale di output casuale. Il merge deve
       // skippare le modifiche grid e preservare la backGrid corrente.
       const card = createGiovanniCardTemplate();
       const originalBackGrid = JSON.parse(JSON.stringify(card.backGrid));
@@ -683,7 +683,7 @@ describe('mergeCardAIResponse', () => {
       expect(merged.style.borderStyle).toBe('accent-strip-left');
       // Modifiche accettate: layout (era 'split', AI dice 'centered', ma
       // poiché l'AI ha cancellato photoUrl, il layout dovrebbe restare 'split'.
-      // Tuttavia la nostra protezione photoUrl non influisce sul layout —
+      // Tuttavia la nostra protezione photoUrl non influisce sul layout:
       // l'AI esplicitamente dice 'centered' e noi lo accettiamo.
       // NOTA: questo è un trade-off: proteggiamo photoUrl ma non blocchiamo
       // il layout se l'AI lo cambia esplicitamente. L'utente può riapplicare

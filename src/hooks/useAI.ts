@@ -172,7 +172,7 @@ export function useAI(userEmail?: string): UseAIReturn {
               if (!startedToolsRef.current.has(id)) {
                 startedToolsRef.current.add(id);
                 toolStartRef.current.set(id, Date.now());
-                addLog(createToolEntry(`⚙ ${formatToolCall(fn.name, safeJson(fn.arguments))} — avviato`));
+                addLog(createToolEntry(`⚙ ${formatToolCall(fn.name, safeJson(fn.arguments))}, avviato`));
               }
               return;
             }
@@ -184,13 +184,13 @@ export function useAI(userEmail?: string): UseAIReturn {
             if (!startedToolsRef.current.has(toolCallId)) {
               startedToolsRef.current.add(toolCallId);
               toolStartRef.current.set(toolCallId, Date.now());
-              addLog(createToolEntry(`⚙ ${name} — avviato`));
+              addLog(createToolEntry(`⚙ ${name}, avviato`));
             }
           },
           onToolComplete: (toolCallId, name, toolResult) => {
             const start = toolStartRef.current.get(toolCallId);
             const durationMs = start ? Date.now() - start : undefined;
-            addLog(createToolEntry(`⚙ ${formatToolResult(toolResult, name)} — fatto`, durationMs));
+            addLog(createToolEntry(`⚙ ${formatToolResult(toolResult, name)}, fatto`, durationMs));
           },
         });
 
@@ -229,7 +229,7 @@ export function useAI(userEmail?: string): UseAIReturn {
           const tokens = result.response.usage?.totalTokens ?? 0;
           updateLog(streamId, {
             status: 'done',
-            msg: `✅ Risposta ricevuta — ${tokens.toLocaleString('it-IT')} token · ${elapsed}s`,
+            msg: `✅ Risposta ricevuta, ${tokens.toLocaleString('it-IT')} token · ${elapsed}s`,
             detail: result.rawResponse,
           });
         }

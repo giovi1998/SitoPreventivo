@@ -71,7 +71,7 @@ describe('gridUtils - wouldCollideOnMove', () => {
   });
 
   it('handle caso diagonale: dx+dy che avvicina a un altro elemento', () => {
-    // name (1,1,3,1) e title (1,2,3,1) — spostare name in giù di 1 collide con title
+    // name (1,1,3,1) e title (1,2,3,1), spostare name in giù di 1 collide con title
     expect(wouldCollideOnMove(grid, 'name', 0, 1)).toBe(true);
   });
 });

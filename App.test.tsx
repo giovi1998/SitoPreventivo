@@ -134,7 +134,7 @@ describe('App runAI toast feedback', () => {
     await waitFor(() => expect(mocks.addToast).toHaveBeenCalledTimes(1));
     expect(mocks.addToast).toHaveBeenCalledWith(
       'info',
-      'AI: nessuna modifica applicata — vedi log per la risposta testuale',
+      'AI: nessuna modifica applicata, vedi log per la risposta testuale',
       5000
     );
   });

@@ -1,6 +1,6 @@
 /**
  * Event-based AI logging helpers.
- * Raw stream content stays in buffers — never emitted to the user log.
+ * Raw stream content stays in buffers, never emitted to the user log.
  * Entries can be created in 'pending' state and updated in place
  * (see createStreamEntry / updateStreamProgress / completeStreamEntry).
  */

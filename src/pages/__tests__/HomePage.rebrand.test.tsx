@@ -22,7 +22,7 @@ function getInlineCss(): string {
   return styleEl?.textContent ?? '';
 }
 
-describe('HomePage — Quickbrand rebrand', () => {
+describe('HomePage, Quickbrand rebrand', () => {
   // AC-001
   it('does not contain the legacy brand "PrecisionQuote" anywhere in rendered content', () => {
     const { container } = renderHome();
@@ -124,7 +124,7 @@ describe('HomePage — Quickbrand rebrand', () => {
     const { container } = renderHome();
     const text = container.textContent ?? '';
     // strip aria-labels and the flip demo aria-label which contains ":" not "!"
-    // and CSS class names containing "!" via "!" — we check user-facing text only:
+    // and CSS class names containing "!" via "!", we check user-facing text only:
     // use the body of headings, paragraphs, links, buttons
     const userNodes = container.querySelectorAll('h1, h2, h3, p, li, span, a, button');
     for (const node of Array.from(userNodes)) {
@@ -145,7 +145,7 @@ describe('HomePage — Quickbrand rebrand', () => {
     expect(css).not.toMatch(/#d2e3fc/i);
   });
 
-  // REQ-C01 — light tokens
+  // REQ-C01, light tokens
   it('defines the "The Classic" palette tokens in light mode (--qb-red = #E62020, --qb-ink = #1A1A1A, --qb-paper = #FFFFFF)', () => {
     renderHome();
     const css = getInlineCss();
@@ -154,7 +154,7 @@ describe('HomePage — Quickbrand rebrand', () => {
     expect(css).toMatch(/--qb-paper:\s*#FFFFFF/i);
   });
 
-  // REQ-C01 — dark tokens
+  // REQ-C01, dark tokens
   it('defines the dark-mode palette tokens (--qb-red = #FF3B3B, --qb-paper = #0F1117)', () => {
     renderHome();
     const css = getInlineCss();
@@ -162,7 +162,7 @@ describe('HomePage — Quickbrand rebrand', () => {
     expect(css).toMatch(/\[data-theme="dark"\][\s\S]*?--qb-paper:\s*#0F1117/i);
   });
 
-  // REQ-C06 — borders use nero profondo
+  // REQ-C06, borders use nero profondo
   it('light-mode card borders reference --qb-border (nero profondo at low alpha)', () => {
     renderHome();
     const css = getInlineCss();

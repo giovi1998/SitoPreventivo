@@ -5,7 +5,7 @@ import {
   applyWatermarkToCanvas,
 } from '../watermark';
 
-describe('watermark — Quickbrand rebrand', () => {
+describe('watermark, Quickbrand rebrand', () => {
   it('WATERMARK_TEXT no longer contains the legacy brand', () => {
     expect(WATERMARK_TEXT.toLowerCase()).not.toContain('precisionquote');
   });

@@ -242,8 +242,8 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="settings-info">
-              <div className="settings-info-row"><span>Email</span><b>{user?.email || '—'}</b></div>
-              <div className="settings-info-row"><span>Username</span><b>{user?.username || '—'}</b></div>
+              <div className="settings-info-row"><span>Email</span><b>{user?.email || ':'}</b></div>
+              <div className="settings-info-row"><span>Username</span><b>{user?.username || ':'}</b></div>
               <div className="settings-info-row"><span>Ruolo</span><b className={`role-badge ${user?.role === 'admin' ? 'admin' : 'user'}`}>{user?.role || 'user'}</b></div>
               {user?.dataRegistrazione && (
                 <div className="settings-info-row"><span>Membro dal</span><b>{user.dataRegistrazione}</b></div>
@@ -254,7 +254,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Phase 5 — Il mio account (stato tier + redeem) */}
+          {/* Phase 5, Il mio account (stato tier + redeem) */}
           <div className="settings-card" data-testid="settings-tier-card">
             <div className="settings-card-header">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -271,7 +271,7 @@ export default function SettingsPage() {
               <div className="settings-info-row">
                 <span>Piano</span>
                 <b data-testid="settings-tier-value">
-                  {tier === 'loading' ? '—' : tier === 'unlocked' ? 'Sbloccato' : 'Free'}
+                  {tier === 'loading' ? ':' : tier === 'unlocked' ? 'Sbloccato' : 'Free'}
                 </b>
               </div>
               {tier === 'free' && documentLimit !== null && (

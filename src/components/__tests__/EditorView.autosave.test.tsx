@@ -158,7 +158,7 @@ describe('EditorView auto-save race condition fix', () => {
     );
     vi.advanceTimersByTime(15000);
     unmount();
-    // Advance past the 30s tick — if timer wasn't cleared, saveQuote would fire
+    // Advance past the 30s tick, if timer wasn't cleared, saveQuote would fire
     vi.advanceTimersByTime(20000);
     expect(saveQuote).not.toHaveBeenCalled();
   });

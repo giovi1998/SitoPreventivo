@@ -35,7 +35,7 @@ async function renderCollection(ctxOverrides: Record<string, any> = {}) {
   return ctx;
 }
 
-describe('CollectionView — search (phase 6, AC-004)', () => {
+describe('CollectionView, search (phase 6, AC-004)', () => {
   it('matches a quote by client.name (cross-tipo via search)', async () => {
     seedDocumentsLocalStorage([
       makeDocument({ id: 'q1', documentType: 'quote', title: 'Sito web', client: { name: 'Acme Corp' } }),
@@ -155,7 +155,7 @@ describe('CollectionView — search (phase 6, AC-004)', () => {
     ]);
     await renderCollection();
     const input = screen.getByTestId('collection-search');
-    // type fast — intermediate value shouldn't be applied until 200ms passes
+    // type fast, intermediate value shouldn't be applied until 200ms passes
     fireEvent.change(input, { target: { value: 'B' } });
     expect(screen.queryByTestId('card-q1')).toBeInTheDocument();
     // after 250ms, filter applies

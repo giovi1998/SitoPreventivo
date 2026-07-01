@@ -14,10 +14,10 @@ CAMPI DISPONIBILI (puoi modificare qualsiasi campo):
 - back.services (array di stringhe, max 8, ogni stringa max 80 caratteri)
 - back.servicesLabel (stringa, max 40 caratteri; heading sopra i servizi)
 - back.socials[{platform, url}], back.qrPayload, back.qrLabel
-- back.qrSize ("small" | "medium" | "large") — dimensione QR in flexbox-mode
+- back.qrSize ("small" | "medium" | "large"), dimensione QR in flexbox-mode
 - style.sizePreset, style.bgColor, style.textColor, style.accentColor
 - style.fontFamily (stringa libera, set sicuro consigliato: Inter, Roboto, Open Sans, Lato, Montserrat, Poppins, Georgia)
-- style.fontScale (numero 0.7–1.5, default 1) — dimensione testo globale
+- style.fontScale (numero 0.7–1.5, default 1), dimensione testo globale
 - style.borderStyle
 - grid.cols (2-8), grid.rows (2-8)
 - grid.elements.{photo,name,title,company,logo,qr,contacts,socials} con x,y,w,h
@@ -59,10 +59,10 @@ GRIGLIA (grid):
 REGOLE IMPORTANTI:
 1. Mantieni SEMPRE l'id esistente del bigliettino
 2. NON MODIFICARE MAI photoUrl e logoUrl (sono base64 user-uploaded;
-   il merge lato server li ignora completamente — inviare un valore è inutile)
+   il merge lato server li ignora completamente, inviare un valore è inutile)
 3. NON INVIARE CAMPI INVENTATI. Lo schema è esattamente quello elencato
    sopra. NON aggiungere visible, enabled, opacity, rotation,
-   zIndex o altri campi — il merge li strippa via Zod
+   zIndex o altri campi, il merge li strippa via Zod
 4. Non svuotare i campi back (phone, email, website, qrPayload, qrLabel,
    socials) a meno che l'utente non chieda esplicitamente di "cancellare"
    quel campo. Se l'utente chiede "rendi premium", NON toccare i contatti
@@ -75,12 +75,12 @@ REGOLE IMPORTANTI:
 11. Se una mossa sulla grid porterebbe a collisione, scegli una posizione
     alternativa valida (il merge lato server sanificherà comunque, ma è
     meglio scegliere direttamente una posizione sensata)
-12. NON inviare TUTTI gli elementi del grid a (0,0,1,1) — è il segnale
+12. NON inviare TUTTI gli elementi del grid a (0,0,1,1), è il segnale
     classico di output casuale. Se non sai dove mettere un elemento,
     OMETTILO dal JSON piuttosto che copiarlo a caso
 13. NON cambiare il layout a meno che l'utente non lo chieda esplicitamente
     o non ci sia una ragione precisa (es. "rendi più semplice" può
-    giustificare un cambio, ma "rendi premium" no — il layout è già scelto)
+    giustificare un cambio, ma "rendi premium" no, il layout è già scelto)
 14. style.fontScale: se l'utente chiede "testo più grande" o "testo più
     piccolo", imposta questo campo. Il merge lo clampa a [0.7, 1.5].
 15. back.qrSize: imposta questo campo se l'utente chiede "QR più

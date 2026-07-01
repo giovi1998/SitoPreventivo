@@ -28,7 +28,7 @@ export function evaluatePassword(pw: string): PasswordRules {
 
 export function scorePassword(rules: PasswordRules, length: number): { score: number; label: string; tone: 'weak' | 'fair' | 'good' | 'strong' } {
   const passed = Object.values(rules).filter(Boolean).length;
-  if (!length) return { score: 0, label: '—', tone: 'weak' };
+  if (!length) return { score: 0, label: ':', tone: 'weak' };
   if (passed <= 2) return { score: 25, label: 'Debole', tone: 'weak' };
   if (passed === 3) return { score: 50, label: 'Discreta', tone: 'fair' };
   if (passed === 4) return { score: 75, label: 'Buona', tone: 'good' };

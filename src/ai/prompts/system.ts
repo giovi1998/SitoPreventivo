@@ -31,8 +31,8 @@ ESEMPI ANALISI (rispondi con TESTO, niente JSON, niente tool):
 
 REGOLE IMPORTANTI:
 1. Mantieni SEMPRE gli ID esistenti di opzioni, item e clausole
-2. Non modificare i campi 'total' (net, tax, gross) — li calcola il sistema
-3. Non modificare i campi 'summary' e 'globalTotals' — li calcola il sistema
+2. Non modificare i campi 'total' (net, tax, gross), li calcola il sistema
+3. Non modificare i campi 'summary' e 'globalTotals', li calcola il sistema
 4. Per i costi numerici, modifica solo unitPrice e quantity
 5. Usa [WARNING]...[/WARNING] e [INFO]...[/INFO] nei testi per callout visivi (solo in modalità MODIFICA)
 6. Non inventare prezzi se non richiesto
@@ -70,8 +70,8 @@ CAMPI DISPONIBILI (puoi modificare qualsiasi campo):
 
 REGOLE IMPORTANTI:
 1. Mantieni SEMPRE gli ID esistenti di opzioni, item e clausole
-2. Non modificare i campi 'total' (net, tax, gross) — li calcola il sistema
-3. Non modificare i campi 'summary' e 'globalTotals' — li calcola il sistema
+2. Non modificare i campi 'total' (net, tax, gross), li calcola il sistema
+3. Non modificare i campi 'summary' e 'globalTotals', li calcola il sistema
 4. Per i costi numerici, modifica solo unitPrice e quantity
 5. Usa [WARNING]...[/WARNING] e [INFO]...[/INFO] nei testi per callout visivi
 6. Non inventare prezzi se non richiesto

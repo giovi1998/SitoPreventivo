@@ -67,7 +67,7 @@ export function createEmptyQrCode(): QRCode {
 export function createGiovanniQrTemplate(): QRCode {
   return {
     ...createEmptyQrCode(),
-    title: 'QR personale — Giovanni',
+    title: 'QR personale, Giovanni',
     data: { type: 'url', payload: 'https://webdeveloperca.netlify.app/' },
   };
 }
@@ -211,7 +211,7 @@ export function gridPresetSplit(): CardGrid {
 
 // Phase 2.2 fix: preset SPLIT per il FRONTE (foto a sinistra a tutta altezza,
 // testo + logo a destra). gridPresetSplit() qui sopra NON include `photo` e
-// contiene elementi del retro (contacts/qr) — non adatto al fronte. Questo
+// contiene elementi del retro (contacts/qr), non adatto al fronte. Questo
 // preset rispecchia il layout flexbox `split` del fronte, così init-from-layout
 // (REQ-E03) e il preset "Diviso" non perdono la foto.
 export function gridPresetFrontSplit(): CardGrid {
@@ -445,7 +445,7 @@ function giovanniLogoDataUri(): string {
 export function createGiovanniCardTemplate(): BusinessCard {
   return {
     ...createEmptyCard(),
-    title: 'Bigliettino Giovanni — Web Developer',
+    title: 'Bigliettino Giovanni, Web Developer',
     front: {
       ...createEmptyCard().front,
       name: 'GIOVANNI CIDU',

@@ -449,7 +449,7 @@ export class AIOrchestrator {
     }
 
     // Bug #14: only bump updatedAt if there were actual modifications.
-    // Filter out error entries — they don't count as real changes.
+    // Filter out error entries, they don't count as real changes.
     const hasRealChanges = changes.some((c) => !c.startsWith('error:'));
     if (hasRealChanges && (!currentQuote.updatedAt || currentQuote.updatedAt === quote.updatedAt)) {
       currentQuote = { ...currentQuote, updatedAt: new Date().toISOString() };

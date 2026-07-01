@@ -37,7 +37,7 @@ function makeBaseQuote() {
   return addEmptyItem(withOpt, withOpt.options[0].id);
 }
 
-describe('AIOrchestrator.processPrompt — bug #2: follow-up revert', () => {
+describe('AIOrchestrator.processPrompt, bug #2: follow-up revert', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -177,7 +177,7 @@ describe('AIOrchestrator.processPrompt — bug #2: follow-up revert', () => {
   });
 });
 
-describe('needsTools — bug #4: irraggiungibili keyword mancanti', () => {
+describe('needsTools, bug #4: irraggiungibili keyword mancanti', () => {
   it('detects "rimuovi voci vuote" → remove_empty_items', () => {
     expect(needsTools('rimuovi le voci vuote')).toBe(true);
   });

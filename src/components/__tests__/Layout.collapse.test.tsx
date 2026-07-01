@@ -46,7 +46,7 @@ describe('Layout sidebar collapse button', () => {
     expect(container.querySelector('.app-shell')).toHaveClass('sidebar-collapsed');
   });
 
-  it('hides nav-label text in collapsed state via CSS (class only — visual test)', () => {
+  it('hides nav-label text in collapsed state via CSS (class only, visual test)', () => {
     const { container } = renderLayout();
     const btn = screen.getByRole('button', { name: /Comprimi sidebar/i });
     fireEvent.click(btn);

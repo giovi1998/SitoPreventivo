@@ -28,7 +28,7 @@ function renderLayout(props: Partial<React.ComponentProps<typeof Layout>> = {}) 
 
 afterEach(() => cleanup());
 
-describe('Layout — Quickbrand rebrand', () => {
+describe('Layout, Quickbrand rebrand', () => {
   it('does not contain the legacy brand "PrecisionQuote" anywhere in rendered content', () => {
     const { container } = renderLayout();
     const text = (container.textContent ?? '').toLowerCase();

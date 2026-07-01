@@ -157,7 +157,7 @@ export async function generateQrPng(
 
   // Free path: canvas render + watermark
   if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
-    // No canvas (SSR / node) — fall back to buffer, watermark not applied.
+    // No canvas (SSR / node), fall back to buffer, watermark not applied.
     // Watermark is a no-op in node anyway since the file is meant for browser.
     const bufferOpts: QRCode.QRCodeToBufferOptions = {
       type: 'png',

@@ -121,7 +121,7 @@ describe('CardPreview', () => {
       const card = createEmptyCard();
       const { container } = render(<CardPreview side="front" card={card} />);
       const front = container.querySelector('.card-preview-front')!;
-      // Pattern can be a CSS gradient or inline svg — check for either
+      // Pattern can be a CSS gradient or inline svg, check for either
       const hasGradient = window.getComputedStyle(front).getPropertyValue('--card-accent') !== '';
       expect(hasGradient).toBe(true);
     });
@@ -283,10 +283,10 @@ describe('CardPreview', () => {
       const back = screen.getByTestId('card-preview-back');
       expect(back.textContent).toContain('Telefono');
       expect(back.textContent).toContain('Email');
-      // (WEB assente perché website vuoto — verificato sotto)
+      // (WEB assente perché website vuoto, verificato sotto)
     });
 
-    it('renders socials as text handles in footer (not pill buttons — physical card)', () => {
+    it('renders socials as text handles in footer (not pill buttons, physical card)', () => {
       const card = {
         ...createEmptyCard(),
         back: {

@@ -459,7 +459,7 @@ describe('CardEditor', () => {
       fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
-      // Il dropdown deve restare su "centered", non tornare a "— seleziona preset —"
+      // Il dropdown deve restare su "centered", non tornare a ", seleziona preset:"
       expect(presetSelect.value).toBe('centered');
     });
 
@@ -551,7 +551,7 @@ describe('CardEditor', () => {
       renderEditor();
       const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       const options = Array.from(nameSelect.querySelectorAll('option')).map((o) => o.value);
-      // Solo l'opzione vuota "—"
+      // Solo l'opzione vuota ":"
       expect(options.filter((v) => v !== '')).toHaveLength(0);
     });
 

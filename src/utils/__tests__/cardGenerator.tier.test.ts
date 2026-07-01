@@ -42,7 +42,7 @@ afterEach(() => {
   spyWatermarkCanvas.mockRestore();
 });
 
-describe('generateCardPDF — watermark integration', () => {
+describe('generateCardPDF, watermark integration', () => {
   it('free tier → applyWatermarkToPdf adds background + footer to docDef (AC-003)', async () => {
     const card = createGiovanniCardTemplate();
     await generateCardPDF(card, { tier: 'free' });
@@ -61,7 +61,7 @@ describe('generateCardPDF — watermark integration', () => {
   });
 });
 
-describe('generateCardPng — DPI gate (AC-005)', () => {
+describe('generateCardPng, DPI gate (AC-005)', () => {
   // We capture dims via the watermark canvas mock. In jsdom the canvas
   // path may or may not execute, so these tests are gated on whether
   // `lastPngDims` got populated.

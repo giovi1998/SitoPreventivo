@@ -263,7 +263,7 @@ describe('cardGenerator - compressImage (AC-004, AC-005, AC-006, AC-006b)', () =
 
   it('returns PNG dataURL with format="png" (preserves transparency for logos)', async () => {
     mockLoadedImage(100, 100);
-    // Override the default JPEG mock — PNG output must be image/png
+    // Override the default JPEG mock, PNG output must be image/png
     const ctxStub: any = { drawImage: vi.fn() };
     const toDataURL = vi.fn(() => 'data:image/png;base64,' + 'A'.repeat(2000));
     const canvasProto: any = { width: 0, height: 0, getContext: () => ctxStub, toDataURL };
@@ -296,7 +296,7 @@ describe('cardGenerator - compressImage (AC-004, AC-005, AC-006, AC-006b)', () =
     const file = makePngFile();
     const result = await compressImage(file, 800, 300_000, { format: 'png' });
     expect(result).toMatch(/^data:image\/png;base64,/);
-    // PNG path uses toDataURL with no quality arg — verify it was called
+    // PNG path uses toDataURL with no quality arg, verify it was called
     expect(pngCall).toBeGreaterThanOrEqual(2);
   });
 
@@ -345,7 +345,7 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
     expect(docDef.pageOrientation).toBe('landscape');
   });
 
-  it('raster images inside PDF 10-up are positioned in pt (mm × 72/25.4) — regression cards piccole', async () => {
+  it('raster images inside PDF 10-up are positioned in pt (mm × 72/25.4), regression cards piccole', async () => {
     const card = createEmptyCard();
     const pdfMakeModule = await import('pdfmake/build/pdfmake');
     const pdfMake = (pdfMakeModule as any).default;
@@ -782,7 +782,7 @@ describe('cardGenerator - buildCardSvg - card non-template (user-created)', () =
     expect(qrRectCount).toBeGreaterThan(20);
   });
 
-  it('kitchen sink per TUTTI i 3 size preset (EU/US/Square) — no errori, layout adattivo', () => {
+  it('kitchen sink per TUTTI i 3 size preset (EU/US/Square), no errori, layout adattivo', () => {
     // Per ogni size preset, genera il PDF 10-up e verifica:
     // 1) non crasha
     // 2) il docDef ha orientamento corretto
@@ -994,7 +994,7 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
     expect(svg).toContain('data:image/png;base64,AAAA');
   });
 
-  it('includes the logo image in split layout (Phase 2.1 — logo was missing)', () => {
+  it('includes the logo image in split layout (Phase 2.1, logo was missing)', () => {
     const card = {
       ...createEmptyCard(),
       front: {
@@ -1011,7 +1011,7 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
     expect(imageCount).toBeGreaterThanOrEqual(2);
   });
 
-  it('omits the hostname wordmark on the front when back has a QR payload (Phase 2.1 — redundant)', () => {
+  it('omits the hostname wordmark on the front when back has a QR payload (Phase 2.1, redundant)', () => {
     const card = {
       ...createEmptyCard(),
       back: { ...createEmptyCard().back, website: 'https://webdeveloperca.netlify.app' },
@@ -1026,7 +1026,7 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
     expect(svg).not.toContain('webdeveloperca.netlify.app');
   });
 
-  it('omits the WEB contact row on the back when QR payload is present (Phase 2.1 — avoid duplication)', () => {
+  it('omits the WEB contact row on the back when QR payload is present (Phase 2.1, avoid duplication)', () => {
     const card = {
       ...createEmptyCard(),
       back: { ...createEmptyCard().back, website: 'https://webdeveloperca.netlify.app' },
@@ -1038,7 +1038,7 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
     expect(svg).not.toMatch(webRowRegex);
   });
 
-  it('keeps the WEB row when no QR payload is set (user has no QR — they want the URL visible)', () => {
+  it('keeps the WEB row when no QR payload is set (user has no QR, they want the URL visible)', () => {
     // qrPayload = website (auto-derived). To force "no QR", set website to ''
     const card = {
       ...createEmptyCard(),

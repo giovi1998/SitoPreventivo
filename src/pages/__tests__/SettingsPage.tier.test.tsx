@@ -52,7 +52,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('SettingsPage — "Il mio account" tier section (Phase 5)', () => {
+describe('SettingsPage, "Il mio account" tier section (Phase 5)', () => {
   it('free user: shows tier="Free" and the redeem form', async () => {
     vi.spyOn(dataService, 'getUserTier').mockResolvedValue({ tier: 'free', documentCount: 2, documentLimit: 3 } as any);
     renderWithUser(FREE_USER);

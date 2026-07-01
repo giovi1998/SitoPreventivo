@@ -149,8 +149,8 @@ function buildFrontCell(card: BusinessCard, dims: { w: number; h: number }): Con
     });
   }
   if (hasLogo && hasPhoto) {
-    // Logo ~30% della larghezza card (es. 25mm su 85mm). Era 14mm — troppo
-    // piccolo per essere leggibile. Vedi AGENTS.md "Known Issues — Card".
+    // Logo ~30% della larghezza card (es. 25mm su 85mm). Era 14mm, troppo
+    // piccolo per essere leggibile. Vedi AGENTS.md "Known Issues, Card".
     const logoMm = Math.min(25, dims.w * 0.30);
     cells.push(pdfImageOrSvg(card.front.logoUrl!, {
       width: logoMm,
@@ -600,7 +600,7 @@ function buildPageContentFromImage(
       out.push(accentStripBottom(entry, accent));
     }
     // 3. Raster card face laid at trim coords (no per-card bleed offset
-    //    — bleed is the shared gap, filled by the bg rect above).
+    //   , bleed is the shared gap, filled by the bg rect above).
     //    width/height in pt perché pdfmake interpreta le unità del
     //    pageSize (pt di default, 1mm = 2.8346pt).
     out.push({
@@ -1297,7 +1297,7 @@ export interface CompressImageOptions {
    * Output format. Use `'png'` to preserve transparency (logos with
    * alpha channel). Defaults to `'jpeg'` (smaller files, but opaque).
    *
-   * PNG output has no `quality` knob — size reduction is achieved by
+   * PNG output has no `quality` knob, size reduction is achieved by
    * scaling the canvas dimensions down iteratively until the encoded
    * dataURL fits under `maxBytes`.
    */
@@ -1344,7 +1344,7 @@ export async function compressImage(
   if (format === 'png') {
     // PNG has no quality parameter. To reduce size, scale down
     // dimensions iteratively (half each step) until the encoded
-    // dataURL fits under maxBytes — but never below minDim.
+    // dataURL fits under maxBytes, but never below minDim.
     const maxChars = Math.floor(maxBytes * 1.37);
     let curW = canvas.width;
     let curH = canvas.height;

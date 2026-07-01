@@ -31,7 +31,7 @@
   border: 0.5px solid rgba(0, 0, 0, 0.2);
 }
 
-/* Subtle radial accent in the top-left corner — the signature element */
+/* Subtle radial accent in the top-left corner, the signature element */
 .card-corner-accent {
   position: absolute;
   top: 0;
@@ -80,7 +80,7 @@
   padding-left: 8px;
 }
 
-/* ─── FRONT LAYOUT 'LEFT' — the default, redesigned ─── */
+/* ─── FRONT LAYOUT 'LEFT', the default, redesigned ─── */
 .card-front-left {
   flex: 1;
   display: flex;
@@ -207,7 +207,7 @@
   letter-spacing: 0.6px;
   text-transform: uppercase;
   line-height: 1.05;
-  /* Phase 2.2 REQ-F01: il nome del titolare è l'identità della card —
+  /* Phase 2.2 REQ-F01: il nome del titolare è l'identità della card:
    * non deve MAI essere troncato con "…". Va a capo. */
   overflow-wrap: break-word;
   word-break: break-word;
@@ -321,7 +321,7 @@
   gap: 8px;
 }
 
-/* ─── BACK — redesigned with proper filling ─── */
+/* ─── BACK, redesigned with proper filling ─── */
 .card-preview-back {
   padding: 10px 14px 10px;
   gap: 0;
@@ -405,7 +405,7 @@
   min-width: 0;
   /* Phase 2.2 fix: email/telefono su UNA sola riga (no break su '@' o
    * '.'). Se il valore è troppo lungo per la card, viene troncato con
-   * ellissi — meglio perdere qualche pixel che spezzare "mario.rossi@
+   * ellissi, meglio perdere qualche pixel che spezzare "mario.rossi@
    * gmail.com" su due righe. */
   white-space: nowrap;
   overflow: hidden;

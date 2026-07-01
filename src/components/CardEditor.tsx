@@ -277,7 +277,7 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
             mutated = true;
           }
           if (mutated) {
-            addToast('info', 'Griglia attiva — ora puoi spostare gli elementi', 3000);
+            addToast('info', 'Griglia attiva, ora puoi spostare gli elementi', 3000);
           } else {
             addToast('info', 'Griglia attiva', 2500);
           }
@@ -390,7 +390,7 @@ function CardEditor({ userEmail, initialCard, documentTheme, tier }: CardEditorP
     setUploadError(null);
   }, [patchFront]);
 
-  // ─── EXPORT (PDF/PNG/SVG/JSON) — hook dedicato (Phase 2.2 refactor) ──
+  // ─── EXPORT (PDF/PNG/SVG/JSON), hook dedicato (Phase 2.2 refactor) ──
   const { exporting, exportPdf, exportPng, exportSvg, exportJson } = useCardExport(card, tier, addToast);
 
   // ─── SAVE (manual) ────────────────────────────────────

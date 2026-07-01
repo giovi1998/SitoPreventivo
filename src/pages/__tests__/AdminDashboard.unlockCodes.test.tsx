@@ -36,7 +36,7 @@ function renderDashboard() {
   );
 }
 
-describe('AdminDashboard — Codici sblocco tab (Phase 5)', () => {
+describe('AdminDashboard, Codici sblocco tab (Phase 5)', () => {
   it('renders the tab navigation with "Codici sblocco"', async () => {
     vi.spyOn(dataService, 'adminGetUsers').mockResolvedValue({ users: [] } as any);
     vi.spyOn(dataService, 'adminGetAllQuotes').mockResolvedValue({ quotes: [] } as any);

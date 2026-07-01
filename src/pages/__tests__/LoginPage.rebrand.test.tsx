@@ -27,7 +27,7 @@ function renderLogin() {
 
 afterEach(() => cleanup());
 
-describe('LoginPage — Quickbrand rebrand', () => {
+describe('LoginPage, Quickbrand rebrand', () => {
   it('does not contain the legacy brand "PrecisionQuote" anywhere in rendered content', () => {
     const { container } = renderLogin();
     const text = (container.textContent ?? '').toLowerCase();

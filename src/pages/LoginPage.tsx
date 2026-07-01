@@ -37,8 +37,8 @@ export default function LoginPage() {
       navigate('/app', { replace: true });
     } else {
       const hint = result.error?.includes('timeout') ? ' (verifica connessione o riprova)' :
-        result.error?.includes('409') ? ' — account già esistente' :
-        result.error?.includes('401') ? ' — credenziali errate' :
+        result.error?.includes('409') ? ', account già esistente' :
+        result.error?.includes('401') ? ', credenziali errate' :
         '';
       setError(`${result.error}${hint}`);
     }
