@@ -56,7 +56,7 @@ const STARTER_QUOTE_PREMIUM = migrateFromLegacy({
   intro: "Tutti i preventivi includono ottimizzazione SEO base.\nModalità di pagamento: 50% acconto, saldo entro 30 giorni.",
   note: "",
   vat: 22,
-  color: "#0B57D0",
+  color: "#E62020",
   options: STARTER_OPTIONS_LEGACY,
   clauses: STARTER_CLAUSES_LEGACY,
 });
@@ -193,17 +193,37 @@ export default function AppShell() {
         addToast('error', 'Errore salvataggio impostazioni: ' + result.error);
         return;
       }
-      if (settings.defaultColor) {
-        setQuote((c) => ({ ...c, uiPreferences: { ...c.uiPreferences, accentColor: settings.defaultColor } }));
+      // Close the modal IMMEDIATELY after a successful save — before
+      // applying settings to the quote state. If any of the setQuote
+      // updaters below throws (e.g. options[].items undefined), the
+      // modal is already closed and the user isn't stuck. The settings
+      // are persisted server-side regardless.
+      setShowOnboarding(false);
+      addToast('success', 'Benvenuto! Configurazione completata.');
+      // Apply settings to the in-memory quote. Wrapped in try/catch
+      // so a malformed quote state never blocks the onboarding flow.
+      try {
+        if (settings.defaultColor) {
+          setQuote((c) => ({ ...c, uiPreferences: { ...c.uiPreferences, accentColor: settings.defaultColor } }));
+        }
+        if (settings.defaultVat) {
+          setQuote((c) => ({
+            ...c,
+            options: (c.options || []).map((o) => ({
+              ...o,
+              items: (o.items || []).map((i) => ({ ...i, tax: { ...i.tax, rate: settings.defaultVat } })),
+            })),
+          }));
+        }
+        if (settings.documentTheme) setDocumentTheme(settings.documentTheme);
+        if (settings.profession === 'altro') {
+          const francesca = toLegacyFormat(STARTER_QUOTE_PREMIUM);
+          setQuote(migrateFromLegacy(francesca));
+        }
+      } catch (err) {
+        console.error('[Onboarding] Non-critical: failed to apply settings to quote', err);
       }
-      if (settings.defaultVat) {
-        setQuote((c) => ({ ...c, options: c.options.map((o) => ({ ...o, items: o.items.map((i) => ({ ...i, tax: { ...i.tax, rate: settings.defaultVat } })) })) }));
-      }
-      if (settings.documentTheme) setDocumentTheme(settings.documentTheme);
-      if (settings.profession === 'altro') {
-        const francesca = toLegacyFormat(STARTER_QUOTE_PREMIUM);
-        setQuote(migrateFromLegacy(francesca));
-      }
+      return;
     }
     setShowOnboarding(false);
     addToast('success', 'Benvenuto! Configurazione completata.');

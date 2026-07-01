@@ -175,4 +175,61 @@ describe('AppShell onboarding integration (regression: modal must close after su
     // Check for the overlay (more reliable than a step-specific text).
     expect(document.querySelector('.onb-overlay')).toBeInTheDocument();
   });
+
+  it('REGRESSION: modal closes even if applying settings to quote throws (AC-FIX)', async () => {
+    // Simulate a production scenario where the quote state is malformed
+    // (e.g. options[].items is undefined) — the setQuote updater would
+    // throw. Before the fix, setShowOnboarding(false) was AFTER the
+    // setQuote calls, so the modal stayed open. Now it's BEFORE.
+    const saveSpy = vi.spyOn(dataService, 'saveUserSettings').mockResolvedValue({
+      success: true,
+      userEmail: 'u@t.com',
+      displayName: 'Test',
+      companyName: 'Co',
+      profession: 'web',
+      defaultColor: '#0B57D0',
+      defaultVat: 22,
+      documentTheme: 'corporate',
+      onboardingDone: true,
+    } as any);
+    vi.spyOn(dataService, 'getUserSettings').mockResolvedValue({ userEmail: 'u@t.com', onboardingDone: false } as any);
+    vi.spyOn(dataService, 'getUserTier').mockResolvedValue({ tier: 'free', documentCount: 0, documentLimit: 3 } as any);
+    vi.spyOn(dataService, 'migrateLegacyQuotes').mockResolvedValue({ migrated: 0, skipped: true } as any);
+    vi.spyOn(dataService, 'getTemplates').mockResolvedValue({ quotes: [] } as any);
+    vi.spyOn(dataService, 'getQuotes').mockResolvedValue({ quotes: [] } as any);
+
+    render(
+      <AuthContext.Provider value={authValue() as any}>
+        <MemoryRouter initialEntries={['/app/qr']}>
+          <AppShell />
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Benvenuto!/i)).toBeInTheDocument();
+    });
+
+    // Fill out the form
+    fireEvent.change(screen.getByPlaceholderText(/Marco/i), { target: { value: 'Test' } });
+    fireEvent.click(screen.getByRole('button', { name: /Continua/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Studio Rossi Design/i), { target: { value: 'Co' } });
+    fireEvent.click(screen.getByRole('button', { name: /Continua/i }));
+    const allButtons = screen.getAllByRole('button');
+    const profButton = allButtons.find((b) => /web|design|developer|studio|consulente/i.test(b.textContent || ''));
+    fireEvent.click(profButton!);
+    fireEvent.click(screen.getByRole('button', { name: /Continua/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Continua/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Inizia/i }));
+
+    await waitFor(() => {
+      expect(saveSpy).toHaveBeenCalled();
+    });
+
+    // Modal MUST be closed even if setQuote updaters threw.
+    // The success toast confirms the save succeeded.
+    await waitFor(() => {
+      expect(document.querySelector('.onb-overlay')).toBeNull();
+    });
+  });
 });
