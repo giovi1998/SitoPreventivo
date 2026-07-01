@@ -222,11 +222,6 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
             <div className="logo-ai-card" role="status">
               <h2>AI Generation</h2>
               <p>{aiPanelMessage}</p>
-              <p>
-                <a href="/docs/logo-ai" rel="noopener">
-                  Vedi documentazione
-                </a>
-              </p>
             </div>
           </section>
         )}
