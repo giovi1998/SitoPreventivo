@@ -59,7 +59,7 @@ describe('OnboardingModal step "preference" (Phase 7 — last step picker)', () 
     expect(screen.getByText('5/5')).toBeInTheDocument();
   });
 
-  it('admin: renders 4 enabled options + 1 disabled Volantino placeholder', () => {
+  it('admin: renders 5 enabled options (Volantino is now live, phase 3)', () => {
     const onComplete = vi.fn();
     advanceToPreference(onComplete, true);
     expect(screen.getByRole('radio', { name: /Preventivo/i })).toBeInTheDocument();
@@ -67,18 +67,19 @@ describe('OnboardingModal step "preference" (Phase 7 — last step picker)', () 
     expect(screen.getByRole('radio', { name: /Bigliettino/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Logo/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Volantino/i })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Volantino/i })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /Volantino/i })).toBeEnabled();
   });
 
   it('non-admin: hides the "Preventivo" option (cannot create preventivi)', () => {
     const onComplete = vi.fn();
     advanceToPreference(onComplete, false);
     expect(screen.queryByRole('radio', { name: /Preventivo/i })).toBeNull();
-    // The other 3 enabled + 1 disabled (Volantino) are still shown
+    // All 4 other options (including Volantino, phase 3) are enabled.
     expect(screen.getByRole('radio', { name: /QR Code/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Bigliettino/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Logo/i })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Volantino/i })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Volantino/i })).toBeEnabled();
   });
 
   it('admin: clicking "QR Code" submits onComplete with preferredDocumentType="qr"', () => {
@@ -135,12 +136,12 @@ describe('OnboardingModal step "preference" (Phase 7 — last step picker)', () 
     expect(onComplete.mock.calls[0][0].onboardingDone).toBe(true);
   });
 
-  it('non-admin: clicking the disabled Volantino option does not select it', () => {
+  it('non-admin: clicking "Volantino" submits preferredDocumentType="flyer" (phase 3)', () => {
     const onComplete = vi.fn();
     advanceToPreference(onComplete, false);
     const volantino = screen.getByRole('radio', { name: /Volantino/i });
-    expect(volantino).toBeDisabled();
     fireEvent.click(volantino);
-    expect(volantino.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: /Apri Volantino/i }));
+    expect(onComplete.mock.calls[0][0].preferredDocumentType).toBe('flyer');
   });
 });

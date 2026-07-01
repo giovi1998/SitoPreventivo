@@ -155,4 +155,4 @@ npm run preview    # Preview del build
 | CSS non caricato | Hard refresh (Ctrl+F5) |
 | Pagina bianca | Controlla console del browser per errori |
 | Logo AI tab dice "non disponibile" | È il comportamento v1. Vedi `/docs/logo-ai` per come attivarlo in v2 con Vercel Pro + `REPLICATE_API_TOKEN` |
-| Tab "Volantino" assente | La fase 3 è stata skippata (vedi AGENTS.md → "Phase Status & Roadmap"). Prevista in v2 |
+| Tab "Volantino" assente | La fase 3 è ora implementata. Se la tab non compare, prova Ctrl+F5 o controlla `AppShell.tsx` → `openDocument` case `'flyer'` |

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { PROFESSIONI } from '../utils/defaultTemplates';
 import './OnboardingModal.css';
 
-export type PreferredDocumentType = 'editor' | 'qr' | 'card' | 'logo';
+export type PreferredDocumentType = 'editor' | 'qr' | 'card' | 'flyer' | 'logo';
 
 interface OnboardingData {
   displayName: string;
@@ -32,11 +32,11 @@ const VAT_OPTIONS = [
   { value: 0, label: '0%' },
 ];
 
-// Phase 7. Volantino is still skipped (fase 3, see AGENTS.md) and
-// always rendered as a disabled placeholder. The full option list is
-// defined once and filtered at render time by isAdmin.
+// Phase 7 + Phase 3. Volantino is now implemented (see AGENTS.md
+// "Phase 3 implementata"). The full option list is defined once and
+// filtered at render time by isAdmin.
 const ALL_DOCUMENT_OPTIONS: Array<{
-  id: PreferredDocumentType | 'flyer';
+  id: PreferredDocumentType;
   label: string;
   icon: React.ReactNode;
   enabled: boolean;
@@ -87,8 +87,7 @@ const ALL_DOCUMENT_OPTIONS: Array<{
   {
     id: 'flyer',
     label: 'Volantino',
-    enabled: false,
-    badge: 'Presto',
+    enabled: true,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />

@@ -125,9 +125,9 @@ describe('AppShell, tier integration (Phase 5)', () => {
     expect(ctxRef.value.checkDocumentLimit()).toBe(true);
   });
 
-  it('checkDocumentLimit: free user with count>=3 returns false (modal shown)', async () => {
+  it('checkDocumentLimit: free user with count>=10 returns false (modal shown)', async () => {
     vi.spyOn(dataService, 'getUserSettings').mockResolvedValue({ userEmail: 'u@t.com' } as any);
-    vi.spyOn(dataService, 'getUserTier').mockResolvedValue({ tier: 'free', documentCount: 3, documentLimit: 3 } as any);
+    vi.spyOn(dataService, 'getUserTier').mockResolvedValue({ tier: 'free', documentCount: 10, documentLimit: 10 } as any);
     render(
       <AuthContext.Provider value={authValue() as any}>
         <MemoryRouter initialEntries={['/']}>

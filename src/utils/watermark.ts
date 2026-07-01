@@ -18,7 +18,7 @@ export const FREE_PNG_DPI = 72;
 export const UNLOCKED_PNG_DPI = 300;
 export const FREE_PNG_MAX_SIDE = 1200;
 export const UNLOCKED_PNG_MAX_SIDE = 4096;
-export const FREE_DOCUMENT_LIMIT = 3;
+export const FREE_DOCUMENT_LIMIT = 10;
 
 export const WATERMARK_TEXT = 'QUICKBRAND';
 export const WATERMARK_FOOTER = 'Crea il tuo brand con Quickbrand';

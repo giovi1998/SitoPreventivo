@@ -31,20 +31,18 @@ describe('TierLimitModal (Phase 5)', () => {
   it('renders the limit message when open is true', () => {
     render(<TierLimitModal open={true} userEmail={USER} onClose={() => {}} />);
     expect(screen.getByText(/Limite piano free raggiunto/i)).toBeInTheDocument();
-    expect(screen.getByText(/3 documenti/i)).toBeInTheDocument();
+    expect(screen.getByText(/10 documenti/i)).toBeInTheDocument();
   });
 
-  it('shows the "Inserisci codice" and "Contattaci" buttons by default', () => {
+  it('shows the "Inserisci codice", "Contattaci" mailto link, and "Chiudi" by default', () => {
     render(<TierLimitModal open={true} userEmail={USER} onClose={() => {}} />);
     expect(screen.getByTestId('tier-limit-show-redeem')).toBeInTheDocument();
-    expect(screen.getByTestId('tier-limit-contact')).toBeInTheDocument();
-  });
-
-  it('"Contattaci" link uses mailto:admin@gmail.com with precompiled subject', () => {
-    render(<TierLimitModal open={true} userEmail={USER} onClose={() => {}} />);
-    const link = screen.getByTestId('tier-limit-contact') as HTMLAnchorElement;
-    expect(link.href).toContain('mailto:admin@gmail.com');
-    expect(link.href).toContain('subject=');
+    expect(screen.getByTestId('tier-limit-close')).toBeInTheDocument();
+    // Phase 3: "Contattaci" link to webdevcagliari@gmail.com (mailto
+    // opens the user's email client with a precompiled message)
+    const contact = screen.getByTestId('tier-limit-contact') as HTMLAnchorElement;
+    expect(contact.href).toContain('mailto:webdevcagliari@gmail.com');
+    expect(contact.href).toContain('subject=');
   });
 
   it('clicking "Inserisci codice" shows the redeem form', () => {

@@ -52,7 +52,7 @@ export function useDocumentSave(): UseDocumentSaveReturn {
     if (!checkDocumentLimit()) {
       setInternalBlocked(true);
       setShowTierModal(true);
-      return { success: false, blocked: true, error: 'Limite piano free raggiunto (3 documenti)' };
+      return { success: false, blocked: true, error: 'Limite piano free raggiunto (10 documenti)' };
     }
     setIsSaving(true);
     try {

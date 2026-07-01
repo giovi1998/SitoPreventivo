@@ -89,7 +89,7 @@ const unlockCodesTable = pgTable('unlock_codes', {
 });
 
 const VALID_PACKAGES = new Set(['starter', 'apertura', 'presenza', 'custom']);
-const FREE_DOCUMENT_LIMIT = 3;
+const FREE_DOCUMENT_LIMIT = 10;
 
 type RouteHandler = (
   path: string,
@@ -186,6 +186,34 @@ function recordRateAttempt(ip: string, success: boolean, scope: string = 'login'
       rateLimitStore.set(key, { count: 1, firstAttempt: now });
     }
   }
+}
+
+/**
+ * Unconditional rate limiter: every successful call counts toward
+ * the cap. Used for high-volume AI endpoints (aistream, flyerCopy)
+ * where the login-style "max N failed attempts" semantics don't
+ * make sense. Returns `blocked: true` if the cap has been hit in
+ * the current window.
+ */
+function consumeRateLimit(
+  ip: string,
+  scope: string,
+  max: number,
+  windowMs: number
+): { blocked: boolean; retryAfterMs?: number } {
+  const key = `${scope}:${ip}`;
+  const now = Date.now();
+  const record = rateLimitStore.get(key);
+  if (record && now - record.firstAttempt < windowMs) {
+    if (record.count >= max) {
+      return { blocked: true, retryAfterMs: windowMs - (now - record.firstAttempt) };
+    }
+    record.count += 1;
+    rateLimitStore.set(key, record);
+    return { blocked: false };
+  }
+  rateLimitStore.set(key, { count: 1, firstAttempt: now });
+  return { blocked: false };
 }
 
 function validate<T>(schema: z.ZodType<T>, data: unknown): { error: true; errors: string[] } | { error: false; data: T } {
@@ -330,10 +358,8 @@ const businessCardDocumentSchema = genericDocumentSchema.extend({
 const logoDocumentSchema = genericDocumentSchema.extend({
   documentType: z.literal('logo'),
 });
-// Flyer schema is reserved for fase 3 (skipped in v1). The
-// discriminatedUnion still accepts it so a future client doesn't
-// break the API contract, but the handler returns 400 until
-// fase 3 lands. This matches the "skip fase 3" decision in AGENTS.md.
+// Phase 3: flyer schema is now live. Same opaque-jsonb treatment as
+// the card / logo handlers.
 const flyerDocumentSchema = genericDocumentSchema.extend({
   documentType: z.literal('flyer'),
 });
@@ -359,11 +385,12 @@ const UserSettingsSchema = z.object({
   onboardingDone: z.boolean().optional(),
   documentTheme: z.string().optional(),
   // Phase 7, onboarding step 5 preference. Optional, no transform.
-  // Accepts one of: 'editor' | 'qr' | 'card' | 'logo'. Other values
-  // are rejected by the regex to keep the column clean.
+  // Accepts one of: 'editor' | 'qr' | 'card' | 'flyer' | 'logo'. Other
+  // values are rejected by the regex to keep the column clean.
+  // Phase 3 added 'flyer' to the allowlist.
   preferredDocumentType: z
     .string()
-    .regex(/^(editor|qr|card|logo)$/, 'Tipo documento non valido')
+    .regex(/^(editor|qr|card|flyer|logo)$/, 'Tipo documento non valido')
     .optional(),
 });
 
@@ -824,13 +851,6 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, document } = v.data;
 
-    // Fase 3 (flyer) is reserved: schema accepts the discriminator so
-    // the API contract is stable, but the handler still rejects it
-    // until the flyer module lands. AGENTS.md "Skip fase 3".
-    if (document.documentType === 'flyer') {
-      return json(req, res, 400, { error: 'Tipo documento non ancora supportato' });
-    }
-
     const isQr = document.documentType === 'qrCode';
     const existing = await db.select().from(documentsTable).where(eq(documentsTable.id, document.id));
     if (existing.length > 0) {
@@ -987,6 +1007,121 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
     }
     const data = await apiRes.json();
     return json(req, res, 200, data);
+  }
+
+  // Phase 3: dedicated copy endpoint for flyers. Same DeepSeek upstream
+  // as /ai/chat, but with a tighter rate limit (10/min per IP) since
+  // copy generation is more expensive (full prompt + system instructions)
+  // and not interactive like chat. Auth: same as /ai/chat (serverless
+  // function is auth-gated at the route level: a valid session cookie or
+  // Vercel-Auth is required; the actual authorization check happens in
+  // dataService.chatWithAI client side). The endpoint trusts the client
+  // to have a valid session.
+  if (path === '/ai/copy-flyer' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'flyerCopy', 10, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe generazioni di copy. Attendi un minuto.' });
+    }
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) {
+      console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set', { path });
+      return json(req, res, 503, { error: 'DeepSeek non configurato.' });
+    }
+    const v = validate(
+      z.object({
+        brief: z.string().max(1000),
+        tone: z.enum(['formale', 'giovanile', 'tecnico']),
+        layout: z.enum(['classic', 'centered', 'split', 'magazine']).optional(),
+        size: z.enum(['A6', 'A5', 'A4', 'Letter', 'Square']).optional(),
+        model: z.string().optional(),
+      }),
+      body
+    );
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { brief, tone, layout, size, model } = v.data;
+    // Brief is sanitized server-side: strip HTML tags and control
+    // characters before it hits the LLM prompt. This is a defense in
+    // depth: the client sanitizes too (see sanitizeFlyerBrief in
+    // src/ai/prompts/flyerSystem.ts), but we never trust a client.
+    const sanitizedBrief = String(brief || '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 500);
+    if (!sanitizedBrief) return json(req, res, 400, { error: 'Brief vuoto' });
+    // Build the prompt server-side: the public API surface doesn't
+    // expose the prompt template (proprietary copy framework). Same
+    // template as the client's flyerCopy.ts so behavior is consistent
+    // regardless of where the call originates.
+    const systemMsg = `Sei un copywriter italiano esperto in volantini pubblicitari. Rispondi SOLO con JSON valido.`;
+    const toneLine =
+      tone === 'formale'
+        ? 'tono formale e professionale'
+        : tone === 'giovanile'
+          ? 'tono fresco e giovanile, contrazioni ammesse'
+          : 'tono tecnico e preciso, includi numeri e specifiche';
+    const bodyBudget = size === 'A4' || size === 'Letter' ? 800 : size === 'Square' ? 600 : size === 'A6' ? 300 : 500;
+    const userMsg = `Brief: "${sanitizedBrief}"
+Tono: ${toneLine}
+${layout ? `Layout: ${layout}` : ''}
+${size ? `Formato: ${size}` : ''}
+
+Restituisci SOLO un oggetto JSON valido con questa struttura:
+{
+  "headline": "titolo principale, max 60 caratteri",
+  "subheadline": "sottotitolo, max 100 caratteri",
+  "body": "corpo del testo, max ${bodyBudget} caratteri, usa \\\\n per paragrafi",
+  "cta": { "label": "call to action, max 30 caratteri" }
+}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    let apiRes: Response;
+    try {
+      apiRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: model || 'deepseek-chat',
+          messages: [
+            { role: 'system', content: systemMsg },
+            { role: 'user', content: userMsg },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.7,
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError') {
+        return json(req, res, 504, { error: 'DeepSeek non ha risposto entro 25 secondi. Riprova.' });
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!apiRes.ok) {
+      const errBody = await apiRes.text().catch(() => 'Unknown error');
+      if (apiRes.status === 402) return json(req, res, 402, { error: 'Credito DeepSeek esaurito.' });
+      if (apiRes.status === 401) return json(req, res, 401, { error: 'Chiave API DeepSeek non valida' });
+      if (apiRes.status === 429) return json(req, res, 429, { error: 'Troppe richieste a DeepSeek. Attendi qualche secondo e riprova.' });
+      return json(req, res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` });
+    }
+    const data = await apiRes.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') {
+      return json(req, res, 502, { error: 'Risposta AI vuota o malformata' });
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      return json(req, res, 502, { error: 'AI non ha restituito JSON valido', raw: content.slice(0, 500) });
+    }
+    console.info('[flyerCopy] generated', { tone, layout, size });
+    return json(req, res, 200, { data: parsed, raw: content });
   }
 
   if (path === '/ai/chat/stream' && method === 'POST') {

@@ -1,10 +1,44 @@
 ---
 title: Phase 3 — Volantino con 4 layout e AI copy
-version: 1.0
+version: 1.1
 date_created: 2026-06-21
+date_implemented: 2026-07-01
 owner: Giovanni Cidu
-tags: [design, flyer, pdf, print, ai-copy, deepseek, layout-presets, watermark-pending]
+tags: [design, flyer, pdf, print, ai-copy, deepseek, layout-presets, watermark, implemented]
+status: done
 ---
+
+# Status: implemented (v1.1)
+
+La fase 3 è stata implementata in commit dedicato (vedi AGENTS.md
+"Phase 3 (Volantino) - implementata" per il changelog completo).
+La spec originale resta valida come riferimento di intenti e
+acceptance criteria. Modifiche di rilievo rispetto alla spec
+originaria:
+
+- **AI endpoint**: la spec suggeriva `src/ai/index.ts` come pattern
+  di esposizione (vedi `useAI`). L'implementazione reale mette
+  l'endpoint `POST /ai/copy-flyer` direttamente in `api/index.ts` per
+  uniformarsi a `/ai/chat` (già server-side) e ridurre il bundle
+  client. Il client usa `providerRegistry` come per la card.
+- **Orchestrator dedicato**: la spec nota finale suggerisce
+  `FlyerAIOrchestrator` con `useAIFlyer` (no tools, JSON round-trip).
+  Implementato esattamente così.
+- **Watermark**: la fase 5 (tier system) è già rilasciata, quindi la
+  spec REQ-009/010 "tier-aware watermark" è coperta da
+  `applyWatermarkToPdf` / `applyWatermarkToCanvas` (vedi
+  `src/utils/watermark.ts`).
+
+Tutti i 13 acceptance criteria (AC-001 → AC-013) sono coperti dai
+test in `src/utils/__tests__/documentSchemas.test.ts`,
+`src/utils/__tests__/flyerGenerator.test.ts`,
+`src/ai/prompts/__tests__/flyerSystem.test.ts`,
+`src/ai/__tests__/flyerOrchestrator.test.ts`,
+`src/components/__tests__/FlyerEditor.test.tsx`,
+`src/pages/__tests__/FlyerPage.test.tsx`,
+`api/__tests__/copyFlyer.test.ts` e dal update
+`api/__tests__/documents.test.ts` ("POST /documents with flyer
+returns 201 (phase 3)").
 
 # Introduction
 

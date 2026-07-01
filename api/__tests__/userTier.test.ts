@@ -122,7 +122,7 @@ describe('GET /api/users/tier', () => {
     expect(res.body.data.documentLimit).toBeNull();
   });
 
-  it('free user with no settings → free, count 0, limit 3', async () => {
+  it('free user with no settings → free, count 0, limit 10', async () => {
     mockDbState.selectResults = [[]];
     const res = await callHandler({
       method: 'GET',
@@ -133,7 +133,7 @@ describe('GET /api/users/tier', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.data.tier).toBe('free');
     expect(res.body.data.documentCount).toBe(0);
-    expect(res.body.data.documentLimit).toBe(3);
+    expect(res.body.data.documentLimit).toBe(10);
   });
 
   it('unlocked user → unlocked, limit null', async () => {

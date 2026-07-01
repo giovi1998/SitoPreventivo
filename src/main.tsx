@@ -6,7 +6,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import AdminRoute from '../src/components/AdminRoute';
-import { EditorPage, CollectionPage, QrPage, CardPage, LogoPage, SettingsRoute, AdminPage } from './pages/app';
+import { EditorPage, CollectionPage, QrPage, CardPage, LogoPage, FlyerPage, SettingsRoute, AdminPage } from './pages/app';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user } = React.useContext(AuthContext);
@@ -53,6 +53,7 @@ function AppWrapper() {
             <Route path="qr" element={<QrPage />} />
             <Route path="card" element={<CardPage />} />
             <Route path="logo" element={<LogoPage />} />
+            <Route path="flyer" element={<FlyerPage />} />
             <Route path="settings" element={<SettingsRoute />} />
             <Route path="admin" element={
               <AdminRoute>

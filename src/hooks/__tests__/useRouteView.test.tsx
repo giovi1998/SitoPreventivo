@@ -48,6 +48,11 @@ describe('useRouteView', () => {
     expect(result.current.view).toBe('card');
   });
 
+  it('maps /app/flyer to view="flyer" (phase 3)', () => {
+    const { result } = renderHook(() => useRouteView(), { wrapper: wrapper('/app/flyer') });
+    expect(result.current.view).toBe('flyer');
+  });
+
   it('maps /app/settings to view="settings"', () => {
     const { result } = renderHook(() => useRouteView(), { wrapper: wrapper('/app/settings') });
     expect(result.current.view).toBe('settings');
@@ -86,10 +91,17 @@ describe('useRouteView', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/app/admin');
   });
 
-  it('exposes ROUTE_PATHS map with all 7 view keys', () => {
-    expect(Object.keys(ROUTE_PATHS).sort()).toEqual(['admin', 'card', 'collection', 'editor', 'logo', 'qr', 'settings']);
+  it('setView("flyer") navigates to /app/flyer (phase 3)', () => {
+    const { result } = renderHook(() => useRouteView(), { wrapper: wrapper('/app/editor') });
+    act(() => result.current.setView('flyer'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/app/flyer');
+  });
+
+  it('exposes ROUTE_PATHS map with all 8 view keys', () => {
+    expect(Object.keys(ROUTE_PATHS).sort()).toEqual(['admin', 'card', 'collection', 'editor', 'flyer', 'logo', 'qr', 'settings']);
     expect(ROUTE_PATHS.editor).toBe('/app/editor');
     expect(ROUTE_PATHS.admin).toBe('/app/admin');
     expect(ROUTE_PATHS.logo).toBe('/app/logo');
+    expect(ROUTE_PATHS.flyer).toBe('/app/flyer');
   });
 });

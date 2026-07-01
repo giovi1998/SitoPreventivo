@@ -102,13 +102,14 @@ describe('CollectionView, empty states (phase 6, AC-011)', () => {
     expect(cta).toBeInTheDocument();
   });
 
-  it('empty "Volantini" tab shows message but CTA is disabled (fase 3 skipped)', async () => {
+  it('empty "Volantini" tab shows message with active CTA (phase 3)', async () => {
     seedDocumentsLocalStorage([]);
     await renderCollection();
     fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Volantini/ }));
     expect(await screen.findByText(/Nessun volantino ancora/i)).toBeInTheDocument();
-    const cta = screen.getByRole('button', { name: /Volantini non sono ancora disponibili/i });
-    expect(cta).toBeDisabled();
+    // Phase 3 landed: the CTA is "Crea un volantino" and is enabled.
+    const cta = screen.getByRole('button', { name: /Crea un volantino/i });
+    expect(cta).toBeEnabled();
   });
 
   it('search with no match shows "Nessun risultato" (not the empty-tab CTA)', async () => {

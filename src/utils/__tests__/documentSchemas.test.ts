@@ -27,6 +27,18 @@ import {
   createEmptyLogo,
   createLogoTemplate,
   LOGO_SECTORS,
+  flyerSchema,
+  flyerContentSchema,
+  flyerStyleSchema,
+  createEmptyFlyer,
+  createFlyerTemplate,
+  mergeFlyerWithDefaults,
+  getFlyerDimensions,
+  FLYER_SIZES,
+  FLYER_LAYOUTS,
+  FLYER_ORIENTATIONS,
+  FLYER_SECTORS,
+  FLYER_BLEED_MM,
 } from '../documentSchemas';
 
 const GIOVANNI_URL = 'https://webdeveloperca.netlify.app/';
@@ -580,6 +592,214 @@ describe('documentSchemas', () => {
     it('food template picks food-flavored iconType (lucide/monogram)', () => {
       const logo = createLogoTemplate('food');
       expect(['lucide', 'monogram', 'shape', 'none']).toContain(logo.builder.iconType);
+    });
+  });
+
+  // ─── FLYER (Phase 3) ───────────────────────────────────
+  describe('flyerSchema', () => {
+    it('accepts a complete flyer', () => {
+      const r = flyerSchema.safeParse({
+        documentType: 'flyer',
+        id: 'fl-1',
+        title: 'Sagra',
+        size: 'A5',
+        orientation: 'portrait',
+        content: { headline: 'Titolo', body: 'Corpo', cta: { label: 'CTA', url: 'https://x.it' } },
+        style: { layout: 'classic', bgColor: '#ffffff', textColor: '#000000', accentColor: '#01696f', fontFamily: 'Inter' },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      expect(r.success).toBe(true);
+    });
+
+    it('rejects wrong documentType literal', () => {
+      const r = flyerSchema.safeParse({
+        documentType: 'quote',
+        id: 'fl-1', title: '', content: {}, style: {},
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects invalid hex color', () => {
+      const r = flyerSchema.safeParse({
+        documentType: 'flyer',
+        id: 'fl-1', title: '',
+        content: {}, style: { bgColor: 'red' },
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects invalid layout enum', () => {
+      const r = flyerSchema.safeParse({
+        documentType: 'flyer',
+        id: 'fl-1', title: '',
+        content: {}, style: { layout: 'wildcard' },
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+      expect(r.success).toBe(false);
+    });
+
+    it('applies defaults when nested fields missing', () => {
+      const r = flyerContentSchema.parse({});
+      expect(r.headline).toBe('');
+      expect(r.body).toBe('');
+      expect(r.cta.label).toBe('');
+      expect(r.cta.url).toBe('');
+      expect(r.heroImage).toBeNull();
+    });
+
+    it('applies style defaults', () => {
+      const r = flyerStyleSchema.parse({});
+      expect(r.layout).toBe('classic');
+      expect(r.bgColor).toBe('#FFFFFF');
+      expect(r.accentColor).toBe('#01696F');
+    });
+
+    it('rejects oversize headline (>200 char)', () => {
+      const r = flyerContentSchema.safeParse({ headline: 'x'.repeat(201) });
+      expect(r.success).toBe(false);
+    });
+  });
+
+  describe('createEmptyFlyer', () => {
+    it('returns a flyer valid against flyerSchema', () => {
+      const f = createEmptyFlyer();
+      const r = flyerSchema.safeParse(f);
+      expect(r.success).toBe(true);
+      expect(f.documentType).toBe('flyer');
+      expect(f.size).toBe('A5');
+      expect(f.orientation).toBe('portrait');
+      expect(f.style.layout).toBe('classic');
+    });
+
+    it('assigns a unique id each call', () => {
+      const a = createEmptyFlyer();
+      const b = createEmptyFlyer();
+      expect(a.id).not.toBe(b.id);
+    });
+  });
+
+  describe('createFlyerTemplate (sectors × layouts)', () => {
+    it('exports 4 sectors', () => {
+      expect(FLYER_SECTORS).toEqual(['ristorante', 'evento', 'salone', 'negozio']);
+    });
+
+    it.each(FLYER_SECTORS)('default template %s is a valid flyer', (sector) => {
+      const f = createFlyerTemplate(sector);
+      const r = flyerSchema.safeParse(f);
+      expect(r.success).toBe(true);
+      expect(f.content.headline.length).toBeGreaterThan(0);
+      expect(f.content.body.length).toBeGreaterThan(0);
+    });
+
+    it('returns 16 distinct templates (4 settori × 4 layout)', () => {
+      const seen = new Set<string>();
+      for (const s of FLYER_SECTORS) {
+        for (const l of FLYER_LAYOUTS) {
+          const f = createFlyerTemplate(s, l);
+          const key = `${s}|${f.style.layout}|${f.content.headline}|${f.content.body.length}`;
+          expect(seen.has(key)).toBe(false);
+          seen.add(key);
+        }
+      }
+      expect(seen.size).toBe(16);
+    });
+
+    it('creates 3-paragraph body for magazine variants (so 3 cols are populated)', () => {
+      for (const s of FLYER_SECTORS) {
+        const f = createFlyerTemplate(s, 'magazine');
+        const paragraphs = (f.content.body || '').split(/\n+/).filter(Boolean);
+        expect(paragraphs.length).toBeGreaterThanOrEqual(3);
+      }
+    });
+
+    it('uses a picsum.photos URL for hero images (stable per seed)', () => {
+      const ristoranteClassic = createFlyerTemplate('ristorante', 'classic');
+      const ristoranteCentered = createFlyerTemplate('ristorante', 'centered');
+      // Same settore, different layout → different imageSeed → different URL
+      expect(ristoranteClassic.content.heroImage).toMatch(/^https:\/\/picsum\.photos\/seed\//);
+      expect(ristoranteCentered.content.heroImage).toMatch(/^https:\/\/picsum\.photos\/seed\//);
+      expect(ristoranteClassic.content.heroImage).not.toBe(ristoranteCentered.content.heroImage);
+    });
+
+    it('omits hero image for variants that do not need one (e.g. magazine, no imageSeed)', () => {
+      const saloneMagazine = createFlyerTemplate('salone', 'magazine');
+      const eventoMagazine = createFlyerTemplate('evento', 'magazine');
+      // Magazine templates have empty imageSeed → heroImage is null
+      expect(saloneMagazine.content.heroImage).toBeNull();
+      expect(eventoMagazine.content.heroImage).toBeNull();
+    });
+
+    it('default layout is the sector default when layout is omitted', () => {
+      const f = createFlyerTemplate('ristorante');
+      expect(f.style.layout).toBe('classic');
+      const g = createFlyerTemplate('evento');
+      expect(g.style.layout).toBe('centered');
+    });
+  });
+
+  describe('getFlyerDimensions', () => {
+    it('returns portrait dimensions for A5', () => {
+      const dims = getFlyerDimensions({ ...createEmptyFlyer(), size: 'A5', orientation: 'portrait' });
+      expect(dims).toEqual({ w: 148, h: 210 });
+    });
+
+    it('returns landscape dimensions for A4', () => {
+      const dims = getFlyerDimensions({ ...createEmptyFlyer(), size: 'A4', orientation: 'landscape' });
+      expect(dims).toEqual({ w: 297, h: 210 });
+    });
+
+    it('Square ignores orientation and returns 210×210', () => {
+      const p = getFlyerDimensions({ ...createEmptyFlyer(), size: 'Square', orientation: 'portrait' });
+      const l = getFlyerDimensions({ ...createEmptyFlyer(), size: 'Square', orientation: 'landscape' });
+      expect(p).toEqual({ w: 210, h: 210 });
+      expect(l).toEqual({ w: 210, h: 210 });
+    });
+  });
+
+  describe('mergeFlyerWithDefaults (defensive)', () => {
+    it('returns full empty flyer for null input', () => {
+      const r = mergeFlyerWithDefaults(null);
+      const base = createEmptyFlyer();
+      expect(r.content).toEqual(base.content);
+      expect(r.style).toEqual(base.style);
+    });
+
+    it('returns full empty flyer for undefined input', () => {
+      const r = mergeFlyerWithDefaults(undefined);
+      const base = createEmptyFlyer();
+      expect(r.style).toEqual(base.style);
+    });
+
+    it('preserves valid fields while filling missing nested', () => {
+      const partial = { id: 'fl-1', title: 'X', content: { headline: 'Sagra' } };
+      const r = mergeFlyerWithDefaults(partial as any);
+      expect(r.id).toBe('fl-1');
+      expect(r.content.headline).toBe('Sagra');
+      expect(r.content.body).toBe('');
+      expect(r.style.layout).toBe('classic');
+    });
+
+    it('preserves cta fields when content.cta is partial', () => {
+      const partial = { id: 'fl-1', content: { cta: { label: 'Prenota' } } };
+      const r = mergeFlyerWithDefaults(partial as any);
+      expect(r.content.cta.label).toBe('Prenota');
+      expect(r.content.cta.url).toBe('');
+    });
+  });
+
+  describe('flyer constants', () => {
+    it('exposes 5 sizes, 2 orientations, 4 layouts, 4 sectors', () => {
+      expect(FLYER_SIZES.length).toBe(5);
+      expect(FLYER_ORIENTATIONS.length).toBe(2);
+      expect(FLYER_LAYOUTS.length).toBe(4);
+      expect(FLYER_SECTORS.length).toBe(4);
+    });
+
+    it('FLYER_BLEED_MM is 3mm per print-shop standard', () => {
+      expect(FLYER_BLEED_MM).toBe(3);
     });
   });
 });

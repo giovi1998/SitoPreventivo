@@ -81,6 +81,7 @@ export default function AppShell() {
   const [qrDocument, setQrDocument] = useState<any>(null);
   const [cardDocument, setCardDocument] = useState<any>(null);
   const [logoDocument, setLogoDocument] = useState<any>(null);
+  const [flyerDocument, setFlyerDocument] = useState<any>(null);
   const [documentTheme, setDocumentTheme] = useState<DocumentTemplateId>(() =>
     (localStorage.getItem('documentTheme') as DocumentTemplateId) || 'corporate'
   );
@@ -225,8 +226,9 @@ export default function AppShell() {
         // state updates so the user lands on the chosen editor already
         // mounted. Admin keeps the default (editor) per the route
         // guard in main.tsx, but admin skips onboarding anyway.
+        // Phase 3: added 'flyer' to the allowlist.
         const preferred = settings.preferredDocumentType as string | undefined;
-        if (preferred && ['editor', 'qr', 'card', 'logo'].includes(preferred)) {
+        if (preferred && ['editor', 'qr', 'card', 'flyer', 'logo'].includes(preferred)) {
           setView(preferred);
         }
       } catch (err) {
@@ -484,8 +486,7 @@ export default function AppShell() {
   };
 
   // Phase 6: dispatch a document of any type to its editor. Volantini
-  // (flyers) are not yet available (phase 3 skipped), we surface a
-  // toast and stay on the collection.
+  // (flyers) are routed to the FlyerEditor since fase 3.
   const openDocument = (doc: any) => {
     if (!doc) return;
     switch (doc.documentType) {
@@ -508,7 +509,8 @@ export default function AppShell() {
         setView('logo');
         break;
       case 'flyer':
-        addToast('info', 'I volantini non sono ancora disponibili (fase 3 saltata).');
+        setFlyerDocument(doc);
+        setView('flyer');
         break;
       default:
         addToast('error', `Tipo documento non supportato: ${doc.documentType}`);
@@ -592,6 +594,7 @@ export default function AppShell() {
     qrDocument, setQrDocument,
     cardDocument, setCardDocument,
     logoDocument, setLogoDocument,
+    flyerDocument, setFlyerDocument,
     openDocument,
     refreshDocuments,
     documentsVersion,

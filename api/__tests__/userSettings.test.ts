@@ -280,15 +280,17 @@ describe('Phase 7, preferredDocumentType in user-settings', () => {
       url: '/api/user-settings',
       headers: { origin: 'http://localhost' },
       body: {
+        // Anything outside (editor|qr|card|flyer|logo) is rejected.
+        // Phase 3 added 'flyer' to the allowlist.
         email: 'user@test.com',
-        preferredDocumentType: 'flyer', // not in allowlist (Volantino is skipped)
+        preferredDocumentType: 'spreadsheet',
       },
     });
     expect(res.statusCode).toBe(400);
     expect(res.body).toHaveProperty('errors');
   });
 
-  it('POST /user-settings accepts "card" (bigliettino) and "logo"', async () => {
+  it('POST /user-settings accepts "card" (bigliettino), "flyer" (volantino) and "logo"', async () => {
     mockDbState.selectResults = [[]];
     mockDbState.nextReturning = [{
       userEmail: 'user@test.com',
@@ -305,16 +307,29 @@ describe('Phase 7, preferredDocumentType in user-settings', () => {
 
     mockDbState.nextReturning = [{
       userEmail: 'user@test.com',
-      preferredDocumentType: 'logo',
+      preferredDocumentType: 'flyer',
     }];
     const res2 = await callHandler({
       method: 'POST',
       url: '/api/user-settings',
       headers: { origin: 'http://localhost' },
-      body: { email: 'user@test.com', preferredDocumentType: 'logo' },
+      body: { email: 'user@test.com', preferredDocumentType: 'flyer' },
     });
     expect(res2.statusCode).toBe(201);
-    expect(res2.body.preferredDocumentType).toBe('logo');
+    expect(res2.body.preferredDocumentType).toBe('flyer');
+
+    mockDbState.nextReturning = [{
+      userEmail: 'user@test.com',
+      preferredDocumentType: 'logo',
+    }];
+    const res3 = await callHandler({
+      method: 'POST',
+      url: '/api/user-settings',
+      headers: { origin: 'http://localhost' },
+      body: { email: 'user@test.com', preferredDocumentType: 'logo' },
+    });
+    expect(res3.statusCode).toBe(201);
+    expect(res3.body.preferredDocumentType).toBe('logo');
   });
 
   it('POST /user-settings updates preferredDocumentType on existing row (re-onboarding)', async () => {

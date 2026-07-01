@@ -89,6 +89,82 @@
   margin: 0;
 }
 
+/* ─── Collapsible details (Phase 3) ───────────────────────────
+ * Trasforma un <details class="qr-fieldset"> in un fieldset collassabile
+ * con un summary stilizzato come legend cliccabile. Il marker nativo
+ * del browser è nascosto, il cursore è pointer, e l'open attribute
+ * viene usato per gestire lo stato.
+ */
+details.qr-fieldset {
+  padding: 0;
+}
+
+details.qr-fieldset > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 16px;
+  font-weight: 600;
+  color: var(--ink);
+  user-select: none;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+
+details.qr-fieldset > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.qr-fieldset > summary::after {
+  content: '▾';
+  font-size: 0.8rem;
+  color: var(--ink-muted, #5d6b7e);
+  transition: transform 0.15s ease;
+}
+
+details.qr-fieldset[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+details.qr-fieldset > summary:hover {
+  background: var(--surface-2, #f9fafb);
+}
+
+details.qr-fieldset[open] {
+  padding: 12px 16px;
+}
+
+details.qr-fieldset[open] > summary {
+  margin: -12px -16px 8px;
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid var(--line-lt, #f1f5f9);
+}
+
+/* ─── Preview fullscreen button (Phase 3) ─────────────────── */
+.flyer-preview-fullscreen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.flyer-preview-fullscreen-btn:hover {
+  background: rgba(1, 105, 111, 0.08);
+  border-color: var(--accent, #01696f);
+  color: var(--accent, #01696f);
+}
+
 .qr-fieldset legend {
   padding: 0 6px;
   font-weight: 600;
@@ -168,6 +244,22 @@
 .qr-editor-preview h2 {
   margin: 0;
   font-size: 1rem;
+}
+
+/* Flyer preview: confine the watermark to the preview frame only
+ * (not the whole preview section). The wrapper around FlyerPreview is
+ * position: relative so the SVG with position: absolute covers the
+ * preview thumbnail, not the surrounding controls. */
+.flyer-preview-watermark {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  mix-blend-mode: multiply;
+  user-select: none;
+}
   color: var(--ink);
 }
 
@@ -186,6 +278,214 @@
   max-width: 100%;
   height: auto;
   display: block;
+}
+
+/* ─── Flyer 3-col layout: form | preview | AI (Phase 3) ──────────
+ * Stile dedicato al pannello AI del volantino, modellato sul pattern
+ * del bigliettino (3 colonne con AI sticky). Mira a dare all'AI un
+ * peso visivo "dare risalto" simile al bigliettino ma con funzionalità
+ * più ricche (brief + tone + 4 quick action + suggested chips).
+ */
+.flyer-editor-3col {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.1fr) minmax(280px, 0.95fr);
+  gap: 16px;
+  margin-top: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1200px) {
+  .flyer-editor-3col {
+    grid-template-columns: 1fr 1fr;
+  }
+  .flyer-editor-3col .flyer-editor-ai {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .flyer-editor-3col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.flyer-editor-3col .qr-editor-preview {
+  position: sticky;
+  top: 16px;
+}
+
+.flyer-editor-3col .flyer-editor-ai {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--accent, #01696f);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(1, 105, 111, 0.08);
+}
+
+.flyer-editor-3col .flyer-editor-ai .panel-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--accent, #01696f);
+}
+
+.flyer-editor-3col .flyer-editor-ai .panel-kicker button {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  color: var(--ink-muted, #5d6b7e);
+  display: flex;
+  align-items: center;
+}
+
+.flyer-editor-3col .flyer-editor-ai .card-ai-textarea {
+  margin-bottom: 6px;
+}
+
+.flyer-ai-section-hidden {
+  display: none;
+}
+
+.flyer-ai-generate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.flyer-ai-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: flyer-ai-spin 0.8s linear infinite;
+  margin-right: 4px;
+}
+
+@keyframes flyer-ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+.flyer-ai-suggested {
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.flyer-ai-suggested-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 4px;
+}
+
+.flyer-ai-suggested-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flyer-ai-chip {
+  padding: 6px 10px;
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--ink, #1f2937);
+  font-size: 0.76rem;
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.3;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.flyer-ai-chip:hover:not(:disabled) {
+  background: rgba(1, 105, 111, 0.06);
+  border-color: var(--accent, #01696f);
+  color: var(--accent, #01696f);
+}
+
+.flyer-ai-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flyer-ai-section-subhead {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 8px;
+  margin-bottom: 6px;
+}
+
+.flyer-ai-quick-grid-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.flyer-ai-quick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 6px;
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--ink, #1f2937);
+  cursor: pointer;
+  font: inherit;
+  text-align: center;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.flyer-ai-quick-card:hover:not(:disabled) {
+  background: rgba(1, 105, 111, 0.06);
+  border-color: var(--accent, #01696f);
+}
+
+.flyer-ai-quick-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--surface-2, #f9fafb);
+}
+
+.flyer-ai-quick-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.flyer-ai-quick-label {
+  font-weight: 600;
+  font-size: 0.76rem;
+}
+
+.flyer-ai-hint {
+  margin: 6px 0 0;
+  font-size: 0.74rem;
+  color: var(--muted, #6b7280);
+  line-height: 1.4;
 }
 
 .qr-preview-error {

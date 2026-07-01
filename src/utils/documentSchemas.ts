@@ -716,3 +716,429 @@ export function createLogoTemplate(sector: LogoSector): Logo {
     updatedAt: now,
   };
 }
+
+// ─── FLYER (Phase 3) ──────────────────────────────────
+
+export const FLYER_SIZES = ['A6', 'A5', 'A4', 'Letter', 'Square'] as const;
+export type FlyerSize = (typeof FLYER_SIZES)[number];
+
+export const FLYER_ORIENTATIONS = ['portrait', 'landscape'] as const;
+export type FlyerOrientation = (typeof FLYER_ORIENTATIONS)[number];
+
+export const FLYER_LAYOUTS = ['classic', 'centered', 'split', 'magazine'] as const;
+export type FlyerLayout = (typeof FLYER_LAYOUTS)[number];
+
+export const FLYER_TONES = ['formale', 'giovanile', 'tecnico'] as const;
+export type FlyerTone = (typeof FLYER_TONES)[number];
+
+// Millimeter dimensions per size × orientation. Square is orientation-agnostic.
+export const FLYER_SIZE_MM: Record<FlyerSize, Record<FlyerOrientation | 'square', { w: number; h: number }>> = {
+  A6: {
+    portrait: { w: 105, h: 148 },
+    landscape: { w: 148, h: 105 },
+    square: { w: 105, h: 148 },
+  },
+  A5: {
+    portrait: { w: 148, h: 210 },
+    landscape: { w: 210, h: 148 },
+    square: { w: 148, h: 210 },
+  },
+  A4: {
+    portrait: { w: 210, h: 297 },
+    landscape: { w: 297, h: 210 },
+    square: { w: 210, h: 297 },
+  },
+  Letter: {
+    portrait: { w: 216, h: 279 },
+    landscape: { w: 279, h: 216 },
+    square: { w: 216, h: 279 },
+  },
+  Square: {
+    portrait: { w: 210, h: 210 },
+    landscape: { w: 210, h: 210 },
+    square: { w: 210, h: 210 },
+  },
+};
+
+// Resolve physical dimensions honouring size + orientation.
+// Square ignores orientation: it's always 210×210mm.
+export function getFlyerDimensions(flyer: Flyer): { w: number; h: number } {
+  if (flyer.size === 'Square') return FLYER_SIZE_MM.Square.square;
+  return FLYER_SIZE_MM[flyer.size][flyer.orientation];
+}
+
+// Print-ready bleed in mm (applied to all 4 sides).
+export const FLYER_BLEED_MM = 3;
+
+// AI copy length limits (chars). Larger than the spec's `headline` zod
+// constraint of 200 to allow the AI to provide its full context for
+// refine operations; the field-level zod still caps the saved value.
+export const FLYER_BRIEF_MAX = 500;
+export const FLYER_HEADLINE_MAX = 200;
+export const FLYER_SUBHEADLINE_MAX = 300;
+export const FLYER_BODY_MAX = 2000;
+export const FLYER_CTA_LABEL_MAX = 50;
+
+// Hero image: max 5MB raw, 4000×4000px, 500KB after compression.
+export const FLYER_HERO_MAX_RAW_BYTES = 5_000_000;
+export const FLYER_HERO_MAX_DIMENSION = 4000;
+export const FLYER_HERO_MAX_AFTER_COMPRESS = 500_000;
+
+export const flyerContentSchema = z.object({
+  headline: z.string().max(FLYER_HEADLINE_MAX).default(''),
+  subheadline: z.string().max(FLYER_SUBHEADLINE_MAX).default(''),
+  body: z.string().max(FLYER_BODY_MAX).default(''),
+  cta: z.object({
+    label: z.string().max(FLYER_CTA_LABEL_MAX).default(''),
+    url: z.string().default(''),
+  }).default({ label: '', url: '' }),
+  heroImage: z.string().nullable().default(null),
+  qrPayload: z.string().default(''),
+  qrLabel: z.string().default(''),
+});
+export type FlyerContent = z.infer<typeof flyerContentSchema>;
+
+export const flyerLayoutEnumSchema = z.enum(FLYER_LAYOUTS);
+export const flyerSizeEnumSchema = z.enum(FLYER_SIZES);
+export const flyerOrientationEnumSchema = z.enum(FLYER_ORIENTATIONS);
+export const flyerToneEnumSchema = z.enum(FLYER_TONES);
+
+export const flyerStyleSchema = z.object({
+  bgColor: hexColorSchema.default('#FFFFFF'),
+  textColor: hexColorSchema.default('#1a1a2e'),
+  accentColor: hexColorSchema.default('#01696F'),
+  layout: flyerLayoutEnumSchema.default('classic'),
+  fontFamily: z.string().default('Inter'),
+});
+export type FlyerStyle = z.infer<typeof flyerStyleSchema>;
+
+export const flyerSchema = z.object({
+  documentType: z.literal('flyer'),
+  id: z.string().min(1),
+  userEmail: z.string().email().optional(),
+  title: z.string().default(''),
+  size: flyerSizeEnumSchema.default('A5'),
+  orientation: flyerOrientationEnumSchema.default('portrait'),
+  content: flyerContentSchema,
+  style: flyerStyleSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Flyer = z.infer<typeof flyerSchema>;
+
+export function createEmptyFlyer(): Flyer {
+  const now = new Date().toISOString();
+  return {
+    documentType: 'flyer',
+    id: `flyer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    title: '',
+    size: 'A5',
+    orientation: 'portrait',
+    content: {
+      headline: '',
+      subheadline: '',
+      body: '',
+      cta: { label: '', url: '' },
+      heroImage: null,
+      qrPayload: '',
+      qrLabel: '',
+    },
+    style: {
+      bgColor: '#FFFFFF',
+      textColor: '#1a1a2e',
+      accentColor: '#01696F',
+      layout: 'classic',
+      fontFamily: 'Inter',
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export const FLYER_SECTORS = ['ristorante', 'evento', 'salone', 'negozio'] as const;
+export type FlyerSector = (typeof FLYER_SECTORS)[number];
+
+interface FlyerTemplatePreset {
+  title: string;
+  size: FlyerSize;
+  orientation: FlyerOrientation;
+  layout: FlyerLayout;
+  bgColor: string;
+  textColor: string;
+  accentColor: string;
+  /** Picsum.photos seed for the hero image. Empty string = no hero. */
+  imageSeed: string;
+  headline: string;
+  subheadline: string;
+  body: string;
+  cta: { label: string; url: string };
+  qrLabel: string;
+}
+
+// Default layout per sector: which variant the editor loads first when
+// the user clicks a sector button. Each sector exposes 4 layout variants
+// (classic / centered / split / magazine) loaded via the "Varia layout"
+// row in the editor.
+export const FLYER_SECTOR_DEFAULT_LAYOUT: Record<FlyerSector, FlyerLayout> = {
+  ristorante: 'classic',
+  evento: 'centered',
+  salone: 'split',
+  negozio: 'magazine',
+};
+
+/**
+ * 16 template presets (4 settori × 4 layout). Hero image via
+ * `picsum.photos/seed/{seed}/W/H` (free, no API key, CORS-enabled, stable
+ * per seed). Centered / split templates can opt out of the hero (empty
+ * seed) when the layout doesn't need it.
+ */
+const FLYER_TEMPLATES_BY_SECTOR_LAYOUT: Record<FlyerSector, Record<FlyerLayout, FlyerTemplatePreset>> = {
+  ristorante: {
+    classic: {
+      title: 'Cena di Degustazione · Trattoria del Borgo',
+      size: 'A5', orientation: 'portrait', layout: 'classic',
+      bgColor: '#FFFBF2', textColor: '#1F2937', accentColor: '#B45309',
+      imageSeed: 'ristorante-classic',
+      headline: 'Cena di Degustazione',
+      subheadline: 'Venerdì 15 agosto · ore 20:30',
+      body: 'Menu di 5 portate dello chef Marco Bianchi, in abbinamento a 3 vini del territorio selezionati dal sommelier Anna Verdi.\n\nPosti limitati, prenotazione obbligatoria entro mercoledì 13 agosto. Coperto 45€, bevande escluse.',
+      cta: { label: 'Prenota un Tavolo', url: '' },
+      qrLabel: 'Scansiona per il menù completo',
+    },
+    centered: {
+      title: 'Sapori d\'Autunno · Trattoria del Borgo',
+      size: 'A5', orientation: 'portrait', layout: 'centered',
+      bgColor: '#FFFBF2', textColor: '#1F2937', accentColor: '#B45309',
+      imageSeed: 'ristorante-centered',
+      headline: 'Sapori d\'Autunno',
+      subheadline: 'Nuova stagione, nuovi piatti',
+      body: 'Dal 1 ottobre ti aspettano 4 nuovi piatti firmati dalla chef Anna Rossi: zucca, tartufo, castagne e funghi porcini.\n\nPrenota il tuo tavolo per la serata di apertura del 1 ottobre, drink di benvenuto offerto.',
+      cta: { label: 'Scopri il Menù', url: '' },
+      qrLabel: 'Prenota online',
+    },
+    split: {
+      title: 'Trattoria del Borgo · Cucina di stagione',
+      size: 'A4', orientation: 'portrait', layout: 'split',
+      bgColor: '#FFFBF2', textColor: '#1F2937', accentColor: '#B45309',
+      imageSeed: 'ristorante-split',
+      headline: 'Trattoria del Borgo',
+      subheadline: 'Cucina di stagione, ingredienti locali',
+      body: 'Piatti della tradizione sarda rivisitati con materie prime del territorio a km 0.\n\nAperti a pranzo e cena, chiusi il lunedì. Via Roma 12, Cagliari. Tel. 070 123456.',
+      cta: { label: 'Vieni a Trovarci', url: '' },
+      qrLabel: 'Scansiona per la mappa',
+    },
+    magazine: {
+      title: 'Menù della Settimana · Trattoria del Borgo',
+      size: 'A4', orientation: 'portrait', layout: 'magazine',
+      bgColor: '#FFFBF2', textColor: '#1F2937', accentColor: '#B45309',
+      imageSeed: '',
+      headline: 'Menù della Settimana',
+      subheadline: 'Dal 10 al 16 agosto',
+      body: 'Lunedì: Tagliatelle al ragù bianco di vitello e limone.\nMartedì: Risotto allo zafferano e midollo rosso.\nMercoledì: Tagliata di manzo con rucola e grana.',
+      cta: { label: 'Prenota', url: '' },
+      qrLabel: 'Menù completo online',
+    },
+  },
+  evento: {
+    classic: {
+      title: 'Sagra di Paese 2026',
+      size: 'A5', orientation: 'portrait', layout: 'classic',
+      bgColor: '#FFFFFF', textColor: '#0F172A', accentColor: '#0F766E',
+      imageSeed: 'evento-classic',
+      headline: 'Sagra di Paese 2026',
+      subheadline: '15, 16, 17 agosto · Piazza del Popolo',
+      body: 'Tre serate di festa con cucina tipica, musica dal vivo, balli sardi e spettacoli per bambini ogni sera alle 21:30.\n\nIngresso gratuito, apertura stand gastronomici ore 19:00, chiusura ore 01:00. Parcheggio gratuito in via Garibaldi.',
+      cta: { label: 'Scopri il Programma', url: '' },
+      qrLabel: 'Programma completo online',
+    },
+    centered: {
+      title: 'Festa di San Giovanni',
+      size: 'A5', orientation: 'portrait', layout: 'centered',
+      bgColor: '#FFFFFF', textColor: '#0F172A', accentColor: '#0F766E',
+      imageSeed: 'evento-centered',
+      headline: 'Festa di San Giovanni',
+      subheadline: '24 giugno · Centro Storico',
+      body: 'Fiaccolata per le vie del centro, concerto della banda cittadina in piazza Costituzione e gran finale con i fuochi d\'artificio a mezzanotte.\n\nApertura stand gastronomici ore 19:30, degustazione del coccoi fresco e pani pintau.',
+      cta: { label: 'Guarda il Programma', url: '' },
+      qrLabel: 'Mappa della festa',
+    },
+    split: {
+      title: 'Notte Bianca · Centro Città',
+      size: 'A4', orientation: 'portrait', layout: 'split',
+      bgColor: '#FFFFFF', textColor: '#0F172A', accentColor: '#0F766E',
+      imageSeed: 'evento-split',
+      headline: 'Notte Bianca',
+      subheadline: 'Sabato 5 luglio · Centro Città',
+      body: 'Negozi aperti fino a mezzanotte, musica in 5 piazze, dj set finale in piazza Duomo alle 23:30.\n\nIngresso libero, parcheggio gratuito in via Roma, navetta ogni 15 minuti dalle 21:00.',
+      cta: { label: 'Vedi la Mappa', url: '' },
+      qrLabel: 'Mappa dei punti',
+    },
+    magazine: {
+      title: 'Programma del Week-End',
+      size: 'A4', orientation: 'portrait', layout: 'magazine',
+      bgColor: '#FFFFFF', textColor: '#0F172A', accentColor: '#0F766E',
+      imageSeed: '',
+      headline: 'Programma del Week-End',
+      subheadline: '5, 6, 7 luglio',
+      body: 'Venerdì 5 · Notte Bianca, musica e negozi aperti fino a mezzanotte.\nSabato 6 · Mercatino artigianale in piazza e concerto jazz alle 21:00.\nDomenica 7 · Spettacolo per bambini alle 17:00 e cinema sotto le stelle alle 21:30.',
+      cta: { label: 'Vedi gli Orari', url: '' },
+      qrLabel: 'Orari completi online',
+    },
+  },
+  salone: {
+    classic: {
+      title: 'Salone Bellezza · Promo Estate',
+      size: 'A5', orientation: 'portrait', layout: 'classic',
+      bgColor: '#FFF1F2', textColor: '#1F2937', accentColor: '#E11D48',
+      imageSeed: 'salone-classic',
+      headline: 'Promo Estate -20%',
+      subheadline: 'Valido fino al 30 agosto',
+      body: 'Taglio, piega e colore a prezzo speciale per tutta l\'estate. Trattamento cheratina incluso per i capelli colorati.\n\nPrenota il tuo appuntamento con i nostri stilisti esperti, oltre 15 anni di esperienza nel settore.',
+      cta: { label: 'Prenota Ora', url: '' },
+      qrLabel: 'Prenota online',
+    },
+    centered: {
+      title: 'Nuova Apertura · Salone Centro',
+      size: 'A5', orientation: 'portrait', layout: 'centered',
+      bgColor: '#FFF1F2', textColor: '#1F2937', accentColor: '#E11D48',
+      imageSeed: 'salone-centered',
+      headline: 'Nuova Apertura',
+      subheadline: '15 settembre · Salone Centro',
+      body: 'Apre il nostro nuovo spazio in centro: 200mq dedicati a taglio, colore, trattamenti viso e massaggi.\n\nPrenota la tua visita gratuita con consulenza personalizzata per il tuo tipo di capelli.',
+      cta: { label: 'Prenota Visita', url: '' },
+      qrLabel: 'Prenota online',
+    },
+    split: {
+      title: 'Salone Bellezza · Promo Weekend',
+      size: 'A6', orientation: 'landscape', layout: 'split',
+      bgColor: '#0F172A', textColor: '#F8FAFC', accentColor: '#E11D48',
+      imageSeed: 'salone-split',
+      headline: 'Saldi -20%',
+      subheadline: 'Solo questo weekend',
+      body: 'Taglio + piega + colore a 45€ invece di 56€.\nSu prenotazione, posti limitati, vieni sabato o domenica.',
+      cta: { label: 'Prenota', url: '' },
+      qrLabel: 'Prenota online',
+    },
+    magazine: {
+      title: 'I Nostri Servizi · Salone Bellezza',
+      size: 'A4', orientation: 'portrait', layout: 'magazine',
+      bgColor: '#FFF1F2', textColor: '#1F2937', accentColor: '#E11D48',
+      imageSeed: '',
+      headline: 'I Nostri Servizi',
+      subheadline: 'Dal 2010 a Cagliari',
+      body: 'Taglio & Piega: classico, moderno, sposa, bambino.\nColore: balayage, meches, tinta, decolorazione.\nTrattamenti: cheratina, impacco ristrutturante, anticrespo.',
+      cta: { label: 'Prenota', url: '' },
+      qrLabel: 'Lista prezzi completa',
+    },
+  },
+  negozio: {
+    classic: {
+      title: 'Boutique · Saldi di Stagione',
+      size: 'A5', orientation: 'portrait', layout: 'classic',
+      bgColor: '#FFFFFF', textColor: '#111827', accentColor: '#7C3AED',
+      imageSeed: 'negozio-classic',
+      headline: 'Saldi di Stagione',
+      subheadline: 'Fino al -50% · 1-30 del mese',
+      body: 'Migliaia di articoli scontati: abbigliamento, calzature e accessori uomo, donna e bambino.\n\nAcquisti in boutique e online con spedizione gratuita sopra i 50€. Resi gratuiti entro 30 giorni.',
+      cta: { label: 'Vedi il Catalogo', url: '' },
+      qrLabel: 'Scansiona per il catalogo',
+    },
+    centered: {
+      title: 'Apertura Nuovo Store',
+      size: 'A5', orientation: 'portrait', layout: 'centered',
+      bgColor: '#FFFFFF', textColor: '#111827', accentColor: '#7C3AED',
+      imageSeed: 'negozio-centered',
+      headline: 'Apertura Nuovo Store',
+      subheadline: 'Via Roma 23 · 20 settembre ore 18:00',
+      body: 'Apre il nostro nuovo punto vendita: 300mq di collezione autunno/inverno, drink di benvenuto e sconto 10% a tutti i presenti all\'inaugurazione.\n\nApertura dal lunedì al sabato 9:30-19:30, domenica chiuso. Parcheggio convenzionato in via Manno.',
+      cta: { label: 'Vieni all\'Apertura', url: '' },
+      qrLabel: 'Mappa e orari',
+    },
+    split: {
+      title: 'Boutique · Outlet -50%',
+      size: 'A4', orientation: 'portrait', layout: 'split',
+      bgColor: '#FFFFFF', textColor: '#111827', accentColor: '#7C3AED',
+      imageSeed: 'negozio-split',
+      headline: 'Outlet -50%',
+      subheadline: 'Collezione primavera/estate',
+      body: 'Migliaia di capi a metà prezzo: t-shirt, camicie, jeans, gonne, vestiti e accessori.\n\nSolo per questa settimana, fino ad esaurimento scorte. Taglie disponibili dalla S alla XXL.',
+      cta: { label: 'Vedi l\'Outlet', url: '' },
+      qrLabel: 'Lista outlet online',
+    },
+    magazine: {
+      title: 'Le Nostre Categorie · Boutique',
+      size: 'A4', orientation: 'portrait', layout: 'magazine',
+      bgColor: '#FFFFFF', textColor: '#111827', accentColor: '#7C3AED',
+      imageSeed: '',
+      headline: 'Le Nostre Categorie',
+      subheadline: 'Boutique · Autunno/Inverno 2026',
+      body: 'Donna: abiti, gonne, top, maglioni, giacche, accessori.\nUomo: camicie, polo, felpe, giacche, pantaloni, scarpe.\nBambino: magliette, felpe, jeans, gonne, scarpe.',
+      cta: { label: 'Vedi il Catalogo', url: '' },
+      qrLabel: 'Catalogo online',
+    },
+  },
+};
+
+/**
+ * Build a rich flyer from a (sector, layout) combination. The layout
+ * is optional: if omitted, the sector's default layout is used (see
+ * FLYER_SECTOR_DEFAULT_LAYOUT). The hero image is a stable picsum.photos
+ * URL so the same template always renders the same photo. The image is
+ * stored as a plain HTTPS string (not base64): the preview uses CSS
+ * `background: url(...)` which accepts HTTP URLs, and the PDF/PNG
+ * generators pass the URL to pdfmake / the Image element respectively.
+ * Picsum.photos has CORS enabled so pdfmake can fetch it client-side.
+ */
+export function createFlyerTemplate(sector: FlyerSector, layout?: FlyerLayout): Flyer {
+  const now = new Date().toISOString();
+  const useLayout = layout ?? FLYER_SECTOR_DEFAULT_LAYOUT[sector];
+  const tpl = FLYER_TEMPLATES_BY_SECTOR_LAYOUT[sector][useLayout];
+  const heroImage = tpl.imageSeed
+    ? `https://picsum.photos/seed/${tpl.imageSeed}/800/600`
+    : null;
+  return {
+    documentType: 'flyer',
+    id: `flyer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    title: tpl.title,
+    size: tpl.size,
+    orientation: tpl.orientation,
+    content: {
+      headline: tpl.headline,
+      subheadline: tpl.subheadline,
+      body: tpl.body,
+      cta: { ...tpl.cta },
+      heroImage,
+      qrPayload: '',
+      qrLabel: tpl.qrLabel,
+    },
+    style: {
+      bgColor: tpl.bgColor,
+      textColor: tpl.textColor,
+      accentColor: tpl.accentColor,
+      layout: tpl.layout,
+      fontFamily: 'Inter',
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+// Defensive merge: same rationale as mergeQrWithDefaults / mergeCardWithDefaults.
+// A saved flyer from the Collection might be missing nested `content` or
+// `style` fields (legacy save, partial data, schema drift across phases).
+// Without this guard, opening a partial flyer from collection crashed the
+// editor at the first read of `flyer.content.X` or `flyer.style.layout`.
+export function mergeFlyerWithDefaults(input: Partial<Flyer> | null | undefined): Flyer {
+  const base = createEmptyFlyer();
+  if (!input) return base;
+  return {
+    ...base,
+    ...input,
+    content: {
+      ...base.content,
+      ...(input.content || {}),
+      cta: { ...base.content.cta, ...((input.content && input.content.cta) || {}) },
+    },
+    style: { ...base.style, ...(input.style || {}) },
+  };
+}

@@ -8,8 +8,13 @@ interface TierLimitModalProps {
   onRedeemed?: (tier: 'free' | 'unlocked') => void;
 }
 
-const CONTACT_EMAIL = 'admin@gmail.com';
-const CONTACT_SUBJECT = 'Richiesta%20sblocco%20Quickbrand';
+// Email di contatto per lo sblocco (vedi AGENTS.md "Admin User"). Quando
+// l'utente free raggiunge il limite, gli offriamo due strade: (1)
+// riscatta un codice pacchetto (TierLimitModal → redeemUnlockCode),
+// oppure (2) contatta via email per richiedere lo sblocco manuale.
+// L'admin può anche sbloccare l'utente da `/admin/unlock-user`.
+const SUPPORT_EMAIL = 'webdevcagliari@gmail.com';
+const SUPPORT_SUBJECT = 'Richiesta%20sblocco%20Quickbrand';
 
 export default function TierLimitModal({ open, userEmail, onClose, onRedeemed }: TierLimitModalProps) {
   const [code, setCode] = useState('');
@@ -37,7 +42,7 @@ export default function TierLimitModal({ open, userEmail, onClose, onRedeemed }:
     onClose();
   };
 
-  const mailtoHref = `mailto:${CONTACT_EMAIL}?subject=${CONTACT_SUBJECT}`;
+  const mailtoHref = `mailto:${SUPPORT_EMAIL}?subject=${SUPPORT_SUBJECT}&body=${encodeURIComponent(`Ciao,\nuso l'account ${userEmail} e ho raggiunto il limite di documenti del piano free.\nVorrei sbloccare il piano completo.\n\nGrazie.`)}`;
 
   return (
     <div className="tier-limit-overlay" onClick={onClose} role="presentation">
@@ -50,27 +55,27 @@ export default function TierLimitModal({ open, userEmail, onClose, onRedeemed }:
       >
         <h3 id="tier-limit-title">Limite piano free raggiunto</h3>
         <p>
-          Hai raggiunto il limite di 3 documenti nel piano free. Sblocca
+          Hai raggiunto il limite di 10 documenti nel piano free. Sblocca
           documenti illimitati e rimuovi il watermark riscattando un codice
-          pacchetto.
+          pacchetto, oppure contattaci per richiedere lo sblocco.
         </p>
 
         {!showRedeemForm ? (
           <div className="tier-limit-actions">
             <button
               type="button"
-              className="btn-ghost"
+              className="btn-primary"
               onClick={() => setShowRedeemForm(true)}
               data-testid="tier-limit-show-redeem"
             >
               Inserisci codice sbloccato
             </button>
             <a
-              className="btn-primary"
+              className="btn-secondary"
               href={mailtoHref}
               data-testid="tier-limit-contact"
             >
-              Contattaci
+              ✉️ Contattaci per sblocco
             </a>
             <button
               type="button"

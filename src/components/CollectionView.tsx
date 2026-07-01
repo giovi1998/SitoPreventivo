@@ -494,7 +494,7 @@ function EmptyState({ tabId, totalCount, onOpen, ctx, isAdmin }: { tabId: TabId;
         quote: { title: 'Nessun preventivo ancora', cta: 'Crea un preventivo', docType: 'quote' },
         qrCode: { title: 'Nessun QR Code ancora', cta: 'Crea un QR Code', docType: 'qrCode' },
         businessCard: { title: 'Nessun bigliettino ancora', cta: 'Crea un bigliettino', docType: 'businessCard' },
-        flyer: { title: 'Nessun volantino ancora', cta: 'I volantini non sono ancora disponibili', docType: 'flyer' },
+        flyer: { title: 'Nessun volantino ancora', cta: 'Crea un volantino', docType: 'flyer' },
         logo: { title: 'Nessun logo ancora', cta: 'Crea un logo', docType: 'logo' },
       }
     : {
@@ -502,7 +502,7 @@ function EmptyState({ tabId, totalCount, onOpen, ctx, isAdmin }: { tabId: TabId;
         quote: { title: 'Nessun preventivo ancora', cta: 'Crea un preventivo', docType: 'quote' },
         qrCode: { title: 'Nessun QR Code ancora', cta: 'Crea un QR Code', docType: 'qrCode' },
         businessCard: { title: 'Nessun bigliettino ancora', cta: 'Crea un bigliettino', docType: 'businessCard' },
-        flyer: { title: 'Nessun volantino ancora', cta: 'I volantini non sono ancora disponibili', docType: 'flyer' },
+        flyer: { title: 'Nessun volantino ancora', cta: 'Crea un volantino', docType: 'flyer' },
         logo: { title: 'Nessun logo ancora', cta: 'Crea un logo', docType: 'logo' },
       };
   const msg = emptyMessages[tabId];
@@ -526,10 +526,6 @@ function EmptyState({ tabId, totalCount, onOpen, ctx, isAdmin }: { tabId: TabId;
       <button
         type="button"
         onClick={() => {
-          if (tabId === 'flyer') {
-            // flyer's editor doesn't exist (phase 3 skipped), no-op
-            return;
-          }
           if (tabId === 'quote' && !isAdmin) {
             // Non-admin users land on the QR editor instead
             if (ctx?.setView) ctx.setView('qr');
@@ -540,10 +536,8 @@ function EmptyState({ tabId, totalCount, onOpen, ctx, isAdmin }: { tabId: TabId;
         style={{
           padding: '12px 24px', borderRadius: '12px', background: 'var(--accent)',
           color: '#fff', fontWeight: 700, fontSize: '.9rem', border: 'none',
-          cursor: tabId === 'flyer' ? 'not-allowed' : 'pointer',
-          opacity: tabId === 'flyer' ? 0.5 : 1,
+          cursor: 'pointer',
         }}
-        disabled={tabId === 'flyer'}
       >{cta.cta}</button>
     </div>
   );

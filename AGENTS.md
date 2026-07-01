@@ -237,16 +237,20 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/utils/cardGenerator.ts` | Card PDF/PNG/SVG export + `buildCardSvg` |
 | `src/utils/qrGenerator.ts` | QR Code SVG/PNG generation (`qrcode` lib) |
 | `src/utils/logoGenerator.ts` | **Phase 4**: SVG builder + sanitize + export PNG for logos |
+| `src/utils/flyerGenerator.ts` | **Phase 3**: Flyer PDF/PNG export (4 layout × 5 formati, bleed 3mm, tier-aware watermark) |
 | `src/utils/watermark.ts` | **Phase 5**: tier-aware watermark (free vs unlocked) for PDF/PNG/SVG export |
-| `src/utils/documentSchemas.ts` | Zod schema: quote, QR, businessCard, cardGrid, logo, presets |
+| `src/utils/documentSchemas.ts` | Zod schema: quote, QR, businessCard, cardGrid, logo, **flyer (Phase 3)**, presets |
 | `src/utils/gridUtils.ts` | Grid collision helpers (BLOCK su sovrapposizione, edge bounds) |
 | `src/components/CardEditor.tsx` | Editor bigliettini: 3-col desktop / tabs mobile, FAB AI, zoom |
 | `src/components/CardPreview.tsx` | Anteprima card: flexbox + CSS Grid mode (grid-based rendering) |
 | `src/components/QREditor.tsx` | Generatore QR Code (7 tipi, stili, logo overlay) |
 | `src/components/LogoEditor.tsx` | **Phase 4**: Logo Builder (tabs Builder + AI, lucide picker, 3 export sizes) |
+| `src/components/FlyerEditor.tsx` | **Phase 3**: Volantino editor (form, layout switcher, AI modal, 4 template settore, PDF+PNG export) |
 | `src/hooks/useAICard.ts` | Hook AI card (streaming, token tracking, error recovery) |
+| `src/hooks/useAIFlyer.ts` | **Phase 3**: Hook AI flyer (log, stream buffer, token tracking, generate + refine) |
 | `src/hooks/useMediaQuery.ts` | Hook responsive (breakpoint detection via matchMedia) |
 | `src/ai/cardOrchestrator.ts` | AI orchestrator card (no tools, JSON round-trip) |
+| `src/ai/flyerOrchestrator.ts` | **Phase 3**: AI orchestrator volantino (no tools, JSON round-trip, session mgmt) |
 | `src/ai/cardMerge.ts` | Merge risposta AI → card (grid, style, text, photo-preserv) |
 | `vite.config.js` | Port 8000, SPA fallback for /app route |
 | `vercel.json` | Build runs `db:migrate` before `build` |
@@ -310,48 +314,44 @@ Stato corrente delle fasi di sviluppo (commit di riferimento: `126c9d1`).
 | 0, Auto-save fix | ✅ done | `spec/spec-process-phase0-autosave-fix.md` |, |
 | 1, QR Code | ✅ done | `spec/spec-tool-phase1-qr-code.md` |, |
 | 2, Business Card | ✅ done (2.2 refactor) | `spec/spec-design-phase2-business-card.md`, `spec/spec-design-phase2-2-card-refactor.md` | Master switch, init-from-layout, QR sizing, fontScale, servicesLabel, parity mobile, AI parity. |
-| 3, Volantino | ⏭️ **SKIPPED** | `spec/spec-design-phase3-flyer.md` | Vedi nota skip sotto |
+| 3, Volantino | ✅ done | `spec/spec-design-phase3-flyer.md` | 4 layout (classic/centered/split/magazine) × 5 formati (A6/A5/A4/Letter/Square), bleed 3mm, AI copy via `POST /ai/copy-flyer` (10/min/IP). PDF+PNG export client-side. Tier watermark rispettato. |
 | 4, Logo SVG Builder | ✅ done | `spec/spec-tool-phase4-logo-builder.md` | v1 senza AI (Replicate deferred a v2/Pro). Tab "AI Generation" disabilitato con messaggio. |
 | 5, Tier System | ✅ done | `spec/spec-data-phase5-tier-system.md` | Watermark free, unlock code via admin, tier guard su save. |
 | 6, Unified Collection | ✅ done | `spec/spec-architecture-phase6-unified-collection.md` | `documents` table rinominata, collection unificata. |
 | 7, Polish | ✅ done | `spec/spec-process-phase7-polish.md` | Onboarding step 5, HomePage "Perché noi", `LogoAiDocsPage` pubblica, `preferredDocumentType` in DB, docs aggiornate. |
 
-### ⏭️ Skip fase 3 (Volantino)
+### ✅ Fase 3 (Volantino) - implementata
 
-**Decisione**: la fase 3 (`spec/spec-design-phase3-flyer.md`) viene
-**saltata** e si passa direttamente alla fase 4 (Logo Builder).
+**Stato**: Done. Schema `flyerSchema` + helper `createEmptyFlyer`,
+`createFlyerTemplate`, `mergeFlyerWithDefaults`; generatore PDF/PNG
+(`src/utils/flyerGenerator.ts`) con 4 layout × 5 formati + bleed 3mm +
+crop marks via pdfmake; editor (`FlyerEditor.tsx`) con form, layout
+switcher, AI modal, 4 azioni rapide (Semplifica/Più formale/Più
+giovanile/Aggiungi urgenza), 4 template per settore (ristorante,
+evento, salone, negozio); hook AI (`useAIFlyer`); endpoint API
+`POST /ai/copy-flyer` con rate limit 10/min per IP + header
+`Retry-After`; route `/app/flyer` + voce sidebar "Volantini" +
+`flyerDocument` in `AppContext`.
 
-**Motivazione** (riassunto della sezione "Rationale & Context" della
-spec fase 4, vedi `spec/spec-tool-phase4-logo-builder.md` §7):
-
-1. **Vercel Hobby = timeout 10s.** L'endpoint AI nuovo
-   `POST /ai/copy-flyer` (richiesto dalla fase 3 per la copy AI del
-   volantino) e Replicate-vector per la fase 4 hanno entrambi latenze
-   incompatibili con il piano Hobby.
-2. **Priorità al logo**: il logo è input di fase 2 (card `front.logoUrl`)
-   e input futuro di fase 3 (quando ripresa). Senza logo builder,
-   l'utente carica SVG custom con qualità incerta.
-3. **Bundle size**: il volantino aggiunge dipendenze pesanti (PDF
-   4 layout A4/A5) il cui valore si realizza solo in flussi
-   commerciali maturi (richiede tier system = fase 5).
-4. **Fase 4 = zero dipendenze AI**: SVG builder templated, output
-   editabile, qualità deterministica, costo AI zero. Si può completare
-   in v1; AI logo (Replicate) è deferred a v2 con Vercel Pro.
-5. **Nessuna regressione**: la fase 3 presuppone dati logo (input
-   visual); partire dal logo significa che, *se* in futuro la fase 3
-   verrà ripresa, troverà il builder già maturo.
-
-**Conseguenze**:
-- Schema `flyerSchema` non viene aggiunto in v1.
-- Endpoint `POST /ai/copy-flyer` non esiste in v1.
-- Voce sidebar "Volantini" non viene aggiunta.
-- Le sezioni delle spec fasi 5/6/7 che si riferiscono al flyer
-  restano valide (estensione futura), ma non bloccanti.
-
-**Quando riprendere la fase 3**: dopo che il logo builder è in
-produzione e l'utente ha loghi reali da inserire nei volantini. La
-spec `spec-design-phase3-flyer.md` va riveduta perché il contesto
-sarà cambiato.
+**File rilevanti**:
+- `src/utils/documentSchemas.ts` → sezione `FLYER (Phase 3)`.
+- `src/utils/flyerGenerator.ts` → PDF/PNG con tier-aware watermark.
+- `src/ai/prompts/flyerSystem.ts` → system + brief prompt + sanitizer.
+- `src/ai/flyerOrchestrator.ts` → orchestratore no-tools, JSON
+  round-trip, session management (stesso pattern di `cardOrchestrator`).
+- `src/hooks/useAIFlyer.ts` → hook con stream buffer, logs, token
+  tracking.
+- `src/components/FlyerEditor.tsx` → editor con preview live.
+- `src/pages/app/FlyerPage.tsx` + `src/main.tsx` → route.
+- `src/components/Layout.tsx` → sidebar.
+- `src/components/AppShell.tsx` + `src/contexts/index.ts` →
+  `flyerDocument` state + `openDocument` case `'flyer'`.
+- `api/index.ts` → `POST /ai/copy-flyer` + rimosso rejection su
+  `documentType === 'flyer'` in `POST /documents`.
+- `spec/spec-design-phase3-flyer.md` → spec originaria, da
+  rivedere se si vuole (la spec rimane valida; l'implementazione
+  la rispetta salvo l'AI copy endpoint che è in `api/index.ts` invece
+  che in `src/ai/index.ts` come da pattern `useAI` esistente).
 
 ## Logo Builder Module (fase 4, in progress)
 

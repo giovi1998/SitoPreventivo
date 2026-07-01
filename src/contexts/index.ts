@@ -51,6 +51,8 @@ export type AppContextValue = {
   setCardDocument?: (d: any) => void;
   logoDocument?: unknown;
   setLogoDocument?: (d: any) => void;
+  flyerDocument?: unknown;
+  setFlyerDocument?: (d: any) => void;
   openDocument?: (doc: any) => void;
   refreshDocuments?: () => void;
   [key: string]: any;

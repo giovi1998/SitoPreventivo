@@ -247,21 +247,28 @@ describe('documents API', () => {
     expect(res.body.id).toBe('logo-new-1');
   });
 
-  it('POST /documents with flyer returns 400 (fase 3 reserved, AGENTS.md "Skip fase 3")', async () => {
-    // The schema accepts the discriminator (so the API contract is stable
-    // for the future client) but the handler still rejects it until the
-    // flyer module is implemented.
+  it('POST /documents with flyer returns 201 (phase 3)', async () => {
+    // Phase 3: flyer is now a first-class document type. Same opaque
+    // jsonb storage path as businessCard / logo. Regression guard: the
+    // handler no longer rejects 'flyer' (it used to until phase 3
+    // landed; see AGENTS.md "Skip fase 3" history).
     const res = await callHandler({
       method: 'POST',
       url: '/api/documents',
       headers: { origin: 'http://localhost' },
       body: {
         email: 'user@test.com',
-        document: { documentType: 'flyer', id: 'fl-1', title: '', data: {} },
+        document: {
+          documentType: 'flyer',
+          id: 'fl-1',
+          title: 'Sagra del paese',
+          data: { headline: 'Sagra', layout: 'classic' },
+        },
       },
     });
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error).toMatch(/flyer|supportato/i);
+    expect(res.statusCode).toBe(201);
+    expect(res.body.documentType).toBe('flyer');
+    expect(res.body.id).toBe('fl-1');
   });
 
   it('POST /documents with unknown documentType returns 400 (discriminator guard)', async () => {

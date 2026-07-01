@@ -305,9 +305,15 @@ al sito personale, GitHub social, layout split). Da `src/utils/documentSchemas.t
 
 Generatore di loghi vettoriali componibile. **Nessuna AI nella v1**: l'utente compone il logo da testo + icona + forma + colore + layout. Output SVG pulito e modificabile in Illustrator/Inkscape.
 
-> La fase 3 (Volantino) è stata skippata per dare priorità al logo (input di fase 2 `card.front.logoUrl`). Vedi `AGENTS.md`, sezione "Phase Status & Roadmap" e `spec/spec-tool-phase4-logo-builder.md` sezione 7 (Rationale).
+## Volantino (Flyer)
 
-> La fase 3 (Volantino) è stata **skippata** per dare priorità al logo (input di fase 2 `card.front.logoUrl`). Vedi `AGENTS.md` → "Phase Status & Roadmap" e `spec/spec-tool-phase4-logo-builder.md` §7 (Rationale).
+Volantini A6/A5/A4/Letter/Square con 4 layout (classico, centrato, diviso, magazine), bleed 3mm e copy generation via DeepSeek. Tier watermark rispettato (free = QUICKBRAND diagonale, unlocked = no-op).
+
+- **Editor live**: form con headline / sottotitolo / corpo / CTA / QR opzionale, layout switcher, color picker
+- **AI copy**: bottone "Genera copy con AI" → modale con brief + tone (formale / giovanile / tecnico); 4 azioni rapide: Semplifica / Più formale / Più giovanile / Aggiungi urgenza
+- **4 template per settore**: Ristorante / Evento / Salone / Negozio
+- **Export**: PDF (pdfmake, bleed 3mm incluso) + PNG (canvas, tier-aware DPI)
+- **Endpoint AI**: `POST /ai/copy-flyer` con rate limit 10/min per IP, sanitizzazione HTML lato server
 
 ### Tipi di icona
 
@@ -662,7 +668,7 @@ npm run typecheck  # tsc --noEmit
 | 2, Bigliettini | ✅ | 3 layout, 3 formati, AI Design Mode, grid editor |
 | 2.1, Card polish | ✅ | Collision detection BLOCK, logo in grid (~30%), backGrid separato, showGrid toggle, AI merge protection, template Giovanni con foto+logo trasparente |
 | 2.2, Card refactor | ✅ | Master switch griglia, init-from-layout, QR sizing, fontScale, servicesLabel, parità mobile, AI parity |
-| 3, Volantino | ⏭️ **skipped** | Rimandato per prioritizzare il Logo Builder (vedi AGENTS.md) |
+| 3, Volantino | ✅ | 4 layout × 5 formati (A6/A5/A4/Letter/Square), bleed 3mm, AI copy via `POST /ai/copy-flyer` (10/min/IP), export PDF+PNG, tier watermark rispettato |
 | 4, **Logo Builder** | ✅ | SVG builder templated, 48 icone lucide, 4 template settore, 3 layout, export SVG + PNG 512/1024/2048 |
 | 5, Tier System | ✅ | Watermark free (150/72 DPI), unlock code via admin, tier guard su save (3 doc free) |
 | 6, Unified Collection | ✅ | Tabella `documents` rinominata, migration legacy, tab per tipo documento |
