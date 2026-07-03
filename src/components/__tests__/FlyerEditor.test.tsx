@@ -7,13 +7,13 @@ vi.mock('../SaveDialog', () => ({
   default: ({ open }: any) => (open ? <div data-testid="save-dialog" /> : null),
 }));
 
-const buildFlyerSvgMock = vi.fn((flyer: any) => `<svg data-testid="flyer-svg-mock" data-has-qr="${!!flyer?.content?.qrPayload && /^https?:\/\//.test(flyer.content.qrPayload)}"></svg>`);
-const generateFlyerPdfMock = vi.fn();
-const generateFlyerPngMock = vi.fn();
+const buildFlyerSvgMock = vi.fn((flyer: any, _opts?: any) => `<svg data-testid="flyer-svg-mock" data-has-qr="${!!flyer?.content?.qrPayload && /^https?:\/\//.test(flyer.content.qrPayload)}"></svg>`);
+const generateFlyerPdfMock = vi.fn((_flyer: any, _opts?: any) => Promise.resolve(new Uint8Array([0x25, 0x50, 0x44, 0x46])));
+const generateFlyerPngMock = vi.fn((_flyer: any, _opts?: any) => Promise.resolve(new Uint8Array([0x89, 0x50, 0x4e, 0x47])));
 vi.mock('../../utils/flyerGenerator', () => ({
-  buildFlyerSvg: (...args: any[]) => buildFlyerSvgMock(...args),
-  generateFlyerPdf: (...args: any[]) => generateFlyerPdfMock(...args),
-  generateFlyerPng: (...args: any[]) => generateFlyerPngMock(...args),
+  buildFlyerSvg: (flyer: any, opts?: any) => buildFlyerSvgMock(flyer, opts),
+  generateFlyerPdf: (flyer: any, opts?: any) => generateFlyerPdfMock(flyer, opts),
+  generateFlyerPng: (flyer: any, opts?: any) => generateFlyerPngMock(flyer, opts),
 }));
 vi.mock('../../utils/dataService', () => ({ default: { saveDocument: vi.fn(() => Promise.resolve({ success: true, data: {} })) } }));
 

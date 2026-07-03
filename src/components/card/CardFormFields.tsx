@@ -12,51 +12,21 @@ import {
   FONT_SCALE_STEP,
   SAFE_FONT_FAMILIES,
   isSafeFontFamily,
-  QR_SIZE_PX,
 } from '../../utils/documentSchemas';
+import {
+  LAYOUT_LABELS,
+  SIZE_PRESET_LABELS,
+  BORDER_LABELS,
+  QR_SIZE_LABELS,
+  SOCIAL_PLATFORMS,
+} from './labels';
+
+export { LAYOUT_LABELS, SIZE_PRESET_LABELS, BORDER_LABELS, QR_SIZE_LABELS, SOCIAL_PLATFORMS };
 
 // Phase 2.2 REQ-B02: componenti estratti per il form del bigliettino.
 // Sono condivisi tra desktop 3-colonne e tab mobile "Modifica", per
 // garantire parità di funzionalità (foto, logo, servizi, social, QR,
 // stile, font, fontScale sono presenti in entrambi i viewport).
-
-// ─── Costanti UI (label condivise) ─────────────────────────
-export const LAYOUT_LABELS: Record<BusinessCardLayout, string> = {
-  centered: 'Centrato',
-  left: 'Sinistra',
-  split: 'Split (foto a sinistra)',
-};
-
-export const SIZE_PRESET_LABELS: Record<BusinessCardSizePreset, string> = {
-  'eu-85x55': 'EU 85×55mm',
-  'us-89x51': 'US 89×51mm',
-  'square-65x65': 'Quadrato 65×65mm',
-};
-
-export const BORDER_LABELS: Record<BusinessCardBorderStyle, string> = {
-  none: 'Nessuno',
-  thin: 'Bordo sottile',
-  'accent-strip-left': 'Striscia accento a sinistra',
-  'accent-strip-bottom': 'Striscia accento in basso',
-};
-
-export const QR_SIZE_LABELS: Record<BusinessCardQrSize, string> = {
-  small: `Piccolo (${QR_SIZE_PX.small}px)`,
-  medium: `Medio (${QR_SIZE_PX.medium}px)`,
-  large: `Grande (${QR_SIZE_PX.large}px)`,
-};
-
-export const SOCIAL_PLATFORMS = [
-  { value: '', label: ':' },
-  { value: 'LinkedIn', label: 'LinkedIn' },
-  { value: 'GitHub', label: 'GitHub' },
-  { value: 'X', label: 'X (Twitter)' },
-  { value: 'Instagram', label: 'Instagram' },
-  { value: 'Facebook', label: 'Facebook' },
-  { value: 'YouTube', label: 'YouTube' },
-  { value: 'Behance', label: 'Behance' },
-  { value: 'Dribbble', label: 'Dribbble' },
-] as const;
 
 // ─── Props condivise ───────────────────────────────────────
 export interface CardSectionProps {

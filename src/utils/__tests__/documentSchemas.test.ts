@@ -385,9 +385,11 @@ describe('documentSchemas', () => {
       expect(r?.success).toBe(false);
     });
 
-    it('is optional on businessCardSchema (default omitted)', () => {
+    it('is always present on createEmptyCard (grid is the layout engine)', () => {
       const card = createEmptyCard();
-      expect((card as any).grid).toBeUndefined();
+      expect(card.grid).toBeDefined();
+      expect(card.grid!.cols).toBe(4);
+      expect(card.backGrid).toBeDefined();
     });
 
     it('logo is a valid grid element (Phase 2.1, card-logo in grid mode)', () => {

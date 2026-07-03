@@ -84,7 +84,7 @@ describe('MobileGridEditor (Phase 2.2 API)', () => {
     const newGrid: CardGrid = args[0];
     const newName = newGrid.elements.name!;
     expect(newName.y).toBe(0);
-    expect(args[1]).toEqual({ useGrid: true });
+    expect(args[1]).toBeUndefined();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 

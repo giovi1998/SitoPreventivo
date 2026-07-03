@@ -251,6 +251,7 @@ export function applyLayout(svg: string, layout: LogoLayout): string {
     secondaryColor,
     fontFamily: family,
     layout,
+    icons: [],
   });
 }
 

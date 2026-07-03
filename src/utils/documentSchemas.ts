@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { hasElementContent, type GridElementKey } from './card/gridElements';
 import { FLYER_TEMPLATES_BY_SECTOR_LAYOUT, heroBoxMmForLayout } from './flyer/templateCatalog';
 
 export const documentTypeSchema = z.enum(['quote', 'qrCode', 'businessCard', 'flyer', 'logo']);
@@ -116,10 +117,10 @@ export function mergeCardWithDefaults(input: Partial<BusinessCard> | null | unde
     back: { ...base.back, ...(input.back || {}) },
     style: { ...base.style, ...(input.style || {}) },
     grid: input.grid
-      ? { ...(base.grid || gridPresetLeft()), ...input.grid, elements: { ...((base.grid || gridPresetLeft()).elements), ...(input.grid.elements || {}) } }
+      ? { ...base.grid!, ...input.grid, elements: { ...base.grid!.elements, ...(input.grid.elements || {}) } }
       : base.grid,
     backGrid: input.backGrid
-      ? { ...(base.backGrid || gridPresetBackDefault()), ...input.backGrid, elements: { ...((base.backGrid || gridPresetBackDefault()).elements), ...(input.backGrid.elements || {}) } }
+      ? { ...base.backGrid!, ...input.backGrid, elements: { ...base.backGrid!.elements, ...(input.backGrid.elements || {}) } }
       : base.backGrid,
   };
 }
@@ -235,11 +236,11 @@ export function gridPresetLeft(): CardGrid {
     cols: 4,
     rows: 4,
     elements: {
-      photo: { x: 0, y: 0, w: 1, h: 4 },
-      name: { x: 1, y: 0, w: 3, h: 1 },
-      title: { x: 1, y: 1, w: 3, h: 1 },
-      company: { x: 1, y: 2, w: 2, h: 1 },
-      logo: { x: 3, y: 2, w: 1, h: 2 },
+      photo: { x: 0, y: 0, w: 2, h: 4 },
+      name: { x: 2, y: 0, w: 2, h: 1 },
+      title: { x: 2, y: 1, w: 2, h: 1 },
+      company: { x: 2, y: 2, w: 2, h: 1 },
+      logo: { x: 2, y: 3, w: 2, h: 1 },
     },
   };
 }
@@ -296,9 +297,8 @@ export function gridPresetBackDefault(): CardGrid {
     cols: 4,
     rows: 4,
     elements: {
-      contacts: { x: 0, y: 0, w: 3, h: 4 },
-      qr: { x: 3, y: 0, w: 1, h: 2 },
-      socials: { x: 3, y: 2, w: 1, h: 2 },
+      contacts: { x: 0, y: 0, w: 2, h: 4 },
+      qr: { x: 2, y: 0, w: 2, h: 4 },
     },
   };
 }
@@ -331,7 +331,7 @@ function filterGridElementsByContent(
 ): CardGrid {
   const els: Record<string, { x: number; y: number; w: number; h: number }> = {};
   for (const [key, rect] of Object.entries(grid.elements)) {
-    if (rect && hasElementContent(key, card, side)) {
+    if (rect && hasElementContent(key as GridElementKey, card, side)) {
       els[key] = rect;
     }
   }
@@ -340,44 +340,12 @@ function filterGridElementsByContent(
 
 // Phase 2.2 REQ-E01: true se il lato ha almeno un elemento grid con
 // contenuto. Usato per decidere se renderizzare in grid-mode
-// (isGridMode = showGrid && hasGridElements).
+// (isGridMode = useGrid && hasGridElements).
 export function hasGridElements(side: 'front' | 'back', card: BusinessCard): boolean {
   const grid = side === 'back' ? card.backGrid : card.grid;
   if (!grid) return false;
   for (const [key, rect] of Object.entries(grid.elements)) {
-    if (rect && hasElementContent(key, card, side)) return true;
-  }
-  return false;
-}
-
-function hasElementContent(
-  key: string,
-  card: BusinessCard,
-  side: 'front' | 'back',
-): boolean {
-  if (side === 'front') {
-    if (key === 'photo') return !!card.front.photoUrl;
-    if (key === 'logo') return !!card.front.logoUrl;
-    if (key === 'name') return card.front.name.trim().length > 0;
-    if (key === 'title') return card.front.title.trim().length > 0;
-    if (key === 'company') return card.front.company.trim().length > 0;
-    return false;
-  }
-  // back
-  if (key === 'contacts') {
-    return !!(
-      card.back.phone.trim() ||
-      card.back.email.trim() ||
-      card.back.website.trim() ||
-      card.back.address.trim() ||
-      card.back.vatNumber.trim()
-    );
-  }
-  if (key === 'qr') {
-    return !!(card.back.qrPayload.trim() || card.back.website.trim());
-  }
-  if (key === 'socials') {
-    return card.back.socials.some((s) => s.platform && s.url);
+    if (rect && hasElementContent(key as GridElementKey, card, side)) return true;
   }
   return false;
 }
@@ -478,6 +446,8 @@ export function createEmptyCard(): BusinessCard {
       borderStyle: 'accent-strip-left',
       fontScale: 1,
     },
+    grid: gridPresetLeft(),
+    backGrid: gridPresetBackDefault(),
     createdAt: now,
     updatedAt: now,
   };
@@ -581,6 +551,7 @@ export const logoBuilderSchema = z.object({
   secondaryColor: hexColorSchema.default('#1a1a2e'),
   fontFamily: z.string().default('Inter'),
   layout: logoLayoutSchema.default('horizontal'),
+  icons: z.array(z.string()).default([]),
 });
 export type LogoBuilder = z.infer<typeof logoBuilderSchema>;
 
@@ -628,6 +599,7 @@ export function createEmptyLogo(): Logo {
       secondaryColor: '#1a1a2e',
       fontFamily: 'Inter',
       layout: 'horizontal',
+      icons: [],
     },
     brief: '',
     concepts: [],
@@ -704,7 +676,7 @@ export function createLogoTemplate(sector: LogoSector): Logo {
     id: `logo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     title: `Logo ${sector}`,
     source: 'builder',
-    builder: { ...preset, fontFamily: 'Inter' },
+    builder: { ...preset, fontFamily: 'Inter', icons: [] },
     brief: '',
     concepts: [],
     selected: -1,

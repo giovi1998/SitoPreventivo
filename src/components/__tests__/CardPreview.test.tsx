@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import CardPreview from '../CardPreview';
-import { createEmptyCard, createGiovanniCardTemplate, gridPresetLeft, gridPresetSplit } from '../../utils/documentSchemas';
+import { createEmptyCard, createGiovanniCardTemplate, gridPresetLeft, gridPresetSplit, gridPresetBackDefault } from '../../utils/documentSchemas';
 import type { BusinessCardLayout, BusinessCard } from '../../utils/documentSchemas';
 import { generateQrSvg as mockedGenerateQrSvg } from '../../utils/qrGenerator';
 
@@ -20,17 +20,19 @@ describe('CardPreview', () => {
   });
 
   describe('Front side', () => {
-    it('renders the three layout variants (AC-003)', () => {
+    it('always renders via CSS Grid regardless of layout variant (AC-003, grid-only refactor)', () => {
       const card = { ...createEmptyCard(), front: { ...createEmptyCard().front, name: 'Mario Rossi', title: 'CEO', company: 'ACME' } };
       const { rerender } = render(<CardPreview side="front" card={{ ...card, front: { ...card.front, layout: 'left' } }} />);
-      expect(screen.getByTestId('card-preview-front')).toHaveClass('layout-left');
+      const frontLeft = screen.getByTestId('card-preview-front');
+      expect(frontLeft).toHaveClass('grid-mode');
+      expect(window.getComputedStyle(frontLeft).display).toBe('grid');
       expect(screen.getByText('Mario Rossi')).toBeInTheDocument();
 
       rerender(<CardPreview side="front" card={{ ...card, front: { ...card.front, layout: 'centered' } }} />);
-      expect(screen.getByTestId('card-preview-front')).toHaveClass('layout-centered');
+      expect(screen.getByTestId('card-preview-front')).toHaveClass('grid-mode');
 
       rerender(<CardPreview side="front" card={{ ...card, front: { ...card.front, layout: 'split' } }} />);
-      expect(screen.getByTestId('card-preview-front')).toHaveClass('layout-split');
+      expect(screen.getByTestId('card-preview-front')).toHaveClass('grid-mode');
     });
 
     it('renders Giovanni template with name visible', () => {
@@ -106,15 +108,17 @@ describe('CardPreview', () => {
       expect(screen.queryAllByTestId('card-monogram-front')).toHaveLength(0);
     });
 
-    it('renders bottom area with handle/domain in left layout', () => {
+    it('renders front grid-mode always (no more flexbox .card-front-left-bottom)', () => {
       const card = {
         ...createEmptyCard(),
         back: { ...createEmptyCard().back, website: 'https://example.com' },
         front: { ...createEmptyCard().front, name: 'MARIO ROSSI' },
       };
       const { container } = render(<CardPreview side="front" card={card} />);
-      const bottom = container.querySelector('.card-front-left-bottom');
-      expect(bottom).toBeInTheDocument();
+      // grid-only refactor: .card-front-left-bottom non esiste più, la card
+      // è sempre in grid-mode.
+      expect(container.querySelector('.card-front-left-bottom')).toBeNull();
+      expect(screen.getByTestId('card-preview-front')).toHaveClass('grid-mode');
     });
 
     it('renders decorative diagonal pattern in top-right of front card', () => {
@@ -126,10 +130,10 @@ describe('CardPreview', () => {
       expect(hasGradient).toBe(true);
     });
 
-    it('renders accent divider line below text block on front', () => {
+    it('no longer renders flexbox-only accent divider (grid-only refactor)', () => {
       const card = { ...createEmptyCard(), front: { ...createEmptyCard().front, name: 'MARIO ROSSI' } };
       render(<CardPreview side="front" card={card} />);
-      expect(screen.getByTestId('card-accent-divider')).toBeInTheDocument();
+      expect(screen.queryByTestId('card-accent-divider')).toBeNull();
     });
   });
 
@@ -194,10 +198,11 @@ describe('CardPreview', () => {
       expect(container.querySelector('[data-testid="card-back-qr-svg"] svg, .card-back-qr-svg svg, [data-payload]')).toBeTruthy();
     });
 
-    it('renders back header with "Contatti" label when website is set', () => {
+    it('renders back header with website wordmark (grid refactor)', () => {
       const card = { ...createEmptyCard(), back: { ...createEmptyCard().back, website: 'https://example.com' } };
       render(<CardPreview side="back" card={card} />);
-      expect(screen.getByTestId('card-back-header')).toHaveTextContent(/Contatti/i);
+      expect(screen.getByTestId('card-back-header')).toBeInTheDocument();
+      expect(screen.getByTestId('card-back-wordmark')).toHaveTextContent('example.com');
     });
 
     it('omits the WEB contact row on the back when QR payload is present (Phase 2.1)', () => {
@@ -228,13 +233,16 @@ describe('CardPreview', () => {
       expect(screen.queryByTestId('card-back-header')).toBeNull();
     });
 
-    it('renders wordmark footer on back when website is set', () => {
+    it('renders back wordmark inside header (grid refactor)', () => {
       const card = { ...createEmptyCard(), back: { ...createEmptyCard().back, website: 'https://example.com' } };
-      render(<CardPreview side="back" card={card} />);
-      expect(screen.getByTestId('card-back-wordmark')).toHaveTextContent('example.com');
+      const { container } = render(<CardPreview side="back" card={card} />);
+      const wordmark = screen.getByTestId('card-back-wordmark');
+      expect(wordmark).toBeInTheDocument();
+      expect(wordmark).toHaveTextContent('example.com');
+      expect(container.querySelector('.card-back-header')?.contains(wordmark)).toBe(true);
     });
 
-    it('falls back to company name in header when website is empty (C9)', () => {
+    it('renders back wordmark fallback from company when no website (grid refactor, C9)', () => {
       const card = {
         ...createEmptyCard(),
         front: { ...createEmptyCard().front, company: 'ACME SRL' },
@@ -305,7 +313,7 @@ describe('CardPreview', () => {
       expect(socials.textContent).toContain('@mario');
     });
 
-    it('renders socials INSIDE the contacts column, not in a separate footer (below contacts)', () => {
+    it('renders socials INSIDE the contacts grid cell when no socials cell exists (grid-only refactor)', () => {
       const card = {
         ...createEmptyCard(),
         back: {
@@ -314,13 +322,19 @@ describe('CardPreview', () => {
             { platform: 'LinkedIn', url: 'XXXX' },
           ],
         },
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 3, h: 4 },
+            qr: { x: 3, y: 0, w: 1, h: 2 },
+          },
+        },
       };
       const { container } = render(<CardPreview side="back" card={card} />);
-      const contacts = container.querySelector('.card-back-contacts')!;
+      const contactsCell = container.querySelector('[data-testid="grid-el-contacts"]');
       const socials = screen.getByTestId('card-back-socials');
-      // Socials should be a child of contacts column
-      expect(contacts.contains(socials)).toBe(true);
-      // No more separate card-back-footer wrapper
+      expect(contactsCell?.contains(socials)).toBe(true);
       expect(container.querySelector('.card-back-footer')).toBeNull();
     });
 
@@ -357,13 +371,15 @@ describe('CardPreview', () => {
       expect(style.display).toBe('grid');
     });
 
-    it('front: when card.grid is NOT set, falls back to flexbox (no grid)', () => {
+    it('front: grid is ALWAYS used (grid-only refactor, no flexbox fallback)', () => {
+      // grid-only: card.grid è sempre presente (createEmptyCard lo include).
+      // Anche se forziamo grid=undefined, il render usa card.grid ?? backGrid
+      // e resta in grid-mode. Verifichiamo che la card default sia grid-mode.
       const card = createGiovanniCardTemplate();
-      const noGrid = { ...card, grid: undefined as unknown as typeof card.grid };
-      render(<CardPreview side="front" card={noGrid} />);
+      render(<CardPreview side="front" card={card} />);
       const front = screen.getByTestId('card-preview-front');
-      // Giovanni template usa layout: 'split' (Phase 2.1)
-      expect(front).toHaveClass('layout-split');
+      expect(front).toHaveClass('grid-mode');
+      expect(window.getComputedStyle(front).display).toBe('grid');
     });
 
     it('front: grid element photo gets gridColumn/gridRow matching gridPresetLeft', () => {
@@ -376,14 +392,14 @@ describe('CardPreview', () => {
       const photoEl = document.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
       expect(photoEl).not.toBeNull();
       const style = window.getComputedStyle(photoEl);
-      // gridPresetLeft: photo at x=0, y=0, w=1, h=4 → gridColumn 1 / span 1, gridRow 1 / span 4
-      expect(style.gridColumn).toBe('1 / span 1');
+      // gridPresetLeft: photo at x=0, y=0, w=2, h=4 → gridColumn 1 / span 2, gridRow 1 / span 4
+      expect(style.gridColumn).toBe('1 / span 2');
       expect(style.gridRow).toBe('1 / span 4');
     });
 
     it('front: moving name element changes its grid-column', () => {
       const grid = gridPresetLeft();
-      // name is at x=1, w=3 in presetLeft
+      // name is at x=2, w=2 in presetLeft
       const card1: BusinessCard = {
         ...createGiovanniCardTemplate(),
         grid,
@@ -391,7 +407,7 @@ describe('CardPreview', () => {
       };
       const { rerender } = render(<CardPreview side="front" card={card1} showGrid={true} />);
       let nameEl = document.querySelector('[data-testid="grid-el-name"]') as HTMLElement;
-      expect(window.getComputedStyle(nameEl).gridColumn).toBe('2 / span 3');
+      expect(window.getComputedStyle(nameEl).gridColumn).toBe('3 / span 2');
 
       // Move name to x=0, w=2
       const grid2 = { ...grid, elements: { ...grid.elements, name: { x: 0, y: 0, w: 2, h: 1 } } };
@@ -404,16 +420,19 @@ describe('CardPreview', () => {
       const card: BusinessCard = {
         ...createGiovanniCardTemplate(),
         back: { ...createGiovanniCardTemplate().back, useGrid: true },
-        backGrid: gridPresetSplit(),
+        backGrid: gridPresetBackDefault(),
       };
       render(<CardPreview side="back" card={card} showGrid={true} />);
+      // The back root is now a block container with a nested body grid.
       const back = screen.getByTestId('card-preview-back');
-      const style = window.getComputedStyle(back);
-      expect(style.display).toBe('grid');
-      // gridPresetSplit Phase 2.1: qr at x=2, contacts at x=0 (w=2)
+      expect(window.getComputedStyle(back).display).toBe('block');
+      const bodyGrid = back.querySelector('.card-back-body-grid') as HTMLElement;
+      expect(bodyGrid).not.toBeNull();
+      expect(window.getComputedStyle(bodyGrid).display).toBe('grid');
+      // gridPresetBackDefault: contacts at x=0 (w=2), qr at x=2 (w=2)
       const qrEl = document.querySelector('[data-testid="grid-el-qr"]') as HTMLElement;
       expect(qrEl).not.toBeNull();
-      expect(window.getComputedStyle(qrEl).gridColumn).toBe('3 / span 1');
+      expect(window.getComputedStyle(qrEl).gridColumn).toBe('3 / span 2');
       const contactsEl = document.querySelector('[data-testid="grid-el-contacts"]') as HTMLElement;
       expect(contactsEl).not.toBeNull();
       expect(window.getComputedStyle(contactsEl).gridColumn).toBe('1 / span 2');
@@ -490,16 +509,15 @@ describe('CardPreview', () => {
       expect(window.getComputedStyle(qrEl).gridColumn).toBe('1 / span 1');
     });
 
-    it('back: when card.backGrid has no back elements, falls back to flexbox (Phase 2.1 fix)', () => {
-      // Giovanni template: grid ha elementi front, backGrid ha elementi back.
-      // Rimuovendo backGrid, il retro cade in flexbox.
+    it('back: body grid container always renders (grid refactor, no flexbox body)', () => {
+      // grid-only: backGrid è sempre presente in createEmptyCard. Anche
+      // forzandolo undefined, BackPreview usa card.backGrid ?? card.grid.
       const card = createGiovanniCardTemplate();
       render(<CardPreview side="back" card={{ ...card, backGrid: undefined }} showGrid={true} />);
       const back = screen.getByTestId('card-preview-back');
-      // NOT in grid mode → flexbox → contacts/qr visible come flex
-      expect(back.className).not.toContain('grid-mode');
-      expect(screen.queryByTestId('grid-el-qr')).toBeNull();
-      expect(screen.queryByTestId('grid-el-contacts')).toBeNull();
+      const bodyGrid = back.querySelector('.card-back-body-grid') as HTMLElement;
+      expect(bodyGrid).not.toBeNull();
+      expect(window.getComputedStyle(bodyGrid).display).toBe('grid');
     });
 
     it('front: showGrid=false hides overlay but preserves persisted grid layout', () => {
@@ -532,12 +550,15 @@ describe('CardPreview', () => {
       expect(document.querySelector('.card-grid-overlay')).not.toBeNull();
     });
 
-    it('back: showGrid=false → flexbox (REQ-E01 master switch OFF)', () => {
+    it('back: showGrid=false hides debug overlay but keeps body grid (grid refactor)', () => {
       const card = createGiovanniCardTemplate();
       render(<CardPreview side="back" card={card} showGrid={false} />);
       const back = screen.getByTestId('card-preview-back');
-      expect(back.className).not.toContain('grid-mode');
-      expect(document.querySelector('[data-testid="grid-el-qr"]')).toBeNull();
+      // grid-only: showGrid controlla solo l'overlay, non il render branch.
+      const bodyGrid = back.querySelector('.card-back-body-grid') as HTMLElement;
+      expect(bodyGrid).not.toBeNull();
+      expect(window.getComputedStyle(bodyGrid).display).toBe('grid');
+      expect(document.querySelector('[data-testid="card-grid-debug"]')).toBeNull();
     });
 
     it('back: email su una sola riga (nowrap + ellipsis) senza QR', () => {
@@ -610,6 +631,32 @@ describe('CardPreview', () => {
       expect(window.getComputedStyle(logoEl).gridRow).toBe('1 / span 2');
     });
   });
+
+    it('renders grid debug overlay on front when useGrid=true and front has grid elements', () => {
+      const card: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        grid: gridPresetLeft(),
+        front: { ...createGiovanniCardTemplate().front, useGrid: true },
+      };
+      render(<CardPreview side="front" card={card} showGrid={true} />);
+      expect(screen.getByTestId('card-grid-debug')).toBeInTheDocument();
+    });
+
+    it('renders grid debug overlay on back when useGrid=true and back has grid elements', () => {
+      const card: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        backGrid: gridPresetBackDefault(),
+        back: { ...createGiovanniCardTemplate().back, useGrid: true },
+      };
+      render(<CardPreview side="back" card={card} showGrid={true} />);
+      expect(screen.getByTestId('card-grid-debug')).toBeInTheDocument();
+    });
+
+    it('does NOT render grid debug overlay in flexbox mode', () => {
+      const card = createGiovanniCardTemplate();
+      render(<CardPreview side="front" card={card} showGrid={false} />);
+      expect(screen.queryByTestId('card-grid-debug')).toBeNull();
+    });
 
   // ─── Phase 2.2: fontScale + servicesLabel + text wrap ────────────
   describe('Phase 2.2 features (fontScale, servicesLabel, wrap)', () => {

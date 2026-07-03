@@ -23,6 +23,116 @@
   box-sizing: border-box;
 }
 
+/* Grid-mode cell wrapper: every grid child must fill its cell and clip
+ * overflow so long text never overlaps adjacent cells. */
+.card-preview-side.grid-mode .card-grid-cell,
+.card-back-body-grid .card-grid-cell {
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.card-preview-side.grid-mode .card-grid-cell--text,
+.card-back-body-grid .card-grid-cell--text {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.card-preview-side.grid-mode .card-grid-cell--qr,
+.card-back-body-grid .card-grid-cell--qr {
+  padding: 4px;
+}
+
+/* Grid-mode images fill the cell completely so resizing the cell
+ * also resizes the visible image. */
+.card-preview-side.grid-mode .card-grid-cell--logo img,
+.card-preview-side.grid-mode .card-grid-cell .card-photo,
+.card-back-body-grid .card-grid-cell--logo img,
+.card-back-body-grid .card-grid-cell .card-photo {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Back body grid: holds contacts/qr/socials below the header. */
+.card-back-body-grid {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Grid overlay + debug must cover the body grid area, not the header. */
+.card-back-body-grid .card-grid-overlay,
+.card-back-body-grid .card-grid-debug {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* QR in grid-mode keeps its configured size (small/medium/large)
+ * and stays centered in its cell; it does NOT stretch to fill the cell. */
+.card-back-body-grid .card-grid-cell--qr .card-back-qr-svg,
+.card-preview-side.grid-mode .card-grid-cell--qr .card-back-qr-svg {
+  width: var(--card-qr-size, 120px);
+  height: var(--card-qr-size, 120px);
+  aspect-ratio: 1 / 1;
+}
+
+/* Grid-mode text children: wrap and clip, never expand outside the cell. */
+.card-preview-side.grid-mode .card-grid-cell--text .card-name,
+.card-preview-side.grid-mode .card-grid-cell--text .card-title,
+.card-preview-side.grid-mode .card-grid-cell--text .card-company,
+.card-preview-side.grid-mode .card-grid-cell--text .card-back-line,
+.card-preview-side.grid-mode .card-grid-cell--text .card-back-services,
+.card-preview-side.grid-mode .card-grid-cell--text .card-back-services-label,
+.card-preview-side.grid-mode .card-grid-cell--text .card-back-socials {
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  /* Phase 2.2 REQ-F01: editable text wraps instead of being truncated. */
+  overflow-wrap: break-word;
+  word-break: break-word;
+  white-space: normal;
+}
+
+/* Back contact rows in grid mode: keep labels readable but clip values. */
+.card-preview-side.grid-mode .card-grid-cell--text .card-back-line {
+  width: 100%;
+}
+
+.card-preview-side.grid-mode .card-grid-cell--text .card-back-key {
+  flex: 0 0 auto;
+}
+
+/* Grid debug overlay sits above content so cell boundaries remain visible. */
+.card-grid-debug {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* Flexbox mode keeps the overflow-wrap behavior required by REQ-F01. */
+.card-preview-side:not(.grid-mode) .card-name,
+.card-preview-side:not(.grid-mode) .card-title,
+.card-preview-side:not(.grid-mode) .card-company {
+  text-overflow: initial;
+  overflow: visible;
+  display: block;
+}
+
 .card-preview-side.size-eu-85x55 { aspect-ratio: 85 / 55; }
 .card-preview-side.size-us-89x51 { aspect-ratio: 89 / 51; }
 .card-preview-side.size-square-65x65 { aspect-ratio: 1 / 1; }

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import CardEditor from '../CardEditor';
 import dataService from '../../utils/dataService';
-import { createEmptyCard, createGiovanniCardTemplate } from '../../utils/documentSchemas';
+import { createEmptyCard, createGiovanniCardTemplate, gridPresetBackDefault } from '../../utils/documentSchemas';
 import type { BusinessCard } from '../../utils/documentSchemas';
 import { compressImage, generateCardPDF, generateCardPng } from '../../utils/cardGenerator';
 import { useToast } from '../../hooks/useToast';
@@ -119,13 +119,13 @@ describe('CardEditor', () => {
     expect(screen.getByText(/Usa template personale di Giovanni/i)).toBeInTheDocument();
   });
 
-  it('changes front.layout and re-renders preview with new class (AC-003)', () => {
+  it('changes front.layout and re-renders preview always in grid-mode (AC-003, grid-only refactor)', () => {
     renderEditor();
     const select = screen.getByLabelText(/Layout fronte/i) as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'centered' } });
-    expect(screen.getByTestId('card-preview-front')).toHaveClass('layout-centered');
+    expect(screen.getByTestId('card-preview-front')).toHaveClass('grid-mode');
     fireEvent.change(select, { target: { value: 'split' } });
-    expect(screen.getByTestId('card-preview-front')).toHaveClass('layout-split');
+    expect(screen.getByTestId('card-preview-front')).toHaveClass('grid-mode');
   });
 
   it('changes size preset and re-renders preview with new size class (AC-011)', () => {
@@ -842,12 +842,14 @@ describe('CardEditor', () => {
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'contacts' } });
-      // contacts a (0,0,3,4), w=3 > 1 → canShrinkW = true
+      // contacts a (0,0,2,4), w=2 > 1 → canShrinkW = true
       const shrinkW = screen.getByRole('button', { name: /Riduci larghezza/i });
       expect(shrinkW).not.toBeDisabled();
       fireEvent.click(shrinkW);
       const back = screen.getByTestId('card-preview-back');
-      expect(back.className).toContain('grid-mode');
+      const bodyGrid = back.querySelector('.card-back-body-grid') as HTMLElement;
+      expect(bodyGrid).not.toBeNull();
+      expect(window.getComputedStyle(bodyGrid).display).toBe('grid');
     });
 
     it('grid editor back: shrinks QR height (Giovanni template)', () => {
@@ -858,28 +860,46 @@ describe('CardEditor', () => {
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'qr' } });
-      // qr a (3,0,1,2), h=2 > 1 → canShrinkH = true
+      // qr a (2,0,2,4), h=4 > 1 → canShrinkH = true
       const shrinkH = screen.getByRole('button', { name: /Riduci altezza/i });
       expect(shrinkH).not.toBeDisabled();
       fireEvent.click(shrinkH);
       const back = screen.getByTestId('card-preview-back');
-      expect(back.className).toContain('grid-mode');
+      const bodyGrid = back.querySelector('.card-back-body-grid') as HTMLElement;
+      expect(bodyGrid).not.toBeNull();
+      expect(window.getComputedStyle(bodyGrid).display).toBe('grid');
     });
 
-    it('grid editor back: shrinks socials height (Giovanni template)', () => {
-      renderEditor({ initialCard: createGiovanniCardTemplate() });
+    it('grid editor back: shrinks socials height (custom backGrid with socials)', () => {
+      // Giovanni template no longer has a socials cell; use a custom backGrid
+      // that includes contacts/qr/socials so the shrink action is testable.
+      const card: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 2, h: 4 },
+            qr: { x: 2, y: 0, w: 2, h: 2 },
+            socials: { x: 2, y: 2, w: 2, h: 2 },
+          },
+        },
+      };
+      renderEditor({ initialCard: card });
       const gridToggle = screen.getByLabelText(/Mostra griglia/i);
       fireEvent.click(gridToggle);
       const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'socials' } });
-      // socials a (3,2,1,2), h=2 > 1 → canShrinkH = true
+      // socials a (2,2,2,2), h=2 > 1 → canShrinkH = true
       const shrinkH = screen.getByRole('button', { name: /Riduci altezza/i });
       expect(shrinkH).not.toBeDisabled();
       fireEvent.click(shrinkH);
       const back = screen.getByTestId('card-preview-back');
-      expect(back.className).toContain('grid-mode');
+      const bodyGrid = back.querySelector('.card-back-body-grid') as HTMLElement;
+      expect(bodyGrid).not.toBeNull();
+      expect(window.getComputedStyle(bodyGrid).display).toBe('grid');
     });
   });
 

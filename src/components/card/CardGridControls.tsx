@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { BusinessCard, CardGrid } from '../../utils/documentSchemas';
-import { hasGridElements, deriveGridFromLayout } from '../../utils/documentSchemas';
+import { deriveGridFromLayout } from '../../utils/documentSchemas';
+import {
+  allElementOptionsForSide,
+  getAvailableGridElements,
+  type GridSide,
+} from '../../utils/card/gridElements';
 import {
   canMove as canMoveUtil,
   canResize as canResizeUtil,
@@ -8,7 +13,7 @@ import {
   wouldCollideOnResize,
 } from '../../utils/gridUtils';
 
-export type GridSide = 'front' | 'back';
+export type { GridSide };
 
 export interface CardGridControlsProps {
   card: BusinessCard;
@@ -16,7 +21,7 @@ export interface CardGridControlsProps {
   /** Master switch (REQ-E01): quando false, i controlli sono disabilitati. */
   gridEnabled: boolean;
   onSideChange: (s: GridSide) => void;
-  onChangeGrid: (grid: CardGrid, persist: { useGrid: boolean }) => void;
+  onChangeGrid: (grid: CardGrid) => void;
   /** Elemento selezionato (controllato dal parent per persistenza cross-tab). */
   selected: keyof CardGrid['elements'] | '';
   onSelect: (k: keyof CardGrid['elements'] | '') => void;
@@ -32,45 +37,6 @@ export interface CardGridControlsProps {
    *    popup separatamente (vedi MobileGridEditor).
    */
   mode?: 'inline' | 'mobile';
-}
-
-// Elementi del FRONTE/RETRO per la select. Filtrati da `availableElements`
-// (passato dal parent) in base al contenuto (vedi spec REQ-B02).
-const FRONT_KEYS: Array<{ value: keyof CardGrid['elements']; label: string }> = [
-  { value: 'photo', label: 'Foto' },
-  { value: 'name', label: 'Nome' },
-  { value: 'title', label: 'Ruolo' },
-  { value: 'company', label: 'Azienda' },
-  { value: 'logo', label: 'Logo' },
-];
-
-const BACK_KEYS: Array<{ value: keyof CardGrid['elements']; label: string }> = [
-  { value: 'contacts', label: 'Contatti' },
-  { value: 'qr', label: 'QR' },
-  { value: 'socials', label: 'Social' },
-];
-
-export function getAvailableGridElements(side: GridSide, card: BusinessCard): Array<{ value: keyof CardGrid['elements']; label: string }> {
-  if (side === 'front') {
-    const els: Array<{ value: keyof CardGrid['elements']; label: string }> = [];
-    if (card.front.photoUrl) els.push(FRONT_KEYS.find((k) => k.value === 'photo')!);
-    if (card.front.logoUrl) els.push(FRONT_KEYS.find((k) => k.value === 'logo')!);
-    if (card.front.name.trim()) els.push(FRONT_KEYS.find((k) => k.value === 'name')!);
-    if (card.front.title.trim()) els.push(FRONT_KEYS.find((k) => k.value === 'title')!);
-    if (card.front.company.trim()) els.push(FRONT_KEYS.find((k) => k.value === 'company')!);
-    return els;
-  }
-  const els: Array<{ value: keyof CardGrid['elements']; label: string }> = [];
-  const hasContacts = card.back.phone.trim() || card.back.email.trim() ||
-    card.back.website.trim() || card.back.address.trim() || card.back.vatNumber.trim();
-  if (hasContacts) els.push(BACK_KEYS.find((k) => k.value === 'contacts')!);
-  if (card.back.qrPayload.trim() || card.back.website.trim()) {
-    els.push(BACK_KEYS.find((k) => k.value === 'qr')!);
-  }
-  if (card.back.socials.some((s) => s.platform && s.url)) {
-    els.push(BACK_KEYS.find((k) => k.value === 'socials')!);
-  }
-  return els;
 }
 
 // Phase 2.2 REQ-B02: controlli grid condivisi desktop/mobile. Render inline
@@ -137,7 +103,6 @@ export function CardGridControls({
     }
     onChangeGrid(
       { ...activeGrid, elements: { ...activeGrid.elements, [selected]: { ...el, x, y } } },
-      { useGrid: true },
     );
     onAfterMove?.({ element: selected, dx, dy, applied: true });
   };
@@ -157,17 +122,16 @@ export function CardGridControls({
     }
     onChangeGrid(
       { ...activeGrid, elements: { ...activeGrid.elements, [selected]: { ...el, w: nw, h: nh } } },
-      { useGrid: true },
     );
     onAfterResize?.({ element: selected, dw, dh, applied: true });
   };
 
   const handleSetGridSize = (cols: number, rows: number) => {
     if (cols < 2 || cols > 8 || rows < 2 || rows > 8) return;
-    onChangeGrid({ ...activeGrid, cols, rows }, { useGrid: true });
+    onChangeGrid({ ...activeGrid, cols, rows });
   };
 
-  const elementOptions = side === 'front' ? FRONT_KEYS : BACK_KEYS;
+  const elementOptions = allElementOptionsForSide(side);
 
   return (
     <div
@@ -223,7 +187,7 @@ export function CardGridControls({
             const grid = side === 'back'
               ? { cols: 4, rows: 4, elements: { contacts: { x: 0, y: 0, w: 3, h: 4 }, qr: { x: 3, y: 0, w: 1, h: 2 }, socials: { x: 3, y: 2, w: 1, h: 2 } } }
               : FRONT_PRESETS[v] || FRONT_PRESETS.split;
-            onChangeGrid(grid, { useGrid: true });
+            onChangeGrid(grid);
           }}
           aria-label="Preset griglia"
           data-testid="grid-editor-preset"
@@ -322,6 +286,7 @@ export function CardGridControls({
               disabled={!gridEnabled || !canMoveUp}
               aria-label="Sposta su"
               title={!canMoveUp ? (selectedEl?.y === 0 ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta su'}
+              data-testid="grid-move-up"
             ><span aria-hidden="true">↑</span></button>
             <button
               type="button"
@@ -329,6 +294,7 @@ export function CardGridControls({
               disabled={!gridEnabled || !canMoveDown}
               aria-label="Sposta giù"
               title={!canMoveDown ? ((selectedEl?.y ?? 0) + (selectedEl?.h ?? 0) >= activeGrid.rows ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta giù'}
+              data-testid="grid-move-down"
             ><span aria-hidden="true">↓</span></button>
             <button
               type="button"
@@ -346,6 +312,7 @@ export function CardGridControls({
               disabled={!gridEnabled || !canShrinkW}
               aria-label="Riduci larghezza"
               title={!canShrinkW ? 'Larghezza minima 1' : disabledTitle || 'Riduci larghezza'}
+              data-testid="grid-resize-w-minus"
             ><span aria-hidden="true">−↔</span></button>
             <button
               type="button"
@@ -353,6 +320,7 @@ export function CardGridControls({
               disabled={!gridEnabled || !canGrowW}
               aria-label="Aumenta larghezza"
               title={!canGrowW ? (selectedEl && selectedEl.x + selectedEl.w >= activeGrid.cols ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Aumenta larghezza'}
+              data-testid="grid-resize-w-plus"
             ><span aria-hidden="true">+↔</span></button>
             <button
               type="button"
@@ -360,6 +328,7 @@ export function CardGridControls({
               disabled={!gridEnabled || !canShrinkH}
               aria-label="Riduci altezza"
               title={!canShrinkH ? 'Altezza minima 1' : disabledTitle || 'Riduci altezza'}
+              data-testid="grid-resize-h-minus"
             ><span aria-hidden="true">−↕</span></button>
             <button
               type="button"
@@ -367,6 +336,7 @@ export function CardGridControls({
               disabled={!gridEnabled || !canGrowH}
               aria-label="Aumenta altezza"
               title={!canGrowH ? (selectedEl && selectedEl.y + selectedEl.h >= activeGrid.rows ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Aumenta altezza'}
+              data-testid="grid-resize-h-plus"
             ><span aria-hidden="true">+↕</span></button>
           </div>
         </>

@@ -1,12 +1,9 @@
 import React from 'react';
 import AILogPanel from '../AILogPanel';
 import type { AILogEntry } from '../../ai/types';
+import { CARD_QUICK_ACTIONS } from '../../ai/prompts/cardQuickActions';
 
 // Phase 2.2 refactor: pannello AI condiviso del bigliettino.
-// Prima questo blocco JSX (model select + textarea + quick actions +
-// apply/reset + log) era duplicato 3 volte in CardEditor.tsx
-// (tab mobile, colonna desktop, bottom sheet). Estratto qui per
-// eliminare la duplicazione e ridurre la dimensione di CardEditor.tsx.
 
 export interface CardAIModel {
   id: string;
@@ -27,16 +24,6 @@ export interface CardAIControlsProps {
   /** 'desktop' = colonna 3 (textarea 2 righe, apply primario). 'mobile' = tab/bottom-sheet (textarea 4 righe). */
   variant: 'desktop' | 'mobile';
 }
-
-const QUICK_ACTIONS: Array<{ mode: string; label: string; title?: string }> = [
-  { mode: 'premium', label: 'Rendi premium' },
-  { mode: 'minimal', label: 'Minimal' },
-  { mode: 'fill', label: 'Compila da nome' },
-  { mode: 'palette', label: 'Cambia palette' },
-  { mode: 'print', label: 'Ottimizza per stampa' },
-  { mode: 'moveQr', label: '← Sposta QR', title: 'Sposta il QR a sinistra' },
-  { mode: 'growPhoto', label: '↔ Allarga foto', title: 'Allarga la foto' },
-];
 
 export default function CardAIControls({
   aiModel,
@@ -66,7 +53,7 @@ export default function CardAIControls({
 
   const quickActions = (
     <div className="card-ai-actions">
-      {QUICK_ACTIONS.map((a) => (
+      {CARD_QUICK_ACTIONS.map((a) => (
         <button
           key={a.mode}
           type="button"

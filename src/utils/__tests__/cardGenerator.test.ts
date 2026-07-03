@@ -31,8 +31,9 @@ import {
   CARD_A4_MARGIN_MM,
   resolveCardQrPayload,
 } from '../cardGenerator';
-import * as cardGeneratorModule from '../cardGenerator';
+import { resolveToBase64DataUrl } from '../card/pngExport';
 import { createEmptyCard, createGiovanniCardTemplate } from '../documentSchemas';
+import * as cardGeneratorModule from '../cardGenerator';
 
 const ALLOWED_MIME = ['image/png', 'image/jpeg', 'image/svg+xml'];
 
@@ -455,7 +456,7 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
     // resolveToBase64DataUrl converte l'URL in base64 PRIMA di build
     // l'SVG, rendendolo self-contained (funziona in dev, prod, e in
     // ogni browser).
-    const { resolveToBase64DataUrl } = cardGeneratorModule._internalForTests();
+    // resolveToBase64DataUrl imported directly from '../card/pngExport'
     const fetchSpy = vi.fn(async () =>
       new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), { headers: { 'Content-Type': 'image/jpeg' } }),
     );
@@ -485,7 +486,7 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
   });
 
   it('photoUrl con fetch che fallisce: fallback all\'URL originale (no crash)', async () => {
-    const { resolveToBase64DataUrl } = cardGeneratorModule._internalForTests();
+    // resolveToBase64DataUrl imported directly from '../card/pngExport'
     const fetchSpy = vi.fn(async () => {
       throw new Error('network error');
     });
@@ -501,7 +502,7 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
   });
 
   it('photoUrl con data URL esistente: passa direttamente (no fetch)', async () => {
-    const { resolveToBase64DataUrl } = cardGeneratorModule._internalForTests();
+    // resolveToBase64DataUrl imported directly from '../card/pngExport'
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
     try {
@@ -515,7 +516,7 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
   });
 
   it('photoUrl con fetch che ritorna 404: fallback all\'URL originale + warning', async () => {
-    const { resolveToBase64DataUrl } = cardGeneratorModule._internalForTests();
+    // resolveToBase64DataUrl imported directly from '../card/pngExport'
     const fetchSpy = vi.fn(async () => new Response('not found', { status: 404 }));
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubGlobal('fetch', fetchSpy);

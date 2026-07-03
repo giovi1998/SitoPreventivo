@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CardGrid } from '../utils/documentSchemas';
-import { CardGridControls, getAvailableGridElements, type GridSide } from './card/CardGridControls';
+import { CardGridControls, type GridSide } from './card/CardGridControls';
+import { getAvailableGridElements } from '../utils/card/gridElements';
 import { clampMove, wouldCollideOnMove } from '../utils/gridUtils';
 
 interface MobileGridEditorProps {
@@ -11,7 +12,7 @@ interface MobileGridEditorProps {
   selected: keyof CardGrid['elements'] | '';
   onSelect: (k: keyof CardGrid['elements'] | '') => void;
   onChangeSide: (s: GridSide) => void;
-  onChangeGrid: (grid: CardGrid, persist: { useGrid: boolean }) => void;
+  onChangeGrid: (grid: CardGrid) => void;
   /** Restituisce informazioni sulla mossa (per toast feedback in G). */
   onAfterMove?: (info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
 }
@@ -68,7 +69,6 @@ export default function MobileGridEditor({
     }
     onChangeGrid(
       { ...activeGrid, elements: { ...activeGrid.elements, [selected]: { ...selectedEl, x: r.x, y: r.y } } },
-      { useGrid: true },
     );
     onAfterMove?.({ element: selected, dx, dy, applied: true });
     setPopupOpen(false);

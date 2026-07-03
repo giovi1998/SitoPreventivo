@@ -110,6 +110,10 @@ describe('mergeCardAIResponse', () => {
 
   it('merges grid.elements.qr position (C - AI grid move), Phase 2.2 routes to backGrid', () => {
     const card = createEmptyCard();
+    // createEmptyCard ora include backGrid di default (gridPresetBackDefault)
+    // con qr a (2,0,2,4) e contacts a (0,0,2,4). L'AI chiede qr a (0,2,1,2):
+    // la mossa è bloccata da contacts (collisione), il merge sanitizza alla
+    // posizione corrente. Verifichiamo routing backGrid + messaggio blocco.
     const { card: merged, changes } = mergeCardAIResponse(card, {
       grid: {
         cols: 4,
@@ -120,13 +124,16 @@ describe('mergeCardAIResponse', () => {
       },
     });
     // Phase 2.2 REQ-A04: qr è un elemento del retro, va in card.backGrid
-    expect(merged.backGrid?.elements.qr).toEqual({ x: 0, y: 2, w: 1, h: 2 });
+    expect(merged.backGrid?.elements.qr).toEqual({ x: 2, y: 0, w: 1, h: 2 });
     expect(merged.grid?.elements.qr).toBeUndefined();
     expect(changes.some((c) => c.includes('qr'))).toBe(true);
   });
 
   it('merges grid.elements.photo size (C - AI grid resize)', () => {
     const card = createEmptyCard();
+    // createEmptyCard ora include grid=gridPresetLeft con photo a (0,0,2,4).
+    // AI chiede photo (0,0,2,2): nessuna collisione con name(2,0,2,1),
+    // shrinkH a h=2 ok. Risultato: (0,0,2,2).
     const { card: merged, changes } = mergeCardAIResponse(card, {
       grid: {
         elements: {
@@ -140,13 +147,16 @@ describe('mergeCardAIResponse', () => {
 
     it('merges grid.elements.logo position (Phase 2.1: logo is grid-editable)', () => {
       const card = createEmptyCard();
+      // createEmptyCard include grid=gridPresetLeft con logo a (2,3,2,1).
+      // AI chiede logo (2,3,1,1): larghezza ridotta a 1, nessuna collisione.
+      // Risultato: (2,3,1,1).
       const { card: merged, changes } = mergeCardAIResponse(card, {
         grid: {
           elements: {
-          logo: { x: 2, y: 3, w: 1, h: 1 },
+            logo: { x: 2, y: 3, w: 1, h: 1 },
+          },
         },
-      },
-    });
+      });
       expect(merged.grid?.elements.logo).toEqual({ x: 2, y: 3, w: 1, h: 1 });
       expect(changes.some((c) => c.includes('logo'))).toBe(true);
     });
@@ -309,17 +319,20 @@ describe('mergeCardAIResponse', () => {
       const { card: merged } = mergeCardAIResponse(card, {
         grid: {
           elements: {
-            qr: { x: 3, y: 0, w: 1, h: 2 }, // stessa posizione di Giovanni
+            qr: { x: 2, y: 0, w: 2, h: 4 }, // stessa posizione di Giovanni
           },
         },
       });
       expect(merged.grid).toEqual(originalGrid);
-      expect(merged.backGrid?.elements.qr).toEqual({ x: 3, y: 0, w: 1, h: 2 });
+      expect(merged.backGrid?.elements.qr).toEqual({ x: 2, y: 0, w: 2, h: 4 });
     });
 
-    it('initializes backGrid with cols/rows when AI adds back elements to a card without it', () => {
+    it('uses existing backGrid (always present) when AI adds back elements (grid-only refactor)', () => {
       const card = createEmptyCard();
-      expect(card.backGrid).toBeUndefined();
+      // grid-only refactor: createEmptyCard include sempre backGrid
+      // (gridPresetBackDefault). L'AI aggiunge qr, il merge usa la
+      // backGrid esistente e sanitizza la posizione.
+      expect(card.backGrid).toBeDefined();
       const { card: merged } = mergeCardAIResponse(card, {
         grid: {
           cols: 6,
@@ -329,9 +342,12 @@ describe('mergeCardAIResponse', () => {
           },
         },
       });
+      // backGrid: l'AI può aggiornare cols/rows (richiede 6x6). qr esistente
+      // a (2,0,2,4) viene sanitizzato: moveX a x=0 bloccato da contacts,
+      // shrinkH a h=1 ok → resta (2,0,1,1).
       expect(merged.backGrid?.cols).toBe(6);
       expect(merged.backGrid?.rows).toBe(6);
-      expect(merged.backGrid?.elements.qr).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+      expect(merged.backGrid?.elements.qr).toEqual({ x: 2, y: 0, w: 1, h: 1 });
     });
   });
 

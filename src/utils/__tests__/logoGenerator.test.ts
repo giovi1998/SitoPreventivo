@@ -24,6 +24,7 @@ const baseBuilder: LogoBuilder = {
   secondaryColor: '#1a1a2e',
   fontFamily: 'Inter',
   layout: 'horizontal',
+  icons: [],
 };
 
 describe('logoGenerator', () => {

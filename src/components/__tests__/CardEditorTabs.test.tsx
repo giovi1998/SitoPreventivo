@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import CardEditorTabs from '../CardEditorTabs';
+import CardEditorTabs from '../card/CardEditorTabs';
 
 const tabs = [
   { id: 'preview', label: 'Anteprima', content: <div data-testid="content-preview">Preview here</div> },
