@@ -9,6 +9,7 @@ export default defineConfig({
     setupFiles: './src/test-setup.ts',
     testTimeout: 15000, // 15s — API tests re-import modules via vi.resetModules(), can be slow on cold cache
     hookTimeout: 15000,
+    exclude: ['node_modules/**', 'e2e/**', 'playwright.config.ts', 'dist/**', 'scripts/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
