@@ -1,0 +1,30 @@
+.flyer-budget-warning {
+  padding: 8px 10px;
+  margin: 8px 0;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-md);
+  color: #d97706;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.flyer-preview-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 0.76rem;
+}
+
+.flyer-warning-info {
+  color: #0ea5e9;
+}
+
+.flyer-warning-warning {
+  color: #f59e0b;
+}
+
+.flyer-warning-error {
+  color: #ef4444;
+}

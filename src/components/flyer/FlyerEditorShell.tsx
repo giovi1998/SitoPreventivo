@@ -1,0 +1,382 @@
+import React from 'react';
+import FlyerAiPanel from './FlyerAiPanel';
+import FlyerManualPanel from './FlyerManualPanel';
+import FlyerPreviewPanel from './FlyerPreviewPanel';
+import type { Flyer, FlyerSize, FlyerOrientation, FlyerLayout, FlyerContent, FlyerTone } from '../../utils/documentSchemas';
+import { createEmptyFlyer, createFlyerTemplate, mergeFlyerWithDefaults, FLYER_SECTORS, FLYER_SECTOR_DEFAULT_LAYOUT } from '../../utils/documentSchemas';
+import { useAIFlyer } from '../../hooks/useAIFlyer';
+import { useToast } from '../../hooks/useToast';
+import { useDocumentSave } from '../../hooks/useDocumentSave';
+import { computeFlyerLayout, getFlyerCopyBudget } from '../../utils/flyer';
+import { generateFlyerPdf, generateFlyerPng } from '../../utils/flyerGenerator';
+import dataService from '../../utils/dataService';
+import SaveDialog from '../SaveDialog';
+import { logger } from '../../utils/logger';
+
+const FLYER_HERO_MAX_RAW_BYTES = 5_000_000;
+const FLYER_HERO_MAX_DIMENSION = 4000;
+const FLYER_HERO_MAX_AFTER_COMPRESS = 500_000;
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = React.useState(value);
+  React.useEffect(() => {
+    const handle = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(handle);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+function flyerHasCopy(flyer: Flyer): boolean {
+  return !!(flyer.content.headline || flyer.content.subheadline || flyer.content.body);
+}
+
+function flyerHasContent(flyer: Flyer): boolean {
+  return flyerHasCopy(flyer) || !!flyer.title || !!flyer.content.heroImage;
+}
+
+function sanitizeForSave(flyer: Flyer, userEmail: string): Flyer {
+  const base = createEmptyFlyer();
+  return {
+    ...base,
+    ...flyer,
+    userEmail,
+    content: {
+      ...base.content,
+      ...flyer.content,
+      cta: { ...base.content.cta, ...flyer.content.cta },
+    },
+    style: { ...base.style, ...flyer.style },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function compressHeroImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUri = String(reader.result || '');
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > FLYER_HERO_MAX_DIMENSION || height > FLYER_HERO_MAX_DIMENSION) {
+          const ratio = FLYER_HERO_MAX_DIMENSION / Math.max(width, height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Canvas non disponibile'));
+        ctx.drawImage(img, 0, 0, width, height);
+        let quality = 0.85;
+        const tryCompress = () => {
+          canvas.toBlob((blob) => {
+            if (!blob) return reject(new Error('Compressione fallita'));
+            if (blob.size <= FLYER_HERO_MAX_AFTER_COMPRESS || quality <= 0.3) {
+              const fr = new FileReader();
+              fr.onload = () => resolve(String(fr.result || ''));
+              fr.onerror = () => reject(new Error('Lettura fallita'));
+              fr.readAsDataURL(blob);
+            } else {
+              quality -= 0.1;
+              tryCompress();
+            }
+          }, 'image/jpeg', quality);
+        };
+        tryCompress();
+      };
+      img.onerror = () => reject(new Error('Immagine non valida'));
+      img.src = dataUri;
+    };
+    reader.onerror = () => reject(new Error('Lettura file fallita'));
+    reader.readAsDataURL(file);
+  });
+}
+
+interface FlyerEditorShellProps {
+  userEmail: string;
+  initialFlyer?: Flyer;
+  tier?: 'free' | 'unlocked';
+}
+
+export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }: FlyerEditorShellProps): React.ReactElement {
+  const { save: saveDocumentGuarded, documentCount, documentLimit } = useDocumentSave();
+  const { addToast } = useToast();
+  const [flyer, setFlyer] = React.useState<Flyer>(() => mergeFlyerWithDefaults(initialFlyer));
+  const limitReached = tier === 'free' && documentLimit !== null && documentCount >= documentLimit;
+  const [showTemplateBanner, setShowTemplateBanner] = React.useState(() => !initialFlyer);
+  const [showSaveDialog, setShowSaveDialog] = React.useState(false);
+  const [showCustomFont, setShowCustomFont] = React.useState(() => {
+    if (!initialFlyer) return false;
+    const safeFonts = ['Inter, sans-serif', 'Roboto, sans-serif', 'Open Sans, sans-serif', 'Lato, sans-serif', 'Montserrat, sans-serif', 'Poppins, sans-serif', 'Georgia, serif', 'Times New Roman, serif', 'Courier New, monospace'];
+    return !safeFonts.includes(initialFlyer.style.fontFamily);
+  });
+  const [heroError, setHeroError] = React.useState<string | null>(null);
+  const [exporting, setExporting] = React.useState<'pdf' | 'png' | null>(null);
+  const [showAi, setShowAi] = React.useState(true);
+  const [showManual, setShowManual] = React.useState(true);
+  const [previewFocus, setPreviewFocus] = React.useState(false);
+  const [showDebug, setShowDebug] = React.useState(false);
+  const [mobileTab, setMobileTab] = React.useState<'ai' | 'manual' | null>(null);
+  const [aiPrompt, setAiPrompt] = React.useState('');
+  const [aiModel, setAiModel] = React.useState('deepseek-chat');
+  const [aiTone, setAiTone] = React.useState<FlyerTone>('formale');
+  const [activeSector, setActiveSector] = React.useState<typeof FLYER_SECTORS[number]>('ristorante');
+  const ai = useAIFlyer(userEmail);
+  const debouncedFlyer = useDebouncedValue(flyer, 300);
+  const layoutPlan = React.useMemo(() => computeFlyerLayout(flyer), [flyer]);
+  const copyBudget = React.useMemo(() => getFlyerCopyBudget(flyer), [flyer]);
+  const budgetWarning = React.useMemo(() => {
+    if (copyBudget.warning) return copyBudget.warning;
+    if (layoutPlan.density === 'overflow') return 'Troppo testo per il formato/layout attuale: riduci il corpo o scegli un formato più grande.';
+    return null;
+  }, [copyBudget, layoutPlan]);
+  const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-save every 30s when there's content
+  React.useEffect(() => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (!flyerHasContent(flyer)) return;
+      const sanitized = sanitizeForSave(flyer, userEmail);
+      saveDocumentGuarded(userEmail, sanitized).then((result) => {
+        if (result.blocked) {
+          addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
+        } else if (result.error) {
+          logger.error('Flyer auto-save failed', { err: result.error });
+        }
+      });
+    }, 30000);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [flyer, userEmail, saveDocumentGuarded, addToast]);
+
+  // Export PDF/PNG
+  React.useEffect(() => {
+    if (!exporting) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const bytes = exporting === 'pdf'
+          ? await generateFlyerPdf(flyer, { tier })
+          : await generateFlyerPng(flyer, { tier });
+        if (cancelled) return;
+        const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+        const blob = new Blob([arrayBuffer], { type: exporting === 'pdf' ? 'application/pdf' : 'image/png' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${flyer.id}.${exporting}`;
+        a.click();
+        URL.revokeObjectURL(url);
+        addToast('success', exporting === 'pdf' ? 'PDF scaricato' : 'PNG scaricato');
+      } catch (err) {
+        if (!cancelled) addToast('error', (err as Error).message);
+      } finally {
+        if (!cancelled) setExporting(null);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [exporting, flyer, tier, addToast]);
+
+  const updateContent = React.useCallback((patch: Partial<FlyerContent>) => {
+    setFlyer((prev) => ({
+      ...prev,
+      content: { ...prev.content, ...patch, cta: { ...prev.content.cta, ...(patch.cta || {}) } },
+      updatedAt: new Date().toISOString(),
+    }));
+  }, []);
+
+  const updateStyle = React.useCallback(<K extends keyof Flyer['style']>(key: K, value: Flyer['style'][K]) => {
+    setFlyer((prev) => ({ ...prev, style: { ...prev.style, [key]: value }, updatedAt: new Date().toISOString() }));
+  }, []);
+
+  const updateSize = React.useCallback((size: FlyerSize) => {
+    setFlyer((prev) => ({ ...prev, size, updatedAt: new Date().toISOString() }));
+  }, []);
+
+  const updateOrientation = React.useCallback((orientation: FlyerOrientation) => {
+    setFlyer((prev) => (prev.size === 'Square' ? prev : { ...prev, orientation, updatedAt: new Date().toISOString() }));
+  }, []);
+
+  const updateLayout = React.useCallback((layout: FlyerLayout) => updateStyle('layout', layout), [updateStyle]);
+  const updateTitle = React.useCallback((title: string) => setFlyer((prev) => ({ ...prev, title, updatedAt: new Date().toISOString() })), []);
+
+  const applySector = React.useCallback((sector: typeof FLYER_SECTORS[number]) => {
+    setActiveSector(sector);
+    setFlyer(createFlyerTemplate(sector));
+    setShowTemplateBanner(false);
+    addToast('info', `Template ${sector} caricato`);
+  }, [addToast]);
+
+  const applySectorLayout = React.useCallback((layout: FlyerLayout) => {
+    setFlyer(createFlyerTemplate(activeSector, layout));
+    addToast('info', `${activeSector} · ${layout}`);
+  }, [activeSector, addToast]);
+
+  const resetFlyer = React.useCallback(() => {
+    setFlyer(createEmptyFlyer());
+    setShowTemplateBanner(true);
+    setActiveSector('ristorante');
+    setHeroError(null);
+    addToast('info', 'Nuovo volantino vuoto pronto');
+  }, [addToast]);
+
+  const handleHeroUpload = React.useCallback(async (file: File) => {
+    setHeroError(null);
+    if (!/^image\/(png|jpeg|jpg|webp|svg\+xml)$/.test(file.type)) {
+      setHeroError('Formato non supportato. Usa PNG, JPEG, WebP o SVG.');
+      return;
+    }
+    if (file.size > FLYER_HERO_MAX_RAW_BYTES) {
+      setHeroError('File troppo grande. Max 5MB.');
+      return;
+    }
+    try {
+      const dataUri = await compressHeroImage(file);
+      updateContent({ heroImage: dataUri });
+    } catch (err) {
+      setHeroError((err as Error).message || 'Errore compressione');
+    }
+  }, [updateContent]);
+
+  const removeHero = React.useCallback(() => {
+    updateContent({ heroImage: null });
+    setHeroError(null);
+  }, [updateContent]);
+
+  const handleGenerate = React.useCallback(async () => {
+    const brief = aiPrompt.trim();
+    if (!brief) { addToast('info', 'Scrivi un brief nel campo AI prima di generare.'); return; }
+    try {
+      const result = await ai.generate(debouncedFlyer, brief, aiTone, { modelId: aiModel });
+      if (result.applied) { setFlyer(result.flyer); addToast('success', 'Copy generato e applicato'); setAiPrompt(''); }
+      else { addToast('error', "L'AI non ha restituito un risultato valido."); }
+    } catch (err) { addToast('error', (err as Error).message); }
+  }, [ai, aiPrompt, aiTone, aiModel, debouncedFlyer, addToast]);
+
+  const handleRefine = React.useCallback(async (action: 'simplify' | 'formal' | 'young' | 'urgent') => {
+    if (!flyerHasCopy(flyer)) { addToast('info', 'Compila prima il copy.'); return; }
+    try {
+      const result = await ai.refine(flyer, action, { modelId: aiModel });
+      if (result.applied) { setFlyer(result.flyer); addToast('success', `Copy aggiornato: ${action}`); }
+      else { addToast('error', "L'AI non ha restituito un risultato valido."); }
+    } catch (err) { addToast('error', (err as Error).message); }
+  }, [ai, aiModel, flyer, addToast]);
+
+  const handleAiReset = React.useCallback(() => { ai.reset(); addToast('info', 'Sessione AI azzerata'); }, [ai, addToast]);
+
+  const handleSave = React.useCallback((customName: string) => {
+    const title = customName || flyer.title || 'Volantino';
+    const toSave = sanitizeForSave({ ...flyer, title }, userEmail);
+    dataService.saveDocument(userEmail, toSave).then((result) => {
+      if (result.error) { addToast('error', result.error); return; }
+      setFlyer(toSave);
+      addToast('success', `«${title}» salvato`);
+    }).catch((err) => addToast('error', (err as Error).message || 'Errore salvataggio'));
+  }, [flyer, userEmail, addToast]);
+
+  const openSaveDialog = React.useCallback(() => {
+    if (!flyerHasContent(flyer)) { addToast('info', 'Compila almeno il titolo o il copy prima di salvare.'); return; }
+    setShowSaveDialog(true);
+  }, [flyer, addToast]);
+
+  const aiPanel = (
+    <FlyerAiPanel
+      aiPrompt={aiPrompt} setAiPrompt={setAiPrompt}
+      aiModel={aiModel} setAiModel={setAiModel}
+      aiTone={aiTone} setAiTone={setAiTone}
+      ai={ai} flyer={flyer} debouncedFlyer={debouncedFlyer}
+      hasCopy={flyerHasCopy(flyer)}
+      onGenerate={handleGenerate} onRefine={handleRefine} onReset={handleAiReset}
+      onCollapse={() => setShowAi(false)}
+    />
+  );
+
+  const manualPanel = (
+    <FlyerManualPanel
+      flyer={flyer} showTemplateBanner={showTemplateBanner} activeSector={activeSector}
+      heroError={heroError} showCustomFont={showCustomFont} setShowCustomFont={setShowCustomFont}
+      limitReached={limitReached} exporting={exporting}
+      onCollapse={() => setShowManual(false)}
+      onTitleChange={updateTitle} onUpdateContent={updateContent} onUpdateStyle={updateStyle}
+      onUpdateSize={updateSize} onUpdateOrientation={updateOrientation} onUpdateLayout={updateLayout}
+      onApplySector={applySector}
+      onApplySectorLayout={applySectorLayout}
+      onCloseTemplateBanner={() => setShowTemplateBanner(false)}
+      onHeroUpload={handleHeroUpload} onRemoveHero={removeHero}
+      onReset={resetFlyer} onSave={openSaveDialog}
+      onExportPdf={() => setExporting('pdf')} onExportPng={() => setExporting('png')}
+      flyerHasContent={flyerHasContent}
+      budgetWarning={budgetWarning}
+      copyBudget={copyBudget}
+    />
+  );
+
+  return (
+    <div className={`flyer-editor-shell editor-grid ${previewFocus ? 'focus-mode' : ''} ${!showAi && !showManual ? 'both-collapsed' : ''} ${!showAi || !showManual ? 'one-collapsed' : ''}`}>
+      <div className={`editor-col ai-col ${showAi ? '' : 'collapsed'}`}>
+        {showAi ? aiPanel : (
+          <div className="panel-tab" onClick={() => setShowAi(true)} title="Mostra AI" role="button" aria-label="Mostra AI">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+            <span>AI</span>
+          </div>
+        )}
+      </div>
+
+      <div className={`editor-col manual-col ${showManual ? '' : 'collapsed'}`}>
+        {showManual ? manualPanel : (
+          <div className="panel-tab" onClick={() => setShowManual(true)} title="Mostra controllo manuale" role="button" aria-label="Mostra manuale">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
+            <span>Form</span>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile actions */}
+      <div className="editor-mobile-actions">
+        <div className="editor-mobile-actions-buttons" style={{ display: 'flex', gap: 4 }}>
+          <button onClick={openSaveDialog} className="mobile-action-btn mobile-action-btn-save" title="Salva" aria-label="Salva" disabled={limitReached}>💾</button>
+          <button onClick={() => setExporting('pdf')} className="mobile-action-btn mobile-action-btn-export" title="PDF" aria-label="PDF" disabled={exporting !== null || !flyerHasContent(flyer) || limitReached}>📄</button>
+          <button onClick={() => setExporting('png')} className="mobile-action-btn" title="PNG" aria-label="PNG" disabled={exporting !== null || !flyerHasContent(flyer) || limitReached}>🖼</button>
+        </div>
+      </div>
+
+      {/* Mobile bottom bar */}
+      <div className="editor-mobile-bar">
+        <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab(mobileTab === 'ai' ? null : 'ai')}>✨ AI</button>
+        <button className={mobileTab === 'manual' ? 'active' : ''} onClick={() => setMobileTab(mobileTab === 'manual' ? null : 'manual')}>✏️ Form</button>
+        <button onClick={() => setPreviewFocus(!previewFocus)} aria-pressed={previewFocus}>{previewFocus ? '✕ Esci' : '🎯 Focus'}</button>
+      </div>
+
+      {/* Mobile panel overlay */}
+      {mobileTab && (
+        <div className="editor-mobile-panel">
+          {mobileTab === 'ai' ? aiPanel : manualPanel}
+        </div>
+      )}
+
+      {/* Preview column */}
+      <FlyerPreviewPanel
+        flyer={flyer} plan={layoutPlan} tier={tier} previewFocus={previewFocus}
+        showDebug={showDebug} setShowDebug={setShowDebug}
+        setPreviewFocus={setPreviewFocus}
+        onCollapse={() => {}}
+      />
+
+      <SaveDialog
+        open={showSaveDialog}
+        defaultName={flyer.title || 'Volantino'}
+        documentLabel="volantino"
+        placeholder="Es. Volantino - Sagra del paese"
+        onSave={(name: string) => { setShowSaveDialog(false); handleSave(name); }}
+        onCancel={() => setShowSaveDialog(false)}
+      />
+    </div>
+  );
+}
+
+export default FlyerEditorShell;
