@@ -219,8 +219,7 @@ export function fitBodyText(
 }
 
 function wrapBodyLines(text: string, colW: number, fontSizePt: number): string[] {
-  const mmPerChar = charWidthMm(fontSizePt, 'body');
-  const maxChars = Math.max(3, Math.floor(colW / mmPerChar));
+  const safeW = Math.max(3, colW - BOX_SAFETY_MM);
   const out: string[] = [];
   for (const para of text.split(/\n+/)) {
     if (!para) continue;
@@ -228,11 +227,28 @@ function wrapBodyLines(text: string, colW: number, fontSizePt: number): string[]
     let line = '';
     for (const w of words) {
       if (!w) continue;
-      if (line && line.length + 1 + w.length > maxChars) {
+      const wordWidth = measureTextWidth(w, fontSizePt, 'body');
+      if (wordWidth > safeW) {
+        if (line) { out.push(line); line = ''; }
+        let frag = '';
+        for (const ch of w) {
+          const next = frag + ch;
+          if (measureTextWidth(next, fontSizePt, 'body') > safeW && frag) {
+            out.push(frag);
+            frag = ch;
+          } else {
+            frag = next;
+          }
+        }
+        if (frag) line = frag;
+        continue;
+      }
+      const nextLine = line ? `${line} ${w}` : w;
+      if (line && measureTextWidth(nextLine, fontSizePt, 'body') > safeW) {
         out.push(line);
         line = w;
       } else {
-        line = line ? line + ' ' + w : w;
+        line = nextLine;
       }
     }
     if (line) out.push(line);
