@@ -18,14 +18,6 @@ export interface FlyerCopyContext {
   layoutAdvice?: string;
 }
 
-/**
- * Sanitize a user-provided brief before it hits the LLM prompt. The
- * brief is free text entered by the user: we strip HTML tags (XSS
- * payload in case the response is later rendered with dangerouslySetInnerHTML
- * — currently it's rendered as text, but defensive in depth) and trim
- * excessive whitespace. The brief is logged server-side for debugging
- * but never persisted in the DB (see `chatStore.addMessage` path).
- */
 export function sanitizeFlyerBrief(brief: string): string {
   return brief
     .replace(/<[^>]*>/g, ' ')
@@ -34,24 +26,7 @@ export function sanitizeFlyerBrief(brief: string): string {
     .trim();
 }
 
-/**
- * Build the LLM prompt that asks DeepSeek to produce flyer copy.
- * Pure function, no I/O — easy to unit-test and to swap to another
- * provider if needed.
- *
- * Output contract (enforced by the model via `response_format: json_object`):
- * {
- *   headline: string (max 60 char),       // main hook
- *   subheadline: string (max 100 char),   // supporting line
- *   body: string (max {bodyCharBudget} char, \\n for paragraphs),
- *   cta: { label: string (max 30 char) }  // CTA label only, url is user-supplied
- * }
- */
-export function buildFlyerCopyPrompt(
-  brief: string,
-  tone: FlyerTone,
-  context: FlyerCopyContext
-): string {
+export function buildFlyerCopyPrompt(brief: string, tone: FlyerTone, context: FlyerCopyContext): string {
   const safeBrief = sanitizeFlyerBrief(brief).slice(0, 500);
   const toneLine = TONE_DESCRIPTIONS[tone] ?? TONE_DESCRIPTIONS.formale;
   const layoutLine = layoutGuidance(context.layout);
@@ -85,27 +60,17 @@ Vincoli:
 - Niente emoji o caratteri speciali non italiani.
 - Non inventare date specifiche se non presenti nel brief.
 - Restituisci ESCLUSIVAMENTE il JSON.`;
-};
-
+}
 
 function layoutGuidance(layout: FlyerLayout): string {
   switch (layout) {
-    case 'classic':
-      return 'Layout classico: headline in alto, body sotto, CTA in fondo. Struttura lineare, perfetta per eventi e promozioni.';
-    case 'centered':
-      return 'Layout centrato tipografico: tutto centrato, headline come titolo principale, niente immagine hero. Perfetto per annunci e comunicati.';
-    case 'split':
-      return 'Layout split 50/50: immagine hero a sinistra, copy a destra (o viceversa). Hero image è il punto focale, copy breve e diretto.';
-    case 'magazine':
-      return 'Layout magazine a 3 colonne: body distribuito su 3 blocchi paralleli. Perfetto per listini, menù o cataloghi.';
+    case 'classic': return 'Layout classico: headline in alto, body sotto, CTA in fondo. Struttura lineare, perfetta per eventi e promozioni.';
+    case 'centered': return 'Layout centrato tipografico: tutto centrato, headline come titolo principale, niente immagine hero. Perfetto per annunci e comunicati.';
+    case 'split': return 'Layout split 50/50: immagine hero a sinistra, copy a destra (o viceversa). Hero image è il punto focale, copy breve e diretto.';
+    case 'magazine': return 'Layout magazine a colonne: body distribuito su colonne parallele. Perfetto per listini, menù o cataloghi.';
   }
 }
 
-/**
- * Build the system prompt for the flyer AI assistant. Currently used
- * by the orchestrator's first message in the session so the model
- * understands the broader context (no tools, JSON round-trip).
- */
 export function buildFlyerSystemPrompt(): string {
   return `Sei l'assistente AI per la creazione di volantini (flyer) dell'app Quickbrand.
 

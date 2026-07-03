@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Flyer, FlyerTone, FlyerLayout, FlyerSize } from '../utils/documentSchemas';
 import { FLYER_HEADLINE_MAX, FLYER_SUBHEADLINE_MAX, FLYER_BODY_MAX, FLYER_CTA_LABEL_MAX } from '../utils/documentSchemas';
+import { getFlyerCopyBudget } from '../utils/flyer';
 import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk } from './types';
 import { providerRegistry } from './providers/registry';
 import { chatStore } from './chat/store';
@@ -106,10 +107,16 @@ export class FlyerAIOrchestrator {
     options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void }
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
+      const budget = getFlyerCopyBudget(flyer);
       const ctx: FlyerCopyContext = {
         layout: flyer.style.layout,
         size: flyer.size,
-        bodyCharBudget: bodyCharBudgetFor(flyer.size),
+        bodyCharBudget: budget.bodyMaxChars,
+        headlineMaxChars: budget.headlineMaxChars,
+        subheadlineMaxChars: budget.subheadlineMaxChars,
+        ctaMaxChars: budget.ctaMaxChars,
+        densityTarget: budget.densityTarget,
+        layoutAdvice: budget.warning,
       };
       return buildFlyerCopyPrompt(brief, tone, ctx);
     }, options);
