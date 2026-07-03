@@ -1,4 +1,5 @@
 import type { Flyer, FlyerLayout } from '../documentSchemas';
+import { FONT_SCALE_MIN, FONT_SCALE_MAX } from '../documentSchemas';
 import {
   type FlyerLayoutPlan,
   type FlyerElementId,
@@ -29,7 +30,14 @@ export function computeFlyerLayout(flyer: Flyer): FlyerLayoutPlan {
   const page = buildPageRects(flyer);
   const content = normalizeContent(flyer);
   const layout = flyer.style.layout;
-  const bounds = FONT_SIZE_BOUNDS[flyer.size];
+  const rawBounds = FONT_SIZE_BOUNDS[flyer.size];
+  const scale = clamp(flyer.style.fontScale ?? 1, FONT_SCALE_MIN, FONT_SCALE_MAX);
+  const bounds: typeof rawBounds = {
+    headline: { min: rawBounds.headline.min * scale, max: rawBounds.headline.max * scale },
+    subheadline: { min: rawBounds.subheadline.min * scale, max: rawBounds.subheadline.max * scale },
+    body: { min: rawBounds.body.min * scale, max: rawBounds.body.max * scale },
+    cta: { min: rawBounds.cta.min * scale, max: rawBounds.cta.max * scale },
+  };
   const dims = page.trim;
   const safe = page.safe;
   const hasHero = !!content.heroImage;
@@ -162,7 +170,40 @@ export function computeFlyerLayout(flyer: Flyer): FlyerLayoutPlan {
           if (qrLabelFitResult.block.truncated) overflowFlags.qrLabel = true;
           warnings.push(...qrLabelFitResult.warnings);
         } else {
-          warnings.push({ code: 'qr_label_hidden', severity: 'info', message: 'Etichetta QR nascosta per mancanza di spazio.', element: 'qrLabel' });
+          // Fallback: place label between the CTA and the QR (if CTA present)
+          const ctaRight = hasCtaLabel ? footerX + ctaW + GAP_MM : footerX;
+          const sideLabelW = qrX - ctaRight - GAP_MM;
+          if (sideLabelW >= 12) {
+            const sideBox: MmRect = {
+              x: ctaRight,
+              y: footerArea.y,
+              w: sideLabelW,
+              h: footerArea.h,
+            };
+            const sideFit = fitText({
+              id: 'qrLabel',
+              text: content.qrLabel,
+              box: sideBox,
+              minFontSizePt: 5,
+              maxFontSizePt: 7,
+              lineHeight: 1.1,
+              align: 'left',
+              hidden: false,
+              debugName: 'Etichetta QR',
+              kind: 'regular',
+              maxLines: 3,
+            });
+            if (!sideFit.block.truncated) {
+              boxes.qrLabel = sideBox;
+              visibility.qrLabel = true;
+              qrLabelFit = sideFit.block;
+              warnings.push(...sideFit.warnings);
+            } else {
+              warnings.push({ code: 'qr_label_hidden', severity: 'info', message: 'Etichetta QR nascosta per mancanza di spazio.', element: 'qrLabel' });
+            }
+          } else {
+            warnings.push({ code: 'qr_label_hidden', severity: 'info', message: 'Etichetta QR nascosta per mancanza di spazio.', element: 'qrLabel' });
+          }
         }
       }
     } else {
@@ -237,7 +278,7 @@ function computeFooterHeight(hasCtaLabel: boolean, hasQr: boolean, qrSize: numbe
   if (!hasCtaLabel && !hasQr) return 0;
   const contentH = Math.max(hasCtaLabel ? FOOTER_H_MM : 0, hasQr ? qrSize : 0);
   let h = contentH + 2;
-  if (hasQr && qrLabel) h += 4;
+  if (hasQr && qrLabel) h += 6;
   return Math.max(0, h);
 }
 

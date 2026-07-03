@@ -64,7 +64,7 @@ export function renderFlyerSvg(plan: FlyerLayoutPlan, flyer: Flyer, options: Svg
   const bg = safeHex(flyer.style.bgColor, '#FFFFFF');
   const text = safeHex(flyer.style.textColor, '#1a1a2e');
   const accent = safeHex(flyer.style.accentColor, '#01696f');
-  const font = 'Arial, sans-serif';
+  const font = flyer.style.fontFamily || 'Arial, sans-serif';
   const qrPayload = flyer.content.qrPayload || (flyer.content.cta.url && /^https?:\/\//i.test(flyer.content.cta.url) ? flyer.content.cta.url : '');
 
   const widthAttr = options.previewW ? `${options.previewW.toFixed(2)}px` : `${mm(total.w)}mm`;
@@ -146,7 +146,7 @@ export function renderFlyerSvg(plan: FlyerLayoutPlan, flyer: Flyer, options: Svg
       columnCount > 1 ? `column-count:${columnCount};column-gap:${mm(colGap)}mm;` : '',
     ].join('');
 
-    parts.push(`<foreignObject x="${mm(bodyBox.x)}" y="${mm(bodyBox.y)}" width="${mm(bodyBox.w)}" height="${mm(bodyBox.h)}">`);
+    parts.push(`<foreignObject x="${mm(bodyBox.x)}" y="${mm(bodyBox.y)}" width="${mm(bodyBox.w)}" height="${mm(bodyBox.h)}" clip-path="url(#clip-body)">`);
     parts.push(`<div xmlns="http://www.w3.org/1999/xhtml" style="${bodyStyle}font-family:${font}, sans-serif;color:${text};">`);
     // Render body text as pre-wrapped lines to match the plan exactly
     const bodyLines = body.lines;
@@ -177,10 +177,13 @@ export function renderFlyerSvg(plan: FlyerLayoutPlan, flyer: Flyer, options: Svg
       parts.push(`<g transform="translate(${mm(qr.x)} ${mm(qr.y)}) scale(${scale})"><rect width="${inline.size}" height="${inline.size}" fill="#FFFFFF"/>${inline.inner}</g>`);
     }
     if (plan.visibility.qrLabel && plan.boxes.qrLabel && plan.text.qrLabel.text) {
+      const qrBox = plan.boxes.qr;
+      const lblBox = plan.boxes.qrLabel;
+      const isLeftOfQr = qrBox && lblBox.x + lblBox.w <= qrBox.x + 0.5;
       parts.push(renderTextBlock(
         plan.text.qrLabel,
         plan.boxes.qrLabel,
-        { font, color: text, fontWeight: 400, align: 'center', upperCase: false, clipId: 'clip-qrLabel', baseline: 'hanging' },
+        { font, color: text, fontWeight: 400, align: isLeftOfQr ? 'left' : 'center', upperCase: false, clipId: 'clip-qrLabel', baseline: 'hanging' },
       ));
     }
   }
