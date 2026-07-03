@@ -42,6 +42,7 @@ export function createFlyerTemplate(sector: FlyerSector, layout?: FlyerLayout): 
       accentColor: tpl.accentColor,
       layout: tpl.layout,
       fontFamily: 'Inter',
+      fontScale: 1,
     },
     createdAt: now,
     updatedAt: now,

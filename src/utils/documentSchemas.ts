@@ -810,6 +810,7 @@ export const flyerStyleSchema = z.object({
   accentColor: hexColorSchema.default('#01696F'),
   layout: flyerLayoutEnumSchema.default('classic'),
   fontFamily: z.string().default('Inter'),
+  fontScale: z.number().min(FONT_SCALE_MIN).max(FONT_SCALE_MAX).default(FONT_SCALE_DEFAULT),
 });
 export type FlyerStyle = z.infer<typeof flyerStyleSchema>;
 
@@ -850,6 +851,7 @@ export function createEmptyFlyer(): Flyer {
       accentColor: '#01696F',
       layout: 'classic',
       fontFamily: 'Inter',
+      fontScale: FONT_SCALE_DEFAULT,
     },
     createdAt: now,
     updatedAt: now,
@@ -925,6 +927,7 @@ export function createFlyerTemplate(sector: FlyerSector, layout?: FlyerLayout): 
       accentColor: tpl.accentColor,
       layout: tpl.layout,
       fontFamily: 'Inter',
+      fontScale: FONT_SCALE_DEFAULT,
     },
     createdAt: now,
     updatedAt: now,
