@@ -74,6 +74,27 @@ describe('FlyerEditor (phase 3, preventivo layout)', () => {
     expect(screen.getByText(/Template per settore/i)).toBeInTheDocument();
   });
 
+  it('shows sector and layout buttons in organized groups inside the template banner', () => {
+    setupAIMock();
+    renderEditor();
+    const banner = document.querySelector('.flyer-template-banner');
+    expect(banner).toBeTruthy();
+    const sectors = ['Ristorante', 'Evento', 'Salone', 'Negozio'];
+    const layouts = ['Classico', 'Centrato', 'Diviso', 'Magazine'];
+    sectors.forEach((s) => expect(within(banner as HTMLElement).getByText(s)).toBeInTheDocument());
+    layouts.forEach((l) => expect(within(banner as HTMLElement).getByText(l)).toBeInTheDocument());
+    expect(within(banner as HTMLElement).getByLabelText(/Chiudi banner template/i)).toBeInTheDocument();
+  });
+
+  it('renders size and orientation selects inside the Formato section', () => {
+    setupAIMock();
+    renderEditor();
+    const formatoHead = screen.getByText('Formato').closest('.collapsible-head') as HTMLElement;
+    fireEvent.click(formatoHead);
+    expect(screen.getByLabelText(/Dimensione/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Orientamento/i)).toBeInTheDocument();
+  });
+
   it('renders the AI panel with model, brief, generate, quick actions, log', () => {
     setupAIMock();
     renderEditor();

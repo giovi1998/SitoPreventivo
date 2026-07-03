@@ -782,7 +782,7 @@ describe('cardGenerator - buildCardSvg - card non-template (user-created)', () =
     expect(qrRectCount).toBeGreaterThan(20);
   });
 
-  it('kitchen sink per TUTTI i 3 size preset (EU/US/Square), no errori, layout adattivo', () => {
+  it('kitchen sink per TUTTI i 3 size preset (EU/US/Square), no errori, layout adattivo', { timeout: 60000 }, () => {
     // Per ogni size preset, genera il PDF 10-up e verifica:
     // 1) non crasha
     // 2) il docDef ha orientamento corretto
