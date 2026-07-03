@@ -246,6 +246,27 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/QREditor.tsx` | Generatore QR Code (7 tipi, stili, logo overlay) |
 | `src/components/LogoEditor.tsx` | **Phase 4**: Logo Builder (tabs Builder + AI, lucide picker, 3 export sizes) |
 | `src/components/FlyerEditor.tsx` | **Phase 3**: Volantino editor (form, layout switcher, AI modal, 4 template settore, PDF+PNG export) |
+| `src/components/flyer/FlyerEditorShell.tsx` | **Flyer refactor**: logica editor completa (pannelli AI/manuale/preview, export, auto-save, mobile bottom bar) |
+| `src/components/flyer/FlyerPreviewPanel.tsx` | **Flyer refactor**: pannello preview con badge densità e toggle debug |
+| `src/components/flyer/FlyerManualPanel.tsx` | **Flyer refactor**: form manuale con limiti copy bloccanti da `copyBudget` |
+| `src/components/flyer/FlyerAiPanel.tsx` | **Flyer refactor**: pannello AI (brief, suggerimenti, azioni rapide) |
+| `src/components/flyer/FlyerFormatControls.tsx` | **Flyer refactor**: controlli formato/orientamento/dimensione |
+| `src/components/flyer/FlyerLayoutControls.tsx` | **Flyer refactor**: switcher layout (classico/centrato/diviso/magazine) |
+| `src/components/flyer/FlyerStyleFields.tsx` | **Flyer refactor**: colori/font/layout nel form |
+| `src/components/flyer/FlyerTemplatePicker.tsx` | **Flyer refactor**: selettore template per settore |
+| `src/components/flyer/FlyerExportActions.tsx` | **Flyer refactor**: bottoni export PDF/PNG |
+| `src/utils/flyer/layoutEngine.ts` | **Flyer refactor**: layout engine puro, deterministico, in millimetri |
+| `src/utils/flyer/svgRenderer.ts` | **Flyer refactor**: SVG builder con clip-path e `dominant-baseline="text-before-edge"` |
+| `src/utils/flyer/textFit.ts` | **Flyer refactor**: fitting testo con shrink progressivo e verifica larghezza righe |
+| `src/utils/flyer/geometry.ts` | **Flyer refactor**: rect, metriche font, FONT_METRICS, BOX_SAFETY_MM, GLYPH_HEIGHT_FACTOR |
+| `src/utils/flyer/budgets.ts` | **Flyer refactor**: budget copy per blocco (calcolato a font minimo = hard limit) |
+| `src/utils/flyer/templateCatalog.ts` | **Flyer refactor**: 4 settori × 4 layout = 16 template |
+| `src/utils/flyer/templateFactory.ts` | **Flyer refactor**: factory `createFlyerTemplate(sector, layout)` |
+| `src/utils/flyer/qrRenderer.ts` | **Flyer refactor**: QR inline SVG |
+| `src/utils/flyer/pdfExport.ts` | **Flyer refactor**: PDF via pdfmake con SVG inline |
+| `src/utils/flyer/pngExport.ts` | **Flyer refactor**: PNG via canvas pipeline |
+| `src/utils/flyer/index.ts` | **Flyer refactor**: barrel re-export |
+| `src/utils/flyer/__tests__/*` | **Flyer refactor**: unit test layout, budget, stress, template |
 | `src/hooks/useAICard.ts` | Hook AI card (streaming, token tracking, error recovery) |
 | `src/hooks/useAIFlyer.ts` | **Phase 3**: Hook AI flyer (log, stream buffer, token tracking, generate + refine) |
 | `src/hooks/useMediaQuery.ts` | Hook responsive (breakpoint detection via matchMedia) |
@@ -352,6 +373,56 @@ evento, salone, negozio); hook AI (`useAIFlyer`); endpoint API
   rivedere se si vuole (la spec rimane valida; l'implementazione
   la rispetta salvo l'AI copy endpoint che è in `api/index.ts` invece
   che in `src/ai/index.ts` come da pattern `useAI` esistente).
+
+### ⚠️ Volantino rendering gotchas (leggi prima di toccare il rendering)
+
+Bug e decisioni di design del modulo flyer emersi durante il refactor
+preview/AI (`src/utils/flyer/`). Violare queste regole reintroduce
+l'overflow del testo fuori dai box.
+
+1. **Unità di `font-size` in SVG con `viewBox` in mm**: in SVG, se la
+   `viewBox` è in millimetri e si scrive `font-size="8.5pt"` o
+   `font-size="3mm"`, il browser converte in **px a 96dpi** e poi
+   interpreta quei px come **user unit (= mm)**. Risultato: il font è
+   ~3.78× più grande del previsto (8.5pt atteso = 3mm, renderizzato =
+   11.33mm). **Fix**: usare **unitless**, ovvero
+   `font-size="${fontSizePt * MM_PER_PT}"` (il valore numerico è mm
+   user unit). Stessa regola per il `foreignObject` body CSS:
+   `font-size: ${...}px` (px in foreignObject = user unit).
+2. **Metriche font reali per Arial** (calibrate su `font-size` in mm
+   unitless, fonte: `scripts/flyer-calibrate-real.mjs`):
+   - `boldUpper: 0.69` (uppercase bold single word, ~0.66× reale)
+   - `boldUpperCta: 0.67` (uppercase bold phrase con spazi, ~0.64×)
+   - `regularBody: 0.46` (body mixed-case, ~0.43× reale)
+   - `regularMixed: 0.50`
+   `charWidthMm(fontSizePt, kind) = factor * fontSizePt * MM_PER_PT`.
+3. **Altezza glyph reale**: ~1.15× font-size (ascender+descender). Usare
+   `GLYPH_HEIGHT_FACTOR = 1.15` quando si calcola l'altezza verticale
+   del box: `(lines-1) * fontSize * lineHeight + fontSize *
+   GLYPH_HEIGHT_FACTOR`, **non** `lines * fontSize * lineHeight`
+   (l'ultima riga ha glyph height, non line height).
+4. **`dominant-baseline="text-before-edge"`** su tutti i `<text>` nativi:
+   allinea il top del bbox alla y. Senza, il bbox parte ~0.7em sopra
+   la baseline e il testo "sale" sopra il box.
+5. **`clip-path`** con `clipPath` rect in mm: garantisce clipping visivo
+   anche se il bbox del primo glifo ha left side-bearing negativo
+   (overflow orizzontale di ~0.3mm tollerabile e già tagliato).
+6. **Budget copy al font minimo è un hard limit, non un soft hint**.
+   `getFlyerCopyBudget` in `src/utils/flyer/budgets.ts` calcola i char
+   residui usando `bounds.X.min` (font minimo). Al **font reale** (più
+   grande, scelto da `fitText`), ne entrano molti meno — il campo body
+   mostra "1758 CAR. RESIDUI" ma al font 13pt ne entrano ~500. Questo
+   spiega "non riesco a inserire tutto il testo". Possibili mitigazioni:
+   (a) mostrare il budget al font reale corrente, non al minimo;
+   (b) troncare con warning; (c) ridurre il copy nell'AI copy generator.
+7. **Subheadline** è mixed-case, non uppercase: usare `kind: 'regular'`
+   in `fitText`, non `'boldUpper'`. Mixing kinds causa wrap errato e
+   font-size troppo conservativo.
+8. **CTA fitting**: usare `fitCtaText` (shrink + ellipsis centrale)
+   per garantire che il bottone non ecceda mai la larghezza.
+9. **Verifier Playwright**: per controllo overflow end-to-end, usare
+   `getBBox()` (user unit) vs `clipPath` rect; tolleranza orizzontale
+   0.3mm, verticale 0.6mm (side-bearings e ascender).
 
 ## Logo Builder Module (fase 4, in progress)
 
