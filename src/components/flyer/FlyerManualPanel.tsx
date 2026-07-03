@@ -7,6 +7,7 @@ import {
 import type { FlyerCopyBudget } from '../../utils/flyer/budgets';
 import { isHttpUrl } from '../../utils/qrGenerator';
 import { getSizeLabel, getLayoutLabel, getSectorLabel } from '../../utils/flyer';
+import FlyerStyleFields from './FlyerStyleFields';
 
 interface SectionProps {
   title: string;
@@ -35,18 +36,6 @@ function Section({ title, defaultOpen = true, children, extra, badge, className 
     </div>
   );
 }
-
-const FLYER_FONTS = [
-  { value: 'Inter, sans-serif', label: 'Inter (sans-serif, moderno)' },
-  { value: 'Roboto, sans-serif', label: 'Roboto (sans-serif, Android)' },
-  { value: 'Open Sans, sans-serif', label: 'Open Sans (sans-serif, leggibile)' },
-  { value: 'Lato, sans-serif', label: 'Lato (sans-serif, elegante)' },
-  { value: 'Montserrat, sans-serif', label: 'Montserrat (sans-serif, geometrico)' },
-  { value: 'Poppins, sans-serif', label: 'Poppins (sans-serif, arrotondato)' },
-  { value: 'Georgia, serif', label: 'Georgia (serif, classico)' },
-  { value: 'Times New Roman, serif', label: 'Times New Roman (serif, tradizionale)' },
-  { value: 'Courier New, monospace', label: 'Courier New (monospace)' },
-];
 
 interface FlyerManualPanelProps {
   flyer: Flyer;
@@ -91,6 +80,18 @@ export function FlyerManualPanel({
   const bodyMax = Math.min(FLYER_BODY_MAX, copyBudget?.bodyMaxChars ?? FLYER_BODY_MAX);
   const ctaMax = Math.min(FLYER_CTA_LABEL_MAX, copyBudget?.ctaMaxChars ?? FLYER_CTA_LABEL_MAX);
   const qrLabelMax = copyBudget?.qrLabelMaxChars ?? 40;
+
+  // Real-time residuals at the font size the layout engine actually chose.
+  // These are more accurate than the hard max: they reflect what really fits.
+  const headlineResidual = copyBudget?.realHeadlineChars != null
+    ? Math.max(0, copyBudget.realHeadlineChars - flyer.content.headline.length)
+    : headlineMax - flyer.content.headline.length;
+  const subResidual = copyBudget?.realSubheadlineChars != null
+    ? Math.max(0, copyBudget.realSubheadlineChars - flyer.content.subheadline.length)
+    : subMax - flyer.content.subheadline.length;
+  const bodyResidual = copyBudget?.realBodyChars != null
+    ? Math.max(0, copyBudget.realBodyChars - flyer.content.body.length)
+    : bodyMax - flyer.content.body.length;
 
   return (
     <section className="panel manual-panel" aria-label="Controllo manuale volantino">
@@ -147,13 +148,13 @@ export function FlyerManualPanel({
       </Section>
       <Section title="Contenuto" defaultOpen={true}>
         <div className="stack">
-          <label>Titolo ({headlineMax - flyer.content.headline.length} car. residui)
+          <label>Titolo ({headlineResidual} car. residui){copyBudget?.headlineTruncated && <span className="flyer-truncation-warning" role="status"> ⚠ testo troncato</span>}
             <input value={flyer.content.headline} maxLength={headlineMax} onChange={(e) => onUpdateContent({ headline: e.target.value })} placeholder="Es. Sagra del paese" />
           </label>
-          <label>Sottotitolo ({subMax - flyer.content.subheadline.length} car. residui)
+          <label>Sottotitolo ({subResidual} car. residui){copyBudget?.subheadlineTruncated && <span className="flyer-truncation-warning" role="status"> ⚠ testo troncato</span>}
             <input value={flyer.content.subheadline} maxLength={subMax} onChange={(e) => onUpdateContent({ subheadline: e.target.value })} placeholder="Es. 15 agosto, ingresso gratis" />
           </label>
-          <label>Corpo ({bodyMax - flyer.content.body.length} car. residui)
+          <label>Corpo ({bodyResidual} car. residui){copyBudget?.bodyTruncated && <span className="flyer-truncation-warning" role="status"> ⚠ testo troncato, riduci o scegli formato più grande</span>}
             <textarea value={flyer.content.body} maxLength={bodyMax} onChange={(e) => onUpdateContent({ body: e.target.value })} rows={4} placeholder="Es. Cibo tipico, musica dal vivo, ingresso gratuito." />
           </label>
           <div className="mini-row">
@@ -177,25 +178,12 @@ export function FlyerManualPanel({
         </div>
       </Section>
       <Section title="Stile" defaultOpen={false}>
-        <div className="stack">
-          <div className="swatches" style={{ gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
-            {['#FFFFFF', '#FFFBF2', '#FFF1F2', '#0F172A', '#1a1a2e'].map((c) => (
-              <button key={c} className={flyer.style.bgColor === c ? 'selected' : ''} style={{ background: c, width: 28, height: 28, borderRadius: '50%', border: '1px solid var(--line)' }} onClick={() => onUpdateStyle('bgColor', c)} aria-label={c} />
-            ))}
-          </div>
-          <div className="form-grid">
-            <label>Testo<input type="color" value={flyer.style.textColor} onChange={(e) => onUpdateStyle('textColor', e.target.value)} /></label>
-            <label>Accento<input type="color" value={flyer.style.accentColor} onChange={(e) => onUpdateStyle('accentColor', e.target.value)} /></label>
-          </div>
-          <label>Font
-            <select value={FLYER_FONTS.some((f) => f.value === flyer.style.fontFamily) ? flyer.style.fontFamily : '__custom__'}
-              onChange={(e) => { const v = e.target.value; if (v === '__custom__') { setShowCustomFont(true); } else { setShowCustomFont(false); onUpdateStyle('fontFamily', v); } }}>
-              {FLYER_FONTS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-              <option value="__custom__">Personalizzato…</option>
-            </select>
-          </label>
-          {showCustomFont && <label>Nome font<input value={flyer.style.fontFamily} onChange={(e) => onUpdateStyle('fontFamily', e.target.value)} placeholder="Es. Playfair Display, sans-serif" /></label>}
-        </div>
+        <FlyerStyleFields
+          flyer={flyer}
+          showCustomFont={showCustomFont}
+          setShowCustomFont={setShowCustomFont}
+          onUpdateStyle={onUpdateStyle}
+        />
       </Section>
       <div className="editor-actions-row" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <button type="button" className="btn-secondary" onClick={onReset}>Nuovo</button>
