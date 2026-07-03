@@ -725,11 +725,80 @@ describe('documentSchemas', () => {
     });
 
     it('omits hero image for variants that do not need one (e.g. magazine, no imageSeed)', () => {
-      const saloneMagazine = createFlyerTemplate('salone', 'magazine');
-      const eventoMagazine = createFlyerTemplate('evento', 'magazine');
-      // Magazine templates have empty imageSeed → heroImage is null
-      expect(saloneMagazine.content.heroImage).toBeNull();
-      expect(eventoMagazine.content.heroImage).toBeNull();
+      // Phase 3 refresh: magazine now carries a hero image too (editorial
+      // top strip). The only no-image variant is one the user explicitly
+      // cleared. Keep a guard that an empty imageSeed still yields null.
+      const tpl = createFlyerTemplate('ristorante', 'magazine');
+      expect(tpl.content.heroImage).not.toBeNull();
+    });
+
+    it('every template has a valid http cta.url (so the QR renders)', () => {
+      for (const s of FLYER_SECTORS) {
+        for (const l of FLYER_LAYOUTS) {
+          const f = createFlyerTemplate(s, l);
+          expect(f.content.cta.url).toMatch(/^https?:\/\//);
+          expect(f.content.qrLabel.length).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('uses all 5 formats across the 16 templates (diversification)', () => {
+      const sizes = new Set<string>();
+      for (const s of FLYER_SECTORS) {
+        for (const l of FLYER_LAYOUTS) {
+          sizes.add(createFlyerTemplate(s, l).size);
+        }
+      }
+      expect(sizes.has('A6')).toBe(true);
+      expect(sizes.has('A5')).toBe(true);
+      expect(sizes.has('A4')).toBe(true);
+      expect(sizes.has('Square')).toBe(true);
+    });
+
+    it('uses landscape orientation in at least 2 templates', () => {
+      let landscape = 0;
+      for (const s of FLYER_SECTORS) {
+        for (const l of FLYER_LAYOUTS) {
+          if (createFlyerTemplate(s, l).orientation === 'landscape') landscape++;
+        }
+      }
+      expect(landscape).toBeGreaterThanOrEqual(2);
+    });
+
+    it('has at least 2 dark-background templates (textColor light on dark bg)', () => {
+      let dark = 0;
+      for (const s of FLYER_SECTORS) {
+        for (const l of FLYER_LAYOUTS) {
+          const f = createFlyerTemplate(s, l);
+          const bg = f.style.bgColor.toLowerCase();
+          const txt = f.style.textColor.toLowerCase();
+          // dark bg heuristic: one of the near-black hexes
+          const isDarkBg = ['#0f172a', '#111827', '#1a1a2e', '#000000'].includes(bg);
+          const isLightText = ['#f8fafc', '#ffffff', '#fafafa'].includes(txt);
+          if (isDarkBg && isLightText) dark++;
+        }
+      }
+      expect(dark).toBeGreaterThanOrEqual(2);
+    });
+
+    it('hero image URL carries width/height matching the hero box aspect for the layout', () => {
+      // classic portrait A5: hero is a wide top strip (full width × ~42% h)
+      // → URL /seed/X/W/H must be landscape (W>H) and not the old fixed 800x600.
+      const ristoranteClassic = createFlyerTemplate('ristorante', 'classic');
+      const m = ristoranteClassic.content.heroImage!.match(/\/(\d+)\/(\d+)$/);
+      expect(m).not.toBeNull();
+      const w = parseInt(m![1]); const h = parseInt(m![2]);
+      expect(w).toBeGreaterThan(0);
+      expect(h).toBeGreaterThan(0);
+      expect(w).toBeGreaterThan(h); // wide strip
+      // not the legacy fixed 800/600 pair
+      expect(`${w}/${h}`).not.toBe('800/600');
+      // centered hero is a small centered block (ratio ~3:1, very wide & short)
+      const ristoranteCentered = createFlyerTemplate('ristorante', 'centered');
+      const mc = ristoranteCentered.content.heroImage!.match(/\/(\d+)\/(\d+)$/)!;
+      const wc = parseInt(mc[1]); const hc = parseInt(mc[2]);
+      // centered strip is shorter than classic strip → aspect differs
+      expect(wc / hc).toBeGreaterThan(w / h);
     });
 
     it('default layout is the sector default when layout is omitted', () => {

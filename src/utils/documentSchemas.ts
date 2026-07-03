@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FLYER_TEMPLATES_BY_SECTOR_LAYOUT, heroBoxMmForLayout } from './flyer/templateCatalog';
 
 export const documentTypeSchema = z.enum(['quote', 'qrCode', 'businessCard', 'flyer', 'logo']);
 export type DocumentType = z.infer<typeof documentTypeSchema>;
@@ -858,23 +859,6 @@ export function createEmptyFlyer(): Flyer {
 export const FLYER_SECTORS = ['ristorante', 'evento', 'salone', 'negozio'] as const;
 export type FlyerSector = (typeof FLYER_SECTORS)[number];
 
-interface FlyerTemplatePreset {
-  title: string;
-  size: FlyerSize;
-  orientation: FlyerOrientation;
-  layout: FlyerLayout;
-  bgColor: string;
-  textColor: string;
-  accentColor: string;
-  /** Picsum.photos seed for the hero image. Empty string = no hero. */
-  imageSeed: string;
-  headline: string;
-  subheadline: string;
-  body: string;
-  cta: { label: string; url: string };
-  qrLabel: string;
-}
-
 // Default layout per sector: which variant the editor loads first when
 // the user clicks a sector button. Each sector exposes 4 layout variants
 // (classic / centered / split / magazine) loaded via the "Varia layout"
@@ -887,215 +871,39 @@ export const FLYER_SECTOR_DEFAULT_LAYOUT: Record<FlyerSector, FlyerLayout> = {
 };
 
 /**
- * 16 template presets (4 settori × 4 layout). Hero image via
- * `picsum.photos/seed/{seed}/W/H` (free, no API key, CORS-enabled, stable
- * per seed). Centered / split templates can opt out of the hero (empty
- * seed) when the layout doesn't need it.
+ * 16 template presets are defined in src/utils/flyer/templateCatalog.ts
+ * and imported here so that documentSchemas.ts keeps the same public API.
  */
-const FLYER_TEMPLATES_BY_SECTOR_LAYOUT: Record<FlyerSector, Record<FlyerLayout, FlyerTemplatePreset>> = {
-  ristorante: {
-    classic: {
-      title: 'Cena di Degustazione · Trattoria del Borgo',
-      size: 'A5', orientation: 'portrait', layout: 'classic',
-      bgColor: '#FFFBF2', textColor: '#1F2937', accentColor: '#B45309',
-      imageSeed: 'ristorante-classic',
-      headline: 'Cena di Degustazione',
-      subheadline: 'Venerdì 15 agosto · ore 20:30',
-      body: 'Menu di 5 portate dello chef Marco Bianchi, in abbinamento a 3 vini del territorio selezionati dal sommelier Anna Verdi.\n\nPosti limitati, prenotazione obbligatoria entro mercoledì 13 agosto. Coperto 45€, bevande escluse.',
-      cta: { label: 'Prenota un Tavolo', url: '' },
-      qrLabel: 'Scansiona per il menù completo',
-    },
-    centered: {
-      title: 'Sapori d\'Autunno · Trattoria del Borgo',
-      size: 'A5', orientation: 'portrait', layout: 'centered',
-      bgColor: '#FFFBF2', textColor: '#1F2937', accentColor: '#B45309',
-      imageSeed: 'ristorante-centered',
-      headline: 'Sapori d\'Autunno',
-      subheadline: 'Nuova stagione, nuovi piatti',
-      body: 'Dal 1 ottobre ti aspettano 4 nuovi piatti firmati dalla chef Anna Rossi: zucca, tartufo, castagne e funghi porcini.\n\nPrenota il tuo tavolo per la serata di apertura del 1 ottobre, drink di benvenuto offerto.',
-      cta: { label: 'Scopri il Menù', url: '' },
-      qrLabel: 'Prenota online',
-    },
-    split: {
-      title: 'Trattoria del Borgo · Cucina di stagione',
-      size: 'A4', orientation: 'portrait', layout: 'split',
-      bgColor: '#FFFBF2', textColor: '#1F2937', accentColor: '#B45309',
-      imageSeed: 'ristorante-split',
-      headline: 'Trattoria del Borgo',
-      subheadline: 'Cucina di stagione, ingredienti locali',
-      body: 'Piatti della tradizione sarda rivisitati con materie prime del territorio a km 0.\n\nAperti a pranzo e cena, chiusi il lunedì. Via Roma 12, Cagliari. Tel. 070 123456.',
-      cta: { label: 'Vieni a Trovarci', url: '' },
-      qrLabel: 'Scansiona per la mappa',
-    },
-    magazine: {
-      title: 'Menù della Settimana · Trattoria del Borgo',
-      size: 'A4', orientation: 'portrait', layout: 'magazine',
-      bgColor: '#FFFBF2', textColor: '#1F2937', accentColor: '#B45309',
-      imageSeed: '',
-      headline: 'Menù della Settimana',
-      subheadline: 'Dal 10 al 16 agosto',
-      body: 'Lunedì: Tagliatelle al ragù bianco di vitello e limone.\nMartedì: Risotto allo zafferano e midollo rosso.\nMercoledì: Tagliata di manzo con rucola e grana.',
-      cta: { label: 'Prenota', url: '' },
-      qrLabel: 'Menù completo online',
-    },
-  },
-  evento: {
-    classic: {
-      title: 'Sagra di Paese 2026',
-      size: 'A5', orientation: 'portrait', layout: 'classic',
-      bgColor: '#FFFFFF', textColor: '#0F172A', accentColor: '#0F766E',
-      imageSeed: 'evento-classic',
-      headline: 'Sagra di Paese 2026',
-      subheadline: '15, 16, 17 agosto · Piazza del Popolo',
-      body: 'Tre serate di festa con cucina tipica, musica dal vivo, balli sardi e spettacoli per bambini ogni sera alle 21:30.\n\nIngresso gratuito, apertura stand gastronomici ore 19:00, chiusura ore 01:00. Parcheggio gratuito in via Garibaldi.',
-      cta: { label: 'Scopri il Programma', url: '' },
-      qrLabel: 'Programma completo online',
-    },
-    centered: {
-      title: 'Festa di San Giovanni',
-      size: 'A5', orientation: 'portrait', layout: 'centered',
-      bgColor: '#FFFFFF', textColor: '#0F172A', accentColor: '#0F766E',
-      imageSeed: 'evento-centered',
-      headline: 'Festa di San Giovanni',
-      subheadline: '24 giugno · Centro Storico',
-      body: 'Fiaccolata per le vie del centro, concerto della banda cittadina in piazza Costituzione e gran finale con i fuochi d\'artificio a mezzanotte.\n\nApertura stand gastronomici ore 19:30, degustazione del coccoi fresco e pani pintau.',
-      cta: { label: 'Guarda il Programma', url: '' },
-      qrLabel: 'Mappa della festa',
-    },
-    split: {
-      title: 'Notte Bianca · Centro Città',
-      size: 'A4', orientation: 'portrait', layout: 'split',
-      bgColor: '#FFFFFF', textColor: '#0F172A', accentColor: '#0F766E',
-      imageSeed: 'evento-split',
-      headline: 'Notte Bianca',
-      subheadline: 'Sabato 5 luglio · Centro Città',
-      body: 'Negozi aperti fino a mezzanotte, musica in 5 piazze, dj set finale in piazza Duomo alle 23:30.\n\nIngresso libero, parcheggio gratuito in via Roma, navetta ogni 15 minuti dalle 21:00.',
-      cta: { label: 'Vedi la Mappa', url: '' },
-      qrLabel: 'Mappa dei punti',
-    },
-    magazine: {
-      title: 'Programma del Week-End',
-      size: 'A4', orientation: 'portrait', layout: 'magazine',
-      bgColor: '#FFFFFF', textColor: '#0F172A', accentColor: '#0F766E',
-      imageSeed: '',
-      headline: 'Programma del Week-End',
-      subheadline: '5, 6, 7 luglio',
-      body: 'Venerdì 5 · Notte Bianca, musica e negozi aperti fino a mezzanotte.\nSabato 6 · Mercatino artigianale in piazza e concerto jazz alle 21:00.\nDomenica 7 · Spettacolo per bambini alle 17:00 e cinema sotto le stelle alle 21:30.',
-      cta: { label: 'Vedi gli Orari', url: '' },
-      qrLabel: 'Orari completi online',
-    },
-  },
-  salone: {
-    classic: {
-      title: 'Salone Bellezza · Promo Estate',
-      size: 'A5', orientation: 'portrait', layout: 'classic',
-      bgColor: '#FFF1F2', textColor: '#1F2937', accentColor: '#E11D48',
-      imageSeed: 'salone-classic',
-      headline: 'Promo Estate -20%',
-      subheadline: 'Valido fino al 30 agosto',
-      body: 'Taglio, piega e colore a prezzo speciale per tutta l\'estate. Trattamento cheratina incluso per i capelli colorati.\n\nPrenota il tuo appuntamento con i nostri stilisti esperti, oltre 15 anni di esperienza nel settore.',
-      cta: { label: 'Prenota Ora', url: '' },
-      qrLabel: 'Prenota online',
-    },
-    centered: {
-      title: 'Nuova Apertura · Salone Centro',
-      size: 'A5', orientation: 'portrait', layout: 'centered',
-      bgColor: '#FFF1F2', textColor: '#1F2937', accentColor: '#E11D48',
-      imageSeed: 'salone-centered',
-      headline: 'Nuova Apertura',
-      subheadline: '15 settembre · Salone Centro',
-      body: 'Apre il nostro nuovo spazio in centro: 200mq dedicati a taglio, colore, trattamenti viso e massaggi.\n\nPrenota la tua visita gratuita con consulenza personalizzata per il tuo tipo di capelli.',
-      cta: { label: 'Prenota Visita', url: '' },
-      qrLabel: 'Prenota online',
-    },
-    split: {
-      title: 'Salone Bellezza · Promo Weekend',
-      size: 'A6', orientation: 'landscape', layout: 'split',
-      bgColor: '#0F172A', textColor: '#F8FAFC', accentColor: '#E11D48',
-      imageSeed: 'salone-split',
-      headline: 'Saldi -20%',
-      subheadline: 'Solo questo weekend',
-      body: 'Taglio + piega + colore a 45€ invece di 56€.\nSu prenotazione, posti limitati, vieni sabato o domenica.',
-      cta: { label: 'Prenota', url: '' },
-      qrLabel: 'Prenota online',
-    },
-    magazine: {
-      title: 'I Nostri Servizi · Salone Bellezza',
-      size: 'A4', orientation: 'portrait', layout: 'magazine',
-      bgColor: '#FFF1F2', textColor: '#1F2937', accentColor: '#E11D48',
-      imageSeed: '',
-      headline: 'I Nostri Servizi',
-      subheadline: 'Dal 2010 a Cagliari',
-      body: 'Taglio & Piega: classico, moderno, sposa, bambino.\nColore: balayage, meches, tinta, decolorazione.\nTrattamenti: cheratina, impacco ristrutturante, anticrespo.',
-      cta: { label: 'Prenota', url: '' },
-      qrLabel: 'Lista prezzi completa',
-    },
-  },
-  negozio: {
-    classic: {
-      title: 'Boutique · Saldi di Stagione',
-      size: 'A5', orientation: 'portrait', layout: 'classic',
-      bgColor: '#FFFFFF', textColor: '#111827', accentColor: '#7C3AED',
-      imageSeed: 'negozio-classic',
-      headline: 'Saldi di Stagione',
-      subheadline: 'Fino al -50% · 1-30 del mese',
-      body: 'Migliaia di articoli scontati: abbigliamento, calzature e accessori uomo, donna e bambino.\n\nAcquisti in boutique e online con spedizione gratuita sopra i 50€. Resi gratuiti entro 30 giorni.',
-      cta: { label: 'Vedi il Catalogo', url: '' },
-      qrLabel: 'Scansiona per il catalogo',
-    },
-    centered: {
-      title: 'Apertura Nuovo Store',
-      size: 'A5', orientation: 'portrait', layout: 'centered',
-      bgColor: '#FFFFFF', textColor: '#111827', accentColor: '#7C3AED',
-      imageSeed: 'negozio-centered',
-      headline: 'Apertura Nuovo Store',
-      subheadline: 'Via Roma 23 · 20 settembre ore 18:00',
-      body: 'Apre il nostro nuovo punto vendita: 300mq di collezione autunno/inverno, drink di benvenuto e sconto 10% a tutti i presenti all\'inaugurazione.\n\nApertura dal lunedì al sabato 9:30-19:30, domenica chiuso. Parcheggio convenzionato in via Manno.',
-      cta: { label: 'Vieni all\'Apertura', url: '' },
-      qrLabel: 'Mappa e orari',
-    },
-    split: {
-      title: 'Boutique · Outlet -50%',
-      size: 'A4', orientation: 'portrait', layout: 'split',
-      bgColor: '#FFFFFF', textColor: '#111827', accentColor: '#7C3AED',
-      imageSeed: 'negozio-split',
-      headline: 'Outlet -50%',
-      subheadline: 'Collezione primavera/estate',
-      body: 'Migliaia di capi a metà prezzo: t-shirt, camicie, jeans, gonne, vestiti e accessori.\n\nSolo per questa settimana, fino ad esaurimento scorte. Taglie disponibili dalla S alla XXL.',
-      cta: { label: 'Vedi l\'Outlet', url: '' },
-      qrLabel: 'Lista outlet online',
-    },
-    magazine: {
-      title: 'Le Nostre Categorie · Boutique',
-      size: 'A4', orientation: 'portrait', layout: 'magazine',
-      bgColor: '#FFFFFF', textColor: '#111827', accentColor: '#7C3AED',
-      imageSeed: '',
-      headline: 'Le Nostre Categorie',
-      subheadline: 'Boutique · Autunno/Inverno 2026',
-      body: 'Donna: abiti, gonne, top, maglioni, giacche, accessori.\nUomo: camicie, polo, felpe, giacche, pantaloni, scarpe.\nBambino: magliette, felpe, jeans, gonne, scarpe.',
-      cta: { label: 'Vedi il Catalogo', url: '' },
-      qrLabel: 'Catalogo online',
-    },
-  },
-};
 
 /**
  * Build a rich flyer from a (sector, layout) combination. The layout
  * is optional: if omitted, the sector's default layout is used (see
  * FLYER_SECTOR_DEFAULT_LAYOUT). The hero image is a stable picsum.photos
- * URL so the same template always renders the same photo. The image is
- * stored as a plain HTTPS string (not base64): the preview uses CSS
- * `background: url(...)` which accepts HTTP URLs, and the PDF/PNG
- * generators pass the URL to pdfmake / the Image element respectively.
- * Picsum.photos has CORS enabled so pdfmake can fetch it client-side.
+ * URL so the same template always renders the same photo. The image W/H
+ * matches the hero box aspect for that layout, so preserveAspectRatio
+ * slicing wastes as little of the source image as possible.
  */
 export function createFlyerTemplate(sector: FlyerSector, layout?: FlyerLayout): Flyer {
   const now = new Date().toISOString();
   const useLayout = layout ?? FLYER_SECTOR_DEFAULT_LAYOUT[sector];
   const tpl = FLYER_TEMPLATES_BY_SECTOR_LAYOUT[sector][useLayout];
-  const heroImage = tpl.imageSeed
-    ? `https://picsum.photos/seed/${tpl.imageSeed}/800/600`
-    : null;
+  let heroImage: string | null = null;
+  if (tpl.imageSeed) {
+    const box = heroBoxMmForLayout(useLayout, getFlyerDimensions({ ...createEmptyFlyer(), size: tpl.size, orientation: tpl.orientation }));
+    // ~4 px per mm (≈100 dpi). If the smaller side falls below 200px,
+    // scale both proportionally so the aspect ratio is preserved (a flat
+    // Math.max per side would distort the crop ratio for tiny boxes like
+    // the centered hero strip).
+    let pxW = Math.round(box.w * 4);
+    let pxH = Math.round(box.h * 4);
+    const smaller = Math.min(pxW, pxH);
+    if (smaller < 200) {
+      const k = 200 / smaller;
+      pxW = Math.round(pxW * k);
+      pxH = Math.round(pxH * k);
+    }
+    heroImage = `https://picsum.photos/seed/${tpl.imageSeed}/${pxW}/${pxH}`;
+  }
   return {
     documentType: 'flyer',
     id: `flyer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
