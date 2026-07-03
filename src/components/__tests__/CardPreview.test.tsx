@@ -392,9 +392,9 @@ describe('CardPreview', () => {
       const photoEl = document.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
       expect(photoEl).not.toBeNull();
       const style = window.getComputedStyle(photoEl);
-      // gridPresetLeft: photo at x=0, y=0, w=2, h=4 → gridColumn 1 / span 2, gridRow 1 / span 4
+      // gridPresetLeft: photo at x=0, y=0, w=2, h=3 → gridColumn 1 / span 2, gridRow 1 / span 3
       expect(style.gridColumn).toBe('1 / span 2');
-      expect(style.gridRow).toBe('1 / span 4');
+      expect(style.gridRow).toBe('1 / span 3');
     });
 
     it('front: moving name element changes its grid-column', () => {
@@ -429,10 +429,10 @@ describe('CardPreview', () => {
       const bodyGrid = back.querySelector('.card-back-body-grid') as HTMLElement;
       expect(bodyGrid).not.toBeNull();
       expect(window.getComputedStyle(bodyGrid).display).toBe('grid');
-      // gridPresetBackDefault: contacts at x=0 (w=2), qr at x=2 (w=2)
+      // gridPresetBackDefault: contacts at x=0 (w=2), qr at x=3 (w=1)
       const qrEl = document.querySelector('[data-testid="grid-el-qr"]') as HTMLElement;
       expect(qrEl).not.toBeNull();
-      expect(window.getComputedStyle(qrEl).gridColumn).toBe('3 / span 2');
+      expect(window.getComputedStyle(qrEl).gridColumn).toBe('4 / span 1');
       const contactsEl = document.querySelector('[data-testid="grid-el-contacts"]') as HTMLElement;
       expect(contactsEl).not.toBeNull();
       expect(window.getComputedStyle(contactsEl).gridColumn).toBe('1 / span 2');
@@ -561,12 +561,10 @@ describe('CardPreview', () => {
       expect(document.querySelector('[data-testid="card-grid-debug"]')).toBeNull();
     });
 
-    it('back: email su una sola riga (nowrap + ellipsis) senza QR', () => {
-      // Senza QR i contatti si espandono a tutta la larghezza, ma la mail
-      // lunga NON deve spezzarsi sull'@ (fix: rimosso word-break: break-word).
-      // jsdom non applica pienamente whiteSpace/textOverflow via getComputedStyle,
-      // quindi verifichiamo la struttura del DOM (l'email è un singolo text
-      // node, NON spezzato) + la regola CSS è verificata da un check parallelo.
+    it('back: email renderizzata senza tagli e wrappata nella cella grid', () => {
+      // In grid-mode preferiamo mostrare i dati di contatto: il valore può
+      // andare a capo naturalmente dentro la cella invece di essere troncato
+      // con ellissi. Senza QR i contatti si espandono a tutta la larghezza.
       const longEmail = 'mario.rossi.da.vimercate@agenzia-immobiliare-milano.it';
       const card: BusinessCard = {
         ...createGiovanniCardTemplate(),
@@ -579,29 +577,66 @@ describe('CardPreview', () => {
       };
       const { container } = render(<CardPreview side="back" card={card} showGrid={false} />);
       const val = container.querySelector('[data-testid="card-back-email-val"]') as HTMLElement;
-      // 1. L'email è effettivamente renderizzata come singolo text node (no split)
       expect(val).not.toBeNull();
       expect(val.textContent).toBe(longEmail);
       expect(val.childNodes.length).toBe(1);
       expect(val.firstChild?.nodeType).toBe(Node.TEXT_NODE);
-      // 2. La regola .card-back-val contiene nowrap+ellipsis (verifica diretta
-      //    del sorgente CSS, indipendente da jsdom/Vite CSS loading).
-      //    Usiamo fs perché jsdom non vede sempre gli stylesheets di Vite.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fs = require('node:fs') as typeof import('node:fs');
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const path = require('node:path') as typeof import('node:path');
       const cssPath = path.resolve(__dirname, '../card/cardPreviewSide.css');
       const css = fs.readFileSync(cssPath, 'utf8');
-      // Estrai il blocco della regola .card-back-val { ... }
-      const m = css.match(/\.card-back-val\s*\{([^}]+)\}/);
-      expect(m).not.toBeNull();
-      const block = m![1];
-      expect(block).toMatch(/white-space:\s*nowrap/);
-      expect(block).toMatch(/overflow:\s*hidden/);
-      expect(block).toMatch(/text-overflow:\s*ellipsis/);
-      // Critico: NON deve più esserci word-break: break-word
-      expect(block).not.toMatch(/word-break:\s*break-word/);
+      // In grid-mode le celle testuali wrappano i valori invece di troncarli.
+      const mGrid = css.match(/\.card-preview-side\.grid-mode\s+\.card-grid-cell--text\s+\.card-back-val\s*\{([^}]+)\}/);
+      expect(mGrid).not.toBeNull();
+      const blockGrid = mGrid![1];
+      expect(blockGrid).toMatch(/white-space:\s*normal/);
+      expect(blockGrid).toMatch(/overflow-wrap:\s*break-word/);
+      expect(blockGrid).toMatch(/word-break:\s*normal/);
+    });
+
+    it('front: alignment inline styles control text position', () => {
+      const card: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        front: { ...createGiovanniCardTemplate().front, name: 'ALICE', title: '', company: '' },
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            name: { x: 0, y: 0, w: 4, h: 1, alignH: 'left', alignV: 'top' },
+          },
+        },
+      };
+      const { container } = render(<CardPreview side="front" card={card} />);
+      const nameCell = container.querySelector('[data-testid="grid-el-name"]') as HTMLElement;
+      expect(nameCell).not.toBeNull();
+      const style = window.getComputedStyle(nameCell);
+      expect(style.justifyContent).toBe('flex-start');
+      expect(style.alignItems).toBe('flex-start');
+    });
+
+    it('back: services render in a separate grid cell when present', () => {
+      const card: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        back: {
+          ...createGiovanniCardTemplate().back,
+          services: ['Consulenza', 'Supporto'],
+        },
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 2, h: 2 },
+            services: { x: 0, y: 2, w: 2, h: 1 },
+            qr: { x: 2, y: 0, w: 2, h: 4 },
+          },
+        },
+      };
+      render(<CardPreview side="back" card={card} />);
+      expect(screen.getByTestId('grid-el-services')).toBeInTheDocument();
+      expect(screen.getByTestId('grid-el-contacts')).toBeInTheDocument();
+      expect(screen.getByTestId('card-back-services')).toBeInTheDocument();
     });
 
     it('front: grid renders logo element with data-testid grid-el-logo (Phase 2.1)', () => {
@@ -656,6 +691,29 @@ describe('CardPreview', () => {
       const card = createGiovanniCardTemplate();
       render(<CardPreview side="front" card={card} showGrid={false} />);
       expect(screen.queryByTestId('card-grid-debug')).toBeNull();
+    });
+
+    it('back grid debug hides empty socials slot when back.socials is empty', () => {
+      const card: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        backGrid: gridPresetBackDefault(),
+        back: {
+          ...createGiovanniCardTemplate().back,
+          useGrid: true,
+          services: ['Consulenza'],
+          socials: [],
+          phone: '3408613407',
+          email: 'test@example.com',
+          website: '',
+          qrPayload: '',
+        },
+      };
+      render(<CardPreview side="back" card={card} showGrid={true} />);
+      expect(screen.getByTestId('card-grid-debug')).toBeInTheDocument();
+      expect(screen.queryByText('socials')).toBeNull();
+      // contacts and services should still appear
+      expect(screen.getByText('contacts')).toBeInTheDocument();
+      expect(screen.getByText('services')).toBeInTheDocument();
     });
 
   // ─── Phase 2.2: fontScale + servicesLabel + text wrap ────────────

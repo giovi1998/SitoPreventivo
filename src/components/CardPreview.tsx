@@ -62,6 +62,29 @@ function CardPreview({ side, card, showGrid = false, tier = 'unlocked' }: CardPr
     </svg>
   ) : null;
 
+  const nonEmptyGridKeys = useMemo(() => {
+    const set = new Set<string>();
+    if (side === 'front') {
+      if (card.front.photoUrl) set.add('photo');
+      if (card.front.logoUrl) set.add('logo');
+      if (card.front.name?.trim()) set.add('name');
+      if (card.front.title?.trim()) set.add('title');
+      if (card.front.company?.trim()) set.add('company');
+    } else {
+      const hasContacts =
+        card.back.phone?.trim() ||
+        card.back.email?.trim() ||
+        card.back.website?.trim() ||
+        card.back.address?.trim() ||
+        card.back.vatNumber?.trim();
+      if (hasContacts) set.add('contacts');
+      if (card.back.services?.some((s) => s.trim())) set.add('services');
+      if (card.back.socials?.some((s) => s.platform && s.url)) set.add('socials');
+      if (qrPayload) set.add('qr');
+    }
+    return set;
+  }, [card, side, qrPayload]);
+
   const gridDebug = showGrid && grid ? (
     <div
       className="card-grid-debug"
@@ -79,6 +102,7 @@ function CardPreview({ side, card, showGrid = false, tier = 'unlocked' }: CardPr
     >
       {Object.entries(grid.elements).map(([key, el]) => {
         if (!el) return null;
+        if (!nonEmptyGridKeys.has(key)) return null;
         const color = DEBUG_COLORS[key] || '#94a3b8';
         return (
           <div
@@ -135,6 +159,7 @@ const DEBUG_COLORS: Record<string, string> = {
   contacts: '#6366f1',
   qr: '#14b8a6',
   socials: '#f43f5e',
+  services: '#a855f7',
 };
 
 const FrontPreview = React.memo(function FrontPreview({
@@ -353,10 +378,26 @@ const BackPreview = React.memo(function BackPreview({
         {gridDebug}
 
         {grid!.elements.contacts && (
-          <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-contacts" style={gridPlacement(grid!.elements.contacts)}>
+          <div className="card-grid-cell card-grid-cell--text card-grid-cell--contacts" data-testid="grid-el-contacts" style={gridPlacement(grid!.elements.contacts)}>
             {contactsContent}
-            {servicesContent}
+            {!grid!.elements.services && servicesContent}
             {!grid!.elements.socials && socialsContent}
+          </div>
+        )}
+        {grid!.elements.services && servicesContent && (
+          <div
+            className="card-grid-cell card-grid-cell--text card-grid-cell--services"
+            data-testid="grid-el-services"
+            style={(() => {
+              const base = gridPlacement(grid!.elements.services);
+              if (!base || socials.length > 0) return base;
+              // When socials are empty, let services expand into the unused socials row.
+              const el = grid!.elements.services;
+              const emptySocialsH = grid!.elements.socials?.h ?? 1;
+              return { ...base, gridRow: `${el.y + 1} / span ${el.h + emptySocialsH}` };
+            })()}
+          >
+            {servicesContent}
           </div>
         )}
         {grid!.elements.qr && (
@@ -365,7 +406,7 @@ const BackPreview = React.memo(function BackPreview({
           </div>
         )}
         {grid!.elements.socials && socialsContent && (
-          <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-socials" style={gridPlacement(grid!.elements.socials)}>
+          <div className="card-grid-cell card-grid-cell--text card-grid-cell--socials" data-testid="grid-el-socials" style={gridPlacement(grid!.elements.socials)}>
             {socialsContent}
           </div>
         )}

@@ -65,13 +65,13 @@ export async function renderCardSideDataUrl(
       logoUrl: resolvedLogoUrl,
     },
   };
-  const svg = buildCardSvg(cardForSvg, side, pxW, pxH);
+  const svg = buildCardSvg(cardForSvg, side, pxW, pxH, { rotate });
+  const outW = rotate === 90 || rotate === 270 ? pxH : pxW;
+  const outH = rotate === 90 || rotate === 270 ? pxW : pxH;
   const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
   const svgUri = URL.createObjectURL(blob);
   try {
     const img = await loadSvgImage(svgUri);
-    const outW = rotate === 90 || rotate === 270 ? pxH : pxW;
-    const outH = rotate === 90 || rotate === 270 ? pxW : pxH;
     const canvas = document.createElement('canvas');
     canvas.width = outW;
     canvas.height = outH;
@@ -79,16 +79,10 @@ export async function renderCardSideDataUrl(
     if (!ctx) throw new Error('Canvas 2D non disponibile');
     ctx.fillStyle = card.style.bgColor;
     ctx.fillRect(0, 0, outW, outH);
-    if (rotate === 0) {
-      ctx.drawImage(img, 0, 0, pxW, pxH);
-    } else {
-      ctx.translate(outW / 2, outH / 2);
-      ctx.rotate((rotate * Math.PI) / 180);
-      ctx.drawImage(img, -pxW / 2, -pxH / 2, pxW, pxH);
-    }
+    ctx.drawImage(img, 0, 0, outW, outH);
     return canvas.toDataURL('image/png');
   } catch {
-    const png = buildMinimalPng(rotate === 90 || rotate === 270 ? pxH : pxW, rotate === 90 || rotate === 270 ? pxW : pxH, card.style.bgColor);
+    const png = buildMinimalPng(outW, outH, card.style.bgColor);
     return 'data:image/png;base64,' + uint8ArrayToBase64(png);
   } finally {
     URL.revokeObjectURL(svgUri);

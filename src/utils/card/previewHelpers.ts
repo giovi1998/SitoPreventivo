@@ -20,12 +20,27 @@ export function isGridModeFor(side: GridSide, card: BusinessCard): boolean {
 }
 
 export function gridPlacement(
-  el: { x: number; y: number; w: number; h: number } | undefined,
+  el: { x: number; y: number; w: number; h: number; alignH?: 'left' | 'center' | 'right' | null; alignV?: 'top' | 'center' | 'bottom' | null } | undefined,
 ): CSSProperties | undefined {
   if (!el) return undefined;
+  const alignH = el.alignH ?? 'center';
+  const alignV = el.alignV ?? 'center';
+  const justifyMap: Record<string, string> = {
+    left: 'flex-start',
+    center: 'center',
+    right: 'flex-end',
+  };
+  const alignMap: Record<string, string> = {
+    top: 'flex-start',
+    center: 'center',
+    bottom: 'flex-end',
+  };
   return {
     gridColumn: `${el.x + 1} / span ${el.w}`,
     gridRow: `${el.y + 1} / span ${el.h}`,
+    justifyContent: justifyMap[alignH] ?? 'center',
+    alignItems: alignMap[alignV] ?? 'center',
+    textAlign: alignH,
   };
 }
 

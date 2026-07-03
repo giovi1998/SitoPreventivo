@@ -13,7 +13,7 @@ export interface CardMergeResult {
 // Senza questo split, l'AI "sposta QR" scrive in card.grid e il retro
 // (che legge da card.backGrid ?? card.grid) ignora la modifica.
 const FRONT_GRID_KEYS = ['photo', 'name', 'title', 'company', 'logo'] as const;
-const BACK_GRID_KEYS = ['contacts', 'qr', 'socials'] as const;
+const BACK_GRID_KEYS = ['contacts', 'qr', 'socials', 'services'] as const;
 type GridTarget = 'grid' | 'backGrid';
 
 function targetForKey(key: string): GridTarget {
@@ -254,14 +254,6 @@ export function mergeCardAIResponse(
         if (el.w <= 0 || el.h <= 0) continue;
 
         const target: GridTarget = targetForKey(key);
-        if (target === 'grid' && !updated.front.useGrid) {
-          updated.front = { ...updated.front, useGrid: true };
-          changes.push('Fronte: griglia attivata');
-        }
-        if (target === 'backGrid' && !updated.back.useGrid) {
-          updated.back = { ...updated.back, useGrid: true };
-          changes.push('Retro: griglia attivata');
-        }
         const currentTargetGrid: CardGrid = updated[target] ?? {
           cols: (typeof g.cols === 'number' ? g.cols : 4),
           rows: (typeof g.rows === 'number' ? g.rows : 4),
@@ -274,19 +266,29 @@ export function mergeCardAIResponse(
           elements: { ...currentTargetGrid.elements },
         };
         const current = currentTargetGrid.elements[key as keyof typeof currentTargetGrid.elements];
-        let sanitized = el;
+        let sanitized: { x: number; y: number; w: number; h: number; alignH?: 'left' | 'center' | 'right'; alignV?: 'top' | 'center' | 'bottom' } = el;
         if (current) {
           const dx = el.x - current.x;
           const dy = el.y - current.y;
           const dw = el.w - current.w;
           const dh = el.h - current.h;
+          let workingGrid = currentTargetGrid;
           if (dx !== 0 || dy !== 0) {
             const { x, y } = stepMove(currentTargetGrid, key, dx, dy);
-            sanitized = { x, y, w: el.w, h: el.h };
+            sanitized = { ...sanitized, x, y };
+            // Aggiorna la grid di lavoro con la nuova posizione così che
+            // eventuali resize successivi tengano conto dello spostamento.
+            workingGrid = {
+              ...currentTargetGrid,
+              elements: {
+                ...currentTargetGrid.elements,
+                [key]: { ...current, x, y },
+              },
+            };
           }
           if (dw !== 0 || dh !== 0) {
-            const r = stepResize(currentTargetGrid, key, dw, dh);
-            sanitized = { x: r.x, y: r.y, w: r.w, h: r.h };
+            const r = stepResize(workingGrid, key, dw, dh);
+            sanitized = { ...sanitized, x: r.x, y: r.y, w: r.w, h: r.h };
           }
         } else {
           // Nuovo elemento: clamp ai bordi della grid di destinazione.
@@ -296,24 +298,29 @@ export function mergeCardAIResponse(
           const h = Math.max(1, Math.min(rows, el.h));
           const x = Math.max(0, Math.min(cols - w, el.x));
           const y = Math.max(0, Math.min(rows - h, el.y));
-          sanitized = { x, y, w, h };
+          sanitized = { ...sanitized, x, y, w, h };
         }
         const sameAsCurrent = !!current && sanitized.x === current.x && sanitized.y === current.y &&
           sanitized.w === current.w && sanitized.h === current.h;
         const sameAsRequested = sanitized.x === el.x && sanitized.y === el.y &&
           sanitized.w === el.w && sanitized.h === el.h;
+        // Preserve alignment changes even if position did not change.
+        const alignmentChanged = !!current && (sanitized.alignH !== current.alignH || sanitized.alignV !== current.alignV);
 
         newTargetGrid.elements = { ...newTargetGrid.elements, [key]: sanitized };
 
-        if (sameAsCurrent) {
+        if (sameAsCurrent && !alignmentChanged) {
           // Nessuna modifica effettiva: richiesta impossibile per collisione/bordi.
           changes.push(`Griglia: ${key} bloccato (collisione), posizione richiesta non raggiungibile`);
         } else {
           updated[target] = newTargetGrid;
-          if (sameAsRequested) {
+          if (sameAsRequested && !alignmentChanged) {
             changes.push(`Griglia: ${key} posizionato a (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}`);
           } else {
-            changes.push(`Griglia: ${key} parziale (collisione), richiesto (${el.x}, ${el.y}) ${el.w}×${el.h}, applicato (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}`);
+            const alignMsg = alignmentChanged
+              ? `, alignH=${sanitized.alignH ?? 'center'}, alignV=${sanitized.alignV ?? 'center'}`
+              : '';
+            changes.push(`Griglia: ${key} parziale (collisione), richiesto (${el.x}, ${el.y}) ${el.w}×${el.h}, applicato (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}${alignMsg}`);
           }
         }
       }

@@ -149,6 +149,16 @@
   font-size: 0.7rem;
 }
 
+.card-grid-align {
+  display: flex;
+  gap: 8px;
+}
+
+.card-grid-align .card-field {
+  flex: 1;
+  margin: 0;
+}
+
 .card-grid-arrows,
 .card-grid-resize {
   display: grid;

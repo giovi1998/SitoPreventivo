@@ -101,7 +101,7 @@ describe('CardEditor', () => {
     const webInput = screen.getByLabelText(/Sito web/i) as HTMLInputElement;
     expect(webInput.value).toBe('https://webdeveloperca.netlify.app/');
     const phoneInput = screen.getByLabelText(/Telefono \(retro\)/i) as HTMLInputElement;
-    expect(phoneInput.value).toBe('XXXXX');
+    expect(phoneInput.value).toBe('35180008042');
   });
 
   it('updates front.name when user types (REQ-002)', () => {
@@ -499,24 +499,30 @@ describe('CardEditor', () => {
     });
 
     it('applying a preset SOSTITUISCE la grid (no duplicati di elementi come logo)', () => {
-      // Giovanni template ha grid con logo a (2, 3, 1, 1). Applico preset
-      // 'centered' che mette logo a (3, 3, 1, 1). Il merge precedente
-      // lasciava il logo vecchio + aggiungeva quello nuovo = 2 loghi visibili.
+      // Giovanni template ha grid con logo a (2, 3, 2, 1). Applico preset
+      // 'centered' che mette foto a (1, 0, 2, 1): verifichiamo che la grid
+      // venga sostituita (la foto cambia posizione) e che non ci siano
+      // duplicati di elementi come il logo.
       const card = createGiovanniCardTemplate();
-      expect(card.grid?.elements.logo).toEqual({ x: 2, y: 3, w: 1, h: 1 });
+      expect(card.grid?.elements.logo).toEqual({ x: 2, y: 3, w: 2, h: 1 });
+      expect(card.grid?.elements.photo).toEqual({ x: 0, y: 0, w: 2, h: 4 });
       renderEditor({ initialCard: card });
       // Attiva griglia (init-from-layout) + seleziona centered
       fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
       const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
-      // Verifica che la preview mostri UN SOLO logo (grid centered ha 1 logo)
       const front = screen.getByTestId('card-preview-front');
       expect(front.className).toContain('grid-mode');
-      // Dopo centered: logo a (3, 3, 1, 1)
-      const grid = front.querySelector('[data-testid="grid-el-logo"]') as HTMLElement;
-      expect(grid).not.toBeNull();
-      expect(window.getComputedStyle(grid).gridColumn).toBe('4 / span 1');
-      expect(window.getComputedStyle(grid).gridRow).toBe('4 / span 1');
+      // Dopo centered: foto a (1, 0, 2, 1) → la grid è stata sostituita
+      const photo = front.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
+      expect(photo).not.toBeNull();
+      expect(window.getComputedStyle(photo).gridColumn).toBe('2 / span 2');
+      expect(window.getComputedStyle(photo).gridRow).toBe('1 / span 1');
+      // Logo: un solo elemento, posizione (2, 3, 2, 1)
+      const logos = front.querySelectorAll('[data-testid="grid-el-logo"]');
+      expect(logos.length).toBe(1);
+      expect(window.getComputedStyle(logos[0]).gridColumn).toBe('3 / span 2');
+      expect(window.getComputedStyle(logos[0]).gridRow).toBe('4 / span 1');
     });
 
     it('moves the selected element left when ← is pressed', () => {
@@ -754,7 +760,7 @@ describe('CardEditor', () => {
       expect(front.className).toContain('grid-mode');
     });
 
-    it('moves logo up blocked by company (grid editor front, centered)', () => {
+    it('moves logo up blocked by title (grid editor front, centered)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
       const gridToggle = screen.getByLabelText(/Mostra griglia/i);
       fireEvent.click(gridToggle);
@@ -762,13 +768,12 @@ describe('CardEditor', () => {
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'logo' } });
-      // logo centered: (3,3,1,1) → ↑ va a (3,2,1,1) → collide con title(0,2,4,1)?
-      // x: 4>0 OK, 4<=3 No → x overlap. y: 3<=2 No, 3<=3 No → y overlap. Collide!
+      // logo centered: (2,3,2,1) → ↑ va a (2,2,2,1) → collide con title(0,2,4,1)
       const upBtn = screen.getByRole('button', { name: /Sposta su/i });
       expect(upBtn).toBeDisabled();
     });
 
-    it('resizes logo shrink width (grid editor front, centered preset)', () => {
+    it('resizes logo shrink width enabled (grid editor front, centered preset)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
       const gridToggle = screen.getByLabelText(/Mostra griglia/i);
       fireEvent.click(gridToggle);
@@ -776,12 +781,12 @@ describe('CardEditor', () => {
       fireEvent.change(presetSelect, { target: { value: 'centered' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'logo' } });
-      // logo centered: (3,3,1,1), w=1 → canShrinkW = false (w=1 min)
+      // logo centered: (2,3,2,1), w=2 → canShrinkW = true
       const shrinkW = screen.getByRole('button', { name: /Riduci larghezza/i });
-      expect(shrinkW).toBeDisabled();
+      expect(shrinkW).not.toBeDisabled();
     });
 
-    it('grid editor back: moves QR down blocked by socials (Giovanni template)', () => {
+    it('grid editor back: moves QR down blocked by grid edge (Giovanni template)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
       const gridToggle = screen.getByLabelText(/Mostra griglia/i);
       fireEvent.click(gridToggle);
@@ -789,13 +794,13 @@ describe('CardEditor', () => {
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'qr' } });
-      // Giovanni backGrid (gridPresetBackDefault): qr a (3,0,1,2), socials a (3,2,1,2)
-      // → ↓ va a (3,1,1,2) → collide con socials (y overlap: qr.y2=3 > socials.y=2)
+      // Giovanni backGrid (gridPresetBackDefault): qr a (3,0,1,4) fills all rows
+      // → ↓ va a (3,1,1,4) → y+h=5 > rows=4 → border block
       const downBtn = screen.getByRole('button', { name: /Sposta giù/i });
       expect(downBtn).toBeDisabled();
     });
 
-    it('grid editor back: resizes contacts wider blocked by QR (Giovanni)', () => {
+    it('grid editor back: resizes contacts wider enabled (Giovanni)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
       const gridToggle = screen.getByLabelText(/Mostra griglia/i);
       fireEvent.click(gridToggle);
@@ -803,25 +808,25 @@ describe('CardEditor', () => {
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'contacts' } });
-      // contacts a (0,0,3,4), cols=4 → growW: (0,0,4,4) collide con qr(3,0,1,2)
+      // contacts a (0,0,2,2), cols=4 → growW: (0,0,3,2) no overlap with qr(3,0,1,4)
       const growW = screen.getByRole('button', { name: /Aumenta larghezza/i });
-      expect(growW).toBeDisabled();
+      expect(growW).not.toBeDisabled();
     });
 
-    it('grid editor back: resizes socials taller blocked by grid edge (Giovanni)', () => {
+    it('grid editor back: resizes services taller blocked by socials (Giovanni)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
       const gridToggle = screen.getByLabelText(/Mostra griglia/i);
       fireEvent.click(gridToggle);
       const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
-      fireEvent.change(elSelect, { target: { value: 'socials' } });
-      // socials a (3,2,1,2), rows=4 → y+h=4 = rows → canGrowH = false
+      fireEvent.change(elSelect, { target: { value: 'services' } });
+      // services a (0,2,2,1), growH: (0,2,2,2) overlaps socials(0,3,2,1)
       const growH = screen.getByRole('button', { name: /Aumenta altezza/i });
       expect(growH).toBeDisabled();
     });
 
-    it('grid editor back: moves socials up blocked by QR (Giovanni template)', () => {
+    it('grid editor back: moves socials up blocked by services (Giovanni template)', () => {
       renderEditor({ initialCard: createGiovanniCardTemplate() });
       const gridToggle = screen.getByLabelText(/Mostra griglia/i);
       fireEvent.click(gridToggle);
@@ -829,7 +834,7 @@ describe('CardEditor', () => {
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'socials' } });
-      // socials a (3,2,1,2) → ↑ va a (3,1,1,2) → collide con qr(3,0,1,2)
+      // socials a (0,3,2,1) → ↑ va a (0,2,2,1) → collide con services(0,2,2,1)
       const upBtn = screen.getByRole('button', { name: /Sposta su/i });
       expect(upBtn).toBeDisabled();
     });
@@ -842,7 +847,7 @@ describe('CardEditor', () => {
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'contacts' } });
-      // contacts a (0,0,2,4), w=2 > 1 → canShrinkW = true
+      // contacts a (0,0,2,2), w=2 > 1 → canShrinkW = true
       const shrinkW = screen.getByRole('button', { name: /Riduci larghezza/i });
       expect(shrinkW).not.toBeDisabled();
       fireEvent.click(shrinkW);
@@ -860,7 +865,7 @@ describe('CardEditor', () => {
       fireEvent.change(sideSelect, { target: { value: 'back' } });
       const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
       fireEvent.change(elSelect, { target: { value: 'qr' } });
-      // qr a (2,0,2,4), h=4 > 1 → canShrinkH = true
+      // qr a (3,0,1,4), h=4 > 1 → canShrinkH = true
       const shrinkH = screen.getByRole('button', { name: /Riduci altezza/i });
       expect(shrinkH).not.toBeDisabled();
       fireEvent.click(shrinkH);

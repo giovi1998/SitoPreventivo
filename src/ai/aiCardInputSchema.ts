@@ -2,6 +2,15 @@ import { z } from 'zod';
 
 const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colore non valido (formato #RRGGBB)');
 
+const gridElementShape = z.object({
+  x: z.number(),
+  y: z.number(),
+  w: z.number(),
+  h: z.number(),
+  alignH: z.enum(['left', 'center', 'right']).optional(),
+  alignV: z.enum(['top', 'center', 'bottom']).optional(),
+});
+
 // Phase 2.2 REQ-I01: schema di input AI per il bigliettino. Allineato
 // a `businessCardSchema` (vedi `documentSchemas.ts`) ma con tutti i campi
 // opzionali (l'AI invia solo ciò che vuole modificare).
@@ -59,14 +68,15 @@ export const aiCardInputSchema = z.object({
     cols: z.number().min(2).max(8).optional(),
     rows: z.number().min(2).max(8).optional(),
     elements: z.object({
-      photo: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
-      name: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
-      title: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
-      company: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
-      logo: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
-      qr: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
-      contacts: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
-      socials: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).optional(),
+      photo: gridElementShape.optional(),
+      name: gridElementShape.optional(),
+      title: gridElementShape.optional(),
+      company: gridElementShape.optional(),
+      logo: gridElementShape.optional(),
+      qr: gridElementShape.optional(),
+      contacts: gridElementShape.optional(),
+      socials: gridElementShape.optional(),
+      services: gridElementShape.optional(),
     }).optional(),
   }).optional(),
 });

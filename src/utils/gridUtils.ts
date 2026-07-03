@@ -13,7 +13,8 @@ export type GridElementKey =
   | 'logo'
   | 'qr'
   | 'contacts'
-  | 'socials';
+  | 'socials'
+  | 'services';
 
 export type MoveDirection = 'up' | 'down' | 'left' | 'right';
 export type ResizeAxis = 'growW' | 'growH' | 'shrinkW' | 'shrinkH';

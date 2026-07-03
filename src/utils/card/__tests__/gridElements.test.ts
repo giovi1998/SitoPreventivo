@@ -21,6 +21,7 @@ describe('gridElements', () => {
     it('returns back keys for back side', () => {
       expect(elementKeysForSide('back')).toEqual(BACK_ELEMENT_KEYS);
       expect(elementKeysForSide('back')).toContain('qr');
+      expect(elementKeysForSide('back')).toContain('services');
       expect(elementKeysForSide('back')).not.toContain('photo');
     });
   });
@@ -76,6 +77,10 @@ describe('gridElements', () => {
       expect(hasElementContent('contacts', card, 'back')).toBe(true);
       expect(hasElementContent('qr', card, 'back')).toBe(true);
       expect(hasElementContent('socials', card, 'back')).toBe(true);
+      expect(hasElementContent('services', card, 'back')).toBe(false);
+
+      const withServices = { ...card, back: { ...card.back, services: ['Consulenza'] } };
+      expect(hasElementContent('services', withServices, 'back')).toBe(true);
     });
 
     it('returns false for unknown front key on back side', () => {
@@ -103,11 +108,16 @@ describe('gridElements', () => {
     });
 
     it('returns back options for populated back', () => {
-      const card = createGiovanniCardTemplate();
+      const card = {
+        ...createGiovanniCardTemplate(),
+        back: { ...createGiovanniCardTemplate().back, services: ['Consulenza'] },
+      };
       const opts = getAvailableGridElements('back', card);
       const values = opts.map((o) => o.value);
       expect(values).toContain('contacts');
       expect(values).toContain('qr');
+      expect(values).toContain('services');
+      expect(values).toContain('socials');
     });
 
     it('does not return back socials when socials array has no valid entries', () => {

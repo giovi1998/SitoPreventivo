@@ -131,6 +131,22 @@ export function CardGridControls({
     onChangeGrid({ ...activeGrid, cols, rows });
   };
 
+  const handleAlignH = (alignH: 'left' | 'center' | 'right') => {
+    if (!selected || !selectedEl) return;
+    onChangeGrid({
+      ...activeGrid,
+      elements: { ...activeGrid.elements, [selected]: { ...selectedEl, alignH } },
+    });
+  };
+
+  const handleAlignV = (alignV: 'top' | 'center' | 'bottom') => {
+    if (!selected || !selectedEl) return;
+    onChangeGrid({
+      ...activeGrid,
+      elements: { ...activeGrid.elements, [selected]: { ...selectedEl, alignV } },
+    });
+  };
+
   const elementOptions = allElementOptionsForSide(side);
 
   return (
@@ -185,14 +201,14 @@ export function CardGridControls({
               split: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 4 }, name: { x: 2, y: 0, w: 2, h: 1 }, title: { x: 2, y: 1, w: 2, h: 1 }, company: { x: 2, y: 2, w: 2, h: 1 }, logo: { x: 2, y: 3, w: 2, h: 1 } } },
             };
             const grid = side === 'back'
-              ? { cols: 4, rows: 4, elements: { contacts: { x: 0, y: 0, w: 3, h: 4 }, qr: { x: 3, y: 0, w: 1, h: 2 }, socials: { x: 3, y: 2, w: 1, h: 2 } } }
+              ? { cols: 4, rows: 4, elements: { contacts: { x: 0, y: 0, w: 2, h: 3 }, socials: { x: 0, y: 3, w: 2, h: 1 }, qr: { x: 2, y: 0, w: 2, h: 4 } } }
               : FRONT_PRESETS[v] || FRONT_PRESETS.split;
             onChangeGrid(grid);
           }}
           aria-label="Preset griglia"
           data-testid="grid-editor-preset"
         >
-          <option value="">, seleziona preset:</option>
+          <option value="">Seleziona un preset</option>
           {side === 'front' ? (
             <>
               <option value="left">Sinistra (foto a sx)</option>
@@ -200,7 +216,7 @@ export function CardGridControls({
               <option value="split">Diviso (testo + logo)</option>
             </>
           ) : (
-            <option value="split">Default retro (contatti + QR)</option>
+            <option value="split">Default retro (contatti + QR + social)</option>
           )}
         </select>
       </label>
@@ -215,7 +231,7 @@ export function CardGridControls({
           disabled={isSideDisabled}
           aria-label="Elemento selezionato"
         >
-          <option value="">:</option>
+          <option value="">Nessun elemento selezionato</option>
           {availableElements.map((el) => (
             <option key={el.value} value={el.value}>{el.label}</option>
           ))}
@@ -269,6 +285,38 @@ export function CardGridControls({
           </div>
         </label>
       </div>
+      {selectedEl && mode === 'inline' && (
+        <div className="card-grid-align" role="group" aria-label="Allineamento elemento">
+          <label className="card-field">
+            <span>Orizzontale</span>
+            <select
+              value={selectedEl.alignH ?? 'center'}
+              onChange={(e) => handleAlignH(e.target.value as 'left' | 'center' | 'right')}
+              disabled={isSideDisabled}
+              aria-label="Allineamento orizzontale"
+              data-testid="grid-align-h"
+            >
+              <option value="left">Sinistra</option>
+              <option value="center">Centro</option>
+              <option value="right">Destra</option>
+            </select>
+          </label>
+          <label className="card-field">
+            <span>Verticale</span>
+            <select
+              value={selectedEl.alignV ?? 'center'}
+              onChange={(e) => handleAlignV(e.target.value as 'top' | 'center' | 'bottom')}
+              disabled={isSideDisabled}
+              aria-label="Allineamento verticale"
+              data-testid="grid-align-v"
+            >
+              <option value="top">Alto</option>
+              <option value="center">Centro</option>
+              <option value="bottom">Basso</option>
+            </select>
+          </label>
+        </div>
+      )}
       {mode === 'inline' && (
         <>
           <div className="card-grid-arrows" role="group" aria-label="Sposta elemento">

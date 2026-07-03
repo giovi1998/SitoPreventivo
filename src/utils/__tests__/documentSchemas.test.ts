@@ -307,11 +307,11 @@ describe('documentSchemas', () => {
   });
 
   describe('createGiovanniCardTemplate (AC-002)', () => {
-    it('pre-fills Giovanni URL and XXXXX placeholders', () => {
+    it('pre-fills Giovanni real contact data and URL', () => {
       const card = createGiovanniCardTemplate();
       expect(card.back.website).toBe(GIOVANNI_URL);
-      expect(card.back.phone).toBe('XXXXX');
-      expect(card.back.email).toBe('XXXXX');
+      expect(card.back.phone).toBe('35180008042');
+      expect(card.back.email).toBe('webdevcaglian@gmail.com');
       expect(card.back.qrPayload).toBe(GIOVANNI_URL);
       expect(card.front.name).toContain('GIOVANNI');
       expect(card.front.layout).toBe('split');
@@ -347,15 +347,15 @@ describe('documentSchemas', () => {
       expect(svgPart).toContain('fill="#01696F"'); // accent color del badge
     });
 
-    it('pre-fills LinkedIn and GitHub placeholders with "XXXXX" (Phase 2.1: GitHub added)', () => {
+    it('pre-fills LinkedIn and GitHub with real URLs (Phase 2.1: GitHub added)', () => {
       const card = createGiovanniCardTemplate();
       const platforms = card.back.socials.map((s) => s.platform);
       expect(platforms).toContain('LinkedIn');
       expect(platforms).toContain('GitHub');
-      // Tutti gli url sono placeholder 'XXXXX'
-      card.back.socials.forEach((s) => {
-        expect(s.url).toBe('XXXXX');
-      });
+      const linkedIn = card.back.socials.find((s) => s.platform === 'LinkedIn');
+      expect(linkedIn?.url).toBe('https://www.linkedin.com/in/giovanni-cidu-16162b212');
+      const github = card.back.socials.find((s) => s.platform === 'GitHub');
+      expect(github?.url).toMatch(/^https:\/\/github\.com/);
     });
   });
 
@@ -441,7 +441,7 @@ describe('documentSchemas', () => {
       const g = gridPresetFrontSplit();
       expect(g.elements.photo).toBeDefined();
       expect(g.elements.photo!.x).toBe(0);
-      expect(g.elements.photo!.h).toBe(4); // full height left
+      expect(g.elements.photo!.h).toBe(3); // 3/4 height left, leaves row for logo
       expect(g.elements.name).toBeDefined();
       expect(g.elements.company).toBeDefined();
       expect(g.elements.logo).toBeDefined();

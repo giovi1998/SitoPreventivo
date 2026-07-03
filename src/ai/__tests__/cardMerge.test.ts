@@ -161,18 +161,26 @@ describe('mergeCardAIResponse', () => {
       expect(changes.some((c) => c.includes('logo'))).toBe(true);
     });
 
-    it('AI grid change auto-enables front.useGrid so preview can switch to grid-mode', () => {
-      const card = createGiovanniCardTemplate();
+    it('AI grid change keeps card grid-ready (grid rendering is always active)', () => {
+      const card = createEmptyCard();
       card.front.useGrid = false;
+      card.grid = {
+        cols: 4, rows: 4,
+        elements: {
+          name: { x: 0, y: 0, w: 4, h: 1 },
+          logo: { x: 0, y: 2, w: 2, h: 1 },
+        },
+      };
       const { card: merged, changes } = mergeCardAIResponse(card, {
         grid: {
           elements: {
-            logo: { x: 2, y: 0, w: 2, h: 1 },
+            logo: { x: 2, y: 2, w: 2, h: 1 },
           },
         },
       });
-      expect(merged.front.useGrid).toBe(true);
-      expect(changes.some((c) => /griglia attivata/i.test(c))).toBe(true);
+      // Grid is now always the render source; AI changing elements still succeeds.
+      expect(merged.grid?.elements.logo).toEqual({ x: 2, y: 2, w: 2, h: 1 });
+      expect(changes.some((c) => /logo/i.test(c))).toBe(true);
     });
 
   it('AI grid move that would collide is sanitized to nearest valid position (BLOCK + clamp)', () => {
@@ -455,10 +463,11 @@ describe('mergeCardAIResponse', () => {
         const { card: merged, changes } = mergeCardAIResponse(card, aiOutput as unknown as Record<string, unknown>);
         // La validazione NON deve fallire
         expect(changes.length).toBeGreaterThan(0);
-        // Logo PARZIALE (photo a (0,0,2,4) occupa lo spazio richiesto).
+        // Logo BLOCCATO (photo a (0,0,2,4) occupa lo spazio richiesto).
         // Il merge NON finge di aver raggiunto la posizione richiesta.
-        expect(changes.some((c) => /logo.*parziale/i.test(c))).toBe(true);
-        // useGrid attivato
+        expect(changes.some((c) => /logo.*bloccato/i.test(c))).toBe(true);
+        // useGrid non è più il master switch del render; la grid è sempre
+        // attiva, quindi il campo viene semplicemente mantenuto.
         expect(merged.front.useGrid).toBe(true);
         // Modifiche tracciate
         expect(changes).toEqual(expect.arrayContaining([
@@ -491,13 +500,13 @@ describe('mergeCardAIResponse', () => {
         expect(merged.grid).toBeDefined();
       });
 
-    it('useGrid: true esplicito viene propagato (anche senza grid.elements)', () => {
+    it('useGrid: true esplicito viene mantenuto ma non più master switch', () => {
       const card = createGiovanniCardTemplate();
-      const { card: merged, changes } = mergeCardAIResponse(card, {
+      const { card: merged } = mergeCardAIResponse(card, {
         front: { useGrid: true },
       });
+      // useGrid è deprecato come master switch; la grid è sempre il layout.
       expect(merged.front.useGrid).toBe(true);
-      expect(changes.some((c) => /griglia attivata/i.test(c))).toBe(true);
     });
 
     it('AI "metti logo sopra" con null elements: accetta null, applica campi non-grid', () => {
@@ -523,10 +532,11 @@ describe('mergeCardAIResponse', () => {
       expect(merged.front.name).toBe('Antonio Ruggeri');
       expect(merged.front.title).toBe('Impresa Edile');
       expect(merged.style.accentColor).toBe('#1e3a5f');
+      // useGrid non è più il master switch; la grid è sempre attiva.
       expect(merged.front.useGrid).toBe(true);
-      // Il logo è PARZIALE (photo occupa lo spazio). L'AI deve re-inviare
-      // con una posizione libera o spostando anche photo.
-      expect(changes.some((c) => /logo.*parziale/i.test(c))).toBe(true);
+      // Il logo è BLOCCATO (photo a (0,0,2,4) occupa lo spazio richiesto).
+      // Il merge non finge di averlo mosso.
+      expect(changes.some((c) => /logo.*bloccato/i.test(c))).toBe(true);
     });
 
     it('AI sposta logo in posizione libera → mossa applicata', () => {
@@ -577,7 +587,7 @@ describe('mergeCardAIResponse', () => {
 
     it('does NOT clear back fields with empty string (preserves user data)', () => {
       const card = createGiovanniCardTemplate();
-      // card.back ha phone/email="XXXXX" e website=URL
+      // card.back ha phone/email reali e website=URL
       const { card: merged } = mergeCardAIResponse(card, {
         back: {
           phone: '',
@@ -588,8 +598,8 @@ describe('mergeCardAIResponse', () => {
         },
       });
       // Nessun campo back deve essere stato sovrascritto
-      expect(merged.back.phone).toBe('XXXXX');
-      expect(merged.back.email).toBe('XXXXX');
+      expect(merged.back.phone).toBe('35180008042');
+      expect(merged.back.email).toBe('webdevcaglian@gmail.com');
       expect(merged.back.website).toBe('https://webdeveloperca.netlify.app/');
       expect(merged.back.qrPayload).toBe('https://webdeveloperca.netlify.app/');
       expect(merged.back.qrLabel).toBe('Scansiona per visitare il mio sito');
@@ -688,8 +698,8 @@ describe('mergeCardAIResponse', () => {
       // User data preservato
       expect(merged.front.photoUrl).toBe('/giovanni-photo.jpg');
       expect(merged.front.logoUrl).toMatch(/^data:image\/svg\+xml/);
-      expect(merged.back.phone).toBe('XXXXX');
-      expect(merged.back.email).toBe('XXXXX');
+      expect(merged.back.phone).toBe('35180008042');
+      expect(merged.back.email).toBe('webdevcaglian@gmail.com');
       expect(merged.back.website).toBe('https://webdeveloperca.netlify.app/');
       expect(merged.back.socials).toHaveLength(2);
       expect(merged.back.qrPayload).toBe('https://webdeveloperca.netlify.app/');

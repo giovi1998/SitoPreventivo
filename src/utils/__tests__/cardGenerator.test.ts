@@ -772,7 +772,8 @@ describe('cardGenerator - buildCardSvg - card non-template (user-created)', () =
     // SVG BACK
     const backSvg = buildCardSvg(card, 'back', 1024, 663);
     expect(backSvg).toContain('<svg');
-    expect(backSvg).toContain('+39 02 1234567');
+    expect(backSvg).toContain('+39 02'); // phone may wrap in grid-mode
+    expect(backSvg).toContain('1234567');
     expect(backSvg).toContain('mario@acme.com');
     expect(backSvg).toContain('I NOSTRI SERVIZI'); // servicesLabel uppercase
     expect(backSvg).toContain('Consulenza strategica');
@@ -948,7 +949,8 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
       },
     };
     const svg = buildCardSvg(card, 'back', 1024, 663);
-    expect(svg).toContain('+39 333 1234567');
+    expect(svg).toContain('+39 333'); // phone may wrap across lines in grid-mode
+    expect(svg).toContain('1234567');
     expect(svg).toContain('mario@acme.com');
     // Nota: la riga WEB è omessa perché il QR codifica già l'URL
     // (Phase 2.1: ridurre ridondanza). Vedi test "omits the WEB contact row..."
@@ -1078,7 +1080,7 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
       back: { ...createEmptyCard().back, website: 'https://example.com' },
     };
     const svg = buildCardSvg(card, 'back', 1024, 663);
-    expect(svg).toMatch(/<g transform="translate\(\d+ \d+\) scale\([\d.]+\)">/);
+    expect(svg).toMatch(/transform="translate\(\d+(?:\.\d+)? \d+(?:\.\d+)?\) scale\([\d.]+\)"/);
     // Non deve più esserci un nested <svg> per il QR.
     const nestedSvgCount = (svg.match(/<svg /g) || []).length;
     expect(nestedSvgCount).toBe(1); // solo l'outer wrapper

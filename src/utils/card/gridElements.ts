@@ -8,7 +8,8 @@ export type GridElementKey =
   | 'logo'
   | 'qr'
   | 'contacts'
-  | 'socials';
+  | 'socials'
+  | 'services';
 
 export type GridSide = 'front' | 'back';
 
@@ -29,6 +30,7 @@ export const BACK_ELEMENT_KEYS: readonly GridElementKey[] = [
   'contacts',
   'qr',
   'socials',
+  'services',
 ];
 
 export function elementKeysForSide(side: GridSide): readonly GridElementKey[] {
@@ -64,6 +66,9 @@ export function hasElementContent(
   if (key === 'socials') {
     return card.back.socials.some((s) => s.platform && s.url);
   }
+  if (key === 'services') {
+    return (card.back.services ?? []).some((s) => s.trim().length > 0);
+  }
   return false;
 }
 
@@ -76,6 +81,7 @@ const LABELS: Record<GridElementKey, string> = {
   contacts: 'Contatti',
   qr: 'QR',
   socials: 'Social',
+  services: 'Servizi',
 };
 
 export function allElementOptionsForSide(side: GridSide): GridElementOption[] {

@@ -44,19 +44,35 @@ describe('previewHelpers', () => {
   });
 
   describe('gridPlacement', () => {
-    it('returns correct gridColumn and gridRow', () => {
+    it('returns correct gridColumn, gridRow and default center alignment', () => {
       expect(gridPlacement({ x: 0, y: 0, w: 1, h: 1 })).toEqual({
         gridColumn: '1 / span 1',
         gridRow: '1 / span 1',
+        justifyContent: 'center',
+        alignItems: 'center',
+        textAlign: 'center',
       });
       expect(gridPlacement({ x: 2, y: 1, w: 2, h: 3 })).toEqual({
         gridColumn: '3 / span 2',
         gridRow: '2 / span 3',
+        justifyContent: 'center',
+        alignItems: 'center',
+        textAlign: 'center',
       });
     });
 
     it('returns undefined for missing element', () => {
       expect(gridPlacement(undefined)).toBeUndefined();
+    });
+
+    it('applies custom alignH and alignV', () => {
+      expect(gridPlacement({ x: 0, y: 0, w: 1, h: 1, alignH: 'left', alignV: 'top' })).toEqual({
+        gridColumn: '1 / span 1',
+        gridRow: '1 / span 1',
+        justifyContent: 'flex-start',
+        alignItems: 'flex-start',
+        textAlign: 'left',
+      });
     });
   });
 

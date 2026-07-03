@@ -207,11 +207,16 @@ export const CARD_A4_ROWS = 2;
 export const CARD_A4_GAP_MM = 3;
 export const CARD_A4_MARGIN_MM = 10;
 
+export const gridAlignHSchema = z.enum(['left', 'center', 'right']).optional();
+export const gridAlignVSchema = z.enum(['top', 'center', 'bottom']).optional();
+
 export const cardGridElementSchema = z.object({
   x: z.number().min(0).max(8),
   y: z.number().min(0).max(8),
   w: z.number().min(0).max(8),
   h: z.number().min(0).max(8),
+  alignH: gridAlignHSchema,
+  alignV: gridAlignVSchema,
 });
 export type CardGridElement = z.infer<typeof cardGridElementSchema>;
 
@@ -227,6 +232,7 @@ export const cardGridSchema = z.object({
     qr: cardGridElementSchema.optional(),
     contacts: cardGridElementSchema.optional(),
     socials: cardGridElementSchema.optional(),
+    services: cardGridElementSchema.optional(),
   }),
 });
 export type CardGrid = z.infer<typeof cardGridSchema>;
@@ -236,11 +242,11 @@ export function gridPresetLeft(): CardGrid {
     cols: 4,
     rows: 4,
     elements: {
-      photo: { x: 0, y: 0, w: 2, h: 4 },
-      name: { x: 2, y: 0, w: 2, h: 1 },
-      title: { x: 2, y: 1, w: 2, h: 1 },
-      company: { x: 2, y: 2, w: 2, h: 1 },
-      logo: { x: 2, y: 3, w: 2, h: 1 },
+      photo: { x: 0, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' },
+      name: { x: 2, y: 0, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      title: { x: 2, y: 1, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      company: { x: 2, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      logo: { x: 0, y: 3, w: 2, h: 1, alignH: 'center', alignV: 'center' },
     },
   };
 }
@@ -250,11 +256,11 @@ export function gridPresetCentered(): CardGrid {
     cols: 4,
     rows: 4,
     elements: {
-      photo: { x: 1, y: 0, w: 2, h: 1 },
-      name: { x: 0, y: 1, w: 4, h: 1 },
-      title: { x: 0, y: 2, w: 4, h: 1 },
-      company: { x: 0, y: 3, w: 3, h: 1 },
-      logo: { x: 3, y: 3, w: 1, h: 1 },
+      photo: { x: 1, y: 0, w: 2, h: 1, alignH: 'center', alignV: 'center' },
+      name: { x: 0, y: 1, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      title: { x: 0, y: 2, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      company: { x: 0, y: 3, w: 2, h: 1, alignH: 'center', alignV: 'center' },
+      logo: { x: 2, y: 3, w: 2, h: 1, alignH: 'center', alignV: 'center' },
     },
   };
 }
@@ -264,11 +270,11 @@ export function gridPresetSplit(): CardGrid {
     cols: 4,
     rows: 4,
     elements: {
-      name: { x: 0, y: 0, w: 4, h: 1 },
-      title: { x: 0, y: 1, w: 4, h: 1 },
-      contacts: { x: 0, y: 2, w: 2, h: 2 },
-      qr: { x: 2, y: 2, w: 1, h: 2 },
-      logo: { x: 3, y: 2, w: 1, h: 2 },
+      name: { x: 0, y: 0, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      title: { x: 0, y: 1, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      contacts: { x: 0, y: 2, w: 2, h: 2, alignH: 'left', alignV: 'top' },
+      qr: { x: 2, y: 2, w: 1, h: 2, alignH: 'center', alignV: 'center' },
+      logo: { x: 3, y: 2, w: 1, h: 2, alignH: 'center', alignV: 'center' },
     },
   };
 }
@@ -283,11 +289,11 @@ export function gridPresetFrontSplit(): CardGrid {
     cols: 4,
     rows: 4,
     elements: {
-      photo: { x: 0, y: 0, w: 2, h: 4 },
-      name: { x: 2, y: 0, w: 2, h: 1 },
-      title: { x: 2, y: 1, w: 2, h: 1 },
-      company: { x: 2, y: 2, w: 2, h: 1 },
-      logo: { x: 2, y: 3, w: 2, h: 1 },
+      photo: { x: 0, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' },
+      name: { x: 2, y: 0, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      title: { x: 2, y: 1, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      company: { x: 2, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      logo: { x: 0, y: 3, w: 2, h: 1, alignH: 'center', alignV: 'center' },
     },
   };
 }
@@ -297,8 +303,10 @@ export function gridPresetBackDefault(): CardGrid {
     cols: 4,
     rows: 4,
     elements: {
-      contacts: { x: 0, y: 0, w: 2, h: 4 },
-      qr: { x: 2, y: 0, w: 2, h: 4 },
+      contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left', alignV: 'top' },
+      services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+      socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      qr: { x: 3, y: 0, w: 1, h: 4, alignH: 'center', alignV: 'center' },
     },
   };
 }
@@ -476,6 +484,9 @@ function giovanniLogoDataUri(): string {
 }
 
 export function createGiovanniCardTemplate(): BusinessCard {
+  const phone = '35180008042';
+  const email = 'webdevcaglian@gmail.com';
+  const linkedInUrl = 'https://www.linkedin.com/in/giovanni-cidu-16162b212';
   return {
     ...createEmptyCard(),
     title: 'Bigliettino Giovanni, Web Developer',
@@ -490,16 +501,16 @@ export function createGiovanniCardTemplate(): BusinessCard {
     },
     back: {
       ...createEmptyCard().back,
-      phone: 'XXXXX',
-      email: 'XXXXX',
+      phone,
+      email,
       website: GIOVANNI_PERSONAL_URL,
       qrPayload: GIOVANNI_PERSONAL_URL,
       qrLabel: 'Scansiona per visitare il mio sito',
       servicesLabel: 'Servizi che offro',
       qrSize: 'medium',
       socials: [
-        { platform: 'LinkedIn', url: 'XXXXX' },
-        { platform: 'GitHub', url: 'XXXXX' },
+        { platform: 'LinkedIn', url: linkedInUrl },
+        { platform: 'GitHub', url: 'https://github.com/GiovanniCidu' },
       ],
     },
     style: {
@@ -520,7 +531,7 @@ export function createGiovanniCardTemplate(): BusinessCard {
         name: { x: 2, y: 0, w: 2, h: 1 },
         title: { x: 2, y: 1, w: 2, h: 1 },
         company: { x: 2, y: 2, w: 2, h: 1 },
-        logo: { x: 2, y: 3, w: 1, h: 1 },
+        logo: { x: 2, y: 3, w: 2, h: 1 },
       },
     },
     backGrid: gridPresetBackDefault(),

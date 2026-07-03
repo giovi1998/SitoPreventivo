@@ -151,65 +151,62 @@ test.describe('Card grid behavior regression suite', () => {
     const gridToggle = page.locator('.card-grid-toggle').first();
     await gridToggle.click();
     await page.waitForTimeout(600);
-    await selectPreset(page, 'split');
+    await selectPreset(page, 'left');
 
-    // Select name element (default position in split is top-right)
-    await selectElement(page, 'name');
+    // Select company element (left preset has empty space below it at row 3)
+    await selectElement(page, 'company');
 
-    // Read initial grid-column style
-    const initialGridColumn = await page.locator('[data-testid="grid-el-name"]').first().evaluate((el) => (el as HTMLElement).style.gridColumn);
+    // Read initial grid-row style
+    const initialGridRow = await page.locator('[data-testid="grid-el-company"]').first().evaluate((el) => (el as HTMLElement).style.gridRow);
 
-    // Move name to the right (in split 4-col grid, name starts at col 3, cannot move right, so move down)
+    // Move company down one row
     await moveElement(page, 'down');
 
-    const afterGridColumn = await page.locator('[data-testid="grid-el-name"]').first().evaluate((el) => (el as HTMLElement).style.gridColumn);
-    const afterGridRow = await page.locator('[data-testid="grid-el-name"]').first().evaluate((el) => (el as HTMLElement).style.gridRow);
+    const afterGridRow = await page.locator('[data-testid="grid-el-company"]').first().evaluate((el) => (el as HTMLElement).style.gridRow);
 
-    // The grid-row should have increased by 1
-    expect(afterGridRow).not.toBe(initialGridColumn === '' ? '' : initialGridColumn);
-    await page.screenshot({ path: 'e2e/__screenshots__/card-grid-move-name.png', fullPage: false });
+    // The grid-row should have changed
+    expect(afterGridRow).not.toBe(initialGridRow);
+    await page.screenshot({ path: 'e2e/__screenshots__/card-grid-move-company.png', fullPage: false });
   });
 
   test('Resizing an element in grid mode changes its visual size (cell span)', async ({ page }) => {
     const gridToggle = page.locator('.card-grid-toggle').first();
     await gridToggle.click();
     await page.waitForTimeout(600);
-    await selectPreset(page, 'split');
+    await selectPreset(page, 'left');
 
-    await selectElement(page, 'logo');
-    const before = await getBoundingBox(page, 'grid-el-logo');
+    await selectElement(page, 'company');
+    const before = await getBoundingBox(page, 'grid-el-company');
     expect(before).not.toBeNull();
 
-    // Increase logo width
-    await resizeElement(page, 'w+');
+    // Increase company height (empty row below it)
+    await resizeElement(page, 'h+');
 
-    const after = await getBoundingBox(page, 'grid-el-logo');
+    const after = await getBoundingBox(page, 'grid-el-company');
     expect(after).not.toBeNull();
-    // The bounding box width should have increased
-    expect(after!.width).toBeGreaterThan(before!.width);
+    // The bounding box height should have increased
+    expect(after!.height).toBeGreaterThan(before!.height);
 
-    await page.screenshot({ path: 'e2e/__screenshots__/card-grid-resize-logo-width.png', fullPage: false });
+    await page.screenshot({ path: 'e2e/__screenshots__/card-grid-resize-company-height.png', fullPage: false });
   });
 
-  test('Resizing logo height also increases logo image height within the cell', async ({ page }) => {
+  test('Resizing company height increases its cell span', async ({ page }) => {
     const gridToggle = page.locator('.card-grid-toggle').first();
     await gridToggle.click();
     await page.waitForTimeout(600);
 
-    // Use left preset: logo cell is taller
+    // Use left preset: company cell has empty space below it at row 3
     await selectPreset(page, 'left');
-    await selectElement(page, 'logo');
+    await selectElement(page, 'company');
 
-    const beforeCell = await getBoundingBox(page, 'grid-el-logo');
-    const beforeImg = await getBoundingBox(page, 'grid-el-logo');
+    const beforeCell = await getBoundingBox(page, 'grid-el-company');
 
     await resizeElement(page, 'h+');
 
-    const afterCell = await getBoundingBox(page, 'grid-el-logo');
+    const afterCell = await getBoundingBox(page, 'grid-el-company');
     expect(afterCell!.height).toBeGreaterThan(beforeCell!.height);
 
-    // The logo image should fill the larger cell because of width/height:100% on card-grid-cell
-    await page.screenshot({ path: 'e2e/__screenshots__/card-grid-resize-logo-height.png', fullPage: false });
+    await page.screenshot({ path: 'e2e/__screenshots__/card-grid-resize-company-height.png', fullPage: false });
   });
 
   test('Back grid: moving QR left updates its grid-column', async ({ page }) => {
@@ -226,8 +223,7 @@ test.describe('Card grid behavior regression suite', () => {
     await selectElement(page, 'qr');
     const initialCol = await page.locator('[data-testid="grid-el-qr"]').first().evaluate((el) => (el as HTMLElement).style.gridColumn);
 
-    // Move QR left twice to reach col 1
-    await moveElement(page, 'left');
+    // Move QR left once (from col 3 to col 2; second move would collide with contacts)
     await moveElement(page, 'left');
 
     const afterCol = await page.locator('[data-testid="grid-el-qr"]').first().evaluate((el) => (el as HTMLElement).style.gridColumn);
@@ -267,13 +263,12 @@ test.describe('Card grid behavior regression suite', () => {
       const gridToggle = page.locator('.card-grid-toggle').first();
       await gridToggle.click();
       await page.waitForTimeout(600);
-      await selectPreset(page, 'split');
+      await selectPreset(page, 'left');
 
-      // Resize all front text elements to max width and take screenshot
-      for (const el of ['name', 'title', 'company']) {
-        await selectElement(page, el);
-        await resizeElement(page, 'w+');
-      }
+      // Resize elements that have room to grow and take screenshot.
+      // In the left preset only company has empty vertical space below it.
+      await selectElement(page, 'company');
+      await resizeElement(page, 'h+');
 
       await page.screenshot({ path: `e2e/__screenshots__/card-grid-${size}-no-overlap.png`, fullPage: false });
 
