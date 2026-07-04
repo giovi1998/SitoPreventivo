@@ -29,7 +29,7 @@ export const aiCardInputSchema = z.object({
     company: z.string().optional(),
     photoUrl: z.string().nullable().optional(),
     logoUrl: z.string().nullable().optional(),
-    layout: z.enum(['centered', 'left', 'split']).optional(),
+    layout: z.enum(['centered', 'left', 'split', 'right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact']).optional(),
     useGrid: z.boolean().optional(),
   }).optional(),
 

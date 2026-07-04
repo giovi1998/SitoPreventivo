@@ -1,14 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   BusinessCard,
+  BusinessCardLayout,
   CardGrid,
 } from '../../utils/documentSchemas';
 import {
   createEmptyCard,
   createGiovanniCardTemplate,
-  gridPresetLeft,
-  gridPresetCentered,
-  gridPresetFrontSplit,
   gridPresetBackDefault,
   deriveGridFromLayout,
   hasGridElements,
@@ -143,7 +141,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     });
   }, [gridEditorSide]);
 
-  const applyGridPreset = useCallback((preset: 'left' | 'centered' | 'split') => {
+  const applyGridPreset = useCallback((preset: BusinessCardLayout) => {
     if (gridEditorSide === 'back') {
       setCard((prev) => ({
         ...prev,
@@ -152,16 +150,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       }));
       return;
     }
-    const frontGrid =
-      preset === 'left' ? gridPresetLeft() :
-      preset === 'centered' ? gridPresetCentered() :
-      gridPresetFrontSplit();
+    const frontGrid = deriveGridFromLayout({ ...card, front: { ...card.front, layout: preset } }, 'front');
     setCard((prev) => ({
       ...prev,
       grid: frontGrid,
       updatedAt: new Date().toISOString(),
     }));
-  }, [gridEditorSide]);
+  }, [gridEditorSide, card]);
 
   const handleAfterMove = useCallback((info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => {
     if (info.applied) {

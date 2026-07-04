@@ -8,8 +8,14 @@ import { QR_SIZE_PX } from '../../utils/documentSchemas';
 
 export const LAYOUT_LABELS: Record<BusinessCardLayout, string> = {
   centered: 'Centrato',
-  left: 'Sinistra',
-  split: 'Split (foto a sinistra)',
+  left: 'Sinistra (foto a sx)',
+  split: 'Split (foto a sx)',
+  right: 'Split inverso (foto a dx)',
+  top: 'Foto in alto',
+  bottom: 'Foto in basso',
+  minimal: 'Minimal (testo centrato)',
+  'photo-circle': 'Foto tonda centrata',
+  compact: 'Compatto (colonna foto)',
 };
 
 export const SIZE_PRESET_LABELS: Record<BusinessCardSizePreset, string> = {

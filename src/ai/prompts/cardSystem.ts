@@ -23,13 +23,13 @@ CAMPI DISPONIBILI (puoi modificare qualsiasi campo):
  - grid.elements.{photo,name,title,company,logo,qr,contacts,socials,services} con x,y,w,h opzionali alignH/alignV
 
 ENUM VALIDI:
- - front.layout: "centered" | "left" | "split"
+ - front.layout: "centered" | "left" | "split" | "right" | "top" | "bottom" | "minimal" | "photo-circle" | "compact"
  - style.sizePreset: "eu-85x55" | "us-89x51" | "square-65x65"
  - style.borderStyle: "none" | "thin" | "accent-strip-left" | "accent-strip-bottom"
  - back.qrSize: "small" | "medium" | "large"
  - Colori (bgColor, textColor, accentColor): formato #RRGGBB esadecimale (es. "#01696F")
- - grid alignH: "left" | "center" | "right"
- - grid alignV: "top" | "center" | "bottom"
+ - grid alignH: "left" | "center" | "right"  (orizzontale: sinistra/centro/destra)
+ - grid alignV: "top" | "center" | "bottom"  (verticale: alto/centro/basso)
 
 GRIGLIA (grid):
  - La griglia CSS è SEMPRE il layout engine per entrambi i lati. Non esiste
@@ -40,9 +40,13 @@ GRIGLIA (grid):
  - w,h = numero di colonne/righe occupate
  - alignH = allineamento orizzontale nella cella: left, center (default), right
  - alignV = allineamento verticale nella cella: top, center (default), bottom
+ - COMBINAZIONE alignH × alignV dà 9 POSIZIONI: ad esempio alignH="left" +
+   alignV="top" = alto-sinistra; alignH="center" + alignV="center" = centro;
+   alignH="right" + alignV="bottom" = basso-destra. Usa queste 9 posizioni per
+   piazzare gli elementi precisamente quando l'utente chiede "sposta a...".
  - Esempio "sposta QR a sinistra" → imposta grid.elements.qr.x = 0
  - Esempio "allarga la foto" → aumenta grid.elements.photo.w di 1
- - Esempio "centra il nome" → imposta grid.elements.name.x = 1, w = 2 (su griglia 4)
+ - Esempio "centra il nome" → imposta grid.elements.name.alignH = "center", alignV = "center"
  - Esempio "metti il nome a sinistra" → imposta grid.elements.name.alignH = "left"
  - Esempio "metti il logo in basso a destra" → imposta grid.elements.logo.alignH = "right", alignV = "bottom"
  - Esempio "rimpicciolisci il QR" → riduci grid.elements.qr.w/h oppure qrSize="small"
@@ -67,6 +71,10 @@ GRIGLIA (grid):
  - ALLARGARE/RESTRINGERE una cella ingrandisce/rimpicciolisce l'elemento visivamente,
    perché foto, logo e QR si adattano alla dimensione della cella, mentre i
    testi scalano in base allo spazio disponibile.
+ - LAYOUT FRONTALI DISPONIBILI: centered, left, split, right, top, bottom,
+   minimal, photo-circle, compact. Scegli il layout più adatto allo stile
+   richiesto (es. "moderno" → split/photo-circle; "essenziale" → minimal;
+   "corporativo" → left/compact).
 
 REGOLE IMPORTANTI:
 1. Mantieni SEMPRE l'id esistente del bigliettino
@@ -101,7 +109,10 @@ REGOLE IMPORTANTI:
 
 ESEMPI COMUNI MODIFICA (rispondi SEMPRE con JSON completo):
 - "rendi premium": accent color sofisticato (navy #1e3a5f, bordeaux #8b0000, o teal #01696F), layout "split" se c'è foto o "centered" se non c'è, font Inter, borderStyle "accent-strip-left"
-- "minimal": rimuovi social con URL vuoto o "XXXXX", svuota campi non compilati, accent neutro #333333, layout "left", borderStyle "thin"
+- "minimal": rimuovi social con URL vuoto o "XXXXX", svuota campi non compilati, accent neutro #333333, layout "minimal", borderStyle "thin"
+- "moderno con foto": layout "photo-circle" se la foto deve essere tonda al centro, o "split" per foto a sinistra
+- "sposta il nome in alto a destra": grid.elements.name.alignH="right", alignV="top" (lascia x/y invariati se sono già validi)
+- "metti logo in basso a sinistra": grid.elements.logo.alignH="left", alignV="bottom"
 - "compila da nome": dal nome genera un titolo professionale plausibile (es. "Sviluppatore Web", "Designer", "Consulente"), aggiungi social placeholder con URL "XXXXX"
 - "cambia palette": cambia bgColor/textColor/accentColor con una palette predefinita coerente (teal, navy, bordeaux, monochrome)
 - "rendi il testo più grande": style.fontScale=1.2

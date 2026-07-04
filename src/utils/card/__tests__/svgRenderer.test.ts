@@ -40,6 +40,40 @@ describe('svgRenderer', () => {
     });
   });
 
+  describe('new front layouts (Phase 2.3)', () => {
+    it('renders photo-circle layout with circular clip path', () => {
+      const card = {
+        ...createEmptyCard(),
+        front: {
+          ...createEmptyCard().front,
+          name: 'MARIO',
+          photoUrl: 'data:image/png;base64,PHOTO',
+          layout: 'photo-circle' as const,
+        },
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: { photo: { x: 1, y: 0, w: 2, h: 2 }, name: { x: 0, y: 2, w: 4, h: 1 }, title: { x: 0, y: 3, w: 4, h: 1 } },
+        },
+      };
+      const svg = buildFrontSvg(card, 1024, 663);
+      expect(svg).toContain('clip-path="url(#photoCircle)"');
+      expect(svg).toContain('<circle');
+    });
+
+    it('renders all new front layouts without empty grid fallback', () => {
+      for (const layout of ['right', 'top', 'bottom', 'minimal', 'compact'] as const) {
+        const card = {
+          ...createEmptyCard(),
+          front: { ...createEmptyCard().front, name: 'MARIO', photoUrl: 'data:image/png;base64,PHOTO', layout },
+        };
+        const svg = buildFrontSvg(card, 1024, 663);
+        expect(svg).toContain('MARIO');
+        expect(svg).toContain('PHOTO');
+      }
+    });
+  });
+
   describe('hostname deduplication', () => {
     it('does not duplicate hostname on front when QR is present on back', () => {
       const card = {

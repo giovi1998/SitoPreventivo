@@ -525,6 +525,48 @@ describe('CardEditor', () => {
       expect(window.getComputedStyle(logos[0]).gridRow).toBe('4 / span 1');
     });
 
+    // ─── Phase 2.3: nuovi template frontali e 9-posizioni ─────────────────────
+    it('lists all 9 layout presets in the grid preset dropdown', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      const values = Array.from(presetSelect.querySelectorAll('option')).map((o) => o.value).filter(Boolean);
+      for (const layout of ['left', 'centered', 'split', 'right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact']) {
+        expect(values).toContain(layout);
+      }
+    });
+
+    it('applies the right preset (mirror split) and keeps photo on right', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
+      const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
+      fireEvent.change(presetSelect, { target: { value: 'right' } });
+      const photo = document.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
+      expect(photo).not.toBeNull();
+      expect(window.getComputedStyle(photo).gridColumn).toMatch(/^3/);
+    });
+
+    it('renders 9-position alignment matrix when an element is selected', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
+      const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+      fireEvent.change(elSelect, { target: { value: 'name' } });
+      expect(screen.getByTestId('grid-align-matrix')).toBeInTheDocument();
+      expect(screen.getByTestId('grid-align-center-center')).toBeInTheDocument();
+      expect(screen.getByTestId('grid-align-right-bottom')).toBeInTheDocument();
+    });
+
+    it('sets alignH/alignV via 9-position matrix buttons', () => {
+      renderEditor({ initialCard: createGiovanniCardTemplate() });
+      fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
+      fireEvent.change(screen.getByLabelText(/Elemento selezionato/i), { target: { value: 'name' } });
+      const btn = screen.getByTestId('grid-align-right-bottom');
+      expect(btn).not.toBeDisabled();
+      fireEvent.click(btn);
+      const front = screen.getByTestId('card-preview-front');
+      expect(front.className).toContain('grid-mode');
+    });
+
     it('moves the selected element left when ← is pressed', () => {
       renderEditor();
       // Phase 2.2 REQ-E01: attivare il master switch prima di poter spostare

@@ -17,6 +17,12 @@ import {
   gridPresetCentered,
   gridPresetSplit,
   gridPresetFrontSplit,
+  gridPresetRight,
+  gridPresetTop,
+  gridPresetBottom,
+  gridPresetMinimal,
+  gridPresetPhotoCircle,
+  gridPresetCompact,
   deriveGridFromLayout,
   hasGridElements,
   logoSchema,
@@ -435,6 +441,48 @@ describe('documentSchemas', () => {
     });
   });
 
+  // Phase 2.3: nuovi preset frontali
+  describe('gridPreset new front layouts (B3)', () => {
+    it('gridPresetRight mirrors split to the right', () => {
+      const g = gridPresetRight();
+      expect(g.elements.photo!.x).toBeGreaterThanOrEqual(2);
+      expect(g.elements.name!.x).toBe(0);
+    });
+
+    it('gridPresetTop places photo on top full-width', () => {
+      const g = gridPresetTop();
+      expect(g.elements.photo!.w).toBe(4);
+      expect(g.elements.photo!.y).toBe(0);
+      expect(g.elements.name!.y).toBeGreaterThan(g.elements.photo!.y);
+    });
+
+    it('gridPresetBottom places photo on bottom full-width', () => {
+      const g = gridPresetBottom();
+      expect(g.elements.photo!.w).toBe(4);
+      expect(g.elements.photo!.y).toBeGreaterThan(g.elements.name!.y);
+    });
+
+    it('gridPresetMinimal centers text and keeps photo/logo small top', () => {
+      const g = gridPresetMinimal();
+      expect(g.elements.name!.w).toBe(4);
+      expect(g.elements.name!.alignH).toBe('center');
+    });
+
+    it('gridPresetPhotoCircle centers photo in top half', () => {
+      const g = gridPresetPhotoCircle();
+      expect(g.elements.photo!.x).toBe(1);
+      expect(g.elements.photo!.w).toBe(2);
+      expect(g.elements.photo!.h).toBe(2);
+    });
+
+    it('gridPresetCompact places media in a narrow left column', () => {
+      const g = gridPresetCompact();
+      expect(g.elements.photo!.w).toBe(1);
+      expect(g.elements.logo!.w).toBe(1);
+      expect(g.elements.name!.x).toBe(1);
+    });
+  });
+
   // ─── Phase 2.2 fix: front split preset + init-from-layout ──────
   describe('gridPresetFrontSplit + deriveGridFromLayout (fix)', () => {
     it('gridPresetFrontSplit includes photo (front split layout)', () => {
@@ -470,6 +518,16 @@ describe('documentSchemas', () => {
       const grid = deriveGridFromLayout(card, 'front');
       // Nessun elemento con contenuto → grid vuota
       expect(Object.keys(grid.elements)).toHaveLength(0);
+    });
+
+    it('deriveGridFromLayout maps all new layouts', () => {
+      const base = createGiovanniCardTemplate();
+      for (const layout of ['right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact'] as const) {
+        const card = { ...base, front: { ...base.front, layout } };
+        const grid = deriveGridFromLayout(card, 'front');
+        expect(grid.elements.name).toBeDefined();
+        expect(grid.elements.photo).toBeDefined();
+      }
     });
 
     it('hasGridElements: true se il lato ha elementi con contenuto', () => {

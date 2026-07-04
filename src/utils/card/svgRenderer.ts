@@ -87,7 +87,16 @@ export function buildFrontSvg(
       const y = photoEl.y * cellH;
       const w = photoEl.w * cellW;
       const h = photoEl.h * cellH;
-      out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 6)"/>`;
+      const isPhotoCircle = card.front.layout === 'photo-circle';
+      if (isPhotoCircle) {
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const r = Math.min(w, h) / 2;
+        out += `<defs><clipPath id="photoCircle"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>`;
+        out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#photoCircle)"/>`;
+      } else {
+        out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 6)"/>`;
+      }
     }
 
     const logoEl = grid.elements.logo;

@@ -151,9 +151,55 @@
 
 .card-grid-align {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
 }
 
+.card-grid-align-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--ink-muted, #5d6b7e);
+}
+
+.card-grid-align-matrix {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: fit-content;
+}
+
+.card-grid-align-matrix button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.card-grid-align-matrix button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
+  border-color: var(--accent, #01696F);
+}
+
+.card-grid-align-matrix button.active {
+  background: var(--accent, #01696F);
+  border-color: var(--accent, #01696F);
+  color: white;
+}
+
+.card-grid-align-matrix button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Legacy dropdown align kept for mobile/other views if still used */
 .card-grid-align .card-field {
   flex: 1;
   margin: 0;

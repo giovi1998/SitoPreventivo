@@ -51,8 +51,8 @@ describe('aiCardInputSchema', () => {
     expect(aiCardInputSchema.safeParse({ front: { name: 123 } }).success).toBe(false);
   });
 
-  it('accepts all 3 layouts', () => {
-    for (const layout of ['centered', 'left', 'split'] as const) {
+  it('accepts all 9 layouts', () => {
+    for (const layout of ['centered', 'left', 'split', 'right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact'] as const) {
       expect(aiCardInputSchema.safeParse({ front: { layout } }).success).toBe(true);
     }
   });

@@ -28,11 +28,21 @@ describe('CardPreview', () => {
       expect(window.getComputedStyle(frontLeft).display).toBe('grid');
       expect(screen.getByText('Mario Rossi')).toBeInTheDocument();
 
-      rerender(<CardPreview side="front" card={{ ...card, front: { ...card.front, layout: 'centered' } }} />);
-      expect(screen.getByTestId('card-preview-front')).toHaveClass('grid-mode');
+      for (const layout of ['centered', 'split', 'right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact'] as BusinessCardLayout[]) {
+        rerender(<CardPreview side="front" card={{ ...card, front: { ...card.front, layout } }} />);
+        expect(screen.getByTestId('card-preview-front')).toHaveClass('grid-mode');
+      }
+    });
 
-      rerender(<CardPreview side="front" card={{ ...card, front: { ...card.front, layout: 'split' } }} />);
-      expect(screen.getByTestId('card-preview-front')).toHaveClass('grid-mode');
+    it('renders photo-circle layout with circular photo clip', () => {
+      const card = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, name: 'Anna', photoUrl: 'data:image/png;base64,AAAA', layout: 'photo-circle' as BusinessCardLayout },
+      };
+      render(<CardPreview side="front" card={card} />);
+      const img = screen.getByAltText(/Foto del titolare/i) as HTMLImageElement;
+      expect(img).toBeInTheDocument();
+      expect(img.style.borderRadius).toBe('50%');
     });
 
     it('renders Giovanni template with name visible', () => {

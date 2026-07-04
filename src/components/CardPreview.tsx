@@ -190,8 +190,19 @@ const FrontPreview = React.memo(function FrontPreview({
     gridTemplateRows: `repeat(${grid!.rows}, 1fr)`,
   };
 
+  const isPhotoCircle = card.front.layout === 'photo-circle';
   const photoContent = hasPhoto ? (
-    <img className="card-photo" src={card.front.photoUrl!} alt="Foto del titolare" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />
+    <img
+      className="card-photo"
+      src={card.front.photoUrl!}
+      alt="Foto del titolare"
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        borderRadius: isPhotoCircle ? '50%' : '4px',
+      }}
+    />
   ) : hasLogo ? (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', ...(card.front.logoBackground === 'card' ? { background: card.style.bgColor, borderRadius: '6px' } : {}) }}>
       <img src={card.front.logoUrl!} alt="Logo aziendale" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />

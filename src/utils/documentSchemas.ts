@@ -143,7 +143,10 @@ export function mergeLogoWithDefaults(input: Partial<Logo> | null | undefined): 
 export const businessCardSizePresetSchema = z.enum(['eu-85x55', 'us-89x51', 'square-65x65']);
 export type BusinessCardSizePreset = z.infer<typeof businessCardSizePresetSchema>;
 
-export const businessCardLayoutSchema = z.enum(['centered', 'left', 'split']);
+// Phase 2.3: layout frontali espansi con nuovi template selezionabili.
+export const businessCardLayoutSchema = z.enum([
+  'centered', 'left', 'split', 'right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact',
+]);
 export type BusinessCardLayout = z.infer<typeof businessCardLayoutSchema>;
 
 export const businessCardBorderStyleSchema = z.enum(['none', 'thin', 'accent-strip-left', 'accent-strip-bottom']);
@@ -298,6 +301,91 @@ export function gridPresetFrontSplit(): CardGrid {
   };
 }
 
+// Phase 2.3: nuovi preset frontali per dare più scelta all'utente.
+export function gridPresetRight(): CardGrid {
+  return {
+    cols: 4,
+    rows: 4,
+    elements: {
+      name: { x: 0, y: 0, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      title: { x: 0, y: 1, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      company: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      logo: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      photo: { x: 2, y: 0, w: 2, h: 4, alignH: 'center', alignV: 'center' },
+    },
+  };
+}
+
+export function gridPresetTop(): CardGrid {
+  return {
+    cols: 4,
+    rows: 4,
+    elements: {
+      photo: { x: 0, y: 0, w: 4, h: 2, alignH: 'center', alignV: 'center' },
+      name: { x: 0, y: 2, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      title: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      company: { x: 2, y: 3, w: 2, h: 1, alignH: 'right', alignV: 'center' },
+      logo: { x: 1, y: 3, w: 2, h: 1, alignH: 'center', alignV: 'center' },
+    },
+  };
+}
+
+export function gridPresetBottom(): CardGrid {
+  return {
+    cols: 4,
+    rows: 4,
+    elements: {
+      name: { x: 0, y: 0, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      title: { x: 0, y: 1, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      logo: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      company: { x: 2, y: 2, w: 2, h: 1, alignH: 'right', alignV: 'center' },
+      photo: { x: 0, y: 3, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+    },
+  };
+}
+
+export function gridPresetMinimal(): CardGrid {
+  return {
+    cols: 4,
+    rows: 4,
+    elements: {
+      name: { x: 0, y: 1, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      title: { x: 0, y: 2, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      company: { x: 0, y: 3, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      logo: { x: 1, y: 0, w: 2, h: 1, alignH: 'center', alignV: 'center' },
+      photo: { x: 1, y: 0, w: 2, h: 1, alignH: 'center', alignV: 'center' },
+    },
+  };
+}
+
+export function gridPresetPhotoCircle(): CardGrid {
+  return {
+    cols: 4,
+    rows: 4,
+    elements: {
+      photo: { x: 1, y: 0, w: 2, h: 2, alignH: 'center', alignV: 'center' },
+      name: { x: 0, y: 2, w: 4, h: 1, alignH: 'center', alignV: 'center' },
+      title: { x: 0, y: 3, w: 3, h: 1, alignH: 'center', alignV: 'center' },
+      company: { x: 3, y: 3, w: 1, h: 1, alignH: 'center', alignV: 'center' },
+      logo: { x: 3, y: 3, w: 1, h: 1, alignH: 'center', alignV: 'center' },
+    },
+  };
+}
+
+export function gridPresetCompact(): CardGrid {
+  return {
+    cols: 4,
+    rows: 4,
+    elements: {
+      photo: { x: 0, y: 0, w: 1, h: 2, alignH: 'center', alignV: 'center' },
+      logo: { x: 0, y: 2, w: 1, h: 2, alignH: 'center', alignV: 'center' },
+      name: { x: 1, y: 0, w: 3, h: 1, alignH: 'left', alignV: 'center' },
+      title: { x: 1, y: 1, w: 3, h: 1, alignH: 'left', alignV: 'center' },
+      company: { x: 1, y: 2, w: 3, h: 1, alignH: 'left', alignV: 'center' },
+    },
+  };
+}
+
 export function gridPresetBackDefault(): CardGrid {
   return {
     cols: 4,
@@ -316,6 +404,19 @@ export function gridPresetBackDefault(): CardGrid {
 // visivamente gli elementi. Per il retro usa sempre gridPresetBackDefault.
 // `filterByContent` rimuove gli elementi vuoti (es. `logo` se non c'è
 // logoUrl), così l'utente non vede "riserve" inutili nella griglia.
+// Phase 2.3: lookup table per tutti i layout frontali supportati.
+const FRONT_GRID_PRESETS: Record<BusinessCardLayout, () => CardGrid> = {
+  centered: gridPresetCentered,
+  left: gridPresetLeft,
+  split: gridPresetFrontSplit,
+  right: gridPresetRight,
+  top: gridPresetTop,
+  bottom: gridPresetBottom,
+  minimal: gridPresetMinimal,
+  'photo-circle': gridPresetPhotoCircle,
+  compact: gridPresetCompact,
+};
+
 export function deriveGridFromLayout(
   card: BusinessCard,
   side: 'front' | 'back',
@@ -323,13 +424,8 @@ export function deriveGridFromLayout(
   if (side === 'back') {
     return filterGridElementsByContent(gridPresetBackDefault(), card, 'back');
   }
-  const preset =
-    card.front.layout === 'centered'
-      ? gridPresetCentered()
-      : card.front.layout === 'split'
-        ? gridPresetFrontSplit() // fix: include `photo` (gridPresetSplit non l'ha)
-        : gridPresetLeft();
-  return filterGridElementsByContent(preset, card, 'front');
+  const presetFn = FRONT_GRID_PRESETS[card.front.layout] ?? gridPresetLeft;
+  return filterGridElementsByContent(presetFn(), card, 'front');
 }
 
 function filterGridElementsByContent(

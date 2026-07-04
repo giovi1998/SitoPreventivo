@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { BusinessCard, CardGrid } from '../../utils/documentSchemas';
+import type { BusinessCard, BusinessCardLayout, CardGrid } from '../../utils/documentSchemas';
 import { deriveGridFromLayout } from '../../utils/documentSchemas';
 import {
   allElementOptionsForSide,
@@ -25,8 +25,8 @@ export interface CardGridControlsProps {
   /** Elemento selezionato (controllato dal parent per persistenza cross-tab). */
   selected: keyof CardGrid['elements'] | '';
   onSelect: (k: keyof CardGrid['elements'] | '') => void;
-  /** Phase 2.2: applica un preset di griglia (callback opzionale). */
-  onApplyPreset?: (p: 'left' | 'centered' | 'split') => void;
+  /** Phase 2.3: applica un preset di griglia (callback opzionale). */
+  onApplyPreset?: (p: BusinessCardLayout) => void;
   /** Restituisce informazioni sulla mossa applicata (per toast feedback in G). */
   onAfterMove?: (info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
   onAfterResize?: (info: { element: string; dw: number; dh: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
@@ -191,18 +191,24 @@ export function CardGridControls({
             // che SOSTITUISCE completamente la grid (no merge → no duplicati
             // di elementi come `logo` che cambiavano solo posizione).
             if (typeof onApplyPreset === 'function') {
-              onApplyPreset(v as 'left' | 'centered' | 'split');
+              onApplyPreset(v as BusinessCardLayout);
               return;
             }
             // Fallback solo se il parent non passa onApplyPreset (es. test).
-            const FRONT_PRESETS: Record<string, CardGrid> = {
-              left: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 1, h: 4 }, name: { x: 1, y: 0, w: 3, h: 1 }, title: { x: 1, y: 1, w: 3, h: 1 }, company: { x: 1, y: 2, w: 2, h: 1 }, logo: { x: 3, y: 2, w: 1, h: 2 } } },
-              centered: { cols: 4, rows: 4, elements: { photo: { x: 1, y: 0, w: 2, h: 1 }, name: { x: 0, y: 1, w: 4, h: 1 }, title: { x: 0, y: 2, w: 4, h: 1 }, company: { x: 0, y: 3, w: 3, h: 1 }, logo: { x: 3, y: 3, w: 1, h: 1 } } },
+            const FRONT_PRESETS: Record<BusinessCardLayout, CardGrid> = {
+              left: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 4 }, name: { x: 2, y: 0, w: 2, h: 1 }, title: { x: 2, y: 1, w: 2, h: 1 }, company: { x: 2, y: 2, w: 2, h: 1 }, logo: { x: 0, y: 3, w: 2, h: 1 } } },
+              centered: { cols: 4, rows: 4, elements: { photo: { x: 1, y: 0, w: 2, h: 1 }, name: { x: 0, y: 1, w: 4, h: 1 }, title: { x: 0, y: 2, w: 4, h: 1 }, company: { x: 0, y: 3, w: 2, h: 1 }, logo: { x: 2, y: 3, w: 2, h: 1 } } },
               split: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 4 }, name: { x: 2, y: 0, w: 2, h: 1 }, title: { x: 2, y: 1, w: 2, h: 1 }, company: { x: 2, y: 2, w: 2, h: 1 }, logo: { x: 2, y: 3, w: 2, h: 1 } } },
+              right: { cols: 4, rows: 4, elements: { photo: { x: 2, y: 0, w: 2, h: 4 }, name: { x: 0, y: 0, w: 2, h: 1 }, title: { x: 0, y: 1, w: 2, h: 1 }, company: { x: 0, y: 2, w: 2, h: 1 }, logo: { x: 0, y: 3, w: 2, h: 1 } } },
+              top: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 4, h: 2 }, name: { x: 0, y: 2, w: 4, h: 1 }, title: { x: 0, y: 3, w: 2, h: 1 }, company: { x: 2, y: 3, w: 2, h: 1 }, logo: { x: 1, y: 3, w: 2, h: 1 } } },
+              bottom: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 3, w: 4, h: 1 }, name: { x: 0, y: 0, w: 4, h: 1 }, title: { x: 0, y: 1, w: 4, h: 1 }, logo: { x: 0, y: 2, w: 2, h: 1 }, company: { x: 2, y: 2, w: 2, h: 1 } } },
+              minimal: { cols: 4, rows: 4, elements: { logo: { x: 1, y: 0, w: 2, h: 1 }, photo: { x: 1, y: 0, w: 2, h: 1 }, name: { x: 0, y: 1, w: 4, h: 1 }, title: { x: 0, y: 2, w: 4, h: 1 }, company: { x: 0, y: 3, w: 4, h: 1 } } },
+              'photo-circle': { cols: 4, rows: 4, elements: { photo: { x: 1, y: 0, w: 2, h: 2 }, name: { x: 0, y: 2, w: 4, h: 1 }, title: { x: 0, y: 3, w: 3, h: 1 }, company: { x: 3, y: 3, w: 1, h: 1 }, logo: { x: 3, y: 3, w: 1, h: 1 } } },
+              compact: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 1, h: 2 }, logo: { x: 0, y: 2, w: 1, h: 2 }, name: { x: 1, y: 0, w: 3, h: 1 }, title: { x: 1, y: 1, w: 3, h: 1 }, company: { x: 1, y: 2, w: 3, h: 1 } } },
             };
             const grid = side === 'back'
               ? { cols: 4, rows: 4, elements: { contacts: { x: 0, y: 0, w: 2, h: 3 }, socials: { x: 0, y: 3, w: 2, h: 1 }, qr: { x: 2, y: 0, w: 2, h: 4 } } }
-              : FRONT_PRESETS[v] || FRONT_PRESETS.split;
+              : FRONT_PRESETS[v as BusinessCardLayout] ?? FRONT_PRESETS.left;
             onChangeGrid(grid);
           }}
           aria-label="Preset griglia"
@@ -213,7 +219,13 @@ export function CardGridControls({
             <>
               <option value="left">Sinistra (foto a sx)</option>
               <option value="centered">Centrato</option>
-              <option value="split">Diviso (testo + logo)</option>
+              <option value="split">Diviso (foto a sx)</option>
+              <option value="right">Diviso inverso (foto a dx)</option>
+              <option value="top">Foto in alto</option>
+              <option value="bottom">Foto in basso</option>
+              <option value="minimal">Minimal</option>
+              <option value="photo-circle">Foto tonda centrata</option>
+              <option value="compact">Compatto</option>
             </>
           ) : (
             <option value="split">Default retro (contatti + QR + social)</option>
@@ -287,34 +299,39 @@ export function CardGridControls({
       </div>
       {selectedEl && mode === 'inline' && (
         <div className="card-grid-align" role="group" aria-label="Allineamento elemento">
-          <label className="card-field">
-            <span>Orizzontale</span>
-            <select
-              value={selectedEl.alignH ?? 'center'}
-              onChange={(e) => handleAlignH(e.target.value as 'left' | 'center' | 'right')}
-              disabled={isSideDisabled}
-              aria-label="Allineamento orizzontale"
-              data-testid="grid-align-h"
-            >
-              <option value="left">Sinistra</option>
-              <option value="center">Centro</option>
-              <option value="right">Destra</option>
-            </select>
-          </label>
-          <label className="card-field">
-            <span>Verticale</span>
-            <select
-              value={selectedEl.alignV ?? 'center'}
-              onChange={(e) => handleAlignV(e.target.value as 'top' | 'center' | 'bottom')}
-              disabled={isSideDisabled}
-              aria-label="Allineamento verticale"
-              data-testid="grid-align-v"
-            >
-              <option value="top">Alto</option>
-              <option value="center">Centro</option>
-              <option value="bottom">Basso</option>
-            </select>
-          </label>
+          <span className="card-grid-align-label">Posizione 3×3</span>
+          <div className="card-grid-align-matrix" data-testid="grid-align-matrix">
+            {[
+              { alignH: 'left', alignV: 'top', label: '↖', title: 'Alto-sinistra' },
+              { alignH: 'center', alignV: 'top', label: '↑', title: 'Alto-centro' },
+              { alignH: 'right', alignV: 'top', label: '↗', title: 'Alto-destra' },
+              { alignH: 'left', alignV: 'center', label: '←', title: 'Centro-sinistra' },
+              { alignH: 'center', alignV: 'center', label: '·', title: 'Centro' },
+              { alignH: 'right', alignV: 'center', label: '→', title: 'Centro-destra' },
+              { alignH: 'left', alignV: 'bottom', label: '↙', title: 'Basso-sinistra' },
+              { alignH: 'center', alignV: 'bottom', label: '↓', title: 'Basso-centro' },
+              { alignH: 'right', alignV: 'bottom', label: '↘', title: 'Basso-destra' },
+            ].map((pos) => {
+              const active = (selectedEl.alignH ?? 'center') === pos.alignH && (selectedEl.alignV ?? 'center') === pos.alignV;
+              return (
+                <button
+                  key={`${pos.alignH}-${pos.alignV}`}
+                  type="button"
+                  className={active ? 'active' : ''}
+                  disabled={isSideDisabled}
+                  aria-label={pos.title}
+                  title={pos.title}
+                  onClick={() => {
+                    handleAlignH(pos.alignH as 'left' | 'center' | 'right');
+                    handleAlignV(pos.alignV as 'top' | 'center' | 'bottom');
+                  }}
+                  data-testid={`grid-align-${pos.alignH}-${pos.alignV}`}
+                >
+                  {pos.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
       {mode === 'inline' && (
