@@ -61,7 +61,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/AdminRoute.tsx` | Guard: `user.role === 'admin'` required, else `navigate('/app/editor')` |
 | `src/hooks/useRouteView.ts` | Bridge hook: `pathname ↔ view` (editor\|collection\|qr\|card\|logo\|settings\|admin), `setView` calls `navigate()` |
 | `src/pages/app/*` | Thin page wrappers (Editor/Collection/Qr/Card/Logo/Settings/Admin), read state from `AppContext` |
-| `src/pages/LogoAiDocsPage.tsx` | **Phase 7**: public docs page explaining the disabled "AI Generation" tab. Lazy-loaded. |
+| `docs/logo-ai.md` | **Phase 7**: private docs explaining the disabled "AI Generation" tab (la versione pubblica `LogoAiDocsPage.tsx` + route `/docs/logo-ai` sono state rimosse deliberatamente). |
 | `api/index.ts` | Single Vercel serverless function, entire REST API (monolith, intentional) |
 | `db/schema.ts` | Drizzle schema (users, documents, user_settings, unlock_codes) |
 | `src/utils/dataService.js` | Data layer, routes to API or localStorage |
@@ -161,18 +161,27 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 
 ## Phase Status & Roadmap
 
-Stato corrente delle fasi di sviluppo (commit di riferimento: `126c9d1`).
+Stato corrente delle fasi di sviluppo. Le spec delle fasi 0-6 + 10 (rebrand,
+card-refactor, card-grid-ux) sono state cancellate dopo verifica
+implementazione completa (commit `497100f`). Traccia storica in git history.
 
-| Fase | Stato | Spec | Note |
-|------|-------|------|------|
-| 0, Auto-save fix | ✅ done | `spec/spec-process-phase0-autosave-fix.md` |, |
-| 1, QR Code | ✅ done | `spec/spec-tool-phase1-qr-code.md` |, |
-| 2, Business Card | ✅ done (2.2 refactor) | `spec/spec-design-phase2-business-card.md`, `spec/spec-design-phase2-2-card-refactor.md` | Master switch, init-from-layout, QR sizing, fontScale, servicesLabel, parity mobile, AI parity. |
-| 3, Volantino | ✅ done | `spec/spec-design-phase3-flyer.md` | 4 layout (classic/centered/split/magazine) × 5 formati (A6/A5/A4/Letter/Square), bleed 3mm, AI copy via `POST /ai/copy-flyer` (10/min/IP). PDF+PNG export client-side. Tier watermark rispettato. |
-| 4, Logo SVG Builder | ✅ done | `spec/spec-tool-phase4-logo-builder.md` | v1 senza AI (Replicate deferred a v2/Pro). Tab "AI Generation" disabilitato con messaggio. |
-| 5, Tier System | ✅ done | `spec/spec-data-phase5-tier-system.md` | Watermark free, unlock code via admin, tier guard su save. |
-| 6, Unified Collection | ✅ done | `spec/spec-architecture-phase6-unified-collection.md` | `documents` table rinominata, collection unificata. |
-| 7, Polish | ✅ done | `spec/spec-process-phase7-polish.md` | Onboarding step 5, HomePage "Perché noi", `LogoAiDocsPage` pubblica, `preferredDocumentType` in DB, docs aggiornate. |
+Le spec superstiti (`phase7-polish`, `flyer-refactor-preview-ai`) sono
+mantenute per gap residui da chiarare.
+
+| Fase | Stato | Note |
+|------|-------|------|
+| 0, Auto-save fix | ✅ done | `processingRef`/`cooldownRef` in EditorView, toast merge. |
+| 1, QR Code | ✅ done | 7 tipi, export SVG/PNG, migration DB `documents`. |
+| 2, Business Card | ✅ done (2.2 refactor) | Master switch, init-from-layout, QR sizing, fontScale, servicesLabel, parity mobile, AI parity. |
+| 3, Volantino | ✅ done | 4 layout (classic/centered/split/magazine) × 5 formati (A6/A5/A4/Letter/Square), bleed 3mm, AI copy via `POST /ai/copy-flyer` (10/min/IP). PDF+PNG export client-side. Tier watermark rispettato. |
+| 4, Logo SVG Builder | ✅ done | v1 senza AI (Replicate deferred a v2/Pro). Tab "AI Generation" disabilitato con messaggio. |
+| 5, Tier System | ✅ done | Watermark free, unlock code via admin, tier guard su save. |
+| 6, Unified Collection | ✅ done | `documents` table rinominata, collection unificata. |
+| 7, Polish | ✅ done (parziale) | Onboarding step 5, HomePage "Perché noi", `preferredDocumentType` in DB, docs aggiornate. ⚠️ `LogoAiDocsPage` pubblica rimossa deliberatamente (docs ora private in `docs/logo-ai.md`); spec mantenuta per chiarimento. |
+| 8, Quickbrand Rebrand | ✅ done | Rename + palette "The Classic" (Red & Ink), HomePage/LoginPage rebrand, test. |
+| 9, Card Refactor Submodules | ✅ done | 11 utils + 9 components `src/utils/card/*` + `src/components/card/*`, barrel/shell pattern. |
+| 10, Card Grid UX Alignment | ✅ done | alignH/alignV (9-pos), preset retro separato, e2e. |
+| 11, Flyer Refactor Preview/AI | ⚠️ parziale | Architettura 12/12 utils + 11/11 components + 5/5 CSS. Gap: test matrix 4/10, `ai/flyer/budgets.ts` in `utils/flyer/budgets.ts` (deviazione equivalente). Spec mantenuta. |
 
 ### ✅ Fase 3 (Volantino) - implementata
 
