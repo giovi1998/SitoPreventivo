@@ -7,16 +7,7 @@ import { buildCardAIContext } from './prompts/cardContext';
 import { aiCardInputSchema } from './aiCardInputSchema';
 import { mergeCardAIResponse } from './cardMerge';
 import { needsAnalysis } from './promptUtils';
-
-function sanitizeAIResponse(raw: string): string {
-  let s = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-  const firstBrace = s.indexOf('{');
-  const lastBrace = s.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    s = s.slice(firstBrace, lastBrace + 1);
-  }
-  return s;
-}
+import { BaseOrchestrator } from './BaseOrchestrator';
 
 export interface CardProcessResult {
   card: BusinessCard;
@@ -26,23 +17,7 @@ export interface CardProcessResult {
   rawResponse?: string;
 }
 
-export class CardAIOrchestrator {
-  private activeSessionId: string | null = null;
-
-  getCurrentSessionId(): string | null {
-    return this.activeSessionId;
-  }
-
-  resetSession(): void {
-    if (this.activeSessionId) {
-      chatStore.clearSession(this.activeSessionId);
-    }
-    this.activeSessionId = null;
-  }
-
-  getProviderList(): { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[] {
-    return providerRegistry.listProviders();
-  }
+export class CardAIOrchestrator extends BaseOrchestrator {
 
   async processPrompt(
     card: BusinessCard,
@@ -134,7 +109,7 @@ export class CardAIOrchestrator {
     });
 
     if (aiResponse.content) {
-      const cleanJson = sanitizeAIResponse(aiResponse.content);
+      const cleanJson = this.sanitizeAIResponse(aiResponse.content);
       try {
         const modified = JSON.parse(cleanJson);
         const validation = aiCardInputSchema.safeParse(modified);

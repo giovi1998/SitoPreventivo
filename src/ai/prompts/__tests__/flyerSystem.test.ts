@@ -51,6 +51,31 @@ describe('flyerSystem prompts (phase 3)', () => {
     });
   });
 
+  describe('v2 enhancements', () => {
+    it('system prompt declares DENSITY TARGET and maps layout → density', () => {
+      const s = buildFlyerSystemPrompt();
+      expect(s).toMatch(/DENSITY TARGET/i);
+      expect(s.toLowerCase()).toContain('centered');
+      expect(s.toLowerCase()).toContain('split');
+      expect(s.toLowerCase()).toContain('low');
+      expect(s.toLowerCase()).toContain('medium');
+    });
+
+    it('system prompt forbids inventing data (date, luoghi, prezzi, telefono)', () => {
+      const s = buildFlyerSystemPrompt();
+      expect(s).toMatch(/NON INVENTARE/i);
+      expect(s.toLowerCase()).toContain('date');
+      expect(s.toLowerCase()).toContain('luoghi');
+      expect(s.toLowerCase()).toContain('prezzi');
+      expect(s.toLowerCase()).toContain('telefono');
+    });
+
+    it('copy prompt embeds bodyCharBudget as a hard limit', () => {
+      const p = buildFlyerCopyPrompt('x', 'formale', { layout: 'classic', size: 'A5', bodyCharBudget: 500 });
+      expect(p).toContain('500 caratteri');
+    });
+  });
+
   describe('sanitizeFlyerBrief', () => {
     it('strips HTML tags', () => {
       const result = sanitizeFlyerBrief('<script>alert(1)</script>Sagra della birra');

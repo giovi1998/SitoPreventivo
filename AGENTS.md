@@ -573,11 +573,13 @@ Queste skill vengono caricate automaticamente. Quando modifichi il codice riferi
 - `vercel-react-best-practices`, performance React (sempre attiva)
 - `vercel-composition-patterns`, component design
 - `web-design-guidelines`, review UI/accessibilità
-- `web-security`, security review
 - `writing-guidelines`, docs/prose style
 - `test-driven-development` (obra/superpowers), disciplina TDD per Blocco 3+
 - `frontend-design` (anthropics/skills), design opinionale per UI
 - `caveman` ([juliusbrussee/caveman](https://github.com/juliusbrussee/caveman)), **compressione output** (stile terso, ~-65% token risposta). Sempre attiva, vedi sezione *Output Style* sopra. Disattivazione solo con "normal mode" o in casi di auto-clarity.
+- `ai-prompt-engineering`, system prompt AI (quando si tocca `src/ai/prompts/*` o `src/ai/*Orchestrator.ts`)
+- `vercel-serverless-monolith`, monolite Vercel (quando si tocca `api/index.ts` o `api/`)
+- `pdf-client-side`, PDF/PNG export (quando si tocca `*Generator.ts` o `watermark.ts`)
 
 **Skill on-demand** (caricare solo se il task lo richiede esplicitamente):
 - `deploy-to-vercel`, solo quando l'utente chiede deploy
@@ -588,6 +590,7 @@ Queste skill vengono caricate automaticamente. Quando modifichi il codice riferi
 **Skill rimosse** (non usate da questo progetto):
 - `vercel-react-native-skills`, non è un'app React Native
 - `vercel-react-view-transitions`, non usiamo View Transitions API
+- ~~`web-security`~~, **mancante su disco** (riferimento storico, rimosso da Active Skills). Reinstallare con `npx skills add ...` se serve.
 
 ## API Design Principles (REST)
 

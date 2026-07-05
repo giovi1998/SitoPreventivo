@@ -45,4 +45,37 @@ describe('buildCardSystemPrompt', () => {
     expect(p).not.toContain('paymentTerms');
     expect(p).not.toContain('unitPrice');
   });
+
+  it('declares PALETTE PREDEFINITE with at least 4 entries (premium, minimal, moderno, classico)', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toMatch(/PALETTE PREDEFINITE/i);
+    expect(p).toContain('premium');
+    expect(p).toContain('minimal');
+    expect(p).toContain('moderno');
+    expect(p).toContain('classico');
+    expect(p).toMatch(/#[0-9A-Fa-f]{6}/);
+  });
+
+  it('shows collision example for "logo sopra nome" with both elements repositioned', () => {
+    const p = buildCardSystemPrompt();
+    expect(p.toLowerCase()).toContain('logo');
+    expect(p.toLowerCase()).toContain('sopra');
+    expect(p.toLowerCase()).toContain('nome');
+    expect(p).toMatch(/riposizionat|sposta|nuovo layout|nuova posizione/i);
+  });
+
+  it('distinguishes when to use fontScale vs grid resize', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toMatch(/QUANDO.*allargare|cell.*vs.*fontScale|fontScale/i);
+    expect(p).toContain('fontScale');
+    expect(p).toMatch(/photo\.w|qrSize/);
+  });
+
+  it('warns against sending photoUrl/logoUrl and visible/enabled placeholders', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toMatch(/ESEMPI NEGATIVI|NON inviare/i);
+    expect(p).toContain('photoUrl');
+    expect(p).toContain('logoUrl');
+    expect(p).toContain('visible');
+  });
 });

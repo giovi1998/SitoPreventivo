@@ -197,6 +197,125 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'card_apply_palette',
+      description: 'Applica una palette predefinita coerente (colori bgColor/textColor/accentColor) al bigliettino',
+      parameters: {
+        type: 'object',
+        properties: {
+          palette: {
+            type: 'string',
+            enum: ['premium', 'minimal', 'moderno', 'classico'],
+            description: 'Palette da applicare',
+          },
+        },
+        required: ['palette'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'card_switch_layout',
+      description: 'Cambia il layout frontale del bigliettino (centered/left/split/right/top/bottom/minimal/photo-circle/compact)',
+      parameters: {
+        type: 'object',
+        properties: {
+          layout: {
+            type: 'string',
+            enum: ['centered', 'left', 'split', 'right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact'],
+            description: 'Layout da applicare',
+          },
+        },
+        required: ['layout'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'card_add_service',
+      description: 'Aggiunge un servizio alla lista back.services (max 8 servizi, ogni servizio max 80 caratteri)',
+      parameters: {
+        type: 'object',
+        properties: {
+          service: {
+            type: 'string',
+            description: 'Testo del servizio (max 80 caratteri)',
+          },
+        },
+        required: ['service'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'card_remove_empty_socials',
+      description: 'Rimuove i social con url vuoto o placeholder "XXXXX"',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'flyer_shorten_body',
+      description: 'Tronca il body del volantino a una frazione del testo originale, rispettando il bodyCharBudget',
+      parameters: {
+        type: 'object',
+        properties: {
+          ratio: {
+            type: 'number',
+            minimum: 0.3,
+            maximum: 0.8,
+            description: 'Frazione del body da mantenere (0.3 = 30%, 0.8 = 80%)',
+          },
+        },
+        required: ['ratio'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'flyer_change_tone',
+      description: 'Riformula body e cta.label nel tono indicato (formale/ giovanile/ tecnico)',
+      parameters: {
+        type: 'object',
+        properties: {
+          tone: {
+            type: 'string',
+            enum: ['formale', 'giovanile', 'tecnico'],
+            description: 'Tono da applicare',
+          },
+        },
+        required: ['tone'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'flyer_add_urgency',
+      description: 'Aggiunge una frase di urgenza al body del volantino (max 50 caratteri)',
+      parameters: {
+        type: 'object',
+        properties: {
+          phrase: {
+            type: 'string',
+            description: 'Frase di urgenza (max 50 caratteri, es. "Solo oggi")',
+          },
+        },
+        required: ['phrase'],
+      },
+    },
+  },
 ];
 
 export function getToolNames(): string[] {

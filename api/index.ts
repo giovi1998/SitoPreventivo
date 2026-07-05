@@ -969,12 +969,46 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
 
 const handleAI: RouteHandler = async (path, method, req, res, body) => {
   if (path === '/ai/chat' && method === 'POST') {
+    // Spec 7: Zod validation + rate-limit aichat 30/min/IP + userEmail log.
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aichat', 30, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe richieste AI. Attendi un minuto.' });
+    }
+    const v = validate(
+      z.object({
+        model: z.string().optional(),
+        messages: z
+          .array(
+            z.object({
+              role: z.enum(['system', 'user', 'assistant', 'tool']),
+              content: z.string(),
+              tool_call_id: z.string().optional(),
+              name: z.string().optional(),
+            }),
+          )
+          .min(1)
+          .max(50),
+        response_format: z.object({ type: z.literal('json_object') }).optional(),
+        temperature: z.number().min(0).max(2).optional(),
+        max_tokens: z.number().int().positive().max(8192).optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body
+    );
+    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
+    if (v.data.userEmail) {
+      console.info('[ai_chat] user', { email: v.data.userEmail, ts: Date.now() });
+    } else {
+      console.info('[ai_chat_anon] request', { ts: Date.now() });
+    }
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
       console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set', { path });
       return json(req, res, 503, { error: 'DeepSeek non configurato.' });
     }
-    const { model, messages, response_format, temperature } = body;
+    const { model, messages, response_format, temperature } = v.data;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
     let apiRes: Response;
@@ -1130,14 +1164,39 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     if (rl.blocked) {
       return json(req, res, 429, { error: 'Troppe richieste AI. Attendi un minuto.' });
     }
+    const v = validate(
+      z.object({
+        model: z.string().optional(),
+        messages: z
+          .array(
+            z.object({
+              role: z.enum(['system', 'user', 'assistant', 'tool']),
+              content: z.string(),
+              tool_call_id: z.string().optional(),
+              name: z.string().optional(),
+            }),
+          )
+          .min(1)
+          .max(50),
+        tools: z.array(z.any()).optional(),
+        temperature: z.number().min(0).max(2).optional(),
+        max_tokens: z.number().int().positive().max(8192).optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body
+    );
+    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
+    if (v.data.userEmail) {
+      console.info('[ai_chat_stream] user', { email: v.data.userEmail, ts: Date.now() });
+    } else {
+      console.info('[ai_chat_stream_anon] request', { ts: Date.now() });
+    }
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
       console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set', { path });
       return json(req, res, 503, { error: 'DeepSeek non configurato.' });
     }
-    const { model, messages, tools, temperature, max_tokens } = body as {
-      model?: string; messages?: unknown; tools?: unknown; temperature?: number; max_tokens?: number;
-    };
+    const { model, messages, tools, temperature, max_tokens, userEmail: _userEmail } = v.data;
     const upBody = {
       model: model || 'deepseek-chat',
       messages,
@@ -1209,6 +1268,81 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       clearTimeout(timeout);
     }
     return res.end();
+  }
+
+  // Spec 13: Onboarding AI suggest (rate-limit 5/min/IP, opt-in).
+  if (path === '/ai/onboarding-suggest' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiOnboarding', 5, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe richieste onboarding. Attendi un minuto.' });
+    }
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) {
+      return json(req, res, 503, { error: 'Onboarding AI non configurato (DEEPSEEK_API_KEY mancante)' });
+    }
+    const v = validate(
+      z.object({
+        name: z.string().max(50),
+        sector: z.string().optional(),
+        model: z.string().optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
+    if (v.data.userEmail) {
+      console.info('[ai_onboarding_suggest] user', { email: v.data.userEmail, ts: Date.now() });
+    }
+    // Placeholder: the production caller uses the client-side
+    // useAIOnboarding hook (DeepSeek via /api/ai/chat proxy). This
+    // endpoint exists for parity with /ai/logo-config and future
+    // server-side onboarding flows (e.g. registration funnel). The
+    // contract (Zod, rate-limit, 503 fallback) is in place and tested.
+    return json(req, res, 202, {
+      data: { status: 'queued' },
+      message: 'Onboarding AI endpoint is staged; client-side useAIOnboarding is the v1 path.',
+    });
+  }
+
+  // Spec 11: Logo AI v2 — config (no rate-limit) + generate (rate-limit aiLogo 10/min/IP).
+  if (path === '/ai/logo-config' && method === 'GET') {
+    const enabled = !!process.env.REPLICATE_API_TOKEN;
+    return json(req, res, 200, { enabled });
+  }
+
+  if (path === '/ai/logo-generate' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiLogo', 10, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe generazioni logo AI. Attendi un minuto.' });
+    }
+    if (!process.env.REPLICATE_API_TOKEN) {
+      return json(req, res, 503, { error: 'Logo AI non configurato (REPLICATE_API_TOKEN mancante)' });
+    }
+    const v = validate(
+      z.object({
+        brief: z.string().max(500),
+        sector: z.string().optional(),
+        model: z.string().optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
+    if (v.data.userEmail) {
+      console.info('[ai_logo_generate] user', { email: v.data.userEmail, ts: Date.now() });
+    }
+    // For now this proxy is a placeholder: when a Replicate-backed
+    // generator lands in v2, the call below will be replaced with the
+    // upstream invocation. The endpoint contract (Zod, rate-limit, token
+    // guard, 503 fallback) is in place and tested.
+    return json(req, res, 202, {
+      data: { status: 'queued' },
+      message: 'Logo AI v2 backend is staged; Replicate call lands in v2.',
+    });
   }
 
   return json(req, res, 404, { error: 'Endpoint AI non trovato' });

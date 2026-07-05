@@ -24,6 +24,47 @@ Biglietti da visita, volantino, QR menu o locandina, e sito vetrina con Google M
 
 Il vantaggio non è la grafica migliore del mondo — è la velocità e il fatto che non devono fare niente. Una web agency locale ci mette 2–4 settimane e costa €300–2.000+ solo per il sito. Canva richiede che siano loro a fare tutto. Questo servizio fa tutto, in 3 giorni, a un prezzo fisso e chiaro.
 
+### AI come vantaggio competitivo
+
+L'AI è attiva in **3 moduli su 5** (preventivo, bigliettino, volantino) — il 60% del prodotto. Logo e QR sono AI-free per scelta tecnica. Il vantaggio non è "abbiamo l'AI" (ce l'hanno tutti), ma:
+
+1. **AI contestualizzata per modulo**: la card AI conosce il grid 9-pos, la flyer AI rispetta density target e char budget per layout, la quote AI conosce i tool. Niente AI generica come Canva/Looka.
+2. **Costo marginale sostenibile**: il piano Pro €9/mese include 1.000 prompt AI. Costo DeepSeek per 1.000 prompt ≈ €0.50-1 (flash), margine ~85-90%.
+3. **Costo/prompt trascurabile sui pacchetti una tantum**: ~€0.01-0.03/prompt (flash) rende l'AI inclusa anche in Starter €49 sostenibile.
+
+**Confronto competitor AI**:
+- **Looka** (€18-88/anno): AI solo per logo, niente card/flyer/quote.
+- **Canva Pro** (€12/mese, €144/anno): AI generica (Magic Design, Magic Write), non contestualizzata per modulo.
+- **VistaPrint IT** (varia): niente AI, solo stampa.
+- **Web agency** (€2.500-8.000): umana, lenta, niente AI.
+
+Nessun competitor ha AI contestualizzata in 3 moduli con pricing integrato. Manteniamo questo vantaggio finché DeepSeek V4 resta competitivo sui costi (vedi sezione costi AI per proiezioni).
+
+### Costi AI (DeepSeek V4)
+
+Pricing V4 aggiornato (`api-docs.deepseek.com`, luglio 2026):
+
+| Modello | Input cache miss | Input cache hit | Output |
+|---------|-----------------|-----------------|--------|
+| **V4-Flash** (default) | $0.14/M | $0.0028/M | $0.28/M |
+| **V4-Pro** (premium) | $0.435/M | n/d | $0.87/M |
+
+A luglio 2026: €1 ≈ $1.09. Costi in EUR per 1M token:
+- V4-Flash: €0.13 input, €0.26 output (confermato dal BP, invariato).
+- V4-Pro: €0.40 input, €0.80 output (nuovo, 3× flash).
+
+**Stima costo per 1.000 prompt AI Pro €9/mese** (mix 70% flash, 30% pro, ratio input/output 60/40, cache hit 30%):
+- Input: 1000 × 800 token × 70% × €0.13 + 1000 × 800 token × 30% × €0.40 = €72.8 + €96 = €168.8
+- Cache hit savings: -30% × €168.8 = -€50.6
+- Output: 1000 × 500 token × 70% × €0.26 + 1000 × 500 token × 30% × €0.80 = €91 + €120 = €211
+- **Totale**: €168.8 - €50.6 + €211 = **€329.2 / M prompt** = **€0.33 per 1.000 prompt**
+
+Margine Pro €9/mese: €9 - €0.33 = **€8.67 per utente Pro** (margine 96%). Stima precedente (€0.50-1) conservativa — margine reale più alto.
+
+**Costi extra prompt** (oltre 1.000): €0.01/prompt cliente, costo €0.00033/prompt, margine 96.7%.
+
+
+
 ---
 
 ## Target clienti
@@ -220,7 +261,7 @@ La spec tecnica Phase 5 del progetto implementa esattamente questo modello comme
 | Offerta commerciale | Implementazione tecnica (`db/schema.ts` + `api/index.ts`) |
 |---|---|
 | **Free** (default) | `user_settings.tier = 'free'`, `documentCount` parte da 0, limite 3 |
-| **Starter** €149 | `unlock_codes.package = 'starter'` → `tier = 'unlocked'`, no watermark, 300 DPI |
+| **Starter** €49 | `unlock_codes.package = 'starter'` → `tier = 'unlocked'`, no watermark, 300 DPI |
 | **Apertura** €349 | `unlock_codes.package = 'apertura'` + stampa inclusa |
 | **Presenza** €690 | `unlock_codes.package = 'presenza'` + Google My Business + social |
 | **Custom** | `unlock_codes.package = 'custom'` (manuale) |
@@ -257,6 +298,34 @@ Il tier system è interamente **mechanical** (no AI, no Stripe, no webhook). Cos
 
 ---
 
+## Roadmap post-validazione (oltre 60 giorni)
+
+Dopo il periodo di validazione iniziale (60 giorni, 2 clienti paganti, vedi sopra), la roadmap per scalare il business:
+
+### Q1 post-validazione (3-6 mesi)
+
+- **Stripe Checkout automatico**: trigger quando 15+ transazioni/mese O retainer > €500/mese. Setup stimato 20 ore (skill `vercel-serverless-monolith` disponibile). Tabella `payments` + endpoint `/api/checkout` + `/api/stripe/webhook`. Costo Stripe 1.5% + €0.25 EU.
+- **AI Logo v2**: abilitare tab AI in `LogoEditor.tsx` con `REPLICATE_API_TOKEN` (Recraft-V3). Setup ~30 ore (specifica già scritta). Pricing: incluso in Pro, €0.05/generazione extra (Recraft è più caro di DeepSeek).
+- **Multi-provider AI**: aggiungere OpenAI/Anthropic in `providerRegistry` come fallback. DeepSeek resta default per costo. Setup ~10 ore.
+
+### Q2-Q3 post-validazione (6-12 mesi)
+
+- **Social AI module** (cross-module): generatore 3 social post coordinati col bigliettino/volantino. Nuovo `documentType: 'socialPack'`, route `/app/social`. Spec già scritta. Setup ~25 ore.
+- **Onboarding AI assist**: suggerimenti displayName/company/profession in `OnboardingModal` step 0. Spec già scritta. Setup ~8 ore.
+- **Manutenzione scale-up**: da €49/mese a €79/mese quando funzionalità AI più pesanti incluse (chatbot cliente, generazione automatica contenuti mensili, aggiornamenti grafici ricorrenti). Costo AI sale a €25-35/mese, retainer €79 mantiene margine.
+
+### Q4+ post-validazione (12+ mesi)
+
+- **Fatturazione elettronica italiana**: Fatture in Cloud API o Aruba, integrata con pagamenti Stripe. Compliance IVA + ritenute.
+- **Multi-tenant white label**: licenza dell'app ad altre web agency come "Quickbrand for X", revenue share 70/30.
+- **Marketplace template community**: utenti pubblicano template di flyer/card/logo, monetizza con fee 30% sulle vendite.
+
+### Criteri di priorità
+
+Le feature in Q1+Q2 sono già **specificate** (vedi cartella `spec/`). Le feature in Q4+ sono ancora conceptuali. Costo cumulato setup Q1+Q2: ~95 ore sviluppo, sostenibile con 1 sviluppatore part-time + founder.
+
+---
+
 ## Raccomandazione finale
 
 Il modello è economicamente sostenibile — i conti tornano già con 3 progetti al mese. Il rischio reale non è tecnologico né finanziario, ma commerciale: riuscire a trovare clienti con urgenza reale, non solo interesse generico.
@@ -265,7 +334,7 @@ La versione più forte di questo business non è "agenzia di branding per PMI", 
 
 Costruisci prima il flusso manuale su 5 clienti reali. Solo dopo automatizzare.
 
-> **Nota implementativa:** il tier system Phase 5 è completato tecnicamente (983/983 test verdi, typecheck pulito). Il flusso commerciale end-to-end è pronto per essere validato: admin genera codice → cliente riscatta → tier passa a `unlocked` → watermark rimosso. La parte commerciale (marketing, vendita, delivery) resta il collo di bottiglia.
+> **Nota implementativa:** il tier system Phase 5 è completato tecnicamente (1722/1722 test verdi, typecheck pulito, 11 fasi implementate, 15 spec tecniche, 13 SKILL.md di coding). Il flusso commerciale end-to-end è pronto per essere validato: admin genera codice → cliente riscatta → tier passa a `unlocked` → watermark rimosso. La parte commerciale (marketing, vendita, delivery) resta il collo di bottiglia.
 
 ---
 

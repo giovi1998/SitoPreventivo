@@ -11,6 +11,7 @@ import { buildSystemPrompt } from './prompts/system';
 import { buildAIContext } from './prompts/context';
 import { mergeAIResponse } from './merge';
 import { needsAnalysis } from './promptUtils';
+import { BaseOrchestrator } from './BaseOrchestrator';
 
 import {
   applyDiscount,
@@ -117,10 +118,9 @@ function validateToolArgs(name: string, rawArgs: string): { ok: true; args: Reco
   return { ok: true, args };
 }
 
-export class AIOrchestrator {
-  private activeSessionId: string | null = null;
-
+export class AIOrchestrator extends BaseOrchestrator {
   constructor() {
+    super();
     this.registerTools();
   }
 
@@ -187,17 +187,6 @@ export class AIOrchestrator {
 
   set toolRegistry(r: ToolRegistry) {
     (this as any)._toolRegistry = r;
-  }
-
-  getCurrentSessionId(): string | null {
-    return this.activeSessionId;
-  }
-
-  resetSession(): void {
-    if (this.activeSessionId) {
-      chatStore.clearSession(this.activeSessionId);
-    }
-    this.activeSessionId = null;
   }
 
   async processPrompt(

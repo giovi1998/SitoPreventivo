@@ -1,13 +1,27 @@
 import type { ChatMessage, ChatSession } from '../types';
+import {
+  type SessionAdapter,
+  noopSessionAdapter,
+  autoDetectAdapter,
+} from './localStorageAdapter';
 
 function generateId(): string {
   return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 const MAX_SESSION_MESSAGES = 50;
+const SAVE_DEBOUNCE_MS = 500;
 
 export class ChatStore {
   private sessions: Map<string, ChatSession> = new Map();
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly adapter: SessionAdapter;
+
+  constructor(adapter?: SessionAdapter) {
+    this.adapter = adapter ?? autoDetectAdapter();
+    const loaded = this.adapter.load();
+    for (const s of loaded) this.sessions.set(s.id, s);
+  }
 
   createSession(): ChatSession {
     const now = new Date().toISOString();
@@ -18,6 +32,7 @@ export class ChatStore {
       updatedAt: now,
     };
     this.sessions.set(session.id, session);
+    this.scheduleSave();
     return session;
   }
 
@@ -38,10 +53,12 @@ export class ChatStore {
     }
 
     session.updatedAt = new Date().toISOString();
+    this.scheduleSave();
   }
 
   clearSession(sessionId: string): void {
     this.sessions.delete(sessionId);
+    this.scheduleSave();
   }
 
   getHistory(sessionId: string, maxMessages: number = 30): ChatMessage[] {
@@ -67,7 +84,22 @@ export class ChatStore {
         removed++;
       }
     }
+    if (removed > 0) this.scheduleSave();
     return removed;
+  }
+
+  /**
+   * Debounced persistence: many addMessage calls in quick succession
+   * (e.g. during a stream) coalesce into a single localStorage write.
+   * No-op if the adapter is a noop (SSR).
+   */
+  private scheduleSave(): void {
+    if (this.adapter instanceof noopSessionAdapter) return;
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
+      this.adapter.save(Array.from(this.sessions.values()));
+      this.saveTimer = null;
+    }, SAVE_DEBOUNCE_MS);
   }
 }
 

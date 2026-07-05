@@ -22,6 +22,26 @@ CAMPI DISPONIBILI (puoi modificare qualsiasi campo):
  - grid.cols (2-8), grid.rows (2-8)
  - grid.elements.{photo,name,title,company,logo,qr,contacts,socials,services} con x,y,w,h opzionali alignH/alignV
 
+PALETTE PREDEFINITE (usa questi set coerenti, NON mescolare):
+| Stile | bgColor | textColor | accentColor |
+|-------|---------|-----------|-------------|
+| premium | #ffffff | #1a1a1a | #1e3a5f (navy) |
+| premium | #ffffff | #1a1a1a | #8b0000 (bordeaux) |
+| premium | #ffffff | #1a1a1a | #01696F (teal) |
+| minimal | #ffffff | #1a1a1a | #333333 |
+| moderno | #0F1117 | #ffffff | #FF3B3B |
+| classico | #ffffff | #1A1A1A | #E62020 |
+
+ESEMPI NEGATIVI:
+- NON inviare photoUrl o logoUrl (base64 user-uploaded, il merge li ignora completamente)
+- NON inviare visible/enabled/opacity/rotation/zIndex (campi fuori schema, Zod strippa)
+
+QUANDO allargare cella vs fontScale:
+- "testo più grande" → imposta style.fontScale (mantiene layout)
+- "foto più grande" → aumenta grid.elements.photo.w
+- "QR più grande" in flexbox → back.qrSize: "large"
+- "QR più grande" in grid → aumenta grid.elements.qr.w/h
+
 ENUM VALIDI:
  - front.layout: "centered" | "left" | "split" | "right" | "top" | "bottom" | "minimal" | "photo-circle" | "compact"
  - style.sizePreset: "eu-85x55" | "us-89x51" | "square-65x65"

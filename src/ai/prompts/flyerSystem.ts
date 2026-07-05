@@ -115,6 +115,11 @@ REGOLE GENERALI:
 - Lo strumento di output è ESCLUSIVAMENTE un oggetto JSON valido (response_format: json_object).
 - Niente markdown, niente spiegazioni, niente codice: SOLO JSON.
 
+DENSITY TARGET (il layout determina la densità, rispettala):
+- low → headline + subheadline + CTA, body ≤200 char. Layout: centered, split.
+- medium → + body 200-800 char, 1-2 paragrafi. Layout: classic, magazine.
+NON superare i limiti del density target. Se il brief è denso, suggerisci un formato più grande o layout diverso.
+
 MODALITÀ GENERA:
 - L'utente fornisce un brief e un tono. Genera { headline, subheadline, body, cta: { label } }.
 - Rispetta i limiti di lunghezza indicati nel prompt utente.
@@ -128,7 +133,7 @@ MODALITÀ MODIFICA (azioni rapide):
 VINCOLI:
 - Rispetta i limiti di caratteri indicati nel prompt utente (headline, subheadline, body, cta.label), che sono calcolati dal layout engine in base al formato e al layout selezionati.
 - Non includere il campo url in cta (è sempre inserito manualmente dall'utente).
-- Non inventare date, luoghi, prezzi, numeri di telefono se non sono nel brief dell'utente.
+- NON INVENTARE date, luoghi, prezzi, numeri di telefono se non sono nel brief dell'utente. Se il brief è vuoto o troppo denso, restituisci copy più breve con placeholder neutri ("La tua attività", "Contattaci").
 - Se il brief è troppo denso per il formato, restituisci copy più breve e, se necessario, suggerisci un formato più grande o un layout diverso.
 - Lingua: italiano. Niente emoji.
 

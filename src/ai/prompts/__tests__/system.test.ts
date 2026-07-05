@@ -25,4 +25,20 @@ describe('buildSystemPrompt', () => {
     expect(p).not.toContain('Non chiamate.');
     expect(p).not.toContain('univa azione');
   });
+  it('compact prompt declares CAMPI NON MODIFICABILI and names total/summary/globalTotals', () => {
+    const p = buildSystemPrompt(true);
+    expect(p).toContain('CAMPI NON MODIFICABILI');
+    expect(p).toContain('total');
+    expect(p).toContain('summary');
+    expect(p).toContain('globalTotals');
+  });
+  it('compact prompt contains negative examples (validate_quote as unica azione)', () => {
+    const p = buildSystemPrompt(true);
+    expect(p).toMatch(/ESEMPI NEGATIVI/i);
+    expect(p).toContain('validate_quote');
+  });
+  it('compact prompt length is bounded (≤2500 chars)', () => {
+    const p = buildSystemPrompt(true);
+    expect(p.length).toBeLessThanOrEqual(2500);
+  });
 });
