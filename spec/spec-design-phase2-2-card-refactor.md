@@ -4,7 +4,7 @@ version: 2.0
 date_created: 2026-06-30
 last_updated: 2026-06-30
 owner: Giovanni Cidu
-tags: [design, business-card, refactor, clean-code, grid, ai, responsive, vercel, mobile-parity, qr, typography, feedback, dx, headroom, caveman]
+tags: [design, business-card, refactor, clean-code, grid, ai, responsive, vercel, mobile-parity, qr, typography, feedback, dx, caveman]
 ---
 
 > **Stato (2026-06-30)**: Phase 2.2 **completata**. Fasi A-K tutte
@@ -48,7 +48,7 @@ manuale (mai automatico), test obbligatori verdi prima di ogni commit.
 accessibile e a parità completa desktop/mobile, con feedback chiaro
 all'utente, testo sempre leggibile, QR e tipografia controllabili sia
 manualmente sia via AI, e con un'esperienza di sviluppo che attiva di
-default lo stack di risparmio token (headroom + caveman).
+default lo stack di risparmio token (caveman).
 
 **Scope** (file coinvolti, raggruppati per fase):
 
@@ -63,7 +63,7 @@ default lo stack di risparmio token (headroom + caveman).
 | AI | `src/ai/cardMerge.ts`, `src/ai/cardOrchestrator.ts`, `src/ai/prompts/cardSystem.ts`, `src/hooks/useAICard.ts` |
 | Zoom | `src/hooks/useCardPreviewZoom.ts` |
 | Componenti estratti (NEW) | `src/components/card/*` |
-| DX/tooling | `package.json`, `scripts/start-agent.mjs`, **NEW** `scripts/dev.mjs` |
+| DX/tooling | `package.json` |
 | Docs | `AGENTS.md`, `README.md` |
 | Test | `src/**/__tests__/*` |
 
@@ -128,9 +128,8 @@ reviewer che verifica test e assenza di regressioni.
   grid-mode la dimensione deriva dalla cella della griglia.
 - **Block label**: etichetta/heading editabile per una sezione/lista di
   elementi (es. heading "Servizi che offro" sopra la lista servizi).
-- **Token Optimization Stack**: headroom (proxy HTTP che comprime i
-  prompt verso l'LLM) + caveman (skill che comprime l'output). Vedi
-  AGENTS.md §"Token Optimization Stack".
+- **Token Optimization Stack**: caveman (skill che comprime l'output). Vedi
+  AGENTS.md §"Output Style".
 
 ## 3. Requirements, Constraints & Guidelines
 
@@ -384,36 +383,18 @@ reviewer che verifica test e assenza di regressioni.
 - **REQ-J03**: Aggiornare il `last_updated` di questa spec e la tabella
   "Phase Status & Roadmap" in `AGENTS.md` per Fase 2.2.
 
-### Fase K — DX: headroom + caveman di default con `npm run dev`
+### Fase K — DX: caveman di default
 
-- **REQ-K01** *(punto utente 9)*: `npm run dev` DEVE, oltre ad avviare
-  Vite, **avviare lo stack di risparmio token** in modo best-effort:
-  - Avviare il proxy **headroom** se non già attivo (riuso della logica di
-    `scripts/start-agent.mjs`: `cmdProxy`/`isProxyUp`/`startProxy`),
-    persistente, log in `.headroom.log`.
-  - Aprire la dashboard headroom nel browser **solo in dev**
-    (`openBrowserInDev`, già esistente).
-  - Avviare Vite (`vite`) in parallelo, con output in foreground.
-  - **Degradare con grazia**: se `headroom` non è installato o non parte,
-    stampare un warning chiaro (con istruzioni
-    `pip install "headroom-ai[all]"`) e **continuare comunque** con Vite.
-    Il dev server non deve mai fallire per colpa di headroom.
-  - **caveman**: è una skill auto-caricata (`.agents/skills/caveman/`),
-    non un processo; non c'è nulla da "avviare". Documentare in
-    `AGENTS.md`/`README` che è attiva di default e stampare nel banner di
-    `npm run dev` una riga informativa ("caveman: output compresso attivo
-    via skill"). Non tentare di lanciarla come processo.
-- **REQ-K02**: Implementare un wrapper Node `scripts/dev.mjs` che orchestra
-  i due processi (no nuove dipendenze npm: usare `child_process`).
-  `package.json`: `"dev": "node scripts/dev.mjs"` e mantenere
-  `"dev:app": "vite"` come fallback senza headroom.
-- **CON-K01**: Non introdurre dipendenze pesanti (no `concurrently`); usare
-  `node:child_process`. Il proxy headroom NON deve bloccare l'avvio di
-  Vite (avviarlo async/non-bloccante).
-- **CON-K02**: Il comportamento headroom riguarda l'**agente AI di
-  sviluppo** (opencode), non l'app: il proxy comprime i prompt
-  dell'agente. `npm run dev` lo attiva per comodità del developer; l'app
-  React non passa per il proxy.
+- **REQ-K01** *(punto utente 9)*: l'esperienza di sviluppo include
+  **caveman** (skill auto-caricata in `.agents/skills/caveman/`) per
+  compressione output dell'agente AI. Non c'è nulla da avviare come
+  processo: è una skill.
+- **REQ-K02**: `npm run dev` resta semplice (`vite`); nessun wrapper
+  aggiuntivo. Documentare in `AGENTS.md`/`README.md` che caveman è
+  attiva di default.
+- **CON-K01**: Nessuna dipendenza pesante per il dev server.
+- **CON-K02**: Eventuali tool di sviluppo agent-side (proxy di
+  compressione, ecc.) restano fuori dal `package.json` del progetto.
 
 ### Vincoli architetturali e di processo (tutte le fasi)
 
@@ -655,16 +636,13 @@ const BACK_KEYS  = ['contacts','qr','socials'] as const; // routing già fatto (
   toast d'errore comprensibile (non solo un log silenzioso).
 - **AC-J01**: `AGENTS.md` e `README.md` riflettono il nuovo modello grid,
   i nuovi campi, la parità mobile e il nuovo `npm run dev`.
-- **AC-K01**: Given `headroom` installato, When eseguo `npm run dev`, Then
-  il proxy headroom è attivo (`/livez` 200), la dashboard si apre in dev,
-  e Vite parte. Given `headroom` NON installato, When eseguo `npm run
-  dev`, Then appare un warning e Vite parte comunque.
+- **AC-K01**: `npm run dev` avvia Vite. `AGENTS.md` documenta caveman
+  come skill attiva di default.
 
 ## 6. Test Automation Strategy
 
 - **Test Levels**: Unit (utility/merge/schema), Component (RTL), nessun
-  E2E. Per `scripts/dev.mjs` un test unit del wrapper (mock di
-  `child_process`/`isProxyUp`) che verifica il degrado con grazia.
+  E2E.
 - **Frameworks**: Vitest + React Testing Library + jsdom.
 - **Test Data**: usare **`createGiovanniCardTemplate()`** come fixture
   primaria per i test grid (richiesta esplicita utente): spostare e
@@ -693,8 +671,7 @@ const BACK_KEYS  = ['contacts','qr','socials'] as const; // routing già fatto (
     `servicesLabel`/`services`/`logo` grid; schema AI accetta i nuovi
     campi e strippa gli inventati; test AI simulato end-to-end (mock
     provider).
-  - **K**: `scripts/__tests__/dev.test.mjs` (o equivalente) — wrapper
-    degrada con grazia se headroom assente; non blocca Vite.
+  - **K**: nessun test specifico (DX senza wrapper).
 - **CI/CD**: `npm run typecheck` + `npm run test` verdi prima di ogni
   commit/push.
 - **Coverage**: ≥60% sui nuovi file estratti; nessun `.skip`.
@@ -726,17 +703,15 @@ const BACK_KEYS  = ['contacts','qr','socials'] as const; // routing già fatto (
   l'utente. Oggi `aiCardInputSchema` non include nemmeno `logo` nel grid e
   ignora i nuovi campi. L'harness va esteso con test che partono dal
   template Giovanni.
-- **REQ-J/K (punti 8,9)**: docs da allineare; `npm run dev` deve attivare
-  lo stack di risparmio token (headroom proxy + caveman skill) di default,
-  degradando con grazia se headroom non è installato.
+- **REQ-J/K (punti 8,9)**: docs da allineare; caveman (skill di
+  compressione output) è documentata come attiva di default in
+  `AGENTS.md`/`README.md`.
 
 ## 8. Dependencies & External Integrations
 
 ### External Systems
 - **EXT-001**: DeepSeek Chat API — solo via `CardAIOrchestrator`
   esistente; nessuna nuova integrazione.
-- **EXT-002**: headroom (`headroom-ai`, CLI Python ≥3.10) — proxy locale
-  `:8787`, opzionale, best-effort in `npm run dev`. Degradare se assente.
 
 ### Third-Party Services
 - **SVC-001**: Nessun nuovo servizio runtime. Export/rendering client-side.
@@ -794,8 +769,7 @@ if (typeof s.fontScale === 'number') {
   dai bordi della card (cap via CSS `max-width:100%`).
 - Servizio lungo (80 char): va a capo, font auto-ridotto, non rompe la
   card.
-- `headroom` non installato: `npm run dev` stampa warning e avvia solo
-  Vite (AC-K01).
+- `npm run dev` avvia Vite senza wrapper aggiuntivi.
 - AI invia `grid.elements.logo`: ora accettato (prima strippato).
 
 ## 10. Validation Criteria
@@ -808,7 +782,6 @@ if (typeof s.fontScale === 'number') {
 - Nessun `as unknown as` nel grid editor; nessuna duplicazione di JSX del
   form tra desktop e mobile (componenti `src/components/card/*` condivisi).
 - Watermark tier-free presente in preview ed export.
-- `npm run dev` avvia headroom (se presente) + Vite, degradando con grazia.
 - `AGENTS.md` e `README.md` aggiornati.
 - Commit separati per fase (B, C, D, E, F, G, I, J, K); nessun push
   automatico.
@@ -818,12 +791,10 @@ if (typeof s.fontScale === 'number') {
 - `spec/spec-design-phase2-business-card.md` — spec originale Bigliettino.
 - `spec/spec-data-phase5-tier-system.md` — watermark e tier (COM-001).
 - `AGENTS.md` — sezioni "Business Card Module", "Responsive Patterns",
-  "Token Optimization Stack", "Test — OBBLIGATORI", "Pre-push Checklist",
+  "Output Style", "Test — OBBLIGATORI", "Pre-push Checklist",
   "Known Issues — Card Module", "Git Guardrails".
-- `scripts/start-agent.mjs` — sorgente riusabile per il proxy headroom
-  (REQ-K01): `isProxyUp`, `startProxy`, `waitForProxy`, `openBrowserInDev`.
 - `.agents/skills/caveman/SKILL.md` — regole della skill di compressione
-  output (REQ-K01).
+  output.
 - `.agents/skills/vercel-react-best-practices/SKILL.md` — PAT-002.
 - `.agents/skills/vercel-composition-patterns/SKILL.md` — estrazione
   componenti condivisi (REQ-B02).
@@ -842,7 +813,7 @@ if (typeof s.fontScale === 'number') {
    F/D/E già pronti.
 7. **Fase C** (zoom stabile).
 8. **Fase I** (AI: prompt + merge + harness/test).
-9. **Fase K** (`scripts/dev.mjs` + `package.json`).
+9. **Fase K** (docs: AGENTS.md/README aggiornati su caveman).
 10. **Fase J** (AGENTS.md + README) — per ultima, riflette tutto.
 
 Ogni step: implementazione + test + `typecheck`/`test` verdi + commit
