@@ -333,6 +333,17 @@ function buildSvgForLayout(builder: LogoBuilder): string {
   const scale = builder.textScale || 1;
   const offX = builder.textOffsetX || 0;
   const offY = builder.textOffsetY || 0;
+  const tagOffX = builder.taglineOffsetX || 0;
+  const tagOffY = builder.taglineOffsetY || 0;
+  const hasTagline = !!builder.tagline;
+  // v2.3.1: an AI photo background already carries the visual identity
+  // (illustration/photo) — a lucide icon or decorative underline/dotRing
+  // drawn on top of it reads as visual clutter and usually overlaps the
+  // artwork. Icon + decorations are suppressed automatically whenever a
+  // backgroundImage is present; the layout math (text start position)
+  // is left untouched so textOffsetX/Y can still be used to reclaim the
+  // freed space manually.
+  const hasBgImage = !!builder.backgroundImage;
 
   const bgRect = buildBackgroundRect(builder, W, H);
   const bgImage = builder.backgroundImage
@@ -349,33 +360,38 @@ function buildSvgForLayout(builder: LogoBuilder): string {
 
   if (builder.layout === 'horizontal') {
     iconCenter = { x: iconSize / 2 + 10, y: H / 2 };
-    const r = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize);
-    icon = r.svg;
-    const textX = iconCenter.x + iconSize / 2 + 14 + offX;
-    const maxTextW = W - textX - 28;
+    if (!hasBgImage) {
+      icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
+    }
+    const baseTextX = iconCenter.x + iconSize / 2 + 14;
+    const maxTextW = W - baseTextX - 28;
     const baseFontSize = fitText(builder.primaryText, maxTextW, 36, 14);
     const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
     const taglineFontSize = Math.max(8, Math.round(14 * scale));
-    const textY = H / 2 + offY;
-    const primaryY = builder.tagline ? textY - 10 : textY + 6;
-    primaryText = renderText(builder, textX, primaryY, 'start', primaryFontSize, primaryTextColor);
-    taglineText = renderTagline(builder, textX, textY + 18, 'start', taglineFontSize, taglineColor);
+    const baseY = H / 2;
+    const primaryX = baseTextX + offX;
+    const primaryY = baseY + offY + (hasTagline ? -10 : 6);
+    const taglineX = baseTextX + tagOffX;
+    const taglineY = baseY + 18 + tagOffY;
+    primaryText = renderText(builder, primaryX, primaryY, 'start', primaryFontSize, primaryTextColor);
+    taglineText = renderTagline(builder, taglineX, taglineY, 'start', taglineFontSize, taglineColor);
     const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
-    const taglineWidth = builder.tagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
-    decorations = renderDecorations(builder, W, iconCenter, iconSize, textX, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
-    const boxTop = primaryY - primaryFontSize * 0.85;
-    const boxBottom = builder.tagline ? textY + 18 + taglineFontSize * 0.4 : primaryY + primaryFontSize * 0.3;
-    backdrop = buildTextBackdrop(
-      builder,
-      { x: textX, y: boxTop, width: Math.max(textWidth, taglineWidth), height: boxBottom - boxTop },
-      W,
+    const taglineWidth = hasTagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
+    if (!hasBgImage) {
+      decorations = renderDecorations(builder, W, iconCenter, iconSize, primaryX, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
+    }
+    const box = unionTextBox(
+      { x: primaryX, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
+      hasTagline ? { x: taglineX, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
     );
+    backdrop = buildTextBackdrop(builder, box, W);
   } else {
     // vertical / stacked share the same centered-block layout, differing
     // only in the base font size and tagline gap used by getViewBox().
     iconCenter = { x: W / 2, y: iconSize / 2 + 10 };
-    const r = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize);
-    icon = r.svg;
+    if (!hasBgImage) {
+      icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
+    }
     const startFontSize = builder.layout === 'vertical' ? 32 : 36;
     const baseTaglineFontSize = builder.layout === 'vertical' ? 12 : 14;
     const taglineGap = builder.layout === 'vertical' ? 22 : 26;
@@ -383,25 +399,44 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     const baseFontSize = fitText(builder.primaryText, maxTextW, startFontSize, 14);
     const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
     const taglineFontSize = Math.max(8, Math.round(baseTaglineFontSize * scale));
-    const textY = iconCenter.y + iconSize / 2 + 30 + offY;
-    const textCenterX = W / 2 + offX;
-    primaryText = renderText(builder, textCenterX, textY, 'middle', primaryFontSize, primaryTextColor);
-    taglineText = renderTagline(builder, textCenterX, textY + taglineGap, 'middle', taglineFontSize, taglineColor);
+    const baseY = iconCenter.y + iconSize / 2 + 30;
+    const baseCenterX = W / 2;
+    const primaryCenterX = baseCenterX + offX;
+    const primaryY = baseY + offY;
+    const taglineCenterX = baseCenterX + tagOffX;
+    const taglineY = baseY + taglineGap + tagOffY;
+    primaryText = renderText(builder, primaryCenterX, primaryY, 'middle', primaryFontSize, primaryTextColor);
+    taglineText = renderTagline(builder, taglineCenterX, taglineY, 'middle', taglineFontSize, taglineColor);
     const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
-    const taglineWidth = builder.tagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
-    const textLeft = textCenterX - textWidth / 2;
-    decorations = renderDecorations(builder, W, iconCenter, iconSize, textLeft, textY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
-    const boxTop = textY - primaryFontSize * 0.85;
-    const boxBottom = builder.tagline ? textY + taglineGap + taglineFontSize * 0.4 : textY + primaryFontSize * 0.3;
-    const boxWidth = Math.max(textWidth, taglineWidth);
-    backdrop = buildTextBackdrop(
-      builder,
-      { x: textCenterX - boxWidth / 2, y: boxTop, width: boxWidth, height: boxBottom - boxTop },
-      W,
+    const taglineWidth = hasTagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
+    const primaryLeft = primaryCenterX - textWidth / 2;
+    const taglineLeft = taglineCenterX - taglineWidth / 2;
+    if (!hasBgImage) {
+      decorations = renderDecorations(builder, W, iconCenter, iconSize, primaryLeft, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
+    }
+    const box = unionTextBox(
+      { x: primaryLeft, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
+      hasTagline ? { x: taglineLeft, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
     );
+    backdrop = buildTextBackdrop(builder, box, W);
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${bgRect}${bgImage}${defs}${icon}${decorations}${backdrop}${primaryText}${taglineText}</svg>`;
+}
+
+/** Union bounding box of the primary text block and (optionally) the
+ * tagline block, used to size the readability backdrop so it always
+ * wraps both blocks even when they've been nudged independently. */
+function unionTextBox(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number } | null,
+): { x: number; y: number; width: number; height: number } {
+  if (!b) return a;
+  const left = Math.min(a.x, b.x);
+  const top = Math.min(a.y, b.y);
+  const right = Math.max(a.x + a.width, b.x + b.width);
+  const bottom = Math.max(a.y + a.height, b.y + b.height);
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 export function builderToSvg(b: LogoBuilder): string {
@@ -445,6 +480,8 @@ export function applyLayout(svg: string, layout: LogoLayout): string {
     textOffsetX: 0,
     textOffsetY: 0,
     textScale: 1,
+    taglineOffsetX: 0,
+    taglineOffsetY: 0,
   });
 }
 

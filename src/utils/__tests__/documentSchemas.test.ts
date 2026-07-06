@@ -641,6 +641,18 @@ describe('documentSchemas', () => {
       expect(logoBuilderSchema.safeParse({ textScale: 0.7 }).success).toBe(true);
       expect(logoBuilderSchema.safeParse({ textScale: 1.5 }).success).toBe(true);
     });
+
+    it('logoBuilderSchema defaults taglineOffsetX/Y to 0 (v2.3.1, independent from title offset)', () => {
+      const b = logoBuilderSchema.parse({});
+      expect(b.taglineOffsetX).toBe(0);
+      expect(b.taglineOffsetY).toBe(0);
+    });
+
+    it('logoBuilderSchema clamps taglineOffsetX/Y to [-60, 60]', () => {
+      expect(logoBuilderSchema.safeParse({ taglineOffsetX: 61 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ taglineOffsetY: -61 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ taglineOffsetX: 60, taglineOffsetY: -60 }).success).toBe(true);
+    });
   });
 
   describe('createEmptyLogo (Phase 4)', () => {

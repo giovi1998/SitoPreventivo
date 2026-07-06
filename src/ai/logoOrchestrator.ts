@@ -204,6 +204,8 @@ function convertAIOutputToBuilder(parsed: LogoAIOutput): LogoBuilder {
     textOffsetX: 0,
     textOffsetY: 0,
     textScale: 1,
+    taglineOffsetX: 0,
+    taglineOffsetY: 0,
   };
 }
 

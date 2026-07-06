@@ -35,6 +35,8 @@ const baseBuilder: LogoBuilder = {
   textOffsetX: 0,
   textOffsetY: 0,
   textScale: 1,
+  taglineOffsetX: 0,
+  taglineOffsetY: 0,
 };
 
 describe('logoGenerator', () => {

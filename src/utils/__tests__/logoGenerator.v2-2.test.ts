@@ -23,6 +23,8 @@ const baseBuilder: LogoBuilder = {
   textOffsetX: 0,
   textOffsetY: 0,
   textScale: 1,
+  taglineOffsetX: 0,
+  taglineOffsetY: 0,
 };
 
 describe('logoGenerator v2.2', () => {
@@ -209,6 +211,73 @@ describe('logoGenerator v2.3 (text readability + position controls)', () => {
       const svg = builderToSvg({ ...baseBuilder, primaryText: 'Pedagogista Susanna Cidu Molto Lungo', textScale: 0.7 });
       const fontSize = Number(svg.match(/font-size="(\d+)"/)![1]);
       expect(fontSize).toBeGreaterThanOrEqual(10);
+    });
+  });
+
+  describe('icon/decorazioni soppressi con background AI (v2.3.1)', () => {
+    const withIcon = { ...baseBuilder, iconType: 'shape' as const, iconGlyph: 'A', decorativeElements: ['underline' as const] };
+
+    it('renders the icon shape when there is no backgroundImage', () => {
+      const svg = builderToSvg(withIcon);
+      expect(svg).toContain('<circle');
+    });
+
+    it('renders decorativeElements when there is no backgroundImage', () => {
+      const svg = builderToSvg(withIcon);
+      expect(svg).toContain('<line');
+    });
+
+    it('suppresses the icon shape when backgroundImage is set', () => {
+      const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC' });
+      expect(svg).not.toContain('<circle');
+    });
+
+    it('suppresses decorativeElements when backgroundImage is set', () => {
+      const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC' });
+      expect(svg).not.toContain('<line');
+    });
+
+    it('still renders backgroundImage + text when icon/decorations are suppressed', () => {
+      const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC' });
+      expect(svg).toContain('<image');
+      expect(svg).toContain('Acme');
+    });
+  });
+
+  describe('taglineOffsetX/Y indipendente da textOffsetX/Y (v2.3.1)', () => {
+    const extractTaglineXY = (svg: string): [number, number] => {
+      const m = svg.match(/<text x="([\d.]+)" y="([\d.]+)"[^>]*font-weight="400"/);
+      if (!m) throw new Error('tagline <text> not found');
+      return [Number(m[1]), Number(m[2])];
+    };
+    const extractTitleXY = (svg: string): [number, number] => {
+      const m = svg.match(/<text x="([\d.]+)" y="([\d.]+)"[^>]*font-weight="700"/);
+      if (!m) throw new Error('title <text> not found');
+      return [Number(m[1]), Number(m[2])];
+    };
+
+    it('moving textOffsetX does NOT move the tagline', () => {
+      const [baseTagX] = extractTaglineXY(builderToSvg(baseBuilder));
+      const [shiftedTagX] = extractTaglineXY(builderToSvg({ ...baseBuilder, textOffsetX: 30 }));
+      expect(shiftedTagX).toBeCloseTo(baseTagX, 0);
+    });
+
+    it('moving taglineOffsetX does NOT move the primaryText (title)', () => {
+      const [baseTitleX] = extractTitleXY(builderToSvg(baseBuilder));
+      const [shiftedTitleX] = extractTitleXY(builderToSvg({ ...baseBuilder, taglineOffsetX: 30 }));
+      expect(shiftedTitleX).toBeCloseTo(baseTitleX, 0);
+    });
+
+    it('taglineOffsetX shifts the tagline x position', () => {
+      const [baseTagX] = extractTaglineXY(builderToSvg(baseBuilder));
+      const [shiftedTagX] = extractTaglineXY(builderToSvg({ ...baseBuilder, taglineOffsetX: 25 }));
+      expect(shiftedTagX).toBeCloseTo(baseTagX + 25, 0);
+    });
+
+    it('taglineOffsetY shifts the tagline y position', () => {
+      const [, baseTagY] = extractTaglineXY(builderToSvg(baseBuilder));
+      const [, shiftedTagY] = extractTaglineXY(builderToSvg({ ...baseBuilder, taglineOffsetY: 12 }));
+      expect(shiftedTagY).toBeCloseTo(baseTagY + 12, 0);
     });
   });
 });

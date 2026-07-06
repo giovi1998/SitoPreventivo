@@ -428,8 +428,8 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
             />
           </label>
           <div className="builder-field">
-            <span className="builder-field-label">Posizione testo</span>
-            <div className="builder-nudge-grid" role="group" aria-label="Posizione testo">
+            <span className="builder-field-label">Posizione titolo</span>
+            <div className="builder-nudge-grid" role="group" aria-label="Posizione titolo">
               <button
                 type="button"
                 className="builder-nudge-btn nudge-up"
@@ -477,6 +477,58 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
               </button>
             </div>
           </div>
+          {b.tagline && (
+            <div className="builder-field">
+              <span className="builder-field-label">Posizione sottotitolo (indipendente dal titolo)</span>
+              <div className="builder-nudge-grid" role="group" aria-label="Posizione sottotitolo">
+                <button
+                  type="button"
+                  className="builder-nudge-btn nudge-up"
+                  onClick={() => update('taglineOffsetY', clampOffset(b.taglineOffsetY - TEXT_OFFSET_STEP))}
+                  aria-label="Sposta sottotitolo in alto"
+                  title="Sposta sottotitolo in alto"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="builder-nudge-btn nudge-left"
+                  onClick={() => update('taglineOffsetX', clampOffset(b.taglineOffsetX - TEXT_OFFSET_STEP))}
+                  aria-label="Sposta sottotitolo a sinistra"
+                  title="Sposta sottotitolo a sinistra"
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  className="builder-nudge-btn nudge-center"
+                  onClick={() => { update('taglineOffsetX', 0); update('taglineOffsetY', 0); }}
+                  aria-label="Centra sottotitolo"
+                  title="Centra sottotitolo (azzera spostamento)"
+                >
+                  ⟲
+                </button>
+                <button
+                  type="button"
+                  className="builder-nudge-btn nudge-right"
+                  onClick={() => update('taglineOffsetX', clampOffset(b.taglineOffsetX + TEXT_OFFSET_STEP))}
+                  aria-label="Sposta sottotitolo a destra"
+                  title="Sposta sottotitolo a destra"
+                >
+                  →
+                </button>
+                <button
+                  type="button"
+                  className="builder-nudge-btn nudge-down"
+                  onClick={() => update('taglineOffsetY', clampOffset(b.taglineOffsetY + TEXT_OFFSET_STEP))}
+                  aria-label="Sposta sottotitolo in basso"
+                  title="Sposta sottotitolo in basso"
+                >
+                  ↓
+                </button>
+              </div>
+            </div>
+          )}
         </fieldset>
       </section>
 

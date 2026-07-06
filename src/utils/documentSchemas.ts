@@ -684,6 +684,11 @@ export const logoBuilderSchema = z.object({
   textOffsetX: z.number().min(-60).max(60).default(0),
   textOffsetY: z.number().min(-60).max(60).default(0),
   textScale: z.number().min(0.7).max(1.5).default(1),
+  // Spec v2.3.1: offset indipendente per il sottotitolo (tagline), così
+  // titolo e sottotitolo si possono spostare separatamente invece di
+  // muoversi sempre insieme con textOffsetX/Y.
+  taglineOffsetX: z.number().min(-60).max(60).default(0),
+  taglineOffsetY: z.number().min(-60).max(60).default(0),
 });
 export type LogoBuilder = z.infer<typeof logoBuilderSchema>;
 
@@ -742,6 +747,8 @@ export function createEmptyLogo(): Logo {
       textOffsetX: 0,
       textOffsetY: 0,
       textScale: 1,
+      taglineOffsetX: 0,
+      taglineOffsetY: 0,
     },
     brief: '',
     concepts: [],
@@ -832,6 +839,8 @@ export function createLogoTemplate(sector: LogoSector): Logo {
       textOffsetX: 0,
       textOffsetY: 0,
       textScale: 1,
+      taglineOffsetX: 0,
+      taglineOffsetY: 0,
     },
     brief: '',
     concepts: [],

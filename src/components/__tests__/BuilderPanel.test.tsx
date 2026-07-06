@@ -243,5 +243,35 @@ describe('BuilderPanel', () => {
       fireEvent.click(screen.getByRole('button', { name: /Sposta testo a destra/i }));
       expect(onPatch).toHaveBeenCalledWith('builder.textOffsetX', 60);
     });
+
+    it('does NOT render tagline position controls when tagline is empty', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      expect(screen.queryByRole('group', { name: /Posizione sottotitolo/i })).not.toBeInTheDocument();
+    });
+
+    it('renders 4 independent nudge arrow buttons for the tagline position when tagline is set', () => {
+      const l: Logo = { ...logo, builder: { ...logo.builder, tagline: 'Insieme per crescere' } };
+      render(<BuilderPanel logo={l} onPatch={onPatch} />);
+      expect(screen.getByRole('button', { name: /Sposta sottotitolo a sinistra/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Sposta sottotitolo a destra/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Sposta sottotitolo in alto/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Sposta sottotitolo in basso/i })).toBeInTheDocument();
+    });
+
+    it('clicking the tagline right nudge arrow updates taglineOffsetX, not textOffsetX', () => {
+      const l: Logo = { ...logo, builder: { ...logo.builder, tagline: 'Insieme per crescere' } };
+      render(<BuilderPanel logo={l} onPatch={onPatch} />);
+      fireEvent.click(screen.getByRole('button', { name: /Sposta sottotitolo a destra/i }));
+      expect(onPatch).toHaveBeenCalledWith('builder.taglineOffsetX', 4);
+      expect(onPatch).not.toHaveBeenCalledWith('builder.textOffsetX', expect.anything());
+    });
+
+    it('renders a "Centra sottotitolo" reset button that zeroes tagline offsets', () => {
+      const l: Logo = { ...logo, builder: { ...logo.builder, tagline: 'Insieme per crescere', taglineOffsetX: 12, taglineOffsetY: -8 } };
+      render(<BuilderPanel logo={l} onPatch={onPatch} />);
+      fireEvent.click(screen.getByRole('button', { name: /Centra sottotitolo/i }));
+      expect(onPatch).toHaveBeenCalledWith('builder.taglineOffsetX', 0);
+      expect(onPatch).toHaveBeenCalledWith('builder.taglineOffsetY', 0);
+    });
   });
 });
