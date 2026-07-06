@@ -55,19 +55,16 @@ export abstract class BaseOrchestrator {
   }
 
   /**
-   * Strip markdown code fences and extract the first balanced {...}
-   * substring. Defensive in depth: DeepSeek occasionally wraps responses
-   * in ```json ... ``` even when json_object is requested, and may
-   * prepend/append a short explanation.
+   * Strip markdown code fences and extract the first balanced JSON
+   * object or array. Defensive in depth: DeepSeek occasionally wraps
+   * responses in ```json ... ``` even when json_object is requested,
+   * and may prepend/append a short explanation. Arrays are valid for
+   * logo concepts and other multi-output prompts.
    */
   protected sanitizeAIResponse(raw: string): string {
     let s = raw.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-    const firstBrace = s.indexOf('{');
-    const lastBrace = s.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      s = s.slice(firstBrace, lastBrace + 1);
-    }
-    return s;
+    const extracted = extractBalancedJson(s);
+    return extracted ?? s;
   }
 
   /**
@@ -89,12 +86,17 @@ export abstract class BaseOrchestrator {
     if (schema) {
       const result = schema.safeParse(parsed);
       if (!result.success) {
-        return { ok: false, error: `schema_fail: ${result.error.issues.length} issues` };
+        const details = result.error.issues
+          .slice(0, 5)
+          .map((i) => `${i.path.join('.')}: ${i.message}`)
+          .join(' | ');
+        return { ok: false, error: `schema_fail: ${result.error.issues.length} issues (${details})` };
       }
       return { ok: true, data: result.data };
     }
     return { ok: true, data: parsed as T };
   }
+
 
   /**
    * Build the initial system+user message pair and persist them in the
@@ -199,4 +201,65 @@ export abstract class BaseOrchestrator {
   getProviderList(): { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[] {
     return providerRegistry.listProviders();
   }
+}
+
+/**
+ * Extract the first balanced JSON object or array from a string that may
+ * contain surrounding text/markdown. Handles nested braces/brackets and
+ * quoted strings (including escaped quotes).
+ */
+function extractBalancedJson(s: string): string | null {
+  const trimmed = s.trim();
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    return trimmed;
+  }
+  const startObj = s.indexOf('{');
+  const startArr = s.indexOf('[');
+  let start = -1;
+  let openChar = '';
+  let closeChar = '';
+  if (startObj === -1) {
+    start = startArr;
+    openChar = '[';
+    closeChar = ']';
+  } else if (startArr === -1) {
+    start = startObj;
+    openChar = '{';
+    closeChar = '}';
+  } else {
+    start = Math.min(startObj, startArr);
+    openChar = start === startObj ? '{' : '[';
+    closeChar = openChar === '{' ? '}' : ']';
+  }
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (c === '\\') {
+        escaped = true;
+      } else if (c === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (c === '"') {
+      inString = true;
+      continue;
+    }
+    if (c === openChar) {
+      depth++;
+    } else if (c === closeChar) {
+      depth--;
+      if (depth === 0) {
+        return s.slice(start, i + 1);
+      }
+    }
+  }
+  return null;
 }
