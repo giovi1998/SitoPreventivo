@@ -30,14 +30,18 @@ describe('buildCardCoverBrief', () => {
   it('keeps text areas readable in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.9: creative + safe. Plain descriptive language asking for
-    // diverse abstract styles (shapes, planes, waves, particles,
-    // bokeh, contour lines, blobs) with hard prohibitions for
-    // card-like elements. No artistic metaphors.
+    // v3.0: Nano-Banana reasoning-driven formula (Subject + Action +
+    // Context + Composition + Lighting + Style). Full sentences,
+    // Negative Constraint Logic phrased as "Ensure the background
+    // remains free of...".
     const lower = prompt.toLowerCase();
-    expect(lower).toContain('abstract creative background');
-    expect(lower).toContain('smooth color blending');
-    expect(lower).toContain('original abstract artwork');
+    expect(lower).toContain('subject:');
+    expect(lower).toContain('action:');
+    expect(lower).toContain('context:');
+    expect(lower).toContain('composition:');
+    expect(lower).toContain('lighting:');
+    expect(lower).toContain('style:');
+    expect(lower).toContain('low contrast');
   });
 
   it('flags photo/logo presence in context', () => {
@@ -99,21 +103,23 @@ describe('buildCardCoverBrief', () => {
   it('does not ask for faces/text/logos in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.9: hard prohibitions only for card-like elements. The user
-    // does not want text, QR, logos, faces or people baked into the
-    // generated background; the card content is overlaid separately.
+    // v3.0: Negative Constraint Logic phrased as "Ensure the background
+    // remains free of...". The user does not want text, QR, logos,
+    // faces or people baked into the generated background; the card
+    // content is overlaid separately.
     const lower = prompt.toLowerCase();
-    expect(lower).toContain('no text');
-    expect(lower).toContain('no qr');
-    expect(lower).toContain('no logos');
-    expect(lower).toContain('no faces');
-    expect(lower).toContain('no people');
-    expect(lower).toContain('no real objects');
-    // Creative abstract styles are ALLOWED, not prohibited.
+    expect(lower).toContain('ensure the background remains completely free of');
+    expect(lower).toContain('text');
+    expect(lower).toContain('qr codes');
+    expect(lower).toContain('logos');
+    expect(lower).toContain('faces');
+    expect(lower).toContain('people');
+    expect(lower).toContain('real objects');
+    // Creative abstract styles are ALLOWED, requested as Subject.
     expect(lower).toContain('soft geometric shapes');
     expect(lower).toContain('layered translucent planes');
     expect(lower).toContain('flowing wave-like curves');
-    expect(lower).toContain('gentle bokeh');
+    expect(lower).toContain('gentle bokeh circles');
     expect(lower).toContain('abstract topographic contour lines');
   });
 });

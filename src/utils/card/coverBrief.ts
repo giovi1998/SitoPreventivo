@@ -31,27 +31,31 @@ export function buildCardCoverBrief(
   const brand = company || name || 'brand';
   const profession = title || 'professional';
 
-  // v2.9 prompt: creative + safe. Evolve le istruzioni creative del
-  // v2.7 (shapes, gradients, organic forms) ma mantiene linguaggio
-  // piano e neutro del v2.8 per non triggerare il filtro copyright/
-  // recitation di Gemini. Le proibizioni hard (no text/QR/logos/
-  // faces/people/real objects) restano, ma si chiedono stili diversi:
-  // soft geometric shapes, layered translucent planes, flowing waves,
-  // subtle particle clouds, gentle bokeh, abstract topographic lines.
-  // Niente metafore artistiche ("watercolor wash", "ink on paper").
+  // v3.0 prompt: built with the Nano-Banana reasoning-driven formula
+  // (Subject + Action + Context + Composition + Lighting + Style) from
+  // the muapi-nano-banana skill. Full sentences instead of keyword
+  // soup; Negative Constraint Logic phrased as "Ensure the background
+  // remains free of..." rather than "no text, no QR, no logos" lists
+  // (which Gemini sometimes parses as a request to draw those things).
+  // Plain descriptive language to avoid the copyright/recitation filter.
   const prompt = clamp(
-    `Abstract creative background using ${bgColor} as primary, ` +
-      `${accentColor} as secondary, ${textColor} as deepest tone. ` +
-      `Compose an original abstract artwork: you may use soft geometric ` +
-      `shapes, layered translucent planes, flowing wave-like curves, ` +
-      `subtle particle clouds, gentle bokeh circles, abstract ` +
-      `topographic contour lines, organic blobs. Smooth color blending ` +
-      `throughout, harmonious and calm. ` +
-      `Abstract only: no text, no words, no letters, no numbers, ` +
-      `no QR codes, no logos, no faces, no people, no real objects, ` +
-      `no UI elements. ` +
-      `Keep all areas light enough for overlaid text. ` +
-      `Square 1:1, full-bleed.`,
+    `Subject: a calm abstract background composition built only from ` +
+      `soft geometric shapes, layered translucent planes, flowing ` +
+      `wave-like curves, subtle particle clouds, gentle bokeh circles, ` +
+      `abstract topographic contour lines, and organic blobs. ` +
+      `Action: the forms drift and blend slowly into each other, never ` +
+      `forming sharp edges or recognizable figures. ` +
+      `Context: the palette is restricted to ${bgColor} as primary, ` +
+      `${accentColor} as secondary, and ${textColor} as the deepest tone, ` +
+      `with smooth blending and harmonious low contrast throughout. ` +
+      `Composition: square 1:1, full-bleed, no border. ` +
+      `Lighting: soft, even, diffuse, no harsh highlights. ` +
+      `Style: minimal abstract artwork, calm and professional. ` +
+      `Ensure the background remains completely free of any text, ` +
+      `words, letters, numbers, QR codes, barcodes, logos, symbols, ` +
+      `faces, people, silhouettes, real objects, UI elements, or ` +
+      `recognizable icons. Every region stays light enough for ` +
+      `overlaid text to remain legible.`,
     MAX_PROMPT_LEN,
   );
 
