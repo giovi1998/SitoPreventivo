@@ -394,12 +394,32 @@ sé. Leggere prima di rimettere mano a questa parte.
    secondary... Smooth blending between the colors, soft and calm."`.
    Le proibizioni card-like (`no text, no QR, no logos, no faces, no
    people, no real objects`) sono OK; le metafore artistiche no.
+   **v3.0**: prompt riscritto con la formula Nano-Banana (skill
+   `muapi-nano-banana`): Subject + Action + Context + Composition +
+   Lighting + Style, frasi complete, Negative Constraint Logic
+   ("Ensure the background remains free of...") invece di liste "no X"
+   che Gemini a volte interpretava come richiesta di disegnare X.
 9. **Cache bundle JS browser dopo fix API**. Se un fix di `api/index.ts`
    cambia il path o il body di un endpoint, il vecchio bundle JS nel
    browser può ancora chiamare l'endpoint vecchio. `Ctrl+F5` non
    sempre basta: il Service Worker o la cache HTTP possono servire il
    vecchio `index-*.js`. Fix: DevTools → Application → Clear storage →
    Clear site data, oppure navigare in incognito per testare.
+10. **`coverImageUrl` (base64 cover AI) non deve mai raggiungere
+    DeepSeek**. Quando l'utente genera una cover AI (Gemini) e poi
+    usa il testo AI (DeepSeek) per modificare la card, il base64 della
+    cover (150KB+) era incluso nel contesto inviato a DeepSeek.
+    DeepSeek lo riproduceva nella risposta JSON, rompendo la
+    validazione Zod (`error:invalid_card`, "formato non valido"). Fix:
+    `buildCardAIContext` (`src/ai/prompts/cardContext.ts`) strippa
+    `coverImageUrl` dal payload insieme a `photoUrl` e `logoUrl`.
+11. **Context limit disallineato validatore vs builder**. Il
+    validatore Zod in `api/index.ts` (`context: z.string().max(N)`)
+    e `MAX_CONTEXT_LEN` in `coverBrief.ts` devono essere uguali.
+    Disallineamento (1000 vs 1200) causava `400 Invalid body` con
+    card reali (grid + snapshot JSON superavano 1000). Fix: entrambi
+    a 2000. Verificare SEMPRE che i due limiti coincidano dopo
+    modifiche a `buildCoverContext`.
 
 ### ⚠️ Cover AI Card gotchas (leggi prima di toccare `coverBrief.ts` o `/ai/card-cover`)
 
