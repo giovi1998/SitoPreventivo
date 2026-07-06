@@ -175,12 +175,12 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 
 ## Phase Status & Roadmap
 
-Stato corrente delle fasi di sviluppo. Le spec delle fasi 0-6 + 10 (rebrand,
-card-refactor, card-grid-ux) sono state cancellate dopo verifica
-implementazione completa (commit `497100f`). Traccia storica in git history.
+Stato corrente delle fasi di sviluppo. Le spec implementate sono state
+cancellate dopo verifica completa. Traccia storica in git history.
 
-Le spec superstiti (`phase7-polish`, `flyer-refactor-preview-ai`) sono
-mantenute per gap residui da chiarare.
+Spec superstiti: `spec-design-flyer-refactor-preview-ai.md` (Phase 11
+parziale), `spec-tool-ai-card-flyer-tools.md` (tools definiti ma non
+wireati).
 
 | Fase | Stato | Note |
 |------|-------|------|
@@ -191,44 +191,11 @@ mantenute per gap residui da chiarare.
 | 4, Logo SVG Builder | ✅ done | v1 senza AI (Replicate deferred a v2/Pro). Tab "AI Generation" disabilitato con messaggio. |
 | 5, Tier System | ✅ done | Watermark free, unlock code via admin, tier guard su save. |
 | 6, Unified Collection | ✅ done | `documents` table rinominata, collection unificata. |
-| 7, Polish | ✅ done (parziale) | Onboarding step 5, HomePage "Perché noi", `preferredDocumentType` in DB, docs aggiornate. ⚠️ `LogoAiDocsPage` pubblica rimossa deliberatamente (docs ora private in `docs/logo-ai.md`); spec mantenuta per chiarimento. |
+| 7, Polish | ✅ done | Onboarding step 5, HomePage "Perché noi", `preferredDocumentType` in DB. `LogoAiDocsPage` pubblica rimossa deliberatamente (docs ora private in `docs/logo-ai.md`). |
 | 8, Quickbrand Rebrand | ✅ done | Rename + palette "The Classic" (Red & Ink), HomePage/LoginPage rebrand, test. |
 | 9, Card Refactor Submodules | ✅ done | 11 utils + 9 components `src/utils/card/*` + `src/components/card/*`, barrel/shell pattern. |
 | 10, Card Grid UX Alignment | ✅ done | alignH/alignV (9-pos), preset retro separato, e2e. |
 | 11, Flyer Refactor Preview/AI | ⚠️ parziale | Architettura 12/12 utils + 11/11 components + 5/5 CSS. Gap: test matrix 4/10, `ai/flyer/budgets.ts` in `utils/flyer/budgets.ts` (deviazione equivalente). Spec mantenuta. |
-
-### ✅ Fase 3 (Volantino) - implementata
-
-**Stato**: Done. Schema `flyerSchema` + helper `createEmptyFlyer`,
-`createFlyerTemplate`, `mergeFlyerWithDefaults`; generatore PDF/PNG
-(`src/utils/flyerGenerator.ts`) con 4 layout × 5 formati + bleed 3mm +
-crop marks via pdfmake; editor (`FlyerEditor.tsx`) con form, layout
-switcher, AI modal, 4 azioni rapide (Semplifica/Più formale/Più
-giovanile/Aggiungi urgenza), 4 template per settore (ristorante,
-evento, salone, negozio); hook AI (`useAIFlyer`); endpoint API
-`POST /ai/copy-flyer` con rate limit 10/min per IP + header
-`Retry-After`; route `/app/flyer` + voce sidebar "Volantini" +
-`flyerDocument` in `AppContext`.
-
-**File rilevanti**:
-- `src/utils/documentSchemas.ts` → sezione `FLYER (Phase 3)`.
-- `src/utils/flyerGenerator.ts` → PDF/PNG con tier-aware watermark.
-- `src/ai/prompts/flyerSystem.ts` → system + brief prompt + sanitizer.
-- `src/ai/flyerOrchestrator.ts` → orchestratore no-tools, JSON
-  round-trip, session management (stesso pattern di `cardOrchestrator`).
-- `src/hooks/useAIFlyer.ts` → hook con stream buffer, logs, token
-  tracking.
-- `src/components/FlyerEditor.tsx` → editor con preview live.
-- `src/pages/app/FlyerPage.tsx` + `src/main.tsx` → route.
-- `src/components/Layout.tsx` → sidebar.
-- `src/components/AppShell.tsx` + `src/contexts/index.ts` →
-  `flyerDocument` state + `openDocument` case `'flyer'`.
-- `api/index.ts` → `POST /ai/copy-flyer` + rimosso rejection su
-  `documentType === 'flyer'` in `POST /documents`.
-- `spec/spec-design-phase3-flyer.md` → spec originaria, da
-  rivedere se si vuole (la spec rimane valida; l'implementazione
-  la rispetta salvo l'AI copy endpoint che è in `api/index.ts` invece
-  che in `src/ai/index.ts` come da pattern `useAI` esistente).
 
 ### ⚠️ Volantino rendering gotchas (leggi prima di toccare il rendering)
 
@@ -400,90 +367,8 @@ sé. Leggere prima di rimettere mano a questa parte.
 
 ## Known Issues, Card Module (fase 2)
 
-**Stato (post fase 2.2)**: tutti i bug bloccanti sono chiusi e le
-funzionalità nuove (master switch, init-from-layout, QR sizing,
-fontScale, servicesLabel, parità mobile, AI parity) sono implementate
-e coperte da test. Restano aperte due questioni di scope minore
-(UX mobile + persistenza selezione grid).
-
-### ✅ Risolto in fase 2.1: collision detection BLOCK
-
-Helper `src/utils/gridUtils.ts` con `collides/wouldCollideOnMove/
-wouldCollideOnResize/canMove/canResize/clampMove/clampResize`. Usato da:
-
-- `CardEditor.tsx` (desktop), `moveSelectedElement` e `resizeSelectedElement`
-  clampano alla posizione valida più vicina; bottoni frecce
-  disabilitati in entrambi i casi (edge + collisione).
-- `MobileGridEditor.tsx` (mobile), `move()` delega a `clampMove`;
-  frecce popup con `title="Limite (collisione)"` se il blocco è per
-  sovrapposizione, altrimenti "Limite raggiunto".
-- `cardMerge.ts` (AI), `clampMove`/`clampResize` sanificano la mossa
-  richiesta dall'AI prima di applicarla, così l'AI non può generare
-  grid con elementi sovrapposti. Il system prompt
-  (`src/ai/prompts/cardSystem.ts`) è stato esteso con regole
-  esplicite anti-collisione e la lista elementi aggiornata con `logo`.
-
-25 unit test in `gridUtils.test.ts` + 4 nuovi test in `cardMerge.test.ts`
-(logo merge, AI move→clamp, AI resize→clamp).
-
-### ✅ Risolto in fase 2.1: logo in grid mode
-
-`cardGridSchema.elements` ora include `logo` (opzionale). I tre preset
-hanno una posizione di default sensata:
-
-- `gridPresetLeft`: company ridotto a 2-col, logo a `(3, 2, 1, 2)`.
-- `gridPresetCentered`: company ridotto a 3-col, logo a `(3, 3, 1, 1)`.
-- `gridPresetSplit`: contacts ridotto a 2-col, qr a `(2, 2, 1, 2)`,
-  logo a `(3, 2, 1, 2)`.
-
-`MobileGridEditor.ELEMENT_OPTIONS` ora include `Logo`. `CardEditor`
-dropdown ha `logo` tra le opzioni selezionabili.
-
-### ✅ Risolto in fase 2.1: logo ~30% della card
-
-- CSS (preview/React): `card-logo` 60→100px, `.centered` 76→125px,
-  `.split` 64→110px.
-- Export SVG (`cardGenerator.ts buildFrontSvg`): left
-  `photoSize * 0.32` → `0.48`; split `pxH * 0.12` → `0.20`; centered
-  aggiunto (sotto al company, `pxH * 0.20`).
-- Export PDF (`cardGenerator.ts buildFrontCell`): `Math.min(14, ...)`
-  → `Math.min(25, dims.w * 0.30)`. Logo in mm: ~25mm su 85mm = ~29%.
-- Aggiunto logo al `buildFrontSvg` per layout `centered` (prima
-  mancante anche lì).
-
-### ✅ Risolto in fase 2.1: QR preview/export coerenti
-
-`generateQrSvg` è ora **sincrono** (era `Promise<string>`). La
-`useEffect` async in `CardPreview` rimossa: QR renderizzato
-immediatamente al primo render. Anche il placeholder "QR" è
-migliorato e mostra il QR reale appena la promise risolve (subito,
-in pratica).
-
-### ✅ Risolto in fase 2.1: buildFrontSvg split senza logo
-
-Prima della fase 2.1 il logo **non veniva renderizzato** in split
-layout. Aggiunto `<image>` per il logo a `(textX, logoY)` con size
-proporzionale. Vedi `cardGenerator.ts:761-765` (pxH*0.20).
-
-### ✅ Risolto in fase 2.1: hostname ridondante rimosso dal front
-
-In `buildFrontSvg` (left/centered) e `buildFrontCell` (PDF) il
-`hostname` non viene più mostrato sotto la foto quando è già
-presente il QR code nel retro. Vedi `CardPreview.tsx` WEB row
-condition `card.back.website && !qrPayload`.
-
-### ✅ Risolto in fase 2.1: template Giovanni completo
-
-`createGiovanniCardTemplate()` ora ha:
-
-- `layout: 'split'` (foto a sinistra full-height)
-- `photoUrl: '/giovanni-photo.jpg'` (foto utente in `public/`)
-- `logoUrl: giovanniLogoDataUri()` (SVG trasparente "WebdevCA")
-- `qrPayload: GIOVANNI_PERSONAL_URL` (QR punta al sito)
-- `company: 'HPE CDS'`
-- `grid` preconfigurato con photo a sx full-height e text/logo a dx
-
-### ⏳ Aperto (scope minore, non bloccante)
+Tutti i bug bloccanti sono chiusi in fase 2.2. Restano aperti 3
+item di scope minore:
 
 - **Mobile grid editor, drag-and-drop**: `MobileGridEditor` usa
   frecce ←↑→↓ + +/−. Su schermi piccoli le 4 direzioni × 2 resize × N
@@ -497,18 +382,8 @@ condition `card.back.website && !qrPayload`.
   `qrPayload` è vuoto. Fix: mock `qrcode` o `qrGenerator.generateQrSvg`
   per test deterministici.
 
-### Test coverage del modulo Card
-
-- 4 file di test (`CardEditor`, `CardPreview`, `CardEditorTabs`,
-  `CardAIFab`, `CardAIBottomSheet`, `MobileGridEditor`,
-  `CardPreviewZoomControls`) + 1 nuovo `gridUtils.test.ts` + nuovi
-  test collision in `CardEditor.test.tsx` e `MobileGridEditor.test.tsx`.
-- **Phase 2.2**: test aggiunti per master switch, init-from-layout,
-  fontScale CSS var, servicesLabel rendering, qrSize, auto-shrink
-  classe. Test AI parity (fontScale clamp, services array clamp, qrSize
-  enum, servicesLabel, logo nel grid) in `cardMerge.test.ts` e
-  `aiCardInputSchema.test.ts`.
-- Totale: ~140+ test sul modulo card.
+Card module: ~140+ test across `__tests__/` (grid collision, master
+switch, fontScale, AI parity).
 
 ## Responsive Patterns
 
@@ -652,7 +527,7 @@ Chiavi attuali:
 - Framework: Vitest + React Testing Library + jsdom
 - Run single test: `npx vitest run path/to/file.test.ts`
 - No test database needed, local tests use localStorage path
-- Coverage attuale: ~10% (4 file). Target: 60%. Attualmente 844 test su 76 file.
+- Coverage attuale: ~1864 test su 152 file. Target: 60%.
 
 ## Logging
 
