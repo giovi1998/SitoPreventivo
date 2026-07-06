@@ -12,6 +12,21 @@ vi.mock('../../utils/dataService', () => ({
   },
 }));
 
+vi.mock('../../hooks/useAILogo', () => ({
+  useAILogo: () => ({
+    generate: vi.fn(),
+    generateBackground: vi.fn(),
+    isProcessing: false,
+    isGeneratingBg: false,
+    logs: [],
+    reset: vi.fn(),
+    availableModels: [],
+  }),
+}));
+
+// Stub fetch per evitare errori su /api/ai/logo-config in jsdom
+vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ enabled: false, provider: 'none' }) }));
+
 import dataService from '../../utils/dataService';
 const mockSave = dataService.saveDocument as unknown as ReturnType<typeof vi.fn>;
 
@@ -39,11 +54,18 @@ describe('LogoEditor', () => {
     expect(aiTab).not.toBeDisabled();
   });
 
-  it('switching to AI tab shows the disabled message (AC-010)', () => {
+  it('switching to AI tab shows the AI Generation panel (AC-010 v2)', () => {
     render(<LogoEditor userEmail="user@test.com" />);
     fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
     expect(screen.getByRole('tab', { name: /AI Generation/i })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText(/AI generation non disponibile nella v1/i)).toBeInTheDocument();
+    // v2: tab now shows the namelix-like chat form
+    expect(screen.getByText(/Cosa fa la tua attività/i)).toBeInTheDocument();
+  });
+
+  it('switching to AI tab with tier=free shows the locked message', () => {
+    render(<LogoEditor userEmail="user@test.com" tier="free" />);
+    fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
+    expect(screen.getByText(/Riscatta un codice/i)).toBeInTheDocument();
   });
 
   it('shows export SVG and export PNG buttons (AC-008, AC-009)', () => {

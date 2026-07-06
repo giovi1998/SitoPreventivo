@@ -5,6 +5,7 @@ import { builderToSvg, sanitizeSvg, svgToPng } from '../utils/logoGenerator';
 import dataService from '../utils/dataService';
 import SaveDialog from './SaveDialog';
 import BuilderPanel from './BuilderPanel';
+import LogoAiPanel from './LogoAiPanel';
 import { useToast } from '../hooks/useToast';
 import { logger } from '../utils/logger';
 import './LogoEditor.css';
@@ -140,10 +141,6 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
     setShowSaveDialog(true);
   }, [logo, addToast]);
 
-  const aiPanelMessage = useMemo(() => (
-    'AI generation non disponibile nella v1. Configura REPLICATE_API_TOKEN su Vercel e upgrada a Pro. Vedi docs.'
-  ), []);
-
   return (
     <div className="logo-editor">
       <header className="logo-editor-header">
@@ -216,6 +213,9 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
           onClick={() => setTab('ai')}
         >
           AI Generation
+          {logo.builder.backgroundImage && (
+            <span className="logo-tab-ai-badge" aria-label="Background AI attivo" title="Background AI attivo" />
+          )}
         </button>
       </div>
 
@@ -223,12 +223,14 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
         {tab === 'builder' ? (
           <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} />
         ) : (
-          <section className="logo-ai-disabled" aria-label="AI Generation disabilitata">
-            <div className="logo-ai-card" role="status">
-              <h2>AI Generation</h2>
-              <p>{aiPanelMessage}</p>
-            </div>
-          </section>
+          <LogoAiPanel
+            logo={logo}
+            onPatch={(patch) => {
+              for (const [k, v] of Object.entries(patch)) onPatch(`builder.${k}`, v);
+            }}
+            tier={tier}
+            userEmail={userEmail}
+          />
         )}
       </div>
 

@@ -25,6 +25,11 @@ const baseBuilder: LogoBuilder = {
   fontFamily: 'Inter',
   layout: 'horizontal',
   icons: [],
+  backgroundImage: null,
+  backgroundColor: null,
+  gradientFill: false,
+  decorativeElements: [],
+  imagePrompt: null,
 };
 
 describe('logoGenerator', () => {
@@ -183,6 +188,26 @@ describe('logoGenerator', () => {
     it('uses primaryColor for the main icon/text accent', () => {
       const svg = builderToSvg({ ...baseBuilder, primaryColor: '#FF0000' });
       expect(svg).toContain('#FF0000');
+    });
+
+    it('renders backgroundImage as <image> at the top of the SVG (spec v2.1)', () => {
+      const svg = builderToSvg({
+        ...baseBuilder,
+        backgroundImage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==',
+      });
+      expect(svg).toContain('<image');
+      expect(svg).toContain('iVBORw0KGgoAAAANSUhEUg==');
+      // image deve apparire prima del primo <text> (z-index naturale)
+      const imgIdx = svg.indexOf('<image');
+      const textIdx = svg.indexOf('<text');
+      expect(imgIdx).toBeGreaterThan(-1);
+      expect(textIdx).toBeGreaterThan(-1);
+      expect(imgIdx).toBeLessThan(textIdx);
+    });
+
+    it('omits <image> when backgroundImage is null', () => {
+      const svg = builderToSvg({ ...baseBuilder, backgroundImage: null });
+      expect(svg).not.toContain('<image');
     });
   });
 

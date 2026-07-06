@@ -74,7 +74,7 @@ describe('mergeLogoAIResponse (spec 11)', () => {
     expect(merged.updatedAt).not.toBe(logo.updatedAt);
   });
 
-  it('maps iconType=lucide to iconGlyph from iconName', () => {
+  it('maps iconType=lucide to iconGlyph from iconName (normalized to kebab-case)', () => {
     const logo = createEmptyLogo();
     const merged = mergeLogoAIResponse(logo, {
       primaryText: 'X',
@@ -85,7 +85,9 @@ describe('mergeLogoAIResponse (spec 11)', () => {
       secondaryColor: '#1a1a2e',
       layout: 'horizontal',
     });
-    expect(merged.builder.iconGlyph).toBe('Coffee');
+    // normalizeIconName converts PascalCase (DeepSeek output) to kebab-case
+    // to match the LUCIDE_ICONS allowlist used for SVG rendering.
+    expect(merged.builder.iconGlyph).toBe('coffee');
   });
 
   it('maps iconType=monogram to iconGlyph from monogram', () => {

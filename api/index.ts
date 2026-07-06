@@ -1308,8 +1308,57 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
 
   // Spec 11: Logo AI v2 — config (no rate-limit) + generate (rate-limit aiLogo 10/min/IP).
   if (path === '/ai/logo-config' && method === 'GET') {
-    const enabled = !!process.env.REPLICATE_API_TOKEN;
-    return json(req, res, 200, { enabled });
+    const geminiKey = !!process.env.GEMINI_API_KEY || !!process.env.VITE_GEMINI_API_KEY;
+    const enabled = !!process.env.REPLICATE_API_TOKEN || geminiKey;
+    const provider = geminiKey ? 'gemini' : process.env.REPLICATE_API_TOKEN ? 'replicate' : 'none';
+    return json(req, res, 200, { enabled, provider });
+  }
+
+  if (path === '/ai/logo-background' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiLogoBg', 5, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe generazioni background. Attendi un minuto.' });
+    }
+    // Supporta sia GEMINI_API_KEY (canonical, server-side) sia
+    // VITE_GEMINI_API_KEY (se l'utente l'ha messa in .env locale con
+    // prefisso VITE_). In Vercel production, solo GEMINI_API_KEY è
+    // sicura (VITE_* viene esposta al bundle client).
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      return json(req, res, 503, { error: 'Logo AI background non configurato (GEMINI_API_KEY mancante)' });
+    }
+    const v = validate(
+      z.object({
+        prompt: z.string().max(1000),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
+    if (v.data.userEmail) {
+      console.info('[ai_logo_background] user', { email: v.data.userEmail, ts: Date.now() });
+    }
+    try {
+      // Inline import to keep the serverless bundle slim and avoid
+      // pulling the Gemini client into the chat path.
+      const { GeminiImageProvider } = await import('../src/ai/providers/gemini');
+      const provider = new GeminiImageProvider(apiKey);
+      const result = await provider.generateBackground(v.data.prompt, 30_000);
+      // Clamp 500KB base64 to stay within Vercel response limits.
+      const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
+      if (sizeBytes > 500_000) {
+        return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+      }
+      return json(req, res, 200, { data: result });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      if (msg.startsWith('GEMINI_401')) return json(req, res, 401, { error: 'Chiave Gemini non valida' });
+      if (msg.startsWith('GEMINI_429')) return json(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+      if (msg.startsWith('GEMINI_TIMEOUT')) return json(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' });
+      return json(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+    }
   }
 
   if (path === '/ai/logo-generate' && method === 'POST') {

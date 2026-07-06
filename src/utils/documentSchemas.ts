@@ -648,6 +648,9 @@ export type LogoLayout = z.infer<typeof logoLayoutSchema>;
 export const LOGO_SECTORS = ['tech', 'food', 'fashion', 'professionista'] as const;
 export type LogoSector = (typeof LOGO_SECTORS)[number];
 
+export const logoDecorativeElementSchema = z.enum(['underline', 'dotRing', 'topAccent']);
+export type LogoDecorativeElement = z.infer<typeof logoDecorativeElementSchema>;
+
 export const logoBuilderSchema = z.object({
   primaryText: z.string().max(50).default(''),
   tagline: z.string().max(50).default(''),
@@ -659,6 +662,20 @@ export const logoBuilderSchema = z.object({
   fontFamily: z.string().default('Inter'),
   layout: logoLayoutSchema.default('horizontal'),
   icons: z.array(z.string()).default([]),
+  // Spec v2.1 (Nano Banana): AI-generated background image (base64 PNG, nullable).
+  // Rendered behind the SVG text/icon. Stays optional: a logo without
+  // background is transparent SVG like v1.
+  backgroundImage: z.string().nullable().default(null),
+  // Spec v2.2 (Rich Render): solid brand background behind everything.
+  // Mutually exclusive with backgroundImage at the UI level; in SVG the
+  // image wins and the solid color is rendered underneath it.
+  backgroundColor: z.string().nullable().default(null),
+  // Spec v2.2: primaryText fill uses a primary→secondary gradient.
+  gradientFill: z.boolean().default(false),
+  // Spec v2.2: optional SVG decorative elements (underline, dot ring, top accent).
+  decorativeElements: z.array(logoDecorativeElementSchema).default([]),
+  // Spec v2.2 (Nano-Banana): reasoning-driven prompt used by Gemini image generation.
+  imagePrompt: z.string().max(600).nullable().default(null),
 });
 export type LogoBuilder = z.infer<typeof logoBuilderSchema>;
 
@@ -707,6 +724,11 @@ export function createEmptyLogo(): Logo {
       fontFamily: 'Inter',
       layout: 'horizontal',
       icons: [],
+      backgroundImage: null,
+      backgroundColor: null,
+      gradientFill: false,
+      decorativeElements: [],
+      imagePrompt: null,
     },
     brief: '',
     concepts: [],
@@ -783,7 +805,7 @@ export function createLogoTemplate(sector: LogoSector): Logo {
     id: `logo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     title: `Logo ${sector}`,
     source: 'builder',
-    builder: { ...preset, fontFamily: 'Inter', icons: [] },
+    builder: { ...preset, fontFamily: 'Inter', icons: [], backgroundImage: null, backgroundColor: null, gradientFill: false, decorativeElements: [], imagePrompt: null },
     brief: '',
     concepts: [],
     selected: -1,

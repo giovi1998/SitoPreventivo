@@ -53,18 +53,62 @@ export function isHexColor(value: string): boolean {
   return /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
-// ─── VIEWBOX PER LAYOUT ──────────────────────────────────────────
+// ─── VIEWBOX PER LAYOUT (auto-fit) ─────────────────────────────────
 
 interface ViewBox {
   W: number;
   H: number;
 }
 
-function getViewBox(layout: LogoLayout): ViewBox {
+const MIN_VIEWBOX = { horizontal: { W: 400, H: 160 }, vertical: { W: 300, H: 300 }, stacked: { W: 300, H: 320 } } as const;
+const MAX_VIEWBOX = { horizontal: { W: 800, H: 180 }, vertical: { W: 500, H: 360 }, stacked: { W: 500, H: 380 } } as const;
+
+// Inter bold approx: uppercase ≈ 0.55×fontSize per char, mixed ≈ 0.50.
+export function estimateTextWidth(text: string, fontSize: number): number {
+  if (!text) return 0;
+  // Mixed-case average. Primary text is mostly title-case → 0.55 factor.
+  return Math.round(text.length * fontSize * 0.55);
+}
+
+export function fitText(text: string, maxWidth: number, startSize = 36, minSize = 14): number {
+  if (!text) return startSize;
+  if (estimateTextWidth(text, startSize) <= maxWidth) return startSize;
+  let lo = minSize;
+  let hi = startSize;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (estimateTextWidth(text, mid) <= maxWidth) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function getViewBox(layout: LogoLayout, primaryText: string, tagline: string): ViewBox {
+  const min = MIN_VIEWBOX[layout];
+  const max = MAX_VIEWBOX[layout];
   switch (layout) {
-    case 'horizontal': return { W: 400, H: 160 };
-    case 'vertical':   return { W: 300, H: 300 };
-    case 'stacked':    return { W: 300, H: 320 };
+    case 'horizontal': {
+      const iconSize = Math.min(min.W, min.H) * 0.4;
+      const textStartX = iconSize / 2 + 10 + iconSize / 2 + 14;
+      const maxTextW = max.W - textStartX - 28;
+      const fontSize = fitText(primaryText, maxTextW, 36, 14);
+      const textW = estimateTextWidth(primaryText, fontSize);
+      const W = Math.max(min.W, Math.min(max.W, Math.round(textStartX + textW + 28)));
+      // Keep horizontal height fixed at 160 to preserve v1 previews/tests;
+      // the tagline fits at y=textY+18 with H=160.
+      return { W, H: min.H };
+    }
+    case 'vertical':
+    case 'stacked': {
+      const maxTextW = max.W - 40;
+      const fontSize = fitText(primaryText, maxTextW, 32, 14);
+      const textW = estimateTextWidth(primaryText, fontSize);
+      const W = Math.max(min.W, Math.min(max.W, Math.round(textW + 40)));
+      const extraH = tagline ? 40 : 20;
+      const baseH = layout === 'stacked' ? 320 : 300;
+      const H = Math.max(min.H, Math.min(max.H, baseH + extraH));
+      return { W, H };
+    }
   }
 }
 
@@ -173,6 +217,51 @@ function renderTagline(builder: LogoBuilder, x: number, y: number, anchor: 'star
   return `<text x="${x}" y="${y}" text-anchor="${anchor}" fill="${color}" font-family="${family}, sans-serif" font-weight="400" font-size="${fontSize}" letter-spacing="1">${text}</text>`;
 }
 
+function renderDecorations(
+  builder: LogoBuilder,
+  W: number,
+  iconCenter: { x: number; y: number },
+  iconSize: number,
+  textX: number,
+  textY: number,
+  textWidth: number,
+  fontSize: number,
+): string {
+  if (!builder.decorativeElements?.length) return '';
+  const primary = isHexColor(builder.primaryColor) ? builder.primaryColor : '#01696F';
+  const parts: string[] = [];
+  if (builder.decorativeElements.includes('underline')) {
+    parts.push(`<line x1="${textX}" y1="${textY + Math.round(fontSize * 0.35)}" x2="${textX + textWidth}" y2="${textY + Math.round(fontSize * 0.35)}" stroke="${primary}" stroke-width="2"/>`);
+  }
+  if (builder.decorativeElements.includes('dotRing')) {
+    const ringR = iconSize / 2 + 8;
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI * 2 * i) / 8 - Math.PI / 2;
+      const px = iconCenter.x + ringR * Math.cos(angle);
+      const py = iconCenter.y + ringR * Math.sin(angle);
+      parts.push(`<circle cx="${px.toFixed(2)}" cy="${py.toFixed(2)}" r="2" fill="${primary}"/>`);
+    }
+  }
+  if (builder.decorativeElements.includes('topAccent')) {
+    const barW = Math.round(W * 0.4);
+    const barX = Math.round((W - barW) / 2);
+    parts.push(`<rect x="${barX}" y="4" width="${barW}" height="4" rx="2" fill="${primary}"/>`);
+  }
+  return parts.join('');
+}
+
+function buildGradientDefs(builder: LogoBuilder): string {
+  if (!builder.gradientFill) return '';
+  const primary = isHexColor(builder.primaryColor) ? builder.primaryColor : '#01696F';
+  const secondary = isHexColor(builder.secondaryColor) ? builder.secondaryColor : '#1a1a2e';
+  return `<defs><linearGradient id="textGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${primary}"/><stop offset="1" stop-color="${secondary}"/></linearGradient></defs>`;
+}
+
+function buildBackgroundRect(builder: LogoBuilder, W: number, H: number): string {
+  if (!builder.backgroundColor || !isHexColor(builder.backgroundColor)) return '';
+  return `<rect width="${W}" height="${H}" fill="${builder.backgroundColor}"/>`;
+}
+
 // ─── BUILDER → SVG ──────────────────────────────────────────
 
 function getSafeColors(builder: LogoBuilder): { primary: string; secondary: string } {
@@ -183,42 +272,70 @@ function getSafeColors(builder: LogoBuilder): { primary: string; secondary: stri
 }
 
 function buildSvgForLayout(builder: LogoBuilder): string {
-  const { W, H } = getViewBox(builder.layout);
+  const { W, H } = getViewBox(builder.layout, builder.primaryText, builder.tagline);
   const { primary, secondary } = getSafeColors(builder);
+  const textColor = builder.gradientFill ? 'url(#textGrad)' : secondary;
   const iconSize = Math.min(W, H) * 0.4;
-  const textColor = secondary;
+
+  const bgRect = buildBackgroundRect(builder, W, H);
+  const bgImage = builder.backgroundImage
+    ? `<image href="${escapeXml(builder.backgroundImage)}" x="0" y="0" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"/>`
+    : '';
+  const defs = buildGradientDefs(builder);
 
   let icon = '';
   let primaryText = '';
   let taglineText = '';
+  let decorations = '';
   let iconCenter: { x: number; y: number } = { x: W / 2, y: H / 2 };
+  let textLeft = W / 2;
+  let textTop = H / 2;
+  let primaryFontSize = 36;
 
   if (builder.layout === 'horizontal') {
     iconCenter = { x: iconSize / 2 + 10, y: H / 2 };
     const r = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize);
     icon = r.svg;
     const textX = iconCenter.x + iconSize / 2 + 14;
+    const maxTextW = W - textX - 28;
+    primaryFontSize = fitText(builder.primaryText, maxTextW, 36, 14);
     const textY = H / 2;
-    primaryText = renderText(builder, textX, builder.tagline ? textY - 10 : textY + 6, 'start', 36, textColor);
+    textLeft = textX;
+    textTop = textY;
+    primaryText = renderText(builder, textX, builder.tagline ? textY - 10 : textY + 6, 'start', primaryFontSize, textColor);
     taglineText = renderTagline(builder, textX, textY + 18, 'start', 14, primary);
+    const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
+    decorations = renderDecorations(builder, W, iconCenter, iconSize, textX, textY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
   } else if (builder.layout === 'vertical') {
     iconCenter = { x: W / 2, y: iconSize / 2 + 10 };
     const r = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize);
     icon = r.svg;
     const textY = iconCenter.y + iconSize / 2 + 30;
-    primaryText = renderText(builder, W / 2, textY, 'middle', 32, textColor);
+    const maxTextW = W - 40;
+    primaryFontSize = fitText(builder.primaryText, maxTextW, 32, 14);
+    textTop = textY;
+    primaryText = renderText(builder, W / 2, textY, 'middle', primaryFontSize, textColor);
     taglineText = renderTagline(builder, W / 2, textY + 22, 'middle', 12, primary);
+    const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
+    textLeft = W / 2 - textWidth / 2;
+    decorations = renderDecorations(builder, W, iconCenter, iconSize, textLeft, textY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
   } else {
     // stacked
     iconCenter = { x: W / 2, y: iconSize / 2 + 10 };
     const r = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize);
     icon = r.svg;
     const textY = iconCenter.y + iconSize / 2 + 30;
-    primaryText = renderText(builder, W / 2, textY, 'middle', 36, textColor);
+    const maxTextW = W - 40;
+    primaryFontSize = fitText(builder.primaryText, maxTextW, 36, 14);
+    textTop = textY;
+    primaryText = renderText(builder, W / 2, textY, 'middle', primaryFontSize, textColor);
     taglineText = renderTagline(builder, W / 2, textY + 26, 'middle', 14, primary);
+    const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
+    textLeft = W / 2 - textWidth / 2;
+    decorations = renderDecorations(builder, W, iconCenter, iconSize, textLeft, textY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="none"/>${icon}${primaryText}${taglineText}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${bgRect}${bgImage}${defs}${icon}${decorations}${primaryText}${taglineText}</svg>`;
 }
 
 export function builderToSvg(b: LogoBuilder): string {
@@ -252,6 +369,11 @@ export function applyLayout(svg: string, layout: LogoLayout): string {
     fontFamily: family,
     layout,
     icons: [],
+    backgroundImage: null,
+    backgroundColor: null,
+    gradientFill: false,
+    decorativeElements: [],
+    imagePrompt: null,
   });
 }
 

@@ -48,6 +48,17 @@ const SECTOR_LABELS: Record<LogoSector, string> = {
 const FONT_OPTIONS = ['Inter', 'Georgia', 'system-ui', 'serif', 'sans-serif'];
 const LAYOUT_OPTIONS: LogoLayout[] = ['horizontal', 'vertical', 'stacked'];
 const ICON_SHAPE_OPTIONS: LogoIconShape[] = ['circle', 'square', 'rounded', 'hex'];
+const DECORATION_OPTIONS: { value: import('../utils/documentSchemas').LogoDecorativeElement; label: string }[] = [
+  { value: 'underline', label: 'Sottolineatura' },
+  { value: 'dotRing', label: 'Anello punti' },
+  { value: 'topAccent', label: 'Accent superiore' },
+];
+const BACKGROUND_PRESETS = [
+  { label: 'Nessuno', value: '' },
+  { label: 'Chiaro', value: '#FFFFFF' },
+  { label: 'Scuro', value: '#0F172A' },
+  { label: 'Neutro', value: '#F5F5F4' },
+];
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -286,6 +297,73 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
             </select>
           </label>
         </fieldset>
+
+        <fieldset className="builder-fieldset">
+          <legend>Decorazioni</legend>
+          <label className="builder-field builder-field-inline">
+            <input
+              type="checkbox"
+              checked={b.gradientFill}
+              onChange={(e) => update('gradientFill', e.target.checked)}
+              aria-label="Gradient sui colori"
+            />
+            <span>Gradient sui colori</span>
+          </label>
+          <label className="builder-field">
+            <span>Sfondo brandato</span>
+            <div className="builder-color-row">
+              {BACKGROUND_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className={`builder-color-preset${(!b.backgroundColor && preset.value === '') || b.backgroundColor === preset.value ? ' selected' : ''}`}
+                  onClick={() => update('backgroundColor', preset.value || null)}
+                  title={preset.label}
+                  aria-label={`Sfondo ${preset.label}`}
+                >
+                  {preset.value ? (
+                    <span className="builder-color-swatch" style={{ background: preset.value }} />
+                  ) : (
+                    <span className="builder-color-swatch transparent" />
+                  )}
+                  <span className="builder-color-label">{preset.label}</span>
+                </button>
+              ))}
+              <input
+                type="color"
+                value={isHexColor(b.backgroundColor || '') ? (b.backgroundColor as string) : '#FFFFFF'}
+                onChange={(e) => update('backgroundColor', e.target.value)}
+                aria-label="Sfondo brandato personalizzato"
+                title="Colore personalizzato"
+              />
+            </div>
+          </label>
+          <div className="builder-field">
+            <span className="builder-field-label">Elementi decorativi</span>
+            <div className="builder-chip-group" role="group" aria-label="Elementi decorativi">
+              {DECORATION_OPTIONS.map((d) => {
+                const active = b.decorativeElements.includes(d.value);
+                return (
+                  <button
+                    key={d.value}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={active}
+                    className={`builder-chip${active ? ' active' : ''}`}
+                    onClick={() => {
+                      const next = active
+                        ? b.decorativeElements.filter((x) => x !== d.value)
+                        : [...b.decorativeElements, d.value];
+                      update('decorativeElements', next);
+                    }}
+                  >
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </fieldset>
       </section>
 
       <aside className="builder-preview" aria-label="Anteprima logo">
@@ -298,6 +376,19 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
           dangerouslySetInnerHTML={{ __html: previewSvg }}
         />
         <PreviewWatermark tier={tier} />
+        {b.backgroundImage && (
+          <div className="builder-ai-bg-controls">
+            <span className="builder-ai-bg-badge">Background AI attivo</span>
+            <button
+              type="button"
+              className="builder-ai-bg-remove"
+              onClick={() => update('backgroundImage', null)}
+              aria-label="Rimuovi background AI"
+            >
+              Rimuovi background
+            </button>
+          </div>
+        )}
         {b.iconType === 'lucide' && b.iconGlyph && (
           <div className="builder-preview-icon-meta" aria-hidden="true">
             <PreviewIcon builder={b} />
