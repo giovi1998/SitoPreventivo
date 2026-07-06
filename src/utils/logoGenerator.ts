@@ -276,6 +276,7 @@ function resolveTextColors(
   builder: LogoBuilder,
   primary: string,
   secondary: string,
+  hasBgImage: boolean,
 ): { primaryTextColor: string; taglineColor: string } {
   if (builder.gradientFill) {
     return { primaryTextColor: 'url(#textGrad)', taglineColor: primary };
@@ -287,6 +288,13 @@ function resolveTextColors(
       return { primaryTextColor: '#0F172A', taglineColor: 'rgba(15,23,42,0.78)' };
     case 'auto':
     default:
+      // When an AI photo background is present and the user hasn't
+      // explicitly chosen a text color mode, default to light text
+      // (white) — dark secondaryColor on an arbitrary photo is
+      // usually illegible. The user can override via textColorMode.
+      if (hasBgImage) {
+        return { primaryTextColor: '#FFFFFF', taglineColor: 'rgba(255,255,255,0.85)' };
+      }
       return { primaryTextColor: secondary, taglineColor: primary };
   }
 }
@@ -301,12 +309,18 @@ function buildTextBackdrop(
   builder: LogoBuilder,
   box: { x: number; y: number; width: number; height: number },
   viewW: number,
+  hasBgImage: boolean,
 ): string {
-  if (builder.textBackdrop === 'none') return '';
+  // When a background image is present and the user hasn't chosen a
+  // backdrop, auto-enable a dark pill so the text is always legible
+  // against an unpredictable photo. The user can override via
+  // textBackdrop: 'none'.
+  const effective = builder.textBackdrop === 'none' && hasBgImage ? 'pill' : builder.textBackdrop;
+  if (effective === 'none') return '';
   const dark = 'rgba(15,23,42,0.55)';
   const light = 'rgba(255,255,255,0.72)';
   const fill = builder.textColorMode === 'dark' ? light : dark;
-  if (builder.textBackdrop === 'band') {
+  if (effective === 'band') {
     return `<rect x="0" y="${box.y.toFixed(2)}" width="${viewW}" height="${box.height.toFixed(2)}" fill="${fill}"/>`;
   }
   const pad = 10;
@@ -326,7 +340,8 @@ function getSafeColors(builder: LogoBuilder): { primary: string; secondary: stri
 function buildSvgForLayout(builder: LogoBuilder): string {
   const { W, H } = getViewBox(builder.layout, builder.primaryText, builder.tagline);
   const { primary, secondary } = getSafeColors(builder);
-  const { primaryTextColor, taglineColor } = resolveTextColors(builder, primary, secondary);
+  const hasBgImage = !!builder.backgroundImage;
+  const { primaryTextColor, taglineColor } = resolveTextColors(builder, primary, secondary, hasBgImage);
   const iconSize = Math.min(W, H) * 0.4;
   // v2.3: manual nudge + scale on top of the auto-fit layout. Icon
   // position/size is untouched — only the text block moves/scales.
@@ -340,10 +355,9 @@ function buildSvgForLayout(builder: LogoBuilder): string {
   // (illustration/photo) — a lucide icon or decorative underline/dotRing
   // drawn on top of it reads as visual clutter and usually overlaps the
   // artwork. Icon + decorations are suppressed automatically whenever a
-  // backgroundImage is present; the layout math (text start position)
-  // is left untouched so textOffsetX/Y can still be used to reclaim the
-  // freed space manually.
-  const hasBgImage = !!builder.backgroundImage;
+  // backgroundImage is present; the text is recentered and a dark pill
+  // backdrop is auto-enabled for legibility (the user can override via
+  // textBackdrop / textColorMode).
 
   const bgRect = buildBackgroundRect(builder, W, H);
   const bgImage = builder.backgroundImage
@@ -363,8 +377,13 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     if (!hasBgImage) {
       icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
     }
-    const baseTextX = iconCenter.x + iconSize / 2 + 14;
-    const maxTextW = W - baseTextX - 28;
+    // When a background image is present, the icon is suppressed but its
+    // layout space would leave the text floating off-center over the photo.
+    // Recenter the text block horizontally instead, so it sits cleanly in
+    // the middle of the image. The user can still nudge with textOffsetX/Y.
+    const baseTextX = hasBgImage ? W / 2 : iconCenter.x + iconSize / 2 + 14;
+    const textAnchor: 'start' | 'middle' = hasBgImage ? 'middle' : 'start';
+    const maxTextW = hasBgImage ? W - 40 : W - baseTextX - 28;
     const baseFontSize = fitText(builder.primaryText, maxTextW, 36, 14);
     const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
     const taglineFontSize = Math.max(8, Math.round(14 * scale));
@@ -373,8 +392,8 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     const primaryY = baseY + offY + (hasTagline ? -10 : 6);
     const taglineX = baseTextX + tagOffX;
     const taglineY = baseY + 18 + tagOffY;
-    primaryText = renderText(builder, primaryX, primaryY, 'start', primaryFontSize, primaryTextColor);
-    taglineText = renderTagline(builder, taglineX, taglineY, 'start', taglineFontSize, taglineColor);
+    primaryText = renderText(builder, primaryX, primaryY, textAnchor, primaryFontSize, primaryTextColor);
+    taglineText = renderTagline(builder, taglineX, taglineY, textAnchor, taglineFontSize, taglineColor);
     const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
     const taglineWidth = hasTagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
     if (!hasBgImage) {
@@ -384,7 +403,7 @@ function buildSvgForLayout(builder: LogoBuilder): string {
       { x: primaryX, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
       hasTagline ? { x: taglineX, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
     );
-    backdrop = buildTextBackdrop(builder, box, W);
+    backdrop = buildTextBackdrop(builder, box, W, hasBgImage);
   } else {
     // vertical / stacked share the same centered-block layout, differing
     // only in the base font size and tagline gap used by getViewBox().
@@ -399,7 +418,10 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     const baseFontSize = fitText(builder.primaryText, maxTextW, startFontSize, 14);
     const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
     const taglineFontSize = Math.max(8, Math.round(baseTaglineFontSize * scale));
-    const baseY = iconCenter.y + iconSize / 2 + 30;
+    // When a background image is present, the icon is suppressed. Center
+    // the text block vertically (H/2) instead of below the icon area,
+    // so the title+tagline sit cleanly in the middle of the photo.
+    const baseY = hasBgImage ? H / 2 : iconCenter.y + iconSize / 2 + 30;
     const baseCenterX = W / 2;
     const primaryCenterX = baseCenterX + offX;
     const primaryY = baseY + offY;
@@ -418,7 +440,7 @@ function buildSvgForLayout(builder: LogoBuilder): string {
       { x: primaryLeft, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
       hasTagline ? { x: taglineLeft, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
     );
-    backdrop = buildTextBackdrop(builder, box, W);
+    backdrop = buildTextBackdrop(builder, box, W, hasBgImage);
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${bgRect}${bgImage}${defs}${icon}${decorations}${backdrop}${primaryText}${taglineText}</svg>`;

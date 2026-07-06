@@ -555,7 +555,7 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
             </button>
           </div>
         )}
-        {b.iconType === 'lucide' && b.iconGlyph && (
+        {b.iconType === 'lucide' && b.iconGlyph && !b.backgroundImage && (
           <div className="builder-preview-icon-meta" aria-hidden="true">
             <PreviewIcon builder={b} />
             <span>{b.iconGlyph}</span>
