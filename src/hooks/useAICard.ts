@@ -13,7 +13,7 @@ import {
 import dataService from '../utils/dataService';
 import { buildCardCoverBrief } from '../utils/card/coverBrief';
 import { logger } from '../utils/logger';
-import { isLocalDev } from '../utils/env';
+import { isLocalhost } from '../utils/env';
 
 const MAX_LOG_ENTRIES = 40;
 
@@ -89,8 +89,8 @@ export function useAICard(userEmail?: string): UseAICardReturn {
 
       setIsCardProcessing(true);
 
-      // Token check (skip for admin and local dev)
-      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalDev()) {
+      // Token check (skip for admin and localhost)
+      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
         try {
           const profile = await dataService.getUserProfile(userEmail);
           if (profile.error) {
@@ -225,7 +225,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
 
   const generateCover = useCallback(
     async (card: BusinessCard, side: 'front' | 'back' = 'front', promptOverride?: string, options?: { onProgress?: (msg: string) => void }) => {
-      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalDev()) {
+      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
         const profile = await dataService.getUserProfile(userEmail);
         if (profile.error) throw new Error(profile.error);
         if (profile.tokensUsed >= profile.tokenLimit) {
