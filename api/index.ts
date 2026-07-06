@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { drizzle } from 'drizzle-orm/neon-http';
+import { GeminiImageProvider } from '../src/ai/providers/gemini';
 
 type VercelRequest = {
   method: string;
@@ -1338,7 +1339,6 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       console.info('[ai_card_cover] user', { email: v.data.userEmail, ts: Date.now() });
     }
     try {
-      const { GeminiImageProvider } = await import('../src/ai/providers/gemini');
       const provider = new GeminiImageProvider(apiKey);
       const finalPrompt = v.data.context
         ? `${v.data.prompt}\n\nCARD CONTEXT:\n${v.data.context.slice(0, 1000)}`
@@ -1385,9 +1385,9 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       console.info('[ai_logo_background] user', { email: v.data.userEmail, ts: Date.now() });
     }
     try {
-      // Inline import to keep the serverless bundle slim and avoid
-      // pulling the Gemini client into the chat path.
-      const { GeminiImageProvider } = await import('../src/ai/providers/gemini');
+      // Static import (top of file): keeps the Gemini client in the
+      // serverless bundle. Dynamic import('../src/...') was not
+      // resolved by Vercel's bundler in production.
       const provider = new GeminiImageProvider(apiKey);
       const result = await provider.generateBackground(v.data.prompt, 30_000);
       // Clamp 500KB base64 to stay within Vercel response limits.
