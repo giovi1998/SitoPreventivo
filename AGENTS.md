@@ -364,6 +364,61 @@ sé. Leggere prima di rimettere mano a questa parte.
    fatto ~2/3 delle immagini con 413. Fix: chiedere esplicitamente
    `image_size: '512'` (+ `aspect_ratio: '16:9'`) in fase di richiesta,
    non dopo. Valori supportati: `'512' | '1K' | '2K' | '4K'`.
+6. **`await import('../src/...')` non viene risolto in prod Vercel**.
+   L'import dinamico di un modulo sotto `src/` da `api/index.ts`
+   fallisce in produzione con `Cannot find module
+   '/var/task/src/ai/providers/gemini'` (il bundler Vercel non include
+   `src/` nei dynamic imports della funzione serverless, anche se
+   AGENTS.md dice che `src/` è bundled correttamente per gli import
+   **statici**). Sintomo: 404 `{"error":"Endpoint AI non trovato"}` o
+   502 con quell'errore nel log. Fix: importare il pacchetto
+   `@google/genai` **direttamente** in `api/index.ts` con
+   `await import('@google/genai')` (node_modules è sempre bundled) e
+   inlineare la logica del provider. Non usare `await import('../src/
+   ...')` per moduli con dipendenze ESM-only in `api/index.ts`.
+7. **Import statico di `@google/genai` crasha l'intera funzione**.
+   `@google/genai` v2.10.0 è ESM-only (`"type": "module"` nel
+   `package.json`). L'import **statico** in cima a `api/index.ts`
+   (CJS/ESM interop) rompe il bundle Vercel: ogni endpoint sotto
+   `/api/*` ritorna `FUNCTION_INVOCATION_FAILED` (anche `/api/ping`).
+   Sintomo: 500 generico, nessun log utile. Fix: usare **solo** import
+   dinamico `await import('@google/genai')` dentro l'handler della
+   route specifica, mai import statico in cima al file.
+8. **Prompt cover: metafore artistiche triggerano filtro copyright**.
+   Gemini ha un filtro "copyright/recitation" che blocca la
+   generazione con `400: Image generation blocked due to
+   copyright/recitation`. Frasi come `"watercolor wash"`, `"drifts
+   between"`, `"like diffuse ink on wet paper"` (presenti nel prompt
+   v2.5.1/v2.7) lo triggerano. Fix: prompt **neutro e piano** (v2.8):
+   `"Abstract gradient background using #fff as primary, #01696f as
+   secondary... Smooth blending between the colors, soft and calm."`.
+   Le proibizioni card-like (`no text, no QR, no logos, no faces, no
+   people, no real objects`) sono OK; le metafore artistiche no.
+9. **Cache bundle JS browser dopo fix API**. Se un fix di `api/index.ts`
+   cambia il path o il body di un endpoint, il vecchio bundle JS nel
+   browser può ancora chiamare l'endpoint vecchio. `Ctrl+F5` non
+   sempre basta: il Service Worker o la cache HTTP possono servire il
+   vecchio `index-*.js`. Fix: DevTools → Application → Clear storage →
+   Clear site data, oppure navigare in incognito per testare.
+
+### ⚠️ Cover AI Card gotchas (leggi prima di toccare `coverBrief.ts` o `/ai/card-cover`)
+
+Il modulo cover AI (`POST /ai/card-cover` + `useAICard.generateCover` +
+`buildCardCoverBrief`) ha 3 bug distinti che hanno bloccato la
+generazione in produzione. Leggere prima di rimettere mano.
+
+1. **Endpoint non trovato in prod (404 "Endpoint AI non trovato")**:
+   causa = punto 6 sopra (import dinamico `../src/` non risolto).
+   Sintomo: in locale funziona (proxy Vite usa `ssrLoadModule`), in
+   prod 404. Fix: `await import('@google/genai')` inline in
+   `api/index.ts`.
+2. **FUNCTION_INVOCATION_FAILED su ogni endpoint `/api/*`**: causa =
+   punto 7 sopra (import statico `@google/genai` in cima al file).
+   Sintomo: anche `/api/ping` crasha. Fix: rimuovere l'import
+   statico, usare solo import dinamico nell'handler.
+3. **400 "Image generation blocked due to copyright/recitation"**:
+   causa = punto 8 sopra (prompt con metafore artistiche). Fix:
+   prompt neutro v2.8 (`coverBrief.ts`).
 
 ## Known Issues, Card Module (fase 2)
 
