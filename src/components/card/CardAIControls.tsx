@@ -104,7 +104,9 @@ export default function CardAIControls({
   card,
 }: CardAIControlsProps) {
   const isDesktop = variant === 'desktop';
-  const coverLocked = tier !== 'unlocked';
+  const isLocal = typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const coverLocked = tier !== 'unlocked' && !isLocal;
   const hasFrontCover = !!card?.front.coverImageUrl;
   const hasBackCover = !!card?.back.coverImageUrl;
 
