@@ -311,6 +311,35 @@ l'overflow del testo fuori dai box.
 - **Persistenza chat v2.2**: `LogoAiPanel` salva `answers`, `step`,
   `concepts`, `selected`, `bgImages` in `localStorage['logoAiChat:v1']`
   con TTL 24h.
+- **Bottone "Nuovo" (v2.3)**: header `LogoEditor` ha un bottone "Nuovo"
+  che azzera `logo` a `createEmptyLogo()`, pulisce
+  `localStorage['logoAiChat:v1']` e forza il remount di `LogoAiPanel`
+  (via `key`). Chiede conferma (`window.confirm`) solo se il logo
+  corrente ha contenuto (`logoHasContent`).
+- **Leggibilità e posizione testo (v2.3)**: `logoBuilderSchema` ha
+  `textColorMode` (`auto`/`light`/`dark`, forza bianco/nero-quasi per
+  contrasto contro foto AI), `textBackdrop` (`none`/`pill`/`band`, una
+  pillola o banda semi-trasparente dietro al testo, tono invertito
+  rispetto a `textColorMode`), `textOffsetX`/`textOffsetY` (nudge ±60,
+  frecce nel BuilderPanel, stesso pattern del Card grid — non
+  drag-and-drop), `textScale` (0.7–1.5, slider). Tutti applicati in
+  `logoGenerator.ts buildSvgForLayout` senza toccare la posizione
+  dell'icona. `gradientFill` (v2.2) ha priorità su `textColorMode`
+  quando entrambi attivi.
+- **Prompt template (v2.3, Piano B)**: `LogoAiPanel` ha (1)
+  `SECTOR_PRESET_BRIEFS` — un bottone "Usa esempio {settore}" che
+  pre-compila activity/mood/target con un brief di esempio per il
+  settore selezionato; (2) libreria "I miei prompt" —
+  `localStorage['logoPromptLibrary:v1']`, salva/applica/elimina brief
+  completi (non il singolo `imagePrompt` Gemini, che è troppo legato al
+  concept specifico per essere riusabile come preset); (3) sezione
+  "Prompt avanzato" per concept (`<details>`) con textarea editabile
+  sull'`imagePrompt` generato da DeepSeek + bottone "Rigenera immagine"
+  che richiama `generateBackground` solo per quel concept con il testo
+  modificato (non rigenera gli altri 2). `ConceptCard` non è più un
+  singolo `<button>` (nested-button non valido con la textarea): la
+  select-area è un `<button className="logo-ai-concept-select">`
+  dentro un `<div className="logo-ai-concept">` wrapper.
 
 ### ⚠️ Logo AI, Gemini background gotchas (leggi prima di toccare `gemini.ts` o `vite.config.js`)
 
