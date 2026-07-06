@@ -31,23 +31,19 @@ export function buildCardCoverBrief(
   const brand = company || name || 'brand';
   const profession = title || 'professional';
 
-  // v2.7 prompt: balanced. Keeps hard prohibitions only for card-like
-  // elements the user will overlay separately (text, QR, logo, faces,
-  // people, letters, numbers), but grants freedom on shapes, patterns,
-  // lines, gradients, light effects so the background is more
-  // expressive. Low contrast preserved for text legibility.
+  // v2.8 prompt: minimal and neutral to avoid Gemini copyright filters.
+  // The v2.7 prompt triggered "Image generation blocked due to
+  // copyright/recitation" — likely the "watercolor wash" phrasing
+  // plus the long negative list. Use plain descriptive language,
+  // keep the palette, ask for abstract only. Shorter is safer.
   const prompt = clamp(
-    `Soft abstract background, a gentle gradient that drifts between ` +
-      `the card palette tones (use ONLY: ${bgColor} primary, ` +
-      `${accentColor} undertone, ${textColor} deepest, with subtle ±10% ` +
-      `variation). Let one tone flow softly into another, like a calm ` +
-      `watercolor wash — no hard edges. You may add soft shapes, gentle ` +
-      `patterns, flowing lines, subtle dots, light gradients, organic ` +
-      `forms — keep it abstract and tasteful. ` +
-      `No text, no QR, no logo, no letters, no numbers, no faces, no ` +
-      `people. No realistic objects, no UI elements. ` +
-      `Low contrast throughout, every region stays light enough for ` +
-      `overlaid text. Square 1:1, full-bleed.`,
+    `Abstract gradient background using ${bgColor} as primary, ` +
+      `${accentColor} as secondary, ${textColor} as deepest tone. ` +
+      `Smooth blending between the colors, soft and calm. ` +
+      `Abstract only: no text, no words, no letters, no numbers, ` +
+      `no QR codes, no logos, no faces, no people, no real objects. ` +
+      `Keep all areas light enough for overlaid text. ` +
+      `Square 1:1, full-bleed.`,
     MAX_PROMPT_LEN,
   );
 

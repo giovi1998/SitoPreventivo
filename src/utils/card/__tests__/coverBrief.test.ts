@@ -30,15 +30,12 @@ describe('buildCardCoverBrief', () => {
   it('keeps text areas readable in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.7: gentle gradient + creative freedom (soft shapes, patterns,
-    // lines, dots, light gradients) with hard prohibitions only for
-    // card-like elements (text, QR, logo, faces, people).
+    // v2.8: minimal neutral prompt to avoid Gemini copyright filters.
+    // Plain descriptive language, palette hex codes, abstract only.
     const lower = prompt.toLowerCase();
-    expect(lower).toContain('watercolor wash');
-    expect(lower).toContain('low contrast');
-    expect(lower).toContain('gentle gradient');
-    // Creative freedom is granted for abstract decoration.
-    expect(lower).toMatch(/shapes|patterns|lines|dots/);
+    expect(lower).toContain('abstract gradient');
+    expect(lower).toContain('smooth blending');
+    expect(lower).toContain('soft and calm');
   });
 
   it('flags photo/logo presence in context', () => {
@@ -100,20 +97,15 @@ describe('buildCardCoverBrief', () => {
   it('does not ask for faces/text/logos in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.7: hard prohibitions only for card-like elements. The user
+    // v2.8: hard prohibitions only for card-like elements. The user
     // does not want text, QR, logos, faces or people baked into the
     // generated background; the card content is overlaid separately.
     const lower = prompt.toLowerCase();
     expect(lower).toContain('no text');
     expect(lower).toContain('no qr');
-    expect(lower).toContain('no logo');
+    expect(lower).toContain('no logos');
     expect(lower).toContain('no faces');
     expect(lower).toContain('no people');
-    // Creative elements (shapes, patterns, lines) are ALLOWED, not
-    // prohibited: the prompt must not ban them.
-    expect(lower).not.toContain('no shapes');
-    expect(lower).not.toContain('no pattern');
-    expect(lower).not.toContain('no lines');
-    expect(lower).not.toContain('no dots');
+    expect(lower).toContain('no real objects');
   });
 });
