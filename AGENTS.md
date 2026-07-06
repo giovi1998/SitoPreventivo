@@ -326,6 +326,23 @@ l'overflow del testo fuori dai box.
   `logoGenerator.ts buildSvgForLayout` senza toccare la posizione
   dell'icona. `gradientFill` (v2.2) ha priorità su `textColorMode`
   quando entrambi attivi.
+- **Icona/decorazioni auto-nascoste con background AI (v2.3.1)**:
+  quando `builder.backgroundImage` è settato, `buildSvgForLayout`
+  sopprime automaticamente il rendering di icona e
+  `decorativeElements` (si sovrappongono male a una foto/illustrazione
+  AI, es. icona lucide + dotRing sopra un'immagine con soggetti già
+  disegnati). La matematica del layout (posizione iniziale del testo)
+  resta invariata: lo spazio lasciato libero dall'icona va recuperato
+  manualmente con `textOffsetX`.
+- **Offset indipendente titolo/sottotitolo (v2.3.1)**: `taglineOffsetX`/
+  `taglineOffsetY` (stesso range ±60 di `textOffsetX/Y`) muovono SOLO
+  il sottotitolo; `textOffsetX/Y` muove SOLO il titolo (+ le
+  decorazioni legate al titolo, es. underline). `BuilderPanel` mostra
+  una seconda griglia di frecce "Posizione sottotitolo" (solo se
+  `tagline` non è vuoto). Il backdrop leggibilità (`textBackdrop`) usa
+  `unionTextBox()` per calcolare un riquadro che avvolge SEMPRE
+  entrambi i blocchi, anche quando sono stati spostati in punti
+  diversi del logo.
 - **Prompt template (v2.3, Piano B)**: `LogoAiPanel` ha (1)
   `SECTOR_PRESET_BRIEFS` — un bottone "Usa esempio {settore}" che
   pre-compila activity/mood/target con un brief di esempio per il
