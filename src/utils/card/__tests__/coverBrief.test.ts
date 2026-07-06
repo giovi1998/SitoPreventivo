@@ -30,13 +30,12 @@ describe('buildCardCoverBrief', () => {
   it('keeps text areas readable in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.5.1: prompt is a short "soft gradient that drifts between
-    // palette tones" brief. Keeps character (gradient drift) without
-    // the busy texture words that made v2.5 noisy.
+    // v2.6: minimal positive brief — calm watercolor wash. The long
+    // negative lists of v2.5.1 caused Gemini refusals; we now describe
+    // what we want, not what we don't.
     const lower = prompt.toLowerCase();
-    expect(lower).toContain('soft abstract background');
-    expect(lower).toContain('gradient');
-    expect(lower).toContain('watercolor');
+    expect(lower).toContain('watercolor wash');
+    expect(lower).toContain('soft gradients');
     expect(lower).toContain('low contrast');
   });
 
@@ -73,7 +72,7 @@ describe('buildCardCoverBrief', () => {
     const card = createGiovanniCardTemplate();
     const { prompt, context } = buildCardCoverBrief(card);
     expect(prompt.length).toBeLessThanOrEqual(1000);
-    expect(context.length).toBeLessThanOrEqual(1200);
+    expect(context.length).toBeLessThanOrEqual(1000);
   });
 
   it('includes the actual card palette hex values in the prompt', () => {
@@ -99,10 +98,17 @@ describe('buildCardCoverBrief', () => {
   it('does not ask for faces/text/logos in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
+    // v2.6: minimal positive brief. We no longer enumerate negative
+    // constraints ("no people", "no text", "no logo", "no pattern")
+    // because long negative lists caused Gemini refusals. The brief
+    // is positive-only ("calm watercolor wash, soft gradients, low
+    // contrast"). Readability of overlaid text is delegated to the
+    // CSS wash layer + overlay hints in the context, not to the image
+    // prompt.
     const lower = prompt.toLowerCase();
-    expect(lower).toContain('no people');
-    expect(lower).toContain('no text');
-    expect(lower).toContain('no logo');
-    expect(lower).toContain('no pattern');
+    expect(lower).not.toContain('no people');
+    expect(lower).not.toContain('no text');
+    expect(lower).not.toContain('no logo');
+    expect(lower).not.toContain('no pattern');
   });
 });
