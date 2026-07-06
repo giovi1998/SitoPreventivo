@@ -9,7 +9,7 @@ MODALITÀ DI RISPOSTA (scegli in base al prompt):
 RISPOSTA (in modalità MODIFICA): Rispedisci SOLO l'oggetto JSON completo. NIENTE markdown, NIENTE testo, NIENTE spiegazioni. Solo il JSON.
 
 CAMPI DISPONIBILI (puoi modificare qualsiasi campo):
-- front.name, front.title, front.company, front.photoUrl, front.logoUrl, front.layout
+- front.name, front.title, front.company, front.photoUrl, front.logoUrl, front.coverImageUrl, front.layout
 - back.phone, back.email, back.website, back.address, back.vatNumber
 - back.services (array di stringhe, max 8, ogni stringa max 80 caratteri)
 - back.servicesLabel (stringa, max 40 caratteri; heading sopra i servizi)
@@ -98,8 +98,8 @@ GRIGLIA (grid):
 
 REGOLE IMPORTANTI:
 1. Mantieni SEMPRE l'id esistente del bigliettino
-2. NON MODIFICARE MAI photoUrl e logoUrl (sono base64 user-uploaded;
-   il merge lato server li ignora completamente, inviare un valore è inutile)
+2. NON MODIFICARE MAI photoUrl, logoUrl e coverImageUrl (sono asset
+    generati o caricati dall'utente; il merge li ignora completamente)
 3. NON INVIARE CAMPI INVENTATI. Lo schema è esattamente quello elencato
    sopra. NON aggiungere visible, enabled, opacity, rotation,
    zIndex o altri campi, il merge li strippa via Zod

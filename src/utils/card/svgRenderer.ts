@@ -47,7 +47,12 @@ export function buildFrontSvg(
 
   let out = '';
 
-  // 1. Background
+  // 0. AI-generated cover image (full-bleed behind everything)
+  if (card.front.coverImageUrl) {
+    out += `<image href="${escapeXml(card.front.coverImageUrl)}" x="0" y="0" width="${pxW}" height="${pxH}" preserveAspectRatio="xMidYMid slice"/>`;
+  }
+
+  // 1. Background (only visible where cover image is missing or transparent)
   out += `<rect width="${pxW}" height="${pxH}" fill="${bg}"/>`;
 
   // 2. Corner radial gradient (matches CSS .card-corner-accent)

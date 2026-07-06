@@ -219,6 +219,32 @@ describe('svgRenderer', () => {
     });
   });
 
+  describe('AI cover image rendering (spec v2.4)', () => {
+    it('renders coverImageUrl as a full-bleed image before other content', () => {
+      const card = {
+        ...createEmptyCard(),
+        front: {
+          ...createEmptyCard().front,
+          name: 'MARIO',
+          coverImageUrl: 'data:image/png;base64,COVER',
+        },
+      };
+      const svg = buildFrontSvg(card, 1024, 663);
+      expect(svg).toContain('data:image/png;base64,COVER');
+      const imgIdx = svg.indexOf('data:image/png;base64,COVER');
+      const bgIdx = svg.indexOf(`<rect width="1024" height="663" fill="${card.style.bgColor}"/>`);
+      expect(imgIdx).toBeGreaterThan(-1);
+      expect(bgIdx).toBeGreaterThan(-1);
+      expect(imgIdx).toBeLessThan(bgIdx);
+    });
+
+    it('does not include cover image when coverImageUrl is null', () => {
+      const card = createEmptyCard();
+      const svg = buildFrontSvg(card, 1024, 663);
+      expect(svg).not.toContain('data:image/png;base64,COVER');
+    });
+  });
+
   describe('back header/body layout', () => {
     it('offsets grid body below the header so contacts do not overlap the header', () => {
       const card = {

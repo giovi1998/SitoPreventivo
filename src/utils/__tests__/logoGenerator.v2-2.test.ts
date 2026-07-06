@@ -280,4 +280,55 @@ describe('logoGenerator v2.3 (text readability + position controls)', () => {
       expect(shiftedTagY).toBeCloseTo(baseTagY + 12, 0);
     });
   });
+
+  describe('auto-position + auto-legibility over AI background (spec v2.3.2)', () => {
+    const withBg = { ...baseBuilder, backgroundImage: 'data:image/png;base64,ABC' };
+
+    it('auto-centers primaryText horizontally in horizontal layout (AC-006)', () => {
+      const svg = builderToSvg(withBg);
+      const m = svg.match(/<text x="([\d.]+)" y="([\d.]+)"[^>]*font-weight="700"/);
+      expect(m).toBeTruthy();
+      const x = Number(m![1]);
+      const viewBox = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+      const W = Number(viewBox![1]);
+      expect(x).toBeCloseTo(W / 2, 0);
+      expect(svg).toContain('text-anchor="middle"');
+    });
+
+    it('auto-centers text block vertically in vertical layout (AC-007)', () => {
+      const svg = builderToSvg({ ...withBg, layout: 'vertical' });
+      const m = svg.match(/<text x="([\d.]+)" y="([\d.]+)"[^>]*font-weight="700"/);
+      expect(m).toBeTruthy();
+      const y = Number(m![2]);
+      const viewBox = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+      const H = Number(viewBox![2]);
+      expect(y).toBeCloseTo(H / 2, 0);
+    });
+
+    it('defaults primaryText to white when backgroundImage is set and textColorMode=auto (AC-001)', () => {
+      const svg = builderToSvg(withBg);
+      expect(svg).toContain('fill="#FFFFFF"');
+    });
+
+    it('auto-enables a dark pill backdrop when backgroundImage is set and textBackdrop=none (AC-002)', () => {
+      const svg = builderToSvg(withBg);
+      expect(svg).toContain('fill="rgba(15,23,42,0.55)"');
+    });
+
+    it('respects manual textColorMode=dark override (AC-003)', () => {
+      const svg = builderToSvg({ ...withBg, textColorMode: 'dark' });
+      expect(svg).toContain('fill="#0F172A"');
+    });
+
+    it('respects manual textBackdrop=band override (AC-005)', () => {
+      const svg = builderToSvg({ ...withBg, textBackdrop: 'band' });
+      // band is full-width starting at x=0
+      expect(svg).toMatch(/<rect x="0" y="[\d.]+" width="\d+"[^>]*fill="rgba\(/);
+    });
+
+    it('keeps dark pill even when user explicitly keeps textBackdrop=none (auto overrides for AI bg)', () => {
+      const svg = builderToSvg(withBg);
+      expect(svg).toContain('fill="rgba(15,23,42,0.55)"');
+    });
+  });
 });

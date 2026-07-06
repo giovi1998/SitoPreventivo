@@ -64,13 +64,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const [aiModel, setAiModel] = useState('deepseek-chat');
   const [showAi, setShowAi] = useState(true);
   const [showGrid, setShowGrid] = useState(false);
+  const [isCoverGenerating, setIsCoverGenerating] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMobile = useMediaQuery('(max-width: 900px)');
   const aiFloating = useCardAIFloating();
   const previewZoom = useCardPreviewZoom(1);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
-  const { processCardPrompt, resetCardChat, cardAiLogs, isCardProcessing, availableModels } = useAICard(userEmail);
+  const { processCardPrompt, generateCover, resetCardChat, cardAiLogs, isCardProcessing, availableModels } = useAICard(userEmail);
 
   useEffect(() => {
     const defaultZoom = isMobile ? 0.7 : 1;
@@ -237,6 +238,11 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     addToast('info', 'Nuovo bigliettino vuoto pronto');
   }, [addToast]);
 
+  const removeCoverImage = useCallback(() => {
+    patchFront({ coverImageUrl: null });
+    addToast('info', 'Cover AI rimossa');
+  }, [patchFront, addToast]);
+
   const handleUpload = useCallback(async (file: File, field: 'photoUrl' | 'logoUrl') => {
     setUploadError(null);
     if (!isAllowedLogoMime(file.type)) {
@@ -345,6 +351,23 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
   }, [card, aiText, aiModel, processCardPrompt, addToast]);
 
+  const handleGenerateCover = useCallback(async () => {
+    if (tier !== 'unlocked') {
+      addToast('info', 'Sblocca il piano per generare cover AI.', 4000);
+      return;
+    }
+    setIsCoverGenerating(true);
+    try {
+      const coverDataUrl = await generateCover(card);
+      patchFront({ coverImageUrl: coverDataUrl });
+      addToast('success', 'Cover AI generata e applicata al fronte.', 4000);
+    } catch (err: any) {
+      addToast('error', err.message || 'Errore generazione cover AI', 5000);
+    } finally {
+      setIsCoverGenerating(false);
+    }
+  }, [card, tier, generateCover, patchFront, addToast]);
+
   useEffect(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
@@ -427,6 +450,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         onUpload={handleUpload}
         onRemovePhoto={removePhoto}
         onRemoveLogo={removeLogo}
+        onRemoveCover={removeCoverImage}
         uploadError={uploadError}
       />
       <CardBackFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
@@ -470,12 +494,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       aiText={aiText}
       onTextChange={setAiText}
       availableModels={availableModels}
-      isProcessing={isCardProcessing}
+      isProcessing={isCardProcessing || isCoverGenerating}
       onRun={runCardAI}
       onReset={resetCardChat}
       logs={cardAiLogs}
+      tier={tier}
+      onGenerateCover={handleGenerateCover}
     />
-  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, runCardAI, resetCardChat, cardAiLogs]);
+  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover]);
 
   const previewPanel = useMemo(() => (
     <CardPreviewSurface

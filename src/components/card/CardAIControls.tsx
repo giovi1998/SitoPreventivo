@@ -23,6 +23,10 @@ export interface CardAIControlsProps {
   logs: AILogEntry[];
   /** 'desktop' = colonna 3 (textarea 2 righe, apply primario). 'mobile' = tab/bottom-sheet (textarea 4 righe). */
   variant: 'desktop' | 'mobile';
+  /** Spec v2.4: tier guard for cover image generation. */
+  tier?: 'free' | 'unlocked';
+  /** Spec v2.4: callback for "Genera cover AI" button. */
+  onGenerateCover?: () => void;
 }
 
 export default function CardAIControls({
@@ -36,8 +40,11 @@ export default function CardAIControls({
   onReset,
   logs,
   variant,
+  tier = 'free',
+  onGenerateCover,
 }: CardAIControlsProps) {
   const isDesktop = variant === 'desktop';
+  const coverLocked = tier !== 'unlocked';
 
   const modelSelect = (
     <select value={aiModel} onChange={(e) => onModelChange(e.target.value)} aria-label="Modello AI">
@@ -50,6 +57,18 @@ export default function CardAIControls({
       )}
     </select>
   );
+
+  const coverButton = onGenerateCover ? (
+    <button
+      type="button"
+      className="card-ai-cover-btn"
+      onClick={onGenerateCover}
+      disabled={isProcessing || coverLocked}
+      title={coverLocked ? 'Sblocca il piano per generare cover AI' : 'Genera uno sfondo AI per il fronte'}
+    >
+      {coverLocked ? '🔒 Cover AI (sblocca)' : '🎨 Genera cover AI'}
+    </button>
+  ) : null;
 
   const quickActions = (
     <div className="card-ai-actions">
@@ -76,6 +95,7 @@ export default function CardAIControls({
             {modelSelect}
           </label>
         </div>
+        {coverButton}
         <textarea
           className="card-ai-textarea"
           value={aiText}
@@ -105,6 +125,7 @@ export default function CardAIControls({
         <span>Modello AI</span>
         {modelSelect}
       </label>
+      {coverButton}
       <label className="card-field card-ai-textarea">
         <span>Prompt AI personalizzato</span>
         <textarea

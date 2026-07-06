@@ -274,4 +274,28 @@ describe('BuilderPanel', () => {
       expect(onPatch).toHaveBeenCalledWith('builder.taglineOffsetY', 0);
     });
   });
+
+  describe('icon badge suppression with AI background (v2.3.2)', () => {
+    it('renders icon meta badge when iconType=lucide and no backgroundImage', () => {
+      const l: Logo = { ...logo, builder: { ...logo.builder, iconType: 'lucide', iconGlyph: 'coffee' } };
+      render(<BuilderPanel logo={l} onPatch={onPatch} />);
+      const meta = screen.getByRole('img', { name: /icona coffee/i });
+      expect(meta).toBeInTheDocument();
+      expect(within(meta).getByText('coffee')).toBeInTheDocument();
+    });
+
+    it('suppresses icon meta badge when backgroundImage is set (AC-010)', () => {
+      const l: Logo = {
+        ...logo,
+        builder: {
+          ...logo.builder,
+          iconType: 'lucide',
+          iconGlyph: 'coffee',
+          backgroundImage: 'data:image/png;base64,ABC',
+        },
+      };
+      render(<BuilderPanel logo={l} onPatch={onPatch} />);
+      expect(screen.queryByRole('img', { name: /icona coffee/i })).not.toBeInTheDocument();
+    });
+  });
 });

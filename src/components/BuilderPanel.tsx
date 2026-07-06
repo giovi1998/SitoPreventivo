@@ -556,7 +556,7 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
           </div>
         )}
         {b.iconType === 'lucide' && b.iconGlyph && !b.backgroundImage && (
-          <div className="builder-preview-icon-meta" aria-hidden="true">
+          <div className="builder-preview-icon-meta" aria-label={`Icona ${b.iconGlyph}`} role="img">
             <PreviewIcon builder={b} />
             <span>{b.iconGlyph}</span>
           </div>

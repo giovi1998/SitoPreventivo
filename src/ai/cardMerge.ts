@@ -120,7 +120,11 @@ export function mergeCardAIResponse(
       updated.front.useGrid = true;
       changes.push('Fronte: griglia attivata');
     }
-    // ─── Protezione: photoUrl/logoUrl ───────────────────────
+    // Spec v2.4: coverImageUrl is treated like photoUrl/logoUrl — it's an
+    // asset (user-uploaded or AI-generated) and must never be overwritten by
+    // the text/layout AI. The cover image is generated and applied by the
+    // dedicated generateCover() flow in useAICard.
+    //
     // MAI sovrascrivere. Sono base64 user-uploaded (foto profilo, logo).
     // L'AI non li ha mai visti nella richiesta originale. Se invia "" o null
     // o un qualsiasi valore, ignoriamo. (Lo spread di updated.front preserva

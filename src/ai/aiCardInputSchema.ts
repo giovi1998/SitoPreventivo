@@ -29,6 +29,10 @@ export const aiCardInputSchema = z.object({
     company: z.string().optional(),
     photoUrl: z.string().nullable().optional(),
     logoUrl: z.string().nullable().optional(),
+    // Spec v2.4: AI cover image for the front side. The AI never sets this
+    // directly (it is generated via GeminiImageProvider), but we keep it
+    // in the schema so the client can merge/preserve it safely.
+    coverImageUrl: z.string().nullable().optional(),
     layout: z.enum(['centered', 'left', 'split', 'right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact']).optional(),
     useGrid: z.boolean().optional(),
   }).optional(),

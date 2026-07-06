@@ -29,6 +29,12 @@ interface UseAICardReturn {
     changes: string[];
     rawResponse?: string;
   }>;
+  // Spec v2.4: generate an AI cover image for the front of the card.
+  generateCover: (
+    card: BusinessCard,
+    prompt?: string,
+    options?: { onProgress?: (msg: string) => void }
+  ) => Promise<string>;
   resetCardChat: () => void;
   cardAiLogs: AILogEntry[];
   isCardProcessing: boolean;
@@ -213,11 +219,56 @@ export function useAICard(userEmail?: string): UseAICardReturn {
     streamEntryIdRef.current = null;
   }, [getOrchestrator]);
 
+  const generateCover = useCallback(
+    async (card: BusinessCard, prompt?: string, options?: { onProgress?: (msg: string) => void }) => {
+      if (userEmail && userEmail !== 'admin@gmail.com') {
+        const profile = await dataService.getUserProfile(userEmail);
+        if (profile.error) throw new Error(profile.error);
+        if (profile.tokensUsed >= profile.tokenLimit) {
+          throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
+        }
+      }
+
+      const coverPrompt =
+        prompt ||
+        buildCardCoverPrompt(card);
+
+      addLog(createEntry('info', '🎨 Generazione cover AI in corso...', { detail: coverPrompt }));
+      options?.onProgress?.('🎨 Generazione cover AI in corso...');
+
+      const apiBase = import.meta.env?.VITE_API_BASE || '';
+      const res = await fetch(`${apiBase}/api/ai/card-cover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: coverPrompt, userEmail }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Errore generazione cover' }));
+        throw new Error(err.error || `Cover AI ${res.status}`);
+      }
+
+      const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
+      addLog(createSuccessEntry('Cover AI generata', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`));
+      return `data:${data.mimeType};base64,${data.imageBase64}`;
+    },
+    [userEmail, addLog]
+  );
+
   return {
     processCardPrompt,
+    generateCover,
     resetCardChat,
     cardAiLogs,
     isCardProcessing,
     availableModels,
   };
+}
+
+function buildCardCoverPrompt(card: BusinessCard): string {
+  const { name, title, company } = card.front;
+  const { accentColor, bgColor, textColor } = card.style;
+  const brand = company || name || 'brand';
+  const profession = title || 'professionista';
+  return `Minimal abstract professional background for a business card. Brand "${brand}" (${profession}). Soft geometric shapes, subtle texture, elegant negative space. Palette: accent ${accentColor}, background ${bgColor}, text ${textColor}. No text, no letters, no logos, no faces, no photography, clean vector-like illustration.`;
 }

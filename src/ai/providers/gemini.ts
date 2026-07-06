@@ -26,6 +26,21 @@ export class GeminiImageProvider {
   }
 
   async generateBackground(prompt: string, timeoutMs = 30_000): Promise<GeminiImageResult> {
+    return this.generateImage(prompt, { image_size: '512', aspect_ratio: '16:9' }, timeoutMs);
+  }
+
+  async generateCardCover(prompt: string, timeoutMs = 30_000): Promise<GeminiImageResult> {
+    // Business cards are landscape rectangles (~85×55mm); a 1:1 image
+    // still works because preserveAspectRatio="xMidYMid slice" crops it to
+    // fill. We keep 512px to stay under the 500KB base64 clamp.
+    return this.generateImage(prompt, { image_size: '512', aspect_ratio: '1:1' }, timeoutMs);
+  }
+
+  private async generateImage(
+    prompt: string,
+    imageConfig: { image_size: string; aspect_ratio: string },
+    timeoutMs = 30_000,
+  ): Promise<GeminiImageResult> {
     try {
       const interaction = await this.ai.interactions.create(
         {
@@ -33,13 +48,13 @@ export class GeminiImageProvider {
           input: prompt,
           // Request the smallest resolution tier (512 = 0.5K) instead of
           // the 1K default. Nano Banana output size is highly variable
-          // (400KB-2MB+) and our /ai/logo-background endpoint clamps at
-          // 500KB (Vercel response + Postgres jsonb storage budget), so
-          // asking for 512px upfront avoids most 413 rejections instead
-          // of gambling on a random 1K/2K output and discarding it after
-          // the fact. See https://ai.google.dev/gemini-api/docs/image-generation
+          // (400KB-2MB+) and our /ai/* endpoints clamp at 500KB (Vercel
+          // response + Postgres jsonb storage budget), so asking for 512px
+          // upfront avoids most 413 rejections instead of gambling on a
+          // random 1K/2K output and discarding it after the fact.
+          // See https://ai.google.dev/gemini-api/docs/image-generation
           generation_config: {
-            image_config: { image_size: '512', aspect_ratio: '16:9' },
+            image_config: imageConfig,
           },
           response_modalities: ['text', 'image'],
         },

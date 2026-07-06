@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
 vi.mock('../../utils/dataService', () => ({
@@ -82,5 +82,55 @@ describe('useAICard', () => {
       await result.current.processCardPrompt(createEmptyCard(), 'test');
     });
     expect(dataService.trackTokens).toHaveBeenCalledWith('user@test.com', 15);
+  });
+
+  describe('generateCover', () => {
+    beforeEach(() => {
+      vi.stubGlobal('fetch', vi.fn());
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('returns a data URL from /api/ai/card-cover', async () => {
+      const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { imageBase64: 'FAKEBASE64', mimeType: 'image/png' } }),
+      });
+      const { result } = renderHook(() => useAICard('user@test.com'));
+      const coverUrl = await act(async () => result.current.generateCover(createEmptyCard()));
+      expect(coverUrl).toBe('data:image/png;base64,FAKEBASE64');
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/ai/card-cover',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"prompt"'),
+        }),
+      );
+    });
+
+    it('throws on non-ok response', async () => {
+      const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        json: async () => ({ error: 'Troppe richieste' }),
+      });
+      const { result } = renderHook(() => useAICard('user@test.com'));
+      await expect(
+        act(async () => result.current.generateCover(createEmptyCard())),
+      ).rejects.toThrow('Troppe richieste');
+    });
+
+    it('throws when token limit reached', async () => {
+      const ds = await import('../../utils/dataService');
+      (ds.default.getUserProfile as any).mockResolvedValueOnce({ tokensUsed: 1_000_000, tokenLimit: 1_000_000 });
+      const { result } = renderHook(() => useAICard('user@test.com'));
+      await expect(
+        act(async () => result.current.generateCover(createEmptyCard())),
+      ).rejects.toThrow(/Limite token/);
+    });
   });
 });

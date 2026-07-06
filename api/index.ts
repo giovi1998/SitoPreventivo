@@ -1314,6 +1314,46 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     return json(req, res, 200, { enabled, provider });
   }
 
+  if (path === '/ai/card-cover' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiCardCover', 5, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe generazioni di cover. Attendi un minuto.' });
+    }
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      return json(req, res, 503, { error: 'Cover AI non configurata (GEMINI_API_KEY mancante)' });
+    }
+    const v = validate(
+      z.object({
+        prompt: z.string().max(1000),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
+    if (v.data.userEmail) {
+      console.info('[ai_card_cover] user', { email: v.data.userEmail, ts: Date.now() });
+    }
+    try {
+      const { GeminiImageProvider } = await import('../src/ai/providers/gemini');
+      const provider = new GeminiImageProvider(apiKey);
+      const result = await provider.generateCardCover(v.data.prompt, 30_000);
+      const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
+      if (sizeBytes > 500_000) {
+        return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+      }
+      return json(req, res, 200, { data: result });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      if (msg.startsWith('GEMINI_401')) return json(req, res, 401, { error: 'Chiave Gemini non valida' });
+      if (msg.startsWith('GEMINI_429')) return json(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+      if (msg.startsWith('GEMINI_TIMEOUT')) return json(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' });
+      return json(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+    }
+  }
+
   if (path === '/ai/logo-background' && method === 'POST') {
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'aiLogoBg', 5, 60 * 1000);

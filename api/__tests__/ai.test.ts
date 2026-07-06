@@ -118,4 +118,29 @@ describe('AI endpoint Zod schemas (spec 7)', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe('aiCardCoverSchema (spec v2.4)', () => {
+    const aiCardCoverSchema = z.object({
+      prompt: z.string().max(1000),
+      userEmail: z.string().email().optional(),
+    });
+
+    it('accepts prompt only', () => {
+      expect(aiCardCoverSchema.safeParse({ prompt: 'minimal tech background' }).success).toBe(true);
+    });
+
+    it('accepts prompt + userEmail', () => {
+      expect(aiCardCoverSchema.safeParse({ prompt: 'minimal tech background', userEmail: 'u@x.com' }).success).toBe(true);
+    });
+
+    it('rejects prompt too long', () => {
+      const result = aiCardCoverSchema.safeParse({ prompt: 'x'.repeat(1001) });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects invalid userEmail', () => {
+      const result = aiCardCoverSchema.safeParse({ prompt: 'ok', userEmail: 'bad' });
+      expect(result.success).toBe(false);
+    });
+  });
 });

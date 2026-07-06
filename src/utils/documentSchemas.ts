@@ -459,12 +459,15 @@ export const businessCardSchema = z.object({
   id: z.string().min(1),
   userEmail: z.string().email().optional(),
   title: z.string().default(''),
-  front: z.object({
+    front: z.object({
     name: z.string().default(''),
     title: z.string().default(''),
     company: z.string().default(''),
     photoUrl: z.string().nullable().default(null),
     logoUrl: z.string().nullable().default(null),
+    // Spec v2.4: AI-generated cover/background image for the front side.
+    // Stored as base64 data URL. Rendered full-bleed behind text/photo.
+    coverImageUrl: z.string().nullable().default(null),
     logoBackground: z.enum(['none', 'card']).default('none'),
     layout: businessCardLayoutSchema.default('left'),
     // Phase 2.2 REQ-A02: separa "grid-mode attivo" (rende la preview via
@@ -523,6 +526,7 @@ export function createEmptyCard(): BusinessCard {
       company: '',
       photoUrl: null,
       logoUrl: null,
+      coverImageUrl: null,
       logoBackground: 'none',
       layout: 'left',
       useGrid: false,
@@ -593,6 +597,7 @@ export function createGiovanniCardTemplate(): BusinessCard {
       company: 'HPE CDS',
       photoUrl: '/giovanni-photo.jpg',
       logoUrl: giovanniLogoDataUri(),
+      coverImageUrl: null,
       layout: 'split',
     },
     back: {
