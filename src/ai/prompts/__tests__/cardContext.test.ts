@@ -108,6 +108,15 @@ describe('buildCardAIContext', () => {
     expect((payload.front as any).logoUrl).toBeUndefined();
   });
 
+  it('does NOT include coverImageUrl in front payload (AI cover base64 must not leak to DeepSeek)', () => {
+    const card: BusinessCard = {
+      ...createEmptyCard(),
+      front: { ...createEmptyCard().front, coverImageUrl: 'data:image/jpeg;base64,VERYLONGBASE64' },
+    };
+    const { payload } = buildCardAIContext(card, 'cambia nome');
+    expect((payload.front as any).coverImageUrl).toBeUndefined();
+  });
+
   it('default relevantFields when none detected', () => {
     const card = createEmptyCard();
     const { relevantFields } = buildCardAIContext(card, 'hello');

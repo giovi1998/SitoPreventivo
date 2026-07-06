@@ -43,8 +43,10 @@ export function buildCardAIContext(card: BusinessCard, userPrompt: string): Card
   const payload: Record<string, unknown> = {};
 
   if (fields.has('front') || fields.size === 0) {
-    // Strip photoUrl/logoUrl (base64 too large for AI context)
-    const { photoUrl, logoUrl, ...frontRest } = card.front;
+    // Strip photoUrl/logoUrl/coverImageUrl (base64 too large for AI context).
+    // DeepSeek riproduce il base64 nella risposta se lo vede, rompendo
+    // la validazione Zod (coverImageUrl 150KB+ → JSON enorme → error:invalid_card).
+    const { photoUrl, logoUrl, coverImageUrl, ...frontRest } = card.front;
     payload.front = frontRest;
   }
   if (fields.has('back') || fields.size === 0) {
