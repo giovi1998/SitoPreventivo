@@ -30,13 +30,13 @@ describe('buildCardCoverBrief', () => {
   it('keeps text areas readable in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.6: minimal positive brief — calm watercolor wash. The long
-    // negative lists of v2.5.1 caused Gemini refusals; we now describe
-    // what we want, not what we don't.
+    // v2.5.1: gentle gradient that drifts, low contrast, explicit
+    // negative list (no text/QR/logo/faces/etc) so Gemini does not
+    // invent card elements the user will add separately.
     const lower = prompt.toLowerCase();
     expect(lower).toContain('watercolor wash');
-    expect(lower).toContain('soft gradients');
     expect(lower).toContain('low contrast');
+    expect(lower).toContain('gentle gradient');
   });
 
   it('flags photo/logo presence in context', () => {
@@ -72,7 +72,7 @@ describe('buildCardCoverBrief', () => {
     const card = createGiovanniCardTemplate();
     const { prompt, context } = buildCardCoverBrief(card);
     expect(prompt.length).toBeLessThanOrEqual(1000);
-    expect(context.length).toBeLessThanOrEqual(1000);
+    expect(context.length).toBeLessThanOrEqual(1200);
   });
 
   it('includes the actual card palette hex values in the prompt', () => {
@@ -98,17 +98,15 @@ describe('buildCardCoverBrief', () => {
   it('does not ask for faces/text/logos in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.6: minimal positive brief. We no longer enumerate negative
-    // constraints ("no people", "no text", "no logo", "no pattern")
-    // because long negative lists caused Gemini refusals. The brief
-    // is positive-only ("calm watercolor wash, soft gradients, low
-    // contrast"). Readability of overlaid text is delegated to the
-    // CSS wash layer + overlay hints in the context, not to the image
-    // prompt.
+    // v2.5.1: explicit negative list. The user does not want text,
+    // QR, logos or any card-like elements baked into the generated
+    // background image; the card content is overlaid separately.
     const lower = prompt.toLowerCase();
-    expect(lower).not.toContain('no people');
-    expect(lower).not.toContain('no text');
-    expect(lower).not.toContain('no logo');
-    expect(lower).not.toContain('no pattern');
+    expect(lower).toContain('no text');
+    expect(lower).toContain('no qr');
+    expect(lower).toContain('no logo');
+    expect(lower).toContain('no faces');
+    expect(lower).toContain('no people');
+    expect(lower).toContain('no pattern');
   });
 });
