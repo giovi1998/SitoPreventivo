@@ -24,7 +24,7 @@ import { useToast } from '../hooks/useToast';
 import { tryCatch } from '../utils/errors';
 import { FREE_DOCUMENT_LIMIT } from '../utils/watermark';
 import { logger } from '../utils/logger';
-import { isLocalhost } from '../utils/env';
+import { isLocalDev } from '../utils/env';
 
 function generateId() {
   const year = new Date().getFullYear();
@@ -125,7 +125,7 @@ export default function AppShell() {
       setDocumentCount(0);
       return;
     }
-    if (user.email === 'admin@gmail.com' || isLocalhost()) {
+    if (user.email === 'admin@gmail.com' || isLocalDev()) {
       setTier('unlocked');
       setDocumentCount(0);
       return;

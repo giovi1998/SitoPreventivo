@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { isLocalhost } from '../env';
+import { isLocalhost, isLocalDev } from '../env';
 
 const originalLocation = window.location;
 
@@ -25,5 +25,22 @@ describe('isLocalhost', () => {
   it('returns false for production domain', () => {
     window.location.hostname = 'quickbrand.vercel.app';
     expect(isLocalhost()).toBe(false);
+  });
+});
+
+describe('isLocalDev', () => {
+  it('returns true when hostname is localhost and dev=true', () => {
+    window.location.hostname = 'localhost';
+    expect(isLocalDev(true)).toBe(true);
+  });
+
+  it('returns false when hostname is localhost but dev=false (production build)', () => {
+    window.location.hostname = 'localhost';
+    expect(isLocalDev(false)).toBe(false);
+  });
+
+  it('returns false on production domain even if dev=true', () => {
+    window.location.hostname = 'quickbrand.vercel.app';
+    expect(isLocalDev(true)).toBe(false);
   });
 });
