@@ -56,10 +56,10 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | File | Role |
 |------|------|
 | `App.tsx` (root, not src/) | Thin re-export of `AppShell` (default) + `AuthProvider`/`AuthContext` (named) |
-| `src/main.tsx` | React Router setup: `/login`, `/` (HomePage), `/app/*` (6 child routes), `*` (404) |
+| `src/main.tsx` | React Router setup: `/login`, `/` (HomePage), `/app/*` (8 child routes), `*` (404) |
 | `src/components/AppShell.tsx` | Global state shell (quote, AI, toasts, exports, theme), renders `<Outlet/>` |
 | `src/components/AdminRoute.tsx` | Guard: `user.role === 'admin'` required, else `navigate('/app/editor')` |
-| `src/hooks/useRouteView.ts` | Bridge hook: `pathname ↔ view` (editor\|collection\|qr\|card\|logo\|settings\|admin), `setView` calls `navigate()` |
+| `src/hooks/useRouteView.ts` | Bridge hook: `pathname ↔ view` (editor\|collection\|qr\|card\|logo\|flyer\|social\|settings\|admin), `setView` calls `navigate()` |
 | `src/pages/app/*` | Thin page wrappers (Editor/Collection/Qr/Card/Logo/Settings/Admin), read state from `AppContext` |
 | `docs/logo-ai.md` | **Phase 7**: private docs explaining the disabled "AI Generation" tab (la versione pubblica `LogoAiDocsPage.tsx` + route `/docs/logo-ai` sono state rimosse deliberatamente). |
 | `api/index.ts` | Single Vercel serverless function, entire REST API (monolith, intentional) |
@@ -69,7 +69,8 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/utils/generatePDF.ts` | PDF generation with pdfmake (preventivi) |
 | `src/utils/cardGenerator.ts` | Card PDF/PNG/SVG export + `buildCardSvg` |
 | `src/utils/qrGenerator.ts` | QR Code SVG/PNG generation (`qrcode` lib) |
-| `src/utils/logoGenerator.ts` | **Phase 4**: SVG builder + sanitize + export PNG for logos |
+| `src/utils/logoGenerator.ts` | **Phase 4 / v2.1**: SVG builder + sanitize + export PNG + render `builder.backgroundImage` (Nano Banana) come `<image>` dietro al testo |
+| `src/components/LogoAiPanel.tsx` | **Phase v2.1**: UX namelix-like per Logo AI (3-step chat: attività → mood → target → genera). Parametri via DeepSeek + background via Gemini Nano Banana. |
 | `src/utils/flyerGenerator.ts` | **Phase 3**: Flyer PDF/PNG export (4 layout × 5 formati, bleed 3mm, tier-aware watermark) |
 | `src/utils/watermark.ts` | **Phase 5**: tier-aware watermark (free vs unlocked) for PDF/PNG/SVG export |
 | `src/utils/documentSchemas.ts` | Zod schema: quote, QR, businessCard, cardGrid, logo, **flyer (Phase 3)**, presets |
@@ -77,7 +78,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/CardEditor.tsx` | Editor bigliettini: 3-col desktop / tabs mobile, FAB AI, zoom |
 | `src/components/CardPreview.tsx` | Anteprima card: flexbox + CSS Grid mode (grid-based rendering) |
 | `src/components/QREditor.tsx` | Generatore QR Code (7 tipi, stili, logo overlay) |
-| `src/components/LogoEditor.tsx` | **Phase 4**: Logo Builder (tabs Builder + AI, lucide picker, 3 export sizes) |
+| `src/components/LogoEditor.tsx` | **Phase 4 / v2.1**: Logo Builder (tabs Builder + AI con namelix-like UX, lucide picker, 3 export sizes) |
 | `src/components/FlyerEditor.tsx` | **Phase 3**: Volantino editor (form, layout switcher, AI modal, 4 template settore, PDF+PNG export) |
 | `src/components/flyer/FlyerEditorShell.tsx` | **Flyer refactor**: logica editor completa (pannelli AI/manuale/preview, export, auto-save, mobile bottom bar) |
 | `src/components/flyer/FlyerPreviewPanel.tsx` | **Flyer refactor**: pannello preview con badge densità e toggle debug |
@@ -105,8 +106,19 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/hooks/useMediaQuery.ts` | Hook responsive (breakpoint detection via matchMedia) |
 | `src/ai/cardOrchestrator.ts` | AI orchestrator card (no tools, JSON round-trip) |
 | `src/ai/flyerOrchestrator.ts` | **Phase 3**: AI orchestrator volantino (no tools, JSON round-trip, session mgmt) |
+| `src/ai/BaseOrchestrator.ts` | **Phase v2.1/v2.2**: classe abstract condivisa (sanitizeAIResponse, parseJsonResponse, handleStream, trackUsage). v2.2: `sanitizeAIResponse` estrae anche array JSON bilanciati. 3 orchestratori estendono. |
+| `src/ai/prompts/registry.ts` | **Phase v2.1**: promptRegistry, lookup centralizzato per 7 prompt (quote/card/flyer-system + flyer-copy + logo/social/onboarding-system). |
+| `src/ai/providers/gemini.ts` | **Phase v2.1/v2.2**: `GeminiImageProvider` per generazione background (Nano Banana 2, `gemini-3.1-flash-image`). SDK `@google/genai` (`ai.interactions.create()`), non REST diretto. Richiede `response_modalities: ['text','image']` **minuscolo** e `generation_config.image_config.image_size: '512'` per restare sotto il clamp 500KB (v. `api/index.ts` `/ai/logo-background`). |
+| `src/ai/logoOrchestrator.ts` | **Phase v2.2**: LogoAIOrchestrator con `generateLogo()` 3 concept DeepSeek + `generateBackground()` Gemini, merge nuovi campi decorativi. |
+| `src/ai/socialOrchestrator.ts` | **Phase v2.1**: SocialAIOrchestrator cross-module (legge card/flyer, genera 3 post Instagram/Facebook/LinkedIn). |
+| `src/ai/onboardingOrchestrator.ts` | **Phase v2.1**: OnboardingAIOrchestrator per suggerimenti displayName/company/profession/color. |
+| `src/hooks/useAILogo.ts` | Hook client-side per `useAILogo` (generate 3 concept + generateBackground + isProcessing + isGeneratingBg). |
+| `src/hooks/useAISocial.ts` | Hook per `useAISocial` (generate posts, posts state, logs). |
+| `src/hooks/useAIOnboarding.ts` | Hook per `useAIOnboarding` (suggest, isProcessing, suggestions). |
+| `src/components/SocialEditor.tsx` | **v2.2**: editor AI per generare 3 post social da card o flyer, usa `AILogPanel` per i log. |
+| `src/components/BrandNameGenerator.tsx` | **v2.1**: generatore nome brand UX namelix-like (3-step chat: descrizione → mood → keyword → 5 nomi). |
 | `src/ai/cardMerge.ts` | Merge risposta AI → card (grid, style, text, photo-preserv) |
-| `vite.config.js` | Port 8000, SPA fallback for /app route |
+| `vite.config.js` | Port 8000, SPA fallback for /app route. Dev proxy per `/api/ai/logo-config` + `/api/ai/logo-background` (STESSI path del client/prod, vedi gotcha sotto), `loadEnv()` esplicito per popolare `process.env` (Vite non lo fa di default fuori da `import.meta.env`). |
 | `vercel.json` | Build runs `db:migrate` before `build` |
 
 ## App Routes
@@ -121,7 +133,9 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 | `/app/collection` | `CollectionPage` → `CollectionView` | login |
 | `/app/qr` | `QrPage` → `QREditor` (lazy) | login |
 | `/app/card` | `CardPage` → `CardEditor` (lazy) | login |
-| `/app/logo` | `LogoPage` → `LogoEditor` (lazy) | login (**Phase 4**) |
+| `/app/logo` | `LogoPage` → `LogoEditor` (lazy) | login (**Phase 4 + v2.1**) |
+| `/app/flyer` | `FlyerPage` → `FlyerEditor` (lazy) | login |
+| `/app/social` | `SocialPage` → `SocialEditor` (lazy) | login (**v2.1**: AI genera 3 post Instagram/Facebook/LinkedIn da card/flyer) |
 | `/app/settings` | `SettingsRoute` → `SettingsPage` | login |
 | `/app/admin` | `AdminPage` → `AdminDashboard` (lazy) | `user.role==='admin'` (via `AdminRoute`) |
 | `*` | `NotFoundPage` |, |
@@ -266,16 +280,27 @@ l'overflow del testo fuori dai box.
    `getBBox()` (user unit) vs `clipPath` rect; tolleranza orizzontale
    0.3mm, verticale 0.6mm (side-bearings e ascender).
 
-## Logo Builder Module (fase 4, in progress)
+## Logo Builder Module (fase 4 + v2.2)
 
-- **SVG builder templated**, no AI nella v1. Tab "AI Generation"
-  disabilitato con messaggio esplicito (placeholder per v2 con
-  Replicate).
-- **Icone**: libreria `lucide-react` ^0.395.0, allowlist 48 nomi
-  pre-filtrati (food/tech/fashion/business). Validazione lato
-  generatore (no injection).
+- **SVG builder templated** con tab "AI Generation" attivo (v2.1/v2.2,
+  richiede tier unlocked). Icone: libreria `lucide-react` ^0.395.0,
+  allowlist 48 nomi pre-filtrati (food/tech/fashion/business).
+  Validazione lato generatore (no injection).
 - **4 template per settore**: tech, food, fashion, professionista.
 - **3 layout**: horizontal, vertical, stacked.
+- **Auto-fit v2.2**: `getViewBox(layout, primaryText, tagline)` dinamico
+  + `fitText()` per non troncare testi lunghi. ViewBox clamp `[400, 800]`
+  per horizontal.
+- **Decorazioni v2.2**: `backgroundColor` (solid), `gradientFill`
+  (primary→secondary sul testo), `decorativeElements`
+  (`underline`/`dotRing`/`topAccent`). Controlli sia AI che manuali.
+- **AI v2.2**: DeepSeek genera 3 concept distinti (array JSON) in una
+  sola chiamata, ognuno con un `imagePrompt` dedicato (formula
+  Nano-Banana: Subject+Action+Context+Composition+Lighting+Style). Le
+  **3 immagini Gemini partono in parallelo subito dopo** (non dopo la
+  selezione): `Promise.allSettled` su 3 `generateBackground()`, badge
+  "AI bg ✓" per concept su ogni card. L'utente sceglie un concept →
+  `onPatch(builder)` applica testo/colori/icona/background scelti.
 - **Export**: SVG (Blob download), PNG 512/1024/2048 (canvas pipeline).
 - **Sicurezza**: escape XML su `primaryText`/`tagline`, sanitize SVG
   via `DOMParser`+`XMLSerializer` prima di `dangerouslySetInnerHTML`,
@@ -283,6 +308,49 @@ l'overflow del testo fuori dai box.
 - **Pattern riusati**: schema Zod in `documentSchemas.ts`, salvataggio
   via `dataService.saveDocument` con `documentType='logo'`, lazy-load
   componente in `App.tsx`.
+- **Persistenza chat v2.2**: `LogoAiPanel` salva `answers`, `step`,
+  `concepts`, `selected`, `bgImages` in `localStorage['logoAiChat:v1']`
+  con TTL 24h.
+
+### ⚠️ Logo AI, Gemini background gotchas (leggi prima di toccare `gemini.ts` o `vite.config.js`)
+
+Due bug distinti hanno bloccato la generazione background per un
+intero ciclo di sviluppo; nessuno dei due era nel provider Gemini in
+sé. Leggere prima di rimettere mano a questa parte.
+
+1. **Path del proxy dev deve combaciare col client/prod esattamente**.
+   Il client (`LogoAiPanel.tsx`) e `api/index.ts` usano
+   `/api/ai/logo-config` + `/api/ai/logo-background` (con `/ai/`). Il
+   middleware dev in `vite.config.js` un tempo intercettava
+   `/api/logo-config` (senza `/ai/`): la fetch falliva silenziosamente,
+   `config.provider` restava `'none'` e l'intero ramo di generazione
+   background veniva **skippato lato client senza nessun log** — sembrava
+   che Gemini non venisse mai chiamato. Se si aggiunge un nuovo endpoint
+   AI, verificare SEMPRE che il path nel dev middleware sia identico
+   (char per char) a quello del client.
+2. **`process.env` non è popolato di default nel dev server**. Vite
+   espone `.env` solo via `import.meta.env` (bundle client); il codice
+   server-side in `vite.config.js` (incluso il middleware sopra) vede
+   `process.env` vuoto per le chiavi senza logica esplicita. Fix:
+   `loadEnv(mode, process.cwd(), '')` in testa a `vite.config.js`,
+   merge manuale in `process.env`.
+3. **Non duplicare la logica del provider nel middleware dev**. In
+   passato il middleware aveva una sua chiamata REST inline a Gemini
+   (modello e API diversi da `gemini.ts`), quindi dev e prod si
+   comportavano diversamente. Ora il middleware fa
+   `server.ssrLoadModule('/src/ai/providers/gemini.ts')` e riusa la
+   stessa classe `GeminiImageProvider` di produzione.
+4. **`interactions.create()` vuole `response_modalities` minuscolo**
+   (`['text', 'image']`), non `['TEXT', 'IMAGE']` (quella è la
+   convenzione della vecchia REST `generateContent`). Con i valori
+   maiuscolo l'SDK risponde `400: value 'TEXT' is not supported`.
+5. **Dimensione immagine non enforced di default**: senza
+   `generation_config.image_config.image_size`, Gemini produce a
+   risoluzione `1K` (~400KB-2MB variabile), e il clamp lato server
+   (500KB, vedi `api/index.ts` `/ai/logo-background`) scarta dopo il
+   fatto ~2/3 delle immagini con 413. Fix: chiedere esplicitamente
+   `image_size: '512'` (+ `aspect_ratio: '16:9'`) in fase di richiesta,
+   non dopo. Valori supportati: `'512' | '1K' | '2K' | '4K'`.
 
 ## Known Issues, Card Module (fase 2)
 
@@ -415,13 +483,20 @@ condition `card.back.website && !qrPayload`.
 | Var | Where | Purpose |
 |-----|-------|--------|
 | `DATABASE_URL` | Vercel (Production+Preview) | Neon Postgres connection |
-| `DEEPSEEK_API_KEY` | Vercel (Production+Preview) | AI chat (server-side only) |
+| `DEEPSEEK_API_KEY` | Vercel (Production+Preview) + .env (locale) | AI chat (server-side only). Usato da tutti gli orchestratori (preventivo, card, flyer, social, onboarding) via proxy `/api/ai/chat`. |
+| `GEMINI_API_KEY` | Vercel (Production+Preview) + .env (locale) | **Phase v2.1/v2.2**: Google AI image generation per background logo AI (Nano Banana 2, modello `gemini-3.1-flash-image`, via SDK `@google/genai`). Proxy server-side `/api/ai/logo-background` (prod) e dev middleware in `vite.config.js` (riusa lo stesso provider via `ssrLoadModule`). Senza la key, il tab AI del LogoEditor funziona ma genera solo parametri (no background). In locale può anche chiamarsi `VITE_GEMINI_API_KEY` in `.env` (letto server-side, mai esposto al bundle). |
 | `ADMIN_PASSWORD` | Vercel (Production+Preview) | Admin login (admin@gmail.com) |
 | `VITE_ADMIN_PASSWORD` | .env (local only) | Admin login in dev |
 | `ALLOWED_ORIGIN` | Vercel (Production+Preview) | CORS origin (es. `https://tuodominio.vercel.app`). Se vuoto accetta solo `*.vercel.app`. |
-| `REPLICATE_API_TOKEN` | Vercel (opzionale, v2) | **Phase 4 / Phase 7**: token Replicate per generazione logo AI. **Non** letto nella v1 (tab "AI Generation" mostra messaggio e link a `/docs/logo-ai`). Da configurare in v2 con Vercel Pro per abilitare il flusso AI. |
+| `REPLICATE_API_TOKEN` | Vercel (opzionale, deprecato) | Fallback per Logo AI background. Se `GEMINI_API_KEY` è presente, ha priorità. Mantenuto per retrocompatibilità. |
 
-**Never expose `DEEPSEEK_API_KEY` to the browser.** The frontend calls the serverless function proxy, which holds the key server-side.
+**Setup locale**:
+1. Copia `.env.example` in `.env` (server) o in `.env.local` (Vite).
+2. Inserisci le chiavi: `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `VITE_ADMIN_PASSWORD`.
+3. Le chiavi senza prefisso `VITE_` sono lette solo lato server (`api/index.ts`).
+4. Vite proxy in dev: `npm run dev` espone `/api/*` direttamente tramite il dev server Vite.
+
+**Never expose `DEEPSEEK_API_KEY` or `GEMINI_API_KEY` to the browser.** The frontend calls the serverless function proxy, which holds the keys server-side.
 
 ### PDF Generation, Client-Side Only
 
@@ -586,6 +661,21 @@ Queste skill vengono caricate automaticamente. Quando modifichi il codice riferi
 - `vercel-cli-with-tokens`, solo per setup CLI con token
 - `vercel-optimize`, solo per audit costi/performance (richiede Vercel CLI autenticato)
 - `git-guardrails-claude-code`, solo per setup hook
+- `gpt-taste` (leonxlnx/taste-skill), design taste elite per UI/UX di alta qualità (AIDA, GSAP, bento). Attiva quando si ridisegna HomePage/Editor/Preview.
+- `design-taste-frontend` (leonxlnx/taste-skill), variant frontend del taste skill, per review design UI.
+- `high-end-visual-design`, design visivo premium per feature nuove.
+- `imagegen-frontend-web`, generazione mockup/preview web via AI.
+- `industrial-brutalist-ui`, estetica brutalist come alternativa di design.
+- `minimalist-ui`, estetica minimalista.
+- `redesign-existing-projects`, quando si ridisegna un componente esistente.
+- `stitch-design-taste`, pattern design system Stitch-style.
+- `brandkit`, brand identity kit per coerenza visiva Quickbrand.
+- `full-output-enforcement`, enforcement output formato.
+- `image-to-code`, conversione mockup → codice.
+- `imagegen-frontend-mobile`, mockup mobile via AI.
+- `social-media`, draft post social (NON su disco, riferimento futuro).
+- `muapi-nano-banana`, prompting formula Nano-Banana (Subject+Action+
+  Context+Composition+Lighting+Style) per `imagePrompt` AI logo/immagini.
 
 **Skill rimosse** (non usate da questo progetto):
 - `vercel-react-native-skills`, non è un'app React Native
@@ -620,8 +710,20 @@ Queste skill vengono caricate automaticamente. Quando modifichi il codice riferi
 
 | Path | Contents |
 |------|----------|
-| `.agents/skills/` | Installed agent skills (10 attive) |
+| `.agents/skills/` | Installed agent skills (29 totali, 10 attive + 19 on-demand). Le skill sono **solo per l'agente di coding** (opencode), NON per l'app. L'app usa DeepSeek e (per logo background) Gemini via proxy server-side. |
 | `.agents/guardrails/` | Git safety rules and block scripts |
 | `api/index.ts` | Single Vercel serverless function, entire REST API (monolith) |
 | `src/utils/` | Client-side utilities (logger, errors) |
+
+### Note: UX namelix-like è per tutti i prodotti?
+
+No. Attualmente l'UX namelix-like (chat step che fa domande prima di generare) è implementata **solo in onboarding** (`BrandNameGenerator.tsx`). Per ogni prodotto specifico (logo, card, flyer, social) il flusso AI è diretto: parametri → genera → applica. La UX namelix-like per logo AI v2.1 è una variante semplificata (3 domande nel tab AI), non un generatore di nomi brand. Estendere a tutti i prodotti è fattibile ma fuori scope.
+
+### Note: Skill taste-skill (leonxlnx/taste-skill) è per l'app o per l'agente?
+
+**Solo per l'agente di coding (opencode).** Le skill in `.agents/skills/` sono regole che l'agente di coding carica per scrivere meglio il codice (AIDA, GSAP, bento grid, ecc.). L'app Quickbrand NON usa queste skill: l'app usa DeepSeek (testo AI) e Gemini Nano Banana (immagini AI) via proxy server-side. Le skill taste sono utili quando si ridisegna HomePage/Editor/Preview perché guidano l'agente verso design premium. Non hanno impatto runtime sull'app.
+
+### Note: Gemini Nano Banana è usato per altri prodotti (flyer, card)?
+
+**No, attualmente solo per logo background.** Il provider `GeminiImageProvider` (`src/ai/providers/gemini.ts`) è wireato solo all'endpoint `/ai/logo-background` e all'orchestratore `LogoAIOrchestrator.generateBackground()`. Flyer usa hero image statiche (picsum.photos URL), card non ha AI image generation. Estendere Gemini a flyer (hero AI) e card (cover AI) è fattibile ma out of scope v2.1.
 
