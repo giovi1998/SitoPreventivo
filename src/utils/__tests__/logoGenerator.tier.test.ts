@@ -101,6 +101,7 @@ describe('svgToPng, tier integration', () => {
       // the size-2048 tests below.
       if (observedTier) {
         expect(observedTier).toBe('unlocked');
+        // v2.4: aspect preservato, non più quadrato 512×512.
         expect(observedWidth).toBe(512);
       }
     } finally {
@@ -120,8 +121,11 @@ describe('svgToPng, tier integration', () => {
     const restore = setupJsdomMocks();
     try {
       await svgToPng(svg, 2048, { tier: 'free' });
+      // v2.4: aspect ratio preservato. createEmptyLogo().builder layout
+      // default = 'horizontal' con viewBox 400×160 (aspect 2.5:1).
+      // Lato lungo clampato a 1200, lato corto scalato.
       expect(observedWidth).toBe(1200);
-      expect(observedHeight).toBe(1200);
+      expect(observedHeight).toBe(480);
     } finally {
       restore();
       spyW.mockRestore();
@@ -140,8 +144,10 @@ describe('svgToPng, tier integration', () => {
     const restore = setupJsdomMocks();
     try {
       await svgToPng(svg, 2048, { tier: 'unlocked' });
+      // v2.4: aspect ratio preservato. Layout horizontal 400×160.
+      // Lato lungo 2048, lato corto 2048/2.5 ≈ 819.
       expect(observedWidth).toBe(2048);
-      expect(observedHeight).toBe(2048);
+      expect(observedHeight).toBe(819);
     } finally {
       restore();
       spyW.mockRestore();
@@ -151,14 +157,19 @@ describe('svgToPng, tier integration', () => {
   it('free tier with size=512 → no clamp (size < 1200)', async () => {
     spyWatermarkCanvas.mockRestore();
     let observedWidth = 0;
-    const spyW = vi.spyOn(watermarkMod, 'applyWatermarkToCanvas').mockImplementation((_ctx, _tier, w) => {
+    let observedHeight = 0;
+    const spyW = vi.spyOn(watermarkMod, 'applyWatermarkToCanvas').mockImplementation((_ctx, _tier, w, h) => {
       observedWidth = w;
+      observedHeight = h;
     });
     const svg = builderToSvg(createEmptyLogo().builder);
     const restore = setupJsdomMocks();
     try {
       await svgToPng(svg, 512, { tier: 'free' });
+      // v2.4: aspect preservato. Layout horizontal 400×160, size=512
+      // → lato corto 205.
       expect(observedWidth).toBe(512);
+      expect(observedHeight).toBe(205);
     } finally {
       restore();
       spyW.mockRestore();
@@ -168,14 +179,19 @@ describe('svgToPng, tier integration', () => {
   it('default (no opts) → behaves as unlocked (no clamp)', async () => {
     spyWatermarkCanvas.mockRestore();
     let observedWidth = 0;
-    const spyW = vi.spyOn(watermarkMod, 'applyWatermarkToCanvas').mockImplementation((_ctx, _tier, w) => {
+    let observedHeight = 0;
+    const spyW = vi.spyOn(watermarkMod, 'applyWatermarkToCanvas').mockImplementation((_ctx, _tier, w, h) => {
       observedWidth = w;
+      observedHeight = h;
     });
     const svg = builderToSvg(createEmptyLogo().builder);
     const restore = setupJsdomMocks();
     try {
       await svgToPng(svg, 1024);
+      // v2.4: aspect preservato. Layout horizontal 400×160, size=1024
+      // → lato corto 410.
       expect(observedWidth).toBe(1024);
+      expect(observedHeight).toBe(410);
     } finally {
       restore();
       spyW.mockRestore();

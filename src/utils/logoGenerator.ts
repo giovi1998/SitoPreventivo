@@ -586,6 +586,34 @@ export function sanitizeSvg(svg: string): string {
 
 // ─── SVG → PNG ──────────────────────────────────────────
 
+/**
+ * Estrae W e H dal viewBox "0 0 W H" di un SVG. Se mancante o
+ * malformato, fallback quadrato 512×512 (preserva comportamento
+ * legacy per SVG senza viewBox).
+ */
+function parseViewBox(svg: string): { w: number; h: number } {
+  const m = svg.match(/<svg[^>]*\bviewBox=["']([-\d.\s]+)["']/);
+  if (m) {
+    const parts = m[1].trim().split(/\s+/).map(Number);
+    if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+      return { w: parts[2], h: parts[3] };
+    }
+  }
+  return { w: 512, h: 512 };
+}
+
+/**
+ * Converte un SVG in PNG preservando l'aspect ratio del viewBox.
+ *
+ * Bug fix: prima `canvas.width = canvas.height = size` forzava un
+ * quadrato, deformando logo orizzontali (es. viewBox 400×160 → 2.5:1)
+ * in un quadrato 512×512. Ora parsiamo il viewBox e calcoliamo
+ * `targetW`/`targetH` con il lato lungo = `size`.
+ *
+ * Crispness del testo: render a 2× supersampling su canvas
+ * temporaneo, poi `drawImage` con `imageSmoothingQuality = 'high'`
+ * al target. Questo mitiga il blur nativo del raster SVG→canvas.
+ */
 export async function svgToPng(
   svg: string,
   size: number,
@@ -600,6 +628,20 @@ export async function svgToPng(
   const tier: Tier = opts.tier || 'unlocked';
   const maxSide = getMaxPngSideForTier(tier);
   const effectiveSize = Math.min(size, maxSide);
+  const { w: vw, h: vh } = parseViewBox(svg);
+  const aspect = vw / vh;
+  let targetW: number;
+  let targetH: number;
+  if (aspect >= 1) {
+    targetW = effectiveSize;
+    targetH = Math.max(1, Math.round(effectiveSize / aspect));
+  } else {
+    targetH = effectiveSize;
+    targetW = Math.max(1, Math.round(effectiveSize * aspect));
+  }
+  const SUPERSAMPLE = 2;
+  const renderW = targetW * SUPERSAMPLE;
+  const renderH = targetH * SUPERSAMPLE;
   const blob = new Blob([svg], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
   try {
@@ -611,19 +653,30 @@ export async function svgToPng(
       img.src = url;
     });
     const canvas = document.createElement('canvas');
-    canvas.width = effectiveSize;
-    canvas.height = effectiveSize;
+    canvas.width = renderW;
+    canvas.height = renderH;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D non disponibile');
-    // Ensure transparent background (some browsers default to black)
-    ctx.clearRect(0, 0, effectiveSize, effectiveSize);
+    ctx.clearRect(0, 0, renderW, renderH);
     ctx.fillStyle = 'rgba(0,0,0,0)';
-    ctx.fillRect(0, 0, effectiveSize, effectiveSize);
-    ctx.drawImage(img, 0, 0, effectiveSize, effectiveSize);
-    // Phase 5: tier-aware watermark on PNG canvas
-    applyWatermarkToCanvas(ctx, tier, effectiveSize, effectiveSize);
+    ctx.fillRect(0, 0, renderW, renderH);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, renderW, renderH);
+    // Downscale finale al target con smoothing high per testo crisp.
+    const out = document.createElement('canvas');
+    out.width = targetW;
+    out.height = targetH;
+    const octx = out.getContext('2d');
+    if (!octx) throw new Error('Canvas 2D non disponibile (out)');
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = 'high';
+    octx.clearRect(0, 0, targetW, targetH);
+    octx.drawImage(canvas, 0, 0, renderW, renderH, 0, 0, targetW, targetH);
+    // Phase 5: tier-aware watermark sul canvas finale (dimensioni reali).
+    applyWatermarkToCanvas(octx, tier, targetW, targetH);
     const pngBlob: Blob = await new Promise((resolve, reject) => {
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob ha restituito null'))), 'image/png');
+      out.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob ha restituito null'))), 'image/png');
     });
     const buf = await pngBlob.arrayBuffer();
     return new Uint8Array(buf);

@@ -340,6 +340,121 @@ describe('logoGenerator', () => {
     });
   });
 
+  describe('svgToPng aspect ratio (bug fix v2.4)', () => {
+    /**
+     * Bug originale: `canvas.width = canvas.height = size` forza un
+     * quadrato, deformando logo orizzontali (es. 400×160) in 512×512.
+     * Dopo il fix, il canvas deve rispettare il viewBox del SVG.
+     */
+    function withMockCanvas(): void {
+      const originalImage = (global as any).Image;
+      class FakeImage {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        _src = '';
+        crossOrigin = '';
+        set src(v: string) {
+          this._src = v;
+          setTimeout(() => this.onload && this.onload(), 0);
+        }
+        get src() { return this._src; }
+      }
+      (global as any).Image = FakeImage;
+      const sizes: { w: number; h: number }[] = [];
+      const originalCreate = document.createElement.bind(document);
+      (document as any).createElement = (tag: string) => {
+        const el = originalCreate(tag);
+        if (tag === 'canvas') {
+          const slot: { w: number; h: number } = { w: 0, h: 0 };
+          Object.defineProperty(el, 'width', {
+            get() { return slot.w; },
+            set(v: number) { slot.w = v; },
+          });
+          Object.defineProperty(el, 'height', {
+            get() { return slot.h; },
+            set(v: number) { slot.h = v; },
+          });
+          sizes.push(slot);
+          (el as any).getContext = () => ({
+            clearRect: () => undefined,
+            fillRect: () => undefined,
+            drawImage: () => undefined,
+            fillStyle: '',
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high',
+          });
+          (el as any).toBlob = (cb: (b: Blob | null) => void) => {
+            const blob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' });
+            setTimeout(() => cb(blob), 0);
+          };
+        }
+        return el;
+      };
+      (global as any).__sizes = sizes;
+      (global as any).__restore = () => {
+        (global as any).Image = originalImage;
+        (document as any).createElement = originalCreate;
+      };
+    }
+
+    it('preserves horizontal aspect ratio (400×160 viewBox, size=512)', async () => {
+      withMockCanvas();
+      try {
+        const svg = builderToSvg({ ...baseBuilder, layout: 'horizontal' });
+        await svgToPng(svg, 512);
+        // Ultimo canvas creato è l'output finale; il penultimo è il
+        // supersample 2×. Verifichiamo che esista almeno un canvas
+        // con aspect ratio ~2.5:1 (= 400/160).
+        const sizes = (global as any).__sizes as { w: number; h: number }[];
+        expect(sizes.length).toBeGreaterThanOrEqual(2);
+        // Output canvas: w/h ≈ 2.5, lato lungo = 512.
+        const out = sizes[sizes.length - 1];
+        expect(out.w).toBe(512);
+        expect(out.h).toBeGreaterThan(200);
+        expect(out.h).toBeLessThan(220);
+      } finally {
+        (global as any).__restore();
+      }
+    });
+
+    it('preserves vertical aspect ratio (300×340 viewBox with tagline, size=512)', async () => {
+      withMockCanvas();
+      try {
+        const svg = builderToSvg({ ...baseBuilder, layout: 'vertical' });
+        // Verifica a parte che il viewBox non sia quadrato (cioè la tagline
+        // estende H): è la pre-condizione del fix.
+        const m = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+        expect(m).not.toBeNull();
+        const vw = Number(m![1]);
+        const vh = Number(m![2]);
+        expect(vw).not.toBe(vh); // 300×340 con tagline
+        await svgToPng(svg, 512);
+        const sizes = (global as any).__sizes as { w: number; h: number }[];
+        const out = sizes[sizes.length - 1];
+        // Output canvas: lato lungo = 512, lato corto scalato per
+        // mantenere aspect ratio vw/vh.
+        const ratio = vw / vh;
+        const expectedW = ratio >= 1 ? 512 : Math.round(512 * ratio);
+        const expectedH = ratio >= 1 ? Math.round(512 / ratio) : 512;
+        expect(out.w).toBe(expectedW);
+        expect(out.h).toBe(expectedH);
+      } finally {
+        (global as any).__restore();
+      }
+    });
+
+    it('root SVG does not set text-rendering (browser default uses subpixel hinting for crisp text)', () => {
+      const svg = builderToSvg(baseBuilder);
+      const clean = sanitizeSvg(svg);
+      // text-rendering="geometricPrecision" disabilita il subpixel
+      // hinting in Chrome/Edge → testo SVG inline appare sgranato.
+      // Il browser default ("auto") usa hinting subpixel → più nitido.
+      // Il PNG export compensa con supersampling 2×, ma l'SVG inline no.
+      expect(clean).not.toContain('text-rendering="geometricPrecision"');
+      expect(clean).not.toContain('shape-rendering="geometricPrecision"');
+    });
+  });
+
   describe('createEmptyLogo → builderToSvg pipeline (AC-001/AC-002/AC-003)', () => {
     it('produces a valid SVG for createEmptyLogo defaults', () => {
       const logo = createEmptyLogo();

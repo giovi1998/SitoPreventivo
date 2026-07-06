@@ -2,17 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import LogoAiPanel from '../LogoAiPanel';
 
-const { generateMock, generateBackgroundMock } = vi.hoisted(() => ({
+const { generateMock, generateBackgroundMock, hookState } = vi.hoisted(() => ({
   generateMock: vi.fn(),
   generateBackgroundMock: vi.fn(),
+  hookState: { isProcessing: false, isGeneratingBg: false },
 }));
 
 vi.mock('../../hooks/useAILogo', () => ({
   useAILogo: () => ({
     generate: generateMock,
     generateBackground: generateBackgroundMock,
-    isProcessing: false,
-    isGeneratingBg: false,
+    isProcessing: hookState.isProcessing,
+    isGeneratingBg: hookState.isGeneratingBg,
     logs: [],
     reset: vi.fn(),
     availableModels: [],
@@ -285,6 +286,76 @@ describe('LogoAiPanel (spec 11/12 UI integration)', () => {
         const [, ctxArg] = generateBackgroundMock.mock.calls[0];
         expect(ctxArg.imagePrompt).toBe('A brand new artistic prompt');
       } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('spinner durante generazione background (v2.4)', () => {
+    /**
+     * Bug originale: durante la generazione Gemini (multi-secondo),
+     * il ConceptCard mostra il logo "nudo" (senza background), che
+     * appare come un logo random/placeholder all'utente. Aggiungiamo
+     * uno spinner overlay durante `isGeneratingBg && !bgImage && !bgError`.
+     */
+    const baseConcept = {
+      primaryText: 'Acme', tagline: '', iconType: 'none', iconGlyph: '', iconShape: 'circle',
+      primaryColor: '#000000', secondaryColor: '#111111', fontFamily: 'Inter', layout: 'horizontal',
+      icons: [], backgroundImage: null, backgroundColor: null, gradientFill: false, decorativeElements: [],
+      imagePrompt: null, textBackdrop: 'none', textColorMode: 'auto',
+      textOffsetX: 0, textOffsetY: 0, textScale: 1,
+    };
+
+    const seedConceptLoading = () => {
+      localStorage.setItem('logoAiChat:v1', JSON.stringify({
+        answers: { activity: 'X', mood: 'minimal', target: 'Y', sector: 'tech' },
+        step: 'result',
+        concepts: [baseConcept],
+        selected: -1,
+        bgImages: [null],
+        ts: Date.now(),
+      }));
+    };
+
+    it('shows spinner overlay when isGeneratingBg is true and bg is not ready', () => {
+      seedConceptLoading();
+      hookState.isGeneratingBg = true;
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ enabled: false, provider: 'none' }),
+      } as Response);
+      try {
+        render(
+          <LogoAiPanel logo={{ builder: baseConcept } as never} onPatch={vi.fn()} tier="unlocked" userEmail="t@e.com" />
+        );
+        expect(screen.getByText(/Generazione sfondo/i)).toBeInTheDocument();
+      } finally {
+        hookState.isGeneratingBg = false;
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it('does not show spinner when bg is ready', () => {
+      localStorage.setItem('logoAiChat:v1', JSON.stringify({
+        answers: { activity: 'X', mood: 'minimal', target: 'Y', sector: 'tech' },
+        step: 'result',
+        concepts: [baseConcept],
+        selected: -1,
+        bgImages: ['data:image/png;base64,READY'],
+        ts: Date.now(),
+      }));
+      hookState.isGeneratingBg = true; // anche se true, bg è pronto
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ enabled: false, provider: 'none' }),
+      } as Response);
+      try {
+        render(
+          <LogoAiPanel logo={{ builder: baseConcept } as never} onPatch={vi.fn()} tier="unlocked" userEmail="t@e.com" />
+        );
+        expect(screen.queryByText(/Generazione sfondo/i)).not.toBeInTheDocument();
+      } finally {
+        hookState.isGeneratingBg = false;
         fetchSpy.mockRestore();
       }
     });

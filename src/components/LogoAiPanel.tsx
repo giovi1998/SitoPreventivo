@@ -471,6 +471,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail }: Props) {
                 applied={step === 'applied' && selected === i}
                 bgImage={bgImages[i]}
                 bgError={bgErrors[i]}
+                bgLoading={isGeneratingBg && !bgImages[i] && !bgErrors[i]}
                 onSelect={() => applyConcept(i)}
                 onRegenerate={(promptText) => handleRegenerate(i, promptText)}
                 regenerating={regeneratingIdx === i}
@@ -501,6 +502,7 @@ function ConceptCard({
   applied,
   bgImage,
   bgError,
+  bgLoading,
   onSelect,
   onRegenerate,
   regenerating,
@@ -511,6 +513,7 @@ function ConceptCard({
   applied: boolean;
   bgImage: string | null;
   bgError: string | null;
+  bgLoading: boolean;
   onSelect: () => void;
   onRegenerate: (promptText: string) => void;
   regenerating: boolean;
@@ -534,7 +537,15 @@ function ConceptCard({
         onClick={onSelect}
         aria-pressed={selected}
       >
-        <div className="logo-ai-concept-preview" dangerouslySetInnerHTML={{ __html: previewSvg }} />
+        <div className="logo-ai-concept-preview">
+          <div className="logo-ai-concept-preview-inner" dangerouslySetInnerHTML={{ __html: previewSvg }} />
+          {bgLoading && (
+            <div className="logo-ai-concept-loading" role="status" aria-live="polite">
+              <span className="logo-ai-concept-spinner" aria-hidden="true" />
+              <span className="logo-ai-concept-loading-text">Generazione sfondo…</span>
+            </div>
+          )}
+        </div>
         <div className="logo-ai-concept-meta">
           <strong>Concept {index + 1}</strong>
           <span>{concept.primaryText}</span>
