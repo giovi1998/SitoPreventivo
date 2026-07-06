@@ -30,12 +30,14 @@ describe('buildCardCoverBrief', () => {
   it('keeps text areas readable in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.8: minimal neutral prompt to avoid Gemini copyright filters.
-    // Plain descriptive language, palette hex codes, abstract only.
+    // v2.9: creative + safe. Plain descriptive language asking for
+    // diverse abstract styles (shapes, planes, waves, particles,
+    // bokeh, contour lines, blobs) with hard prohibitions for
+    // card-like elements. No artistic metaphors.
     const lower = prompt.toLowerCase();
-    expect(lower).toContain('abstract gradient');
-    expect(lower).toContain('smooth blending');
-    expect(lower).toContain('soft and calm');
+    expect(lower).toContain('abstract creative background');
+    expect(lower).toContain('smooth color blending');
+    expect(lower).toContain('original abstract artwork');
   });
 
   it('flags photo/logo presence in context', () => {
@@ -97,7 +99,7 @@ describe('buildCardCoverBrief', () => {
   it('does not ask for faces/text/logos in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.8: hard prohibitions only for card-like elements. The user
+    // v2.9: hard prohibitions only for card-like elements. The user
     // does not want text, QR, logos, faces or people baked into the
     // generated background; the card content is overlaid separately.
     const lower = prompt.toLowerCase();
@@ -107,5 +109,11 @@ describe('buildCardCoverBrief', () => {
     expect(lower).toContain('no faces');
     expect(lower).toContain('no people');
     expect(lower).toContain('no real objects');
+    // Creative abstract styles are ALLOWED, not prohibited.
+    expect(lower).toContain('soft geometric shapes');
+    expect(lower).toContain('layered translucent planes');
+    expect(lower).toContain('flowing wave-like curves');
+    expect(lower).toContain('gentle bokeh');
+    expect(lower).toContain('abstract topographic contour lines');
   });
 });

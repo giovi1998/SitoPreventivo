@@ -31,17 +31,25 @@ export function buildCardCoverBrief(
   const brand = company || name || 'brand';
   const profession = title || 'professional';
 
-  // v2.8 prompt: minimal and neutral to avoid Gemini copyright filters.
-  // The v2.7 prompt triggered "Image generation blocked due to
-  // copyright/recitation" — likely the "watercolor wash" phrasing
-  // plus the long negative list. Use plain descriptive language,
-  // keep the palette, ask for abstract only. Shorter is safer.
+  // v2.9 prompt: creative + safe. Evolve le istruzioni creative del
+  // v2.7 (shapes, gradients, organic forms) ma mantiene linguaggio
+  // piano e neutro del v2.8 per non triggerare il filtro copyright/
+  // recitation di Gemini. Le proibizioni hard (no text/QR/logos/
+  // faces/people/real objects) restano, ma si chiedono stili diversi:
+  // soft geometric shapes, layered translucent planes, flowing waves,
+  // subtle particle clouds, gentle bokeh, abstract topographic lines.
+  // Niente metafore artistiche ("watercolor wash", "ink on paper").
   const prompt = clamp(
-    `Abstract gradient background using ${bgColor} as primary, ` +
+    `Abstract creative background using ${bgColor} as primary, ` +
       `${accentColor} as secondary, ${textColor} as deepest tone. ` +
-      `Smooth blending between the colors, soft and calm. ` +
+      `Compose an original abstract artwork: you may use soft geometric ` +
+      `shapes, layered translucent planes, flowing wave-like curves, ` +
+      `subtle particle clouds, gentle bokeh circles, abstract ` +
+      `topographic contour lines, organic blobs. Smooth color blending ` +
+      `throughout, harmonious and calm. ` +
       `Abstract only: no text, no words, no letters, no numbers, ` +
-      `no QR codes, no logos, no faces, no people, no real objects. ` +
+      `no QR codes, no logos, no faces, no people, no real objects, ` +
+      `no UI elements. ` +
       `Keep all areas light enough for overlaid text. ` +
       `Square 1:1, full-bleed.`,
     MAX_PROMPT_LEN,
