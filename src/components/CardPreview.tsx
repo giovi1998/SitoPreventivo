@@ -225,6 +225,11 @@ const FrontPreview = React.memo(function FrontPreview({
   };
 
   const isPhotoCircle = card.front.layout === 'photo-circle';
+  // Show the logo as a fallback inside the photo cell ONLY when the
+  // grid does not also have a separate `logo` element. Otherwise the
+  // logo would be rendered twice (once in the photo cell fallback,
+  // once in the dedicated logo cell).
+  const logoAlreadyInGrid = !!grid?.elements?.logo;
   const photoContent = hasPhoto ? (
     <img
       className="card-photo"
@@ -237,7 +242,7 @@ const FrontPreview = React.memo(function FrontPreview({
         borderRadius: isPhotoCircle ? '50%' : '4px',
       }}
     />
-  ) : hasLogo ? (
+  ) : (hasLogo && !logoAlreadyInGrid) ? (
     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', ...(card.front.logoBackground === 'card' ? { background: card.style.bgColor, borderRadius: '6px' } : {}) }}>
       <img src={card.front.logoUrl!} alt="Logo aziendale" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
     </div>
