@@ -53,6 +53,10 @@ Output: SOLO JSON valido con questo contract:
 
 REGOLE:
 - 3 post, uno per piattaforma.
+- I 3 post DEVONO essere DIVERSI tra loro, non ripetizioni:
+  - Instagram: caption breve e visuale, emoji ammessi, 5-10 hashtag, tono engaging. Focus su estetica e immagine.
+  - Facebook: caption più discorsivo, contesto e storia, 3-5 hashtag, tono amichevole e community.
+  - LinkedIn: caption professionale, valore e insight business, 2-3 hashtag, tono formale e autorevole.
 - Caption coerente col documento sorgente (nome brand, servizi/headline).
 - Hashtag: max 10 per post, formato #word (no spazi, no punteggiatura interna).
 - NON INVENTARE prezzi, date, luoghi non presenti nel documento sorgente.

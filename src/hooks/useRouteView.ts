@@ -8,6 +8,7 @@ export const ROUTE_PATHS: Record<string, string> = {
   card: '/app/card',
   logo: '/app/logo',
   flyer: '/app/flyer',
+  social: '/app/social',
   settings: '/app/settings',
   admin: '/app/admin',
 };

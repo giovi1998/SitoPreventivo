@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { PROFESSIONI } from '../utils/defaultTemplates';
+import { useAIOnboarding } from '../hooks/useAIOnboarding';
+import BrandNameGenerator, { type BrandNameSuggestions } from './BrandNameGenerator';
 import './OnboardingModal.css';
 
 export type PreferredDocumentType = 'editor' | 'qr' | 'card' | 'flyer' | 'logo';
@@ -159,6 +161,49 @@ export default function OnboardingModal({ onComplete, isAdmin = false }: Onboard
   const [defaultColor, setDefaultColor] = useState('#E62020');
   const [defaultVat, setDefaultVat] = useState(22);
   const [preferredDocumentType, setPreferredDocumentType] = useState<PreferredDocumentType | null>(null);
+  const { suggest: suggestOnboarding, isProcessing: aiSuggesting, suggestions: aiSuggestions } = useAIOnboarding();
+  const [showBrandGenerator, setShowBrandGenerator] = useState(false);
+
+  const handleBrandApply = (result: BrandNameSuggestions) => {
+    if (result.displayName && !displayName) setDisplayName(result.displayName);
+    if (result.companySuggestions?.length) setCompanyName(result.companySuggestions[0]);
+    if (result.professionSuggestions?.length) {
+      const found = PROFESSIONI.find((p) =>
+        result.professionSuggestions.some((s) =>
+          p.label.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(p.label.toLowerCase())
+        )
+      );
+      if (found) setProfession(found.id);
+    }
+    if (result.defaultColor) setDefaultColor(result.defaultColor);
+    setShowBrandGenerator(false);
+  };
+
+  const handleAiSuggest = async () => {
+    if (!displayName.trim()) return;
+    try {
+      const result = await suggestOnboarding(displayName, profession || undefined);
+      if (result.applied && result.suggestions) {
+        if (result.suggestions.companySuggestions?.length) {
+          setCompanyName(result.suggestions.companySuggestions[0]);
+        }
+        if (result.suggestions.professionSuggestions?.length) {
+          // Match aiSuggestions against PROFESSIONI ids/labels as best-effort
+          const found = PROFESSIONI.find((p) =>
+            result.suggestions.professionSuggestions.some((s) =>
+              p.label.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(p.label.toLowerCase())
+            )
+          );
+          if (found) setProfession(found.id);
+        }
+        if (result.suggestions.defaultColor) {
+          setDefaultColor(result.suggestions.defaultColor);
+        }
+      }
+    } catch {
+      // Silent: onboarding non blocca su AI failure
+    }
+  };
 
   const documentOptions = ALL_DOCUMENT_OPTIONS.filter((o) => isAdmin || o.id !== 'editor');
 
@@ -213,15 +258,51 @@ export default function OnboardingModal({ onComplete, isAdmin = false }: Onboard
         <p className="onb-subtitle">{steps[step].subtitle}</p>
 
         {currentKey === 'name' && (
-          <input
-            type="text"
-            autoFocus
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && canAdvance && next()}
-            placeholder="Es. Marco"
-            className="onb-input"
-          />
+          <>
+            <input
+              type="text"
+              autoFocus
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && canAdvance && next()}
+              placeholder="Es. Marco"
+              className="onb-input"
+            />
+            <button
+              type="button"
+              onClick={() => setShowBrandGenerator((v) => !v)}
+              className="onb-brand-toggle"
+              title="Genera nome brand con AI (stile namelix.com)"
+            >
+              {showBrandGenerator ? 'Nascondi generatore' : 'Genera nome brand con AI'}
+            </button>
+            {showBrandGenerator && (
+              <BrandNameGenerator onApply={handleBrandApply} />
+            )}
+            <button
+              type="button"
+              onClick={handleAiSuggest}
+              disabled={aiSuggesting || !displayName.trim()}
+              className="onb-ai-suggest"
+              title="Genera suggerimenti company/profession/colore via AI"
+            >
+              {aiSuggesting ? 'Suggerendo…' : 'Suggerisci da nome'}
+            </button>
+            {aiSuggestions && aiSuggestions.companySuggestions?.length > 0 && (
+              <div className="onb-ai-suggestions" role="status">
+                <p className="onb-ai-suggestions-label">Suggeriti:</p>
+                <ul>
+                  {aiSuggestions.companySuggestions.map((c) => (
+                    <li key={c}>
+                      <button type="button" onClick={() => setCompanyName(c)}>
+                        {c}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
         )}
 
         {currentKey === 'company' && (
