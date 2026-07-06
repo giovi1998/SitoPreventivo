@@ -29,6 +29,19 @@ export interface BuildSvgOptions {
   rotate?: 0 | 90 | 180 | 270;
 }
 
+// Simple luminance check to decide if a hex color is light.
+export function isLightColor(hex: string): boolean {
+  const cleaned = hex.replace('#', '');
+  if (cleaned.length !== 6) return false;
+  const r = parseInt(cleaned.slice(0, 2), 16);
+  const g = parseInt(cleaned.slice(2, 4), 16);
+  const b = parseInt(cleaned.slice(4, 6), 16);
+  if ([r, g, b].some((v) => Number.isNaN(v))) return false;
+  // ITU-R BT.601 luminance
+  const y = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return y > 0.6;
+}
+
 export function buildFrontSvg(
   card: BusinessCard,
   pxW: number,
@@ -47,13 +60,32 @@ export function buildFrontSvg(
 
   let out = '';
 
-  // 0. AI-generated cover image (full-bleed behind everything)
+  // 0. Base background (only visible where cover image is missing or transparent)
+  out += `<rect width="${pxW}" height="${pxH}" fill="${bg}"/>`;
+
+  // 1. AI-generated cover image (full-bleed on top of base background)
   if (card.front.coverImageUrl) {
     out += `<image href="${escapeXml(card.front.coverImageUrl)}" x="0" y="0" width="${pxW}" height="${pxH}" preserveAspectRatio="xMidYMid slice"/>`;
   }
-
-  // 1. Background (only visible where cover image is missing or transparent)
-  out += `<rect width="${pxW}" height="${pxH}" fill="${bg}"/>`;
+  // 1a. Readability wash on top of the cover.
+  //
+  // Two stacked semi-transparent layers, both using the card's own
+  // background tint (`bgColor`). The first is a flat 35% wash that
+  // flattens the cover's gradients into a calm tinted page; the second
+  // is a soft vertical gradient that goes from 0% (full cover visible
+  // at the top) to 50% (mostly the bg tint) at the bottom, so the
+  // area where the user name sits in the default front grid is calmer
+  // than the photo region at the top. This guarantees readable text
+  // even when the AI cover happens to be too busy or too dark.
+  if (card.front.coverImageUrl) {
+    out += `<rect width="${pxW}" height="${pxH}" fill="${bg}" opacity="0.6"/>`;
+    out += `<defs><linearGradient id="frontReadGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="${bg}" stop-opacity="0"/>
+      <stop offset="55%" stop-color="${bg}" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="${bg}" stop-opacity="0.8"/>
+    </linearGradient></defs>`;
+    out += `<rect width="${pxW}" height="${pxH}" fill="url(#frontReadGrad)"/>`;
+  }
 
   // 2. Corner radial gradient (matches CSS .card-corner-accent)
   const cornerSize = Math.round(Math.min(pxW, pxH) * 0.28);
@@ -213,6 +245,17 @@ export function buildBackSvg(
   let out = '';
   // Background
   out += `<rect width="${pxW}" height="${pxH}" fill="${bg}"/>`;
+  // Back cover image (full-bleed) with same readability wash as the front.
+  if (card.back.coverImageUrl) {
+    out += `<image href="${escapeXml(card.back.coverImageUrl)}" x="0" y="0" width="${pxW}" height="${pxH}" preserveAspectRatio="xMidYMid slice"/>`;
+    out += `<rect width="${pxW}" height="${pxH}" fill="${bg}" opacity="0.6"/>`;
+    out += `<defs><linearGradient id="backReadGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="${bg}" stop-opacity="0"/>
+      <stop offset="55%" stop-color="${bg}" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="${bg}" stop-opacity="0.8"/>
+    </linearGradient></defs>`;
+    out += `<rect width="${pxW}" height="${pxH}" fill="url(#backReadGrad)"/>`;
+  }
   // Corner radial gradient
   const cornerSize = Math.round(Math.min(pxW, pxH) * 0.28);
   out += `<defs><radialGradient id="backCornerGrad" cx="100%" cy="0%" r="80%">
@@ -229,14 +272,19 @@ export function buildBackSvg(
     out += `<rect x="0" y="${pxH - stripH}" width="${pxW}" height="${stripH}" fill="${accent}"/>`;
   }
 
-  // Header
+  // Header — v2.5: show "CONTATTI" eyebrow whenever there is at least
+  // one contact OR a wordmark (hostname or company). The wordmark is
+  // optional and shown only if present.
   let headerH = 0;
-  if (headerWord) {
+  const hasAnyContact = !!(card.back.phone || card.back.email || card.back.website || card.back.address || card.back.vatNumber);
+  if (hasAnyContact || headerWord) {
     const eyebrowSize = fs(pxH * 0.055, fontScale);
     const wordmarkSize = fs(pxH * 0.052, fontScale);
     const headerTextH = Math.max(eyebrowSize, wordmarkSize);
     out += `<text x="${pad + stripW}" y="${pad + eyebrowSize}" font-family="Inter, system-ui, sans-serif" font-size="${eyebrowSize}" font-weight="700" fill="${accent}" letter-spacing="2.5">CONTATTI</text>`;
-    out += `<text x="${pxW - pad}" y="${pad + eyebrowSize}" font-family="Inter, system-ui, sans-serif" font-size="${wordmarkSize}" font-weight="600" fill="${accent}" text-anchor="end">${escapeXml(headerWord)}</text>`;
+    if (headerWord) {
+      out += `<text x="${pxW - pad}" y="${pad + eyebrowSize}" font-family="Inter, system-ui, sans-serif" font-size="${wordmarkSize}" font-weight="600" fill="${accent}" text-anchor="end">${escapeXml(headerWord)}</text>`;
+    }
     const divY = pad + headerTextH + Math.round(pxH * 0.02);
     out += `<line x1="${pad + stripW}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.4" stroke-dasharray="3,2" opacity="0.18"/>`;
     // Reserve the same vertical space the preview uses for the header + divider + margin.
@@ -280,6 +328,21 @@ export function buildBackSvg(
       if (card.back.website && !hasQr) renderContact('Web', card.back.website, accent, true);
       if (card.back.address) renderContact('Indirizzo', card.back.address);
       if (card.back.vatNumber) renderContact('P.IVA', card.back.vatNumber);
+      // v2.5: fallback — when the grid has no socials cell (the new
+      // default back grid gives that space to services), render the
+      // socials as a small italic line at the bottom of the contacts
+      // cell, mirroring the CardPreview React fallback.
+      if (!grid.elements.socials && socials.length > 0) {
+        const socialsText = socials
+          .map((s) => {
+            const handle = deriveHandle(s.url);
+            const value = handle || s.url;
+            return `${s.platform} · ${value}`;
+          })
+          .join(' · ');
+        const socialSize = fs(Math.min(cw, ch) * 0.1, fontScale);
+        out += `<text x="${cx}" y="${lineY + Math.round(ch * 0.04)}" font-family="Inter, system-ui, sans-serif" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" dominant-baseline="text-before-edge">${escapeXml(socialsText)}</text>`;
+      }
     }
 
     // Services (separate grid element)
@@ -294,24 +357,31 @@ export function buildBackSvg(
       const servicesLabelText = (card.back.servicesLabel ?? '').trim();
       let labelSize = 0;
       if (servicesLabelText) {
-        labelSize = fs(Math.min(sw, sh) * 0.18, fontScale);
+        // v2.5: bumped from 0.18 — label was getting lost in the cell.
+        labelSize = fs(Math.min(sw, sh) * 0.22, fontScale);
         out += `<text x="${sx}" y="${svcY + labelSize}" font-family="Inter, system-ui, sans-serif" font-size="${labelSize}" font-weight="700" fill="${accent}" letter-spacing="1.2" opacity="0.7" dominant-baseline="text-before-edge">${escapeXml(servicesLabelText.toUpperCase())}</text>`;
         svcY += labelSize * 1.4;
       }
       const hasLongService = services.some((s) => s.length >= 40);
-      let svcSize = fs(Math.min(sw, sh) * 0.2, fontScale) * (hasLongService ? 0.85 : 1);
-      const svcLineH = (s: number) => s * 1.35;
+      // v2.5: bumped from 0.2 — services were too small to read.
+      let svcSize = fs(Math.min(sw, sh) * 0.25, fontScale) * (hasLongService ? 0.85 : 1);
+      // v2.5.1: tighter line-height (1.2 instead of 1.35) so 2-3
+      // services + label fit a 1-row cell without shrinking too much.
+      const svcLineH = (s: number) => s * 1.2;
       // Shrink services font until the whole list fits inside the cell height.
       const neededH = (s: number) => {
         const lineH = svcLineH(s);
-        return (labelSize ? labelSize * 1.4 : 0) + services.length * lineH + pad * 0.5;
+        return (labelSize ? labelSize * 1.3 : 0) + services.length * lineH + pad * 0.5;
       };
-      while (svcSize > 6 && neededH(svcSize) > sh) {
+      // v2.5.1: raised floor from 6 to 14 so services stay readable even
+      // when the cell is very short (h:1). If they don't fit at 14px we
+      // accept the overflow rather than producing invisible text.
+      while (svcSize > 14 && neededH(svcSize) > sh) {
         svcSize *= 0.92;
       }
       const finalLineH = svcLineH(svcSize);
       services.forEach((svc, idx) => {
-        out += `<text x="${sx}" y="${svcY + (idx + 1) * finalLineH}" font-family="Inter, system-ui, sans-serif" font-size="${svcSize}" font-weight="700" fill="${accent}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
+        out += `<text x="${sx}" y="${svcY + (idx + 1) * finalLineH}" font-family="Inter, system-ui, sans-serif" font-size="${svcSize}" font-weight="800" fill="${accent}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
       });
     }
 
@@ -382,16 +452,13 @@ export function buildBackSvg(
       const innerScale = (qrSize - 8) / totalSize;
       out += `<g transform="translate(${qrX + 4} ${qrY + 4}) scale(${innerScale})">${extractQrInner(qrSvg)}</g>`;
 
-      // QR label + wordmark below QR cell
+      // QR label below QR cell (v2.5: removed hostname wordmark, it
+      // was redundant with the header wordmark at the top of the back
+      // side and overlapped the qrLabel visually).
       const belowY = qrY + qrSize + Math.round(cellH * 0.04);
       if (card.back.qrLabel) {
         const labelSize = fs(Math.min(qw, qh) * 0.08, fontScale);
         out += `<text x="${qx + qw / 2}" y="${belowY + labelSize}" font-family="Inter, system-ui, sans-serif" font-size="${labelSize}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
-      }
-      if (hostname) {
-        const wordSize = fs(Math.min(qw, qh) * 0.07, fontScale);
-        const wordY = belowY + (card.back.qrLabel ? fs(Math.min(qw, qh) * 0.18, fontScale) : wordSize);
-        out += `<text x="${qx + qw / 2}" y="${wordY}" font-family="Inter, system-ui, sans-serif" font-size="${wordSize}" font-weight="600" fill="${accent}" text-anchor="middle">${escapeXml(hostname)}</text>`;
       }
     }
   }

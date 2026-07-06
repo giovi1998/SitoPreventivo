@@ -41,6 +41,7 @@ export interface CardMediaFieldsProps extends CardSectionProps {
   onRemovePhoto: () => void;
   onRemoveLogo: () => void;
   onRemoveCover?: () => void;
+  onRemoveBackCover?: () => void;
   uploadError: string | null;
 }
 
@@ -130,6 +131,7 @@ export function CardMediaFields({
   onRemovePhoto,
   onRemoveLogo,
   onRemoveCover,
+  onRemoveBackCover,
   uploadError,
 }: CardMediaFieldsProps) {
   return (
@@ -195,6 +197,21 @@ export function CardMediaFields({
           />
           <button type="button" className="card-remove-image" onClick={onRemoveCover}>
             Rimuovi cover AI
+          </button>
+        </div>
+      )}
+
+      {card.back.coverImageUrl && (
+        <div className="card-field">
+          <span>Cover AI (retro)</span>
+          <img
+            src={card.back.coverImageUrl}
+            alt="Cover AI del retro"
+            className="card-cover-thumb"
+            style={{ maxWidth: 120, maxHeight: 80, objectFit: 'cover', borderRadius: 4 }}
+          />
+          <button type="button" className="card-remove-image" onClick={onRemoveBackCover}>
+            Rimuovi cover AI retro
           </button>
         </div>
       )}

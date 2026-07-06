@@ -25,10 +25,10 @@ async function fillSampleData(page: any) {
   };
   await fill(/nome/i, 'Mario Rossi');
   await fill(/ruolo/i, 'Web Developer');
-  await fill(/azienda/i, 'HPE CDS');
+  await fill(/azienda/i, 'WebdevCA');
   await fill(/telefono/i, '+39 012 345 6789');
   await fill(/email/i, 'mario.rossi@example.com');
-  await fill(/sito/i, 'https://webdeveloperca.netlify.app/');
+  await fill(/sito/i, 'https://giovannicidu.vercel.app');
 }
 
 async function selectPreset(page: any, preset: string) {

@@ -11,6 +11,7 @@ import {
   createInfoEntry,
 } from '../ai/eventLog';
 import dataService from '../utils/dataService';
+import { buildCardCoverBrief } from '../utils/card/coverBrief';
 import { logger } from '../utils/logger';
 
 const MAX_LOG_ENTRIES = 40;
@@ -29,9 +30,10 @@ interface UseAICardReturn {
     changes: string[];
     rawResponse?: string;
   }>;
-  // Spec v2.4: generate an AI cover image for the front of the card.
+  // Spec v2.4: generate an AI cover image for the front or back of the card.
   generateCover: (
     card: BusinessCard,
+    side?: 'front' | 'back',
     prompt?: string,
     options?: { onProgress?: (msg: string) => void }
   ) => Promise<string>;
@@ -90,8 +92,19 @@ export function useAICard(userEmail?: string): UseAICardReturn {
       if (userEmail && userEmail !== 'admin@gmail.com') {
         try {
           const profile = await dataService.getUserProfile(userEmail);
-          if (profile.error) throw new Error(profile.error);
-          if (profile.tokensUsed >= profile.tokenLimit) {
+          // v2.5.1: in locale, se il profile non si trova (utente non
+          // in registeredUsers, sessione stale, ecc.) non bloccare
+          // l'AI. Usa un fallback generoso e continua. In produzione
+          // l'errore è reale e va propagato.
+          if (profile.error) {
+            const isLocal = typeof window !== 'undefined' &&
+              (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+            if (isLocal) {
+              // fallback: 0 token usati, 1M limite → continua
+            } else {
+              throw new Error(profile.error);
+            }
+          } else if (profile.tokensUsed >= profile.tokenLimit) {
             throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
           }
         } catch (err: any) {
@@ -220,18 +233,20 @@ export function useAICard(userEmail?: string): UseAICardReturn {
   }, [getOrchestrator]);
 
   const generateCover = useCallback(
-    async (card: BusinessCard, prompt?: string, options?: { onProgress?: (msg: string) => void }) => {
+    async (card: BusinessCard, side: 'front' | 'back' = 'front', promptOverride?: string, options?: { onProgress?: (msg: string) => void }) => {
       if (userEmail && userEmail !== 'admin@gmail.com') {
         const profile = await dataService.getUserProfile(userEmail);
-        if (profile.error) throw new Error(profile.error);
-        if (profile.tokensUsed >= profile.tokenLimit) {
+        // v2.5.1: stesso fallback locale di processCardPrompt.
+        const isLocal = typeof window !== 'undefined' &&
+          (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+        if (profile.error && !isLocal) throw new Error(profile.error);
+        if (!profile.error && profile.tokensUsed >= profile.tokenLimit) {
           throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
         }
       }
 
-      const coverPrompt =
-        prompt ||
-        buildCardCoverPrompt(card);
+      const { prompt: coverPrompt, context: coverContext } =
+        promptOverride ? { prompt: promptOverride, context: '' } : buildCardCoverBrief(card, side);
 
       addLog(createEntry('info', '🎨 Generazione cover AI in corso...', { detail: coverPrompt }));
       options?.onProgress?.('🎨 Generazione cover AI in corso...');
@@ -240,7 +255,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
       const res = await fetch(`${apiBase}/api/ai/card-cover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: coverPrompt, userEmail }),
+        body: JSON.stringify({ prompt: coverPrompt, context: coverContext, userEmail }),
       });
 
       if (!res.ok) {
@@ -263,12 +278,4 @@ export function useAICard(userEmail?: string): UseAICardReturn {
     isCardProcessing,
     availableModels,
   };
-}
-
-function buildCardCoverPrompt(card: BusinessCard): string {
-  const { name, title, company } = card.front;
-  const { accentColor, bgColor, textColor } = card.style;
-  const brand = company || name || 'brand';
-  const profession = title || 'professionista';
-  return `Minimal abstract professional background for a business card. Brand "${brand}" (${profession}). Soft geometric shapes, subtle texture, elegant negative space. Palette: accent ${accentColor}, background ${bgColor}, text ${textColor}. No text, no letters, no logos, no faces, no photography, clean vector-like illustration.`;
 }

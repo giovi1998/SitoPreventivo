@@ -10,6 +10,7 @@ export { generateCardPDF } from './pdfExport';
 export { generateCardPng, renderCardSideDataUrl, buildMinimalPng, resolveToBase64DataUrl } from './pngExport';
 export { compressImage, loadImage, type CompressImageOptions } from './imageCompress';
 export { resolveCardQrPayload, getEffectiveQrPayload } from './qrPayload';
+export { buildCardCoverBrief, type CardCoverBrief } from './coverBrief';
 export {
   computePageCardEntries,
   getCardDimensionsMm,

@@ -40,7 +40,7 @@ const TYPE_LABELS: Record<QrCodeData['type'], string> = {
   sms: 'SMS',
 };
 
-const TEMPLATE_GIOVANNI_URL = 'https://webdeveloperca.netlify.app/';
+const TEMPLATE_GIOVANNI_URL = 'https://giovannicidu.vercel.app';
 const MAX_LOGO_BYTES = 100 * 1024;
 const MAX_RAW_LOGO_BYTES = 500 * 1024;
 const MAX_TEXT_PAYLOAD = 500;

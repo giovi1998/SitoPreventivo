@@ -251,7 +251,7 @@ Il `mergeCardAIResponse` ora protegge da 4 tipi di hallucination:
 ### Template Giovanni
 
 Template preconfigurato con dati reali (foto `public/giovanni-photo.jpg`,
-logo SVG trasparente "WebdevCA" come data URI, company "HPE CDS", QR che punta
+logo SVG trasparente "WebdevCA" come data URI, company vuota, QR che punta
 al sito personale, GitHub social, layout split). Da `src/utils/documentSchemas.ts:createGiovanniCardTemplate()`.
 
 ### Export

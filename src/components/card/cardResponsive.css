@@ -163,3 +163,57 @@
   line-height: 1;
   color: var(--ink);
 }
+
+/* v2.4 redesign: pannello AI responsive.
+   Su mobile le sezioni mantengono la gerarchia ma con padding ridotto
+   e le cover affiancate in una colonna. */
+@media (max-width: 900px) {
+  .card-ai-panel {
+    gap: 10px;
+  }
+  .card-ai-section {
+    padding: 9px 10px 11px;
+  }
+  .card-ai-section__title {
+    font-size: 0.7rem;
+  }
+  .card-ai-cover-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .card-ai-cover-item__btn {
+    padding: 5px 6px;
+    font-size: 0.74rem;
+  }
+  .card-ai-both-btn {
+    padding: 8px 10px;
+    font-size: 0.8rem;
+  }
+  .card-ai-chip-row {
+    gap: 4px;
+  }
+  .card-ai-chip {
+    padding: 4px 9px;
+    font-size: 0.74rem;
+  }
+  .card-ai-prompt-row {
+    flex-wrap: wrap;
+  }
+  .card-ai-prompt-row .card-action-primary,
+  .card-ai-prompt-row .card-ai-reset {
+    flex: 1 1 calc(50% - 3px);
+  }
+  .card-ai-textarea {
+    font-size: 0.82rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .card-ai-cover-grid {
+    grid-template-columns: 1fr;
+  }
+  .card-ai-both-btn {
+    font-size: 0.78rem;
+    padding: 7px 9px;
+  }
+}

@@ -146,6 +146,6 @@ describe('CardEditorShell', () => {
     render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
     expect(screen.getByLabelText(/Modello AI/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Prompt AI personalizzato/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Applica prompt personalizzato/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Applica prompt$/i })).toBeInTheDocument();
   });
 });

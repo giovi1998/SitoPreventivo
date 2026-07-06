@@ -188,6 +188,40 @@ const FrontPreview = React.memo(function FrontPreview({
     display: 'grid',
     gridTemplateColumns: `repeat(${grid!.cols}, 1fr)`,
     gridTemplateRows: `repeat(${grid!.rows}, 1fr)`,
+    position: 'relative',
+  };
+
+  const coverImageStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    zIndex: 0,
+    pointerEvents: 'none',
+  };
+
+  // Readability wash: two stacked layers that match the SVG renderer's
+  // wash (see svgRenderer.ts `1a.`). They keep the cover visible at the
+  // top (where the photo sits) but calm the lower half so the name/title
+  // are readable even when the AI image is busy.
+  // v2.4 fix: the wash is much stronger (60% flat + 80% gradient bottom)
+  // because the AI cover can be very saturated and the user content
+  // (text, logo, photo) must always win visually over the cover.
+  const coverWashFlatStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    background: card.style.bgColor,
+    opacity: 0.6,
+    zIndex: 0,
+    pointerEvents: 'none',
+  };
+  const coverWashGradStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    background: `linear-gradient(to bottom, ${card.style.bgColor}00 0%, ${card.style.bgColor}40 55%, ${card.style.bgColor}cc 100%)`,
+    zIndex: 0,
+    pointerEvents: 'none',
   };
 
   const isPhotoCircle = card.front.layout === 'photo-circle';
@@ -217,6 +251,9 @@ const FrontPreview = React.memo(function FrontPreview({
       role="img"
       aria-label={`Bigliettino fronte: ${card.front.name || 'vuoto'}`}
     >
+      {card.front.coverImageUrl && <img src={card.front.coverImageUrl} alt="" style={coverImageStyle} />}
+      {card.front.coverImageUrl && <div style={coverWashFlatStyle} aria-hidden="true" />}
+      {card.front.coverImageUrl && <div style={coverWashGradStyle} aria-hidden="true" />}
       <span className="card-corner-accent" aria-hidden="true" />
       {gridOverlay}
       {gridDebug}
@@ -275,6 +312,15 @@ const BackPreview = React.memo(function BackPreview({
   const socials = card.back.socials.filter((s) => s.platform && s.url);
   const hostname = card.back.website ? deriveHostname(card) : '';
   const headerWord = hostname || card.front.company || '';
+  // v2.5: track if at least one contact exists so we can still show
+  // the "CONTATTI" eyebrow even when there is no wordmark/company.
+  const hasContacts = !!(
+    card.back.phone?.trim() ||
+    card.back.email?.trim() ||
+    card.back.website?.trim() ||
+    card.back.address?.trim() ||
+    card.back.vatNumber?.trim()
+  );
   const grid = card.backGrid ?? card.grid;
 
   const qrSizePx = qrSizePxFor(card);
@@ -286,6 +332,34 @@ const BackPreview = React.memo(function BackPreview({
     ['--card-accent' as any]: card.style.accentColor,
     ['--card-font-scale' as any]: clampFontScale(card.style.fontScale ?? 1),
     ['--card-qr-size' as any]: `${qrSizePx}px`,
+    position: 'relative',
+  };
+
+  const coverImageStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    zIndex: 0,
+    pointerEvents: 'none',
+  };
+
+  // Readability wash (matches svgRenderer.ts back layer).
+  const backCoverWashFlatStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    background: card.style.bgColor,
+    opacity: 0.35,
+    zIndex: 0,
+    pointerEvents: 'none',
+  };
+  const backCoverWashGradStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    background: `linear-gradient(to bottom, ${card.style.bgColor}00 0%, ${card.style.bgColor}73 100%)`,
+    zIndex: 0,
+    pointerEvents: 'none',
   };
 
   const bodyGridStyle: React.CSSProperties = {
@@ -303,7 +377,7 @@ const BackPreview = React.memo(function BackPreview({
       {card.back.website && !qrPayload && (
         <div className="card-back-line">
           <span className="card-back-key">Web</span>
-          <span className="card-back-val" style={{ color: card.style.accentColor }}>{card.back.website}</span>
+          <span className="card-back-val" data-testid="card-back-website-val" style={{ color: card.style.accentColor }}>{card.back.website}</span>
         </div>
       )}
       {card.back.address && <div className="card-back-line"><span className="card-back-key">Indirizzo</span><span className="card-back-val">{card.back.address}</span></div>}
@@ -350,11 +424,6 @@ const BackPreview = React.memo(function BackPreview({
         <div className="card-back-qr-svg" role="img" aria-label={`QR code: ${qrPayload}`} dangerouslySetInnerHTML={{ __html: qrSvg }} />
       </div>
       {card.back.qrLabel && <div className="card-back-qr-label">{card.back.qrLabel}</div>}
-      {hostname && (
-        <div className="card-back-qr-wordmark" style={{ color: card.style.accentColor }}>
-          {hostname}
-        </div>
-      )}
     </div>
   ) : null;
 
@@ -366,6 +435,9 @@ const BackPreview = React.memo(function BackPreview({
       role="img"
       aria-label={`Bigliettino retro: ${card.front.name || 'vuoto'}`}
     >
+      {card.back.coverImageUrl && <img src={card.back.coverImageUrl} alt="" style={coverImageStyle} />}
+      {card.back.coverImageUrl && <div style={backCoverWashFlatStyle} aria-hidden="true" />}
+      {card.back.coverImageUrl && <div style={backCoverWashGradStyle} aria-hidden="true" />}
       <span className="card-corner-accent" aria-hidden="true" />
 
       {card.style.borderStyle === 'accent-strip-left' && (
@@ -375,12 +447,14 @@ const BackPreview = React.memo(function BackPreview({
         <span className="card-accent-strip-bottom" style={{ backgroundColor: card.style.accentColor }} aria-hidden="true" />
       )}
 
-      {headerWord && (
+      {(hasContacts || headerWord) && (
         <div className="card-back-header" data-testid="card-back-header">
           <span className="card-back-eyebrow" style={{ color: card.style.accentColor }}>Contatti</span>
-          <span className="card-back-wordmark" data-testid="card-back-wordmark" style={{ color: card.style.accentColor }}>
-            {headerWord}
-          </span>
+          {headerWord && (
+            <span className="card-back-wordmark" data-testid="card-back-wordmark" style={{ color: card.style.accentColor }}>
+              {headerWord}
+            </span>
+          )}
         </div>
       )}
 

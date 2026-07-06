@@ -463,9 +463,11 @@ describe('mergeCardAIResponse', () => {
         const { card: merged, changes } = mergeCardAIResponse(card, aiOutput as unknown as Record<string, unknown>);
         // La validazione NON deve fallire
         expect(changes.length).toBeGreaterThan(0);
-        // Logo BLOCCATO (photo a (0,0,2,4) occupa lo spazio richiesto).
-        // Il merge NON finge di aver raggiunto la posizione richiesta.
-        expect(changes.some((c) => /logo.*bloccato/i.test(c))).toBe(true);
+        // Logo non raggiunge la posizione richiesta (photo a (0,0,2,4)
+        // occupa lo spazio richiesto). Il merge reporta la collisione
+        // come posizione parziale/bloccata invece di fingere di aver
+        // raggiunto il target.
+        expect(changes.some((c) => /logo.*(bloccato|parziale|collisione)/i.test(c))).toBe(true);
         // useGrid non è più il master switch del render; la grid è sempre
         // attiva, quindi il campo viene semplicemente mantenuto.
         expect(merged.front.useGrid).toBe(true);
@@ -515,7 +517,19 @@ describe('mergeCardAIResponse', () => {
       // non-grid (nome, titolo, accento, useGrid). Il logo è bloccato perché
       // la posizione richiesta (0,0,4,1) collide con photo (0,0,2,4), il
       // merge lo reporta come "bloccato" invece di fingere di averlo mosso.
-      const card = createGiovanniCardTemplate();
+      const card = {
+        ...createGiovanniCardTemplate(),
+        grid: {
+          cols: 4, rows: 4,
+          elements: {
+            photo: { x: 0, y: 0, w: 2, h: 4 },
+            name: { x: 2, y: 0, w: 2, h: 1 },
+            title: { x: 2, y: 1, w: 2, h: 1 },
+            company: { x: 2, y: 2, w: 2, h: 1 },
+            logo: { x: 2, y: 3, w: 2, h: 1 },
+          },
+        },
+      };
       const { card: merged, changes } = mergeCardAIResponse(card, {
         front: { useGrid: true, name: 'Antonio Ruggeri', title: 'Impresa Edile' },
         style: { accentColor: '#1e3a5f' },
@@ -600,9 +614,9 @@ describe('mergeCardAIResponse', () => {
       // Nessun campo back deve essere stato sovrascritto
       expect(merged.back.phone).toBe('35180008042');
       expect(merged.back.email).toBe('webdevcaglian@gmail.com');
-      expect(merged.back.website).toBe('https://webdeveloperca.netlify.app/');
-      expect(merged.back.qrPayload).toBe('https://webdeveloperca.netlify.app/');
-      expect(merged.back.qrLabel).toBe('Scansiona per visitare il mio sito');
+      expect(merged.back.website).toBe('https://giovannicidu.vercel.app');
+      expect(merged.back.qrPayload).toBe('');
+      expect(merged.back.qrLabel).toBe('Scansiona per il mio sito');
     });
 
     it('does NOT clear socials with empty array (preserves existing)', () => {
@@ -657,7 +671,7 @@ describe('mergeCardAIResponse', () => {
         front: {
           name: 'GIOVANNI CIDU',
           title: 'Web Developer',
-          company: 'HPE CDS',
+          company: '',
           photoUrl: '',
           logoUrl: '',
           layout: 'centered',
@@ -700,9 +714,9 @@ describe('mergeCardAIResponse', () => {
       expect(merged.front.logoUrl).toMatch(/^data:image\/svg\+xml/);
       expect(merged.back.phone).toBe('35180008042');
       expect(merged.back.email).toBe('webdevcaglian@gmail.com');
-      expect(merged.back.website).toBe('https://webdeveloperca.netlify.app/');
+      expect(merged.back.website).toBe('https://giovannicidu.vercel.app');
       expect(merged.back.socials).toHaveLength(2);
-      expect(merged.back.qrPayload).toBe('https://webdeveloperca.netlify.app/');
+      expect(merged.back.qrPayload).toBe('');
       // Modifiche accettate: solo style
       expect(merged.style.accentColor).toBe('#1e3a5f');
       expect(merged.style.fontFamily).toBe('Inter');

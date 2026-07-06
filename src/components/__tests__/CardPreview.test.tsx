@@ -216,10 +216,10 @@ describe('CardPreview', () => {
     });
 
     it('omits the WEB contact row on the back when QR payload is present (Phase 2.1)', () => {
-      const card = { ...createEmptyCard(), back: { ...createEmptyCard().back, website: 'https://webdeveloperca.netlify.app' } };
+      const card = { ...createEmptyCard(), back: { ...createEmptyCard().back, website: 'https://example.com' } };
       render(<CardPreview side="back" card={card} />);
       // Non deve esserci la riga "Web" con il valore del website quando il QR è attivo
-      expect(screen.queryByText('https://webdeveloperca.netlify.app')).not.toBeInTheDocument();
+      expect(screen.queryByText('https://example.com')).not.toBeInTheDocument();
     });
 
     it('shows the WEB contact row when no QR payload is present', () => {
@@ -263,7 +263,9 @@ describe('CardPreview', () => {
     });
 
     it('uses extended keys for back contacts (C11: Telefono/Email/Web/Indirizzo/P.IVA)', () => {
-      // Senza website (no QR) la WEB row è presente
+      // v2.5: WEB row is hidden when a QR is present (the QR already
+      // encodes the URL, and the header wordmark already shows the
+      // hostname). WEB is shown only when no QR is generated.
       const card = {
         ...createEmptyCard(),
         back: {
@@ -271,7 +273,7 @@ describe('CardPreview', () => {
           phone: '+39 333 1234567',
           email: 'mario@acme.com',
           website: 'https://acme.com',
-          qrPayload: 'FORCE_QR', // forziamo QR per testare la WEB row
+          qrPayload: 'FORCE_QR',
           address: 'Via Roma 1',
           vatNumber: 'IT01234567890',
         },

@@ -204,7 +204,7 @@ describe('cardGenerator - resolveCardQrPayload (AC-007, AC-008)', () => {
 
   it('Giovanni template uses website (qrPayload empty)', () => {
     const card = createGiovanniCardTemplate();
-    expect(resolveCardQrPayload(card)).toBe('https://webdeveloperca.netlify.app/');
+    expect(resolveCardQrPayload(card)).toBe('https://giovannicidu.vercel.app');
   });
 });
 
@@ -1017,7 +1017,7 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
   it('omits the hostname wordmark on the front when back has a QR payload (Phase 2.1, redundant)', () => {
     const card = {
       ...createEmptyCard(),
-      back: { ...createEmptyCard().back, website: 'https://webdeveloperca.netlify.app' },
+      back: { ...createEmptyCard().back, website: 'https://example.com' },
       front: {
         ...createEmptyCard().front,
         photoUrl: 'data:image/png;base64,AAAA',
@@ -1026,18 +1026,18 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
     };
     const svg = buildCardSvg(card, 'front', 1024, 663);
     // L'hostname non deve apparire sul FRONT (solo sul back, vicino al QR)
-    expect(svg).not.toContain('webdeveloperca.netlify.app');
+    expect(svg).not.toContain('example.com');
   });
 
   it('omits the WEB contact row on the back when QR payload is present (Phase 2.1, avoid duplication)', () => {
     const card = {
       ...createEmptyCard(),
-      back: { ...createEmptyCard().back, website: 'https://webdeveloperca.netlify.app' },
+      back: { ...createEmptyCard().back, website: 'https://example.com' },
     };
     const svg = buildCardSvg(card, 'back', 1024, 663);
     // La riga WEB non deve essere renderizzata (il QR codifica già l'URL)
     // Cerchiamo il pattern "Web" seguito da vicino dal valore del website
-    const webRowRegex = /<text[^>]*>WEB<\/text>[\s\S]{0,500}<text[^>]*>https:\/\/webdeveloperca/;
+    const webRowRegex = /<text[^>]*>WEB<\/text>[\s\S]{0,500}<text[^>]*>https:\/\/example/;
     expect(svg).not.toMatch(webRowRegex);
   });
 

@@ -78,11 +78,11 @@ describe('svgRenderer', () => {
     it('does not duplicate hostname on front when QR is present on back', () => {
       const card = {
         ...createEmptyCard(),
-        back: { ...createEmptyCard().back, website: 'https://webdeveloperca.netlify.app' },
+        back: { ...createEmptyCard().back, website: 'https://example.com' },
         front: { ...createEmptyCard().front, photoUrl: 'data:image/png;base64,PHOTO', layout: 'left' as const },
       };
       const svg = buildFrontSvg(card, 1024, 663);
-      expect(svg).not.toContain('webdeveloperca.netlify.app');
+      expect(svg).not.toContain('example.com');
     });
   });
 
@@ -220,7 +220,7 @@ describe('svgRenderer', () => {
   });
 
   describe('AI cover image rendering (spec v2.4)', () => {
-    it('renders coverImageUrl as a full-bleed image before other content', () => {
+    it('renders coverImageUrl as a full-bleed image above the base background', () => {
       const card = {
         ...createEmptyCard(),
         front: {
@@ -232,16 +232,62 @@ describe('svgRenderer', () => {
       const svg = buildFrontSvg(card, 1024, 663);
       expect(svg).toContain('data:image/png;base64,COVER');
       const imgIdx = svg.indexOf('data:image/png;base64,COVER');
-      const bgIdx = svg.indexOf(`<rect width="1024" height="663" fill="${card.style.bgColor}"/>`);
+      const bgIdx = svg.indexOf(`<rect width="1024" height="663" fill="${card.style.bgColor}"/\u003e`);
       expect(imgIdx).toBeGreaterThan(-1);
       expect(bgIdx).toBeGreaterThan(-1);
-      expect(imgIdx).toBeLessThan(bgIdx);
+      expect(imgIdx).toBeGreaterThan(bgIdx);
     });
 
     it('does not include cover image when coverImageUrl is null', () => {
       const card = createEmptyCard();
       const svg = buildFrontSvg(card, 1024, 663);
       expect(svg).not.toContain('data:image/png;base64,COVER');
+    });
+
+    it('adds a readability wash (flat tint + vertical gradient) on top of the cover', () => {
+      const card = {
+        ...createEmptyCard(),
+        front: {
+          ...createEmptyCard().front,
+          name: 'MARIO',
+          coverImageUrl: 'data:image/png;base64,COVER',
+        },
+        style: { ...createEmptyCard().style, bgColor: '#1a1a2e', textColor: '#FFFFFF' },
+      };
+      const svg = buildFrontSvg(card, 1024, 663);
+      // Flat tint of the card's bgColor, 60% opacity, over the cover.
+      // v2.4: stronger wash so AI cover (which can be saturated) does
+      // not visually compete with the user text.
+      expect(svg).toContain('fill="#1a1a2e" opacity="0.6"');
+      // Linear gradient on top, going from 0% (top) to 80% (bottom) of
+      // bgColor, with the calmest area at the bottom where the user
+      // name sits by default in the Giovanni template.
+      expect(svg).toContain('id="frontReadGrad"');
+      expect(svg).toContain('stop-color="#1a1a2e" stop-opacity="0"');
+      expect(svg).toContain('stop-color="#1a1a2e" stop-opacity="0.8"');
+    });
+
+    it('does not add the cover wash when cover is absent', () => {
+      const card = createEmptyCard();
+      const svg = buildFrontSvg(card, 1024, 663);
+      expect(svg).not.toContain('id="frontReadGrad"');
+      expect(svg).not.toContain('id="backReadGrad"');
+    });
+
+    it('renders back cover image and wash', () => {
+      const card = {
+        ...createGiovanniCardTemplate(),
+        back: {
+          ...createGiovanniCardTemplate().back,
+          coverImageUrl: 'data:image/png;base64,BACKCOVER',
+        },
+      };
+      const svg = buildBackSvg(card, 1024, 663);
+      expect(svg).toContain('data:image/png;base64,BACKCOVER');
+      // Same readability wash on the back (flat + vertical gradient).
+      // v2.4: stronger wash, same as the front.
+      expect(svg).toContain('id="backReadGrad"');
+      expect(svg).toContain(`fill="${card.style.bgColor}" opacity="0.6"`);
     });
   });
 
@@ -297,8 +343,13 @@ describe('svgRenderer', () => {
       const svg = buildBackSvg(card, 1050, 650);
       const servicesFontSizes = extractTextFontSizes(svg, 'Consulenza pedagogica');
       expect(servicesFontSizes.length).toBeGreaterThan(0);
-      // Font is shrunk to fit the 1-row cell, should be well under the naive 27px.
-      servicesFontSizes.forEach((size) => expect(size).toBeLessThan(25));
+      // v2.5.1: floor raised to 14px and line-height tightened to 1.2,
+      // so 2 services + label fit a 1-row cell at a readable size
+      // (previously shrunk to ~20px, now stays around 30-38px). The
+      // font is still bounded by the cell height, just no longer
+      // collapses to invisible.
+      servicesFontSizes.forEach((size) => expect(size).toBeGreaterThanOrEqual(14));
+      servicesFontSizes.forEach((size) => expect(size).toBeLessThan(50));
     });
   });
 });

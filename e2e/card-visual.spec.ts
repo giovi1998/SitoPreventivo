@@ -53,11 +53,11 @@ test.describe('Card editor visual regression', () => {
     // Front fields
     await setCardField(page, /nome/i, 'Mario Rossi');
     await setCardField(page, /ruolo/i, 'Web Developer');
-    await setCardField(page, /azienda/i, 'HPE CDS');
+    await setCardField(page, /azienda/i, 'WebdevCA');
     // Back fields
     await setCardField(page, /telefono/i, '+39 012 345 6789');
     await setCardField(page, /email/i, 'mario.rossi@example.com');
-    await setCardField(page, /sito/i, 'https://webdeveloperca.netlify.app/');
+    await setCardField(page, /sito/i, 'https://giovannicidu.vercel.app');
   }
 
   test('default card renders without grid debug in flexbox mode', async ({ page }) => {

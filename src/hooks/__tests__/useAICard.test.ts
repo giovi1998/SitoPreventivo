@@ -26,7 +26,7 @@ vi.mock('../../ai/cardOrchestrator', () => ({
 }));
 
 import { useAICard } from '../useAICard';
-import { createEmptyCard } from '../../utils/documentSchemas';
+import { createEmptyCard, createGiovanniCardTemplate } from '../../utils/documentSchemas';
 import dataService from '../../utils/dataService';
 
 describe('useAICard', () => {
@@ -100,15 +100,41 @@ describe('useAICard', () => {
         json: async () => ({ data: { imageBase64: 'FAKEBASE64', mimeType: 'image/png' } }),
       });
       const { result } = renderHook(() => useAICard('user@test.com'));
-      const coverUrl = await act(async () => result.current.generateCover(createEmptyCard()));
+      const coverUrl = await act(async () => result.current.generateCover(createGiovanniCardTemplate()));
       expect(coverUrl).toBe('data:image/png;base64,FAKEBASE64');
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/ai/card-cover',
         expect.objectContaining({
           method: 'POST',
-          body: expect.stringContaining('"prompt"'),
+          body: expect.stringContaining('"context"'),
         }),
       );
+    });
+
+    it('sends context with grid info for non-empty card', async () => {
+      const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { imageBase64: 'FAKEBASE64', mimeType: 'image/png' } }),
+      });
+      const { result } = renderHook(() => useAICard('user@test.com'));
+      await act(async () => result.current.generateCover(createGiovanniCardTemplate()));
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      expect(body.context).toContain('Front grid 4x4');
+      expect(body.context).toContain('photo cols 0-2, rows 0-4');
+    });
+
+    it('uses only prompt when explicit prompt override is provided', async () => {
+      const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { imageBase64: 'FAKEBASE64', mimeType: 'image/png' } }),
+      });
+      const { result } = renderHook(() => useAICard('user@test.com'));
+      await act(async () => result.current.generateCover(createGiovanniCardTemplate(), 'front', 'custom prompt'));
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      expect(body.prompt).toBe('custom prompt');
+      expect(body.context).toBe('');
     });
 
     it('throws on non-ok response', async () => {

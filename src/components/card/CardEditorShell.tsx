@@ -243,6 +243,11 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     addToast('info', 'Cover AI rimossa');
   }, [patchFront, addToast]);
 
+  const removeBackCoverImage = useCallback(() => {
+    patchBack({ coverImageUrl: null });
+    addToast('info', 'Cover AI retro rimossa');
+  }, [patchBack, addToast]);
+
   const handleUpload = useCallback(async (file: File, field: 'photoUrl' | 'logoUrl') => {
     setUploadError(null);
     if (!isAllowedLogoMime(file.type)) {
@@ -351,22 +356,53 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
   }, [card, aiText, aiModel, processCardPrompt, addToast]);
 
-  const handleGenerateCover = useCallback(async () => {
-    if (tier !== 'unlocked') {
+  const handleGenerateCover = useCallback(async (side: 'front' | 'back' | 'both' = 'front') => {
+    // v2.5.1: in locale, permetti la generazione cover anche con
+    // tier free (per testing). In produzione, mantieni il gate.
+    const isLocal = typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    if (tier !== 'unlocked' && !isLocal) {
       addToast('info', 'Sblocca il piano per generare cover AI.', 4000);
       return;
     }
     setIsCoverGenerating(true);
     try {
-      const coverDataUrl = await generateCover(card);
-      patchFront({ coverImageUrl: coverDataUrl });
-      addToast('success', 'Cover AI generata e applicata al fronte.', 4000);
+      if (side === 'both') {
+        const [frontCover, backCover] = await Promise.all([
+          generateCover(card, 'front'),
+          generateCover(card, 'back'),
+        ]);
+        patchFront({ coverImageUrl: frontCover });
+        patchBack({ coverImageUrl: backCover });
+        addToast('success', 'Cover AI generate per fronte e retro.', 4000);
+      } else {
+        const coverDataUrl = await generateCover(card, side);
+        if (side === 'front') {
+          patchFront({ coverImageUrl: coverDataUrl });
+        } else {
+          patchBack({ coverImageUrl: coverDataUrl });
+        }
+        addToast('success', `Cover AI generata e applicata al ${side === 'front' ? 'fronte' : 'retro'}.`, 4000);
+      }
     } catch (err: any) {
       addToast('error', err.message || 'Errore generazione cover AI', 5000);
     } finally {
       setIsCoverGenerating(false);
     }
-  }, [card, tier, generateCover, patchFront, addToast]);
+  }, [card, tier, generateCover, patchFront, patchBack, addToast]);
+
+  const handleRemoveCover = useCallback(
+    (side: 'front' | 'back') => {
+      if (side === 'front') {
+        patchFront({ coverImageUrl: null });
+        addToast('info', 'Cover AI del fronte rimossa.', 2500);
+      } else {
+        patchBack({ coverImageUrl: null });
+        addToast('info', 'Cover AI del retro rimossa.', 2500);
+      }
+    },
+    [patchFront, patchBack, addToast],
+  );
 
   useEffect(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -451,6 +487,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         onRemovePhoto={removePhoto}
         onRemoveLogo={removeLogo}
         onRemoveCover={removeCoverImage}
+        onRemoveBackCover={removeBackCoverImage}
         uploadError={uploadError}
       />
       <CardBackFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
@@ -500,8 +537,10 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       logs={cardAiLogs}
       tier={tier}
       onGenerateCover={handleGenerateCover}
+      onRemoveCover={handleRemoveCover}
+      card={card}
     />
-  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover]);
+  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, card]);
 
   const previewPanel = useMemo(() => (
     <CardPreviewSurface
@@ -564,7 +603,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
       {showTemplateBanner && (
         <div className="card-template-banner" role="status">
-          <span>Usa template personale di Giovanni (precompilato con https://webdeveloperca.netlify.app/, telefono/email = XXXXX)</span>
+          <span>Usa template personale di Giovanni (precompilato con https://giovannicidu.vercel.app, telefono/email = XXXXX)</span>
           <button type="button" onClick={applyGiovanniTemplate}>Applica template</button>
           <button type="button" onClick={() => setShowTemplateBanner(false)} aria-label="Chiudi banner">×</button>
         </div>

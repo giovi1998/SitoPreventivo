@@ -42,7 +42,7 @@ export default defineConfig(({ mode }) => {
           // proxy chiamava un modello/endpoint diverso da gemini.ts).
           server.middlewares.use(async (req, res, next) => {
             const url = (req.url || '').split('?')[0];
-            if (url !== '/api/ai/logo-config' && url !== '/api/ai/logo-background') {
+            if (url !== '/api/ai/logo-config' && url !== '/api/ai/logo-background' && url !== '/api/ai/card-cover') {
               return next();
             }
             if (req.method !== 'GET' && req.method !== 'POST') return next();
@@ -83,6 +83,34 @@ export default defineConfig(({ mode }) => {
                 const provider = new mod.GeminiImageProvider(apiKey);
                 try {
                   const result = await provider.generateBackground(prompt, 30_000);
+                  const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
+                  if (sizeBytes > 500_000) {
+                    return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                  }
+                  return json(200, { data: result });
+                } catch (err) {
+                  const msg = err?.message || 'unknown';
+                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(401, { error: 'Chiave Gemini non valida' });
+                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(504, { error: 'Gemini non ha risposto entro 30s.' });
+                  return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+                }
+              }
+
+              if (url === '/api/ai/card-cover' && req.method === 'POST') {
+                if (!apiKey) {
+                  return json(503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                }
+                const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+                if (!prompt || prompt.length > 1000) {
+                  return json(400, { error: 'prompt mancante o troppo lungo' });
+                }
+                const context = typeof body.context === 'string' ? body.context.slice(0, 1000) : '';
+                const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
+                const provider = new mod.GeminiImageProvider(apiKey);
+                try {
+                  const finalPrompt = context ? `${prompt}\n\nCARD CONTEXT:\n${context}` : prompt;
+                  const result = await provider.generateCardCover(finalPrompt, 30_000);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
                   if (sizeBytes > 500_000) {
                     return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });

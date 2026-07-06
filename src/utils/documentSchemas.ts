@@ -70,7 +70,7 @@ export function createGiovanniQrTemplate(): QRCode {
   return {
     ...createEmptyQrCode(),
     title: 'QR personale, Giovanni',
-    data: { type: 'url', payload: 'https://webdeveloperca.netlify.app/' },
+    data: { type: 'url', payload: GIOVANNI_PERSONAL_URL },
   };
 }
 
@@ -392,8 +392,13 @@ export function gridPresetBackDefault(): CardGrid {
     rows: 4,
     elements: {
       contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left', alignV: 'top' },
-      services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'top' },
-      socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      // v2.5: services doubled from h:1 to h:2 so the list is readable
+      // (1 row on a 4-row grid was too tight even with font shrink).
+      // socials removed from the grid: they fall back into the
+      // contacts cell via the {!grid.elements.socials && socialsContent}
+      // branch in BackPreview, keeping them visible without eating
+      // a row that services now needs.
+      services: { x: 0, y: 2, w: 2, h: 2, alignH: 'left', alignV: 'top' },
       qr: { x: 3, y: 0, w: 1, h: 4, alignH: 'center', alignV: 'center' },
     },
   };
@@ -492,6 +497,8 @@ export const businessCardSchema = z.object({
     // Phase 2.2 REQ-E02: dimensione QR in flexbox-mode. In grid-mode
     // la dimensione deriva dalla cella.
     qrSize: businessCardQrSizeSchema.default('medium'),
+    // Spec v2.4: AI-generated cover/background image for the back side.
+    coverImageUrl: z.string().nullable().default(null),
     // Phase 2.2 REQ-A02: come sopra, per il retro. Indipendente dal front
     // (l'utente può avere grid-mode attivo solo su uno dei due lati).
     useGrid: z.boolean().default(false),
@@ -543,6 +550,7 @@ export function createEmptyCard(): BusinessCard {
       qrPayload: '',
       qrLabel: 'Scansiona per visitare il sito',
       qrSize: 'medium',
+      coverImageUrl: null,
       useGrid: false,
     },
     style: {
@@ -561,7 +569,7 @@ export function createEmptyCard(): BusinessCard {
   };
 }
 
-export const GIOVANNI_PERSONAL_URL = 'https://webdeveloperca.netlify.app/';
+export const GIOVANNI_PERSONAL_URL = 'https://giovannicidu.vercel.app';
 
 // ─── Logo SVG trasparente per Giovanni (generato via builder inline) ───────
 // Lo costruiamo qui (non importando logoGenerator per evitare circular dep).
@@ -594,7 +602,7 @@ export function createGiovanniCardTemplate(): BusinessCard {
       ...createEmptyCard().front,
       name: 'GIOVANNI CIDU',
       title: 'Web Developer',
-      company: 'HPE CDS',
+      company: '',
       photoUrl: '/giovanni-photo.jpg',
       logoUrl: giovanniLogoDataUri(),
       coverImageUrl: null,
@@ -605,10 +613,11 @@ export function createGiovanniCardTemplate(): BusinessCard {
       phone,
       email,
       website: GIOVANNI_PERSONAL_URL,
-      qrPayload: GIOVANNI_PERSONAL_URL,
-      qrLabel: 'Scansiona per visitare il mio sito',
+      qrPayload: '',
+      qrLabel: 'Scansiona per il mio sito',
       servicesLabel: 'Servizi che offro',
       qrSize: 'medium',
+      coverImageUrl: null,
       socials: [
         { platform: 'LinkedIn', url: linkedInUrl },
         { platform: 'GitHub', url: 'https://github.com/GiovanniCidu' },
@@ -622,20 +631,28 @@ export function createGiovanniCardTemplate(): BusinessCard {
       accentColor: '#01696F',
       fontFamily: 'Inter',
       borderStyle: 'accent-strip-left',
-      fontScale: 1,
+      fontScale: 1.05,
     },
     grid: {
       cols: 4,
       rows: 4,
       elements: {
         photo: { x: 0, y: 0, w: 2, h: 4 },
-        name: { x: 2, y: 0, w: 2, h: 1 },
-        title: { x: 2, y: 1, w: 2, h: 1 },
-        company: { x: 2, y: 2, w: 2, h: 1 },
-        logo: { x: 2, y: 3, w: 2, h: 1 },
+        name: { x: 2, y: 0, w: 2, h: 1, alignH: 'right', alignV: 'bottom' },
+        title: { x: 2, y: 1, w: 2, h: 1, alignH: 'center', alignV: 'top' },
+        logo: { x: 2, y: 2, w: 2, h: 2, alignH: 'center', alignV: 'center' },
       },
     },
-    backGrid: gridPresetBackDefault(),
+    backGrid: {
+      cols: 4,
+      rows: 4,
+      elements: {
+        contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left', alignV: 'top' },
+        services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+        socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+        qr: { x: 2, y: 0, w: 2, h: 4, alignH: 'center', alignV: 'center' },
+      },
+    },
   };
 }
 

@@ -1328,6 +1328,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     const v = validate(
       z.object({
         prompt: z.string().max(1000),
+        context: z.string().max(1000).optional(),
         userEmail: z.string().email().optional(),
       }),
       body,
@@ -1339,7 +1340,10 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     try {
       const { GeminiImageProvider } = await import('../src/ai/providers/gemini');
       const provider = new GeminiImageProvider(apiKey);
-      const result = await provider.generateCardCover(v.data.prompt, 30_000);
+      const finalPrompt = v.data.context
+        ? `${v.data.prompt}\n\nCARD CONTEXT:\n${v.data.context.slice(0, 1000)}`
+        : v.data.prompt;
+      const result = await provider.generateCardCover(finalPrompt, 30_000);
       const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
       if (sizeBytes > 500_000) {
         return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });

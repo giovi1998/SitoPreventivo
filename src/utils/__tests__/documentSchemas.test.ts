@@ -47,7 +47,7 @@ import {
   FLYER_BLEED_MM,
 } from '../documentSchemas';
 
-const GIOVANNI_URL = 'https://webdeveloperca.netlify.app/';
+const GIOVANNI_URL = 'https://giovannicidu.vercel.app';
 
 describe('documentSchemas', () => {
   describe('documentTypeSchema', () => {
@@ -318,7 +318,7 @@ describe('documentSchemas', () => {
       expect(card.back.website).toBe(GIOVANNI_URL);
       expect(card.back.phone).toBe('35180008042');
       expect(card.back.email).toBe('webdevcaglian@gmail.com');
-      expect(card.back.qrPayload).toBe(GIOVANNI_URL);
+      expect(card.back.qrPayload).toBe('');
       expect(card.front.name).toContain('GIOVANNI');
       expect(card.front.layout).toBe('split');
       expect(card.front.photoUrl).toBe('/giovanni-photo.jpg');
@@ -327,9 +327,9 @@ describe('documentSchemas', () => {
       expect(r.success).toBe(true);
     });
 
-    it('pre-fills company "HPE CDS" on front (Phase 2.1 update)', () => {
+    it('does not pre-fill any placeholder company on front', () => {
       const card = createGiovanniCardTemplate();
-      expect(card.front.company).toBe('HPE CDS');
+      expect(card.front.company).toBe('');
     });
 
     it('includes a transparent SVG logo as data URI (Phase 2.1: logoUrl non null)', () => {

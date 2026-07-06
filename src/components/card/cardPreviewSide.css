@@ -10,6 +10,11 @@
   --card-font-scale: 1;
   font-size: calc(1rem * var(--card-font-scale));
   position: relative;
+  /* v2.4: create a fresh stacking context so cover <img> (z:0) and the
+   * wash (z:0) cannot leak above the grid cells (z:1) of sibling
+   * parents. Without isolation, a high-z grid-debug overlay on a
+   * sibling could re-paint the cover above this side. */
+  isolation: isolate;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -36,6 +41,12 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
+  /* v2.4: explicit z-index so grid cells always paint ABOVE the
+   * cover AI <img> and the wash (both position:absolute z-index:0).
+   * Without this, painting order rules can let the cover leak
+   * visually when the cell content is small (e.g. logo with padding). */
+  position: relative;
+  z-index: 1;
 }
 
 .card-preview-side.grid-mode .card-grid-cell--text,
@@ -136,6 +147,20 @@
   overflow-wrap: break-word;
   word-break: break-word;
   white-space: normal;
+}
+
+/* Reduce spacing between stacked identity fields in grid mode. */
+.card-preview-side.grid-mode .card-grid-cell--text .card-name + .card-title,
+.card-preview-side.grid-mode .card-grid-cell--text .card-title + .card-company {
+  margin-top: 2px;
+}
+
+/* Center text children by default when align is centered (gridPlacement supplies justify/align). */
+.card-preview-side.grid-mode .card-grid-cell--text .card-name,
+.card-preview-side.grid-mode .card-grid-cell--text .card-title,
+.card-preview-side.grid-mode .card-grid-cell--text .card-company {
+  width: 100%;
+  text-align: inherit;
 }
 
 /* Grid debug overlay sits above content so cell boundaries remain visible. */
@@ -617,16 +642,10 @@
   font-weight: 500;
 }
 
-.card-back-qr-wordmark {
-  font-size: calc(0.5rem * var(--card-font-scale));
-  text-align: center;
-  max-width: 100px;
-  line-height: 1.2;
-  opacity: 0.55;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  margin-top: 1px;
-}
+/* v2.5: removed .card-back-qr-wordmark — the small website URL under
+ * the QR was noisy and overlapped the qrLabel. The QR cell now shows
+ * only the QR + qrLabel. The header wordmark at the top of the back
+ * side is preserved (see .card-back-wordmark). */
 
 .card-back-socials {
   margin-top: 5px;
@@ -651,15 +670,18 @@
 
 .card-back-services {
   list-style: none;
-  margin: 2px 0 0;
-  padding: 2px 0 0;
+  margin: 3px 0 0;
+  padding: 3px 0 0;
   border-top: 1px dashed color-mix(in srgb, currentColor 14%, transparent);
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  font-size: calc(0.7rem * var(--card-font-scale));
+  gap: 2px;
+  /* v2.5: bumped from 0.7rem — services were too small vs contacts
+   * (which sit at 0.75rem). Bring them up so the list is clearly
+   * readable. */
+  font-size: calc(0.85rem * var(--card-font-scale));
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 1.2;
   color: var(--card-accent, #01696F);
 }
 
@@ -676,14 +698,15 @@
 /* Phase 2.2 REQ-F03: auto-riduzione font per servizi lunghi. Combinato
  * con fontScale (vedi --card-font-scale sul contenitore radice). */
 .card-back-services--long {
-  font-size: calc(0.58rem * var(--card-font-scale));
-  line-height: 1.1;
+  font-size: calc(0.7rem * var(--card-font-scale));
+  line-height: 1.15;
 }
 
 /* Phase 2.2 REQ-F02: heading editabile sopra la lista servizi. */
 .card-back-services-label {
   margin-top: 2px;
-  font-size: calc(0.6rem * var(--card-font-scale));
+  /* v2.5: bumped from 0.6rem to match the services list prominence. */
+  font-size: calc(0.7rem * var(--card-font-scale));
   font-weight: 700;
   letter-spacing: 1.2px;
   text-transform: uppercase;

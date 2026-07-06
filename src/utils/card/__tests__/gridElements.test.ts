@@ -96,7 +96,10 @@ describe('gridElements', () => {
     });
 
     it('returns front options with labels for populated card', () => {
-      const card = createGiovanniCardTemplate();
+      const card = {
+        ...createGiovanniCardTemplate(),
+        front: { ...createGiovanniCardTemplate().front, company: 'Quickbrand' },
+      };
       const opts = getAvailableGridElements('front', card);
       const values = opts.map((o) => o.value);
       expect(values).toContain('photo');

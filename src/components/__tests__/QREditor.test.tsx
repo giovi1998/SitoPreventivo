@@ -44,7 +44,7 @@ describe('QREditor', () => {
     expect(banner.textContent).toContain('Giovanni');
     fireEvent.click(screen.getByRole('button', { name: /Applica template/i }));
     const urlInput = screen.getByLabelText(/URL del QR code/i) as HTMLInputElement;
-    expect(urlInput.value).toBe('https://webdeveloperca.netlify.app/');
+    expect(urlInput.value).toBe('https://giovannicidu.vercel.app');
   });
 
   it('changes type and resets payload (AC-003)', () => {
