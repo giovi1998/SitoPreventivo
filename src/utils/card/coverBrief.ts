@@ -31,22 +31,21 @@ export function buildCardCoverBrief(
   const brand = company || name || 'brand';
   const profession = title || 'professional';
 
-  // v2.5.1 prompt: simpler and more direct. The v2.5 prompt was too
-  // verbose and Gemini interpreted "paper-grain / ink-wash texture" as
-  // a license to add busy noise. Back to a short, clear brief: a soft
-  // abstract gradient with gentle tonal drift, no texture words that
-  // can be misread as "add detail". Keeps the "character" the user
-  // liked (a gradient that drifts, not a flat fill) without the
-  // noise that made the last covers less readable.
+  // v2.7 prompt: balanced. Keeps hard prohibitions only for card-like
+  // elements the user will overlay separately (text, QR, logo, faces,
+  // people, letters, numbers), but grants freedom on shapes, patterns,
+  // lines, gradients, light effects so the background is more
+  // expressive. Low contrast preserved for text legibility.
   const prompt = clamp(
     `Soft abstract background, a gentle gradient that drifts between ` +
       `the card palette tones (use ONLY: ${bgColor} primary, ` +
       `${accentColor} undertone, ${textColor} deepest, with subtle ±10% ` +
       `variation). Let one tone flow softly into another, like a calm ` +
-      `watercolor wash — no hard edges, no shapes, no pattern. ` +
+      `watercolor wash — no hard edges. You may add soft shapes, gentle ` +
+      `patterns, flowing lines, subtle dots, light gradients, organic ` +
+      `forms — keep it abstract and tasteful. ` +
       `No text, no QR, no logo, no letters, no numbers, no faces, no ` +
-      `people, no objects, no UI elements, no realistic items, no stripes, ` +
-      `no lines, no dots, no grid, no light beams, no lens flare. ` +
+      `people. No realistic objects, no UI elements. ` +
       `Low contrast throughout, every region stays light enough for ` +
       `overlaid text. Square 1:1, full-bleed.`,
     MAX_PROMPT_LEN,

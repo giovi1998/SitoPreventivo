@@ -30,13 +30,15 @@ describe('buildCardCoverBrief', () => {
   it('keeps text areas readable in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.5.1: gentle gradient that drifts, low contrast, explicit
-    // negative list (no text/QR/logo/faces/etc) so Gemini does not
-    // invent card elements the user will add separately.
+    // v2.7: gentle gradient + creative freedom (soft shapes, patterns,
+    // lines, dots, light gradients) with hard prohibitions only for
+    // card-like elements (text, QR, logo, faces, people).
     const lower = prompt.toLowerCase();
     expect(lower).toContain('watercolor wash');
     expect(lower).toContain('low contrast');
     expect(lower).toContain('gentle gradient');
+    // Creative freedom is granted for abstract decoration.
+    expect(lower).toMatch(/shapes|patterns|lines|dots/);
   });
 
   it('flags photo/logo presence in context', () => {
@@ -98,15 +100,20 @@ describe('buildCardCoverBrief', () => {
   it('does not ask for faces/text/logos in prompt', () => {
     const card = createGiovanniCardTemplate();
     const { prompt } = buildCardCoverBrief(card);
-    // v2.5.1: explicit negative list. The user does not want text,
-    // QR, logos or any card-like elements baked into the generated
-    // background image; the card content is overlaid separately.
+    // v2.7: hard prohibitions only for card-like elements. The user
+    // does not want text, QR, logos, faces or people baked into the
+    // generated background; the card content is overlaid separately.
     const lower = prompt.toLowerCase();
     expect(lower).toContain('no text');
     expect(lower).toContain('no qr');
     expect(lower).toContain('no logo');
     expect(lower).toContain('no faces');
     expect(lower).toContain('no people');
-    expect(lower).toContain('no pattern');
+    // Creative elements (shapes, patterns, lines) are ALLOWED, not
+    // prohibited: the prompt must not ban them.
+    expect(lower).not.toContain('no shapes');
+    expect(lower).not.toContain('no pattern');
+    expect(lower).not.toContain('no lines');
+    expect(lower).not.toContain('no dots');
   });
 });
