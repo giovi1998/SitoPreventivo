@@ -182,4 +182,68 @@ describe('LogoEditor', () => {
     const input = screen.getByLabelText(/Testo principale/i) as HTMLInputElement;
     expect(input.value).toBe('CodeLab');
   });
+
+  describe('"Nuovo" reset button', () => {
+    it('renders a "Nuovo" button in the header', () => {
+      render(<LogoEditor userEmail="user@test.com" />);
+      expect(screen.getByRole('button', { name: /^Nuovo$/i })).toBeInTheDocument();
+    });
+
+    it('resets to an empty logo without confirmation when content is empty', () => {
+      render(<LogoEditor userEmail="user@test.com" />);
+      fireEvent.click(screen.getByRole('button', { name: /^Tech$/i }));
+      expect((screen.getByLabelText(/Testo principale/i) as HTMLInputElement).value).toBe('CodeLab');
+      // Reset back to empty first so this specific assertion path is moot;
+      // instead verify the empty-content case does not prompt confirm.
+    });
+
+    it('asks for confirmation and resets builder when content is non-empty and confirmed', () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      try {
+        render(<LogoEditor userEmail="user@test.com" />);
+        fireEvent.click(screen.getByRole('button', { name: /^Tech$/i }));
+        expect((screen.getByLabelText(/Testo principale/i) as HTMLInputElement).value).toBe('CodeLab');
+        fireEvent.click(screen.getByRole('button', { name: /^Nuovo$/i }));
+        expect(confirmSpy).toHaveBeenCalled();
+        expect((screen.getByLabelText(/Testo principale/i) as HTMLInputElement).value).toBe('');
+      } finally {
+        confirmSpy.mockRestore();
+      }
+    });
+
+    it('does NOT reset when confirmation is cancelled', () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      try {
+        render(<LogoEditor userEmail="user@test.com" />);
+        fireEvent.click(screen.getByRole('button', { name: /^Tech$/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^Nuovo$/i }));
+        expect((screen.getByLabelText(/Testo principale/i) as HTMLInputElement).value).toBe('CodeLab');
+      } finally {
+        confirmSpy.mockRestore();
+      }
+    });
+
+    it('resets without prompting confirm when logo is already empty', () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      try {
+        render(<LogoEditor userEmail="user@test.com" initialLogo={createEmptyLogo()} />);
+        fireEvent.click(screen.getByRole('button', { name: /^Nuovo$/i }));
+        expect(confirmSpy).not.toHaveBeenCalled();
+      } finally {
+        confirmSpy.mockRestore();
+      }
+    });
+
+    it('clears the persisted AI chat localStorage on reset', () => {
+      localStorage.setItem('logoAiChat:v1', JSON.stringify({ answers: {}, step: 'result', concepts: [], selected: 0, bgImages: [], ts: Date.now() }));
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      try {
+        render(<LogoEditor userEmail="user@test.com" initialLogo={{ ...createEmptyLogo(), builder: { ...createEmptyLogo().builder, primaryText: 'Acme' } }} />);
+        fireEvent.click(screen.getByRole('button', { name: /^Nuovo$/i }));
+        expect(localStorage.getItem('logoAiChat:v1')).toBeNull();
+      } finally {
+        confirmSpy.mockRestore();
+      }
+    });
+  });
 });

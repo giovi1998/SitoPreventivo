@@ -141,11 +141,33 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
     setShowSaveDialog(true);
   }, [logo, addToast]);
 
+  const [aiPanelResetKey, setAiPanelResetKey] = useState(0);
+
+  const handleNew = useCallback(() => {
+    if (logoHasContent(logo)) {
+      const ok = window.confirm('Creare un nuovo logo? Le modifiche non salvate andranno perse.');
+      if (!ok) return;
+    }
+    setLogo(createEmptyLogo());
+    setTab('builder');
+    localStorage.removeItem('logoAiChat:v1');
+    setAiPanelResetKey((k) => k + 1);
+    addToast('info', 'Nuovo logo creato.');
+  }, [logo, addToast]);
+
   return (
     <div className="logo-editor">
       <header className="logo-editor-header">
         <h1>Logo</h1>
         <div className="logo-editor-actions">
+          <button
+            type="button"
+            onClick={handleNew}
+            aria-label="Nuovo"
+            title="Crea un nuovo logo (azzera builder e chat AI)"
+          >
+            Nuovo
+          </button>
           <button
             type="button"
             onClick={openSaveDialog}
@@ -224,6 +246,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
           <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} />
         ) : (
           <LogoAiPanel
+            key={aiPanelResetKey}
             logo={logo}
             onPatch={(patch) => {
               for (const [k, v] of Object.entries(patch)) onPatch(`builder.${k}`, v);

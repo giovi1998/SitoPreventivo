@@ -167,4 +167,81 @@ describe('BuilderPanel', () => {
     const input = screen.getByLabelText(/Testo principale/i) as HTMLInputElement;
     expect(input.value).toBe('CodeLab');
   });
+
+  describe('Leggibilità testo (v2.3)', () => {
+    it('renders textColorMode select with 3 options', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      const select = screen.getByLabelText(/Colore testo/i) as HTMLSelectElement;
+      expect(select).toBeInTheDocument();
+      expect(select.value).toBe('auto');
+    });
+
+    it('changing textColorMode calls onPatch', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      const select = screen.getByLabelText(/Colore testo/i) as HTMLSelectElement;
+      fireEvent.change(select, { target: { value: 'light' } });
+      expect(onPatch).toHaveBeenCalledWith('builder.textColorMode', 'light');
+    });
+
+    it('renders 3 textBackdrop preset buttons (Nessuno/Pillola/Banda)', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      expect(screen.getByRole('button', { name: /Sfondo testo Nessuno/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Sfondo testo Pillola/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Sfondo testo Banda/i })).toBeInTheDocument();
+    });
+
+    it('clicking a textBackdrop preset calls onPatch', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      fireEvent.click(screen.getByRole('button', { name: /Sfondo testo Pillola/i }));
+      expect(onPatch).toHaveBeenCalledWith('builder.textBackdrop', 'pill');
+    });
+
+    it('renders textScale slider defaulting to 1', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      const slider = screen.getByLabelText(/Dimensione testo/i) as HTMLInputElement;
+      expect(slider.value).toBe('1');
+    });
+
+    it('changing textScale slider calls onPatch with a number', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      const slider = screen.getByLabelText(/Dimensione testo/i) as HTMLInputElement;
+      fireEvent.change(slider, { target: { value: '1.3' } });
+      expect(onPatch).toHaveBeenCalledWith('builder.textScale', 1.3);
+    });
+
+    it('renders 4 nudge arrow buttons for text position', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      expect(screen.getByRole('button', { name: /Sposta testo a sinistra/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Sposta testo a destra/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Sposta testo in alto/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Sposta testo in basso/i })).toBeInTheDocument();
+    });
+
+    it('clicking the right nudge arrow increases textOffsetX by 4', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      fireEvent.click(screen.getByRole('button', { name: /Sposta testo a destra/i }));
+      expect(onPatch).toHaveBeenCalledWith('builder.textOffsetX', 4);
+    });
+
+    it('clicking the left nudge arrow decreases textOffsetX by 4', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      fireEvent.click(screen.getByRole('button', { name: /Sposta testo a sinistra/i }));
+      expect(onPatch).toHaveBeenCalledWith('builder.textOffsetX', -4);
+    });
+
+    it('renders a "Centra testo" reset button that zeroes offsets', () => {
+      const l: Logo = { ...logo, builder: { ...logo.builder, textOffsetX: 20, textOffsetY: -10 } };
+      render(<BuilderPanel logo={l} onPatch={onPatch} />);
+      fireEvent.click(screen.getByRole('button', { name: /Centra testo/i }));
+      expect(onPatch).toHaveBeenCalledWith('builder.textOffsetX', 0);
+      expect(onPatch).toHaveBeenCalledWith('builder.textOffsetY', 0);
+    });
+
+    it('nudge arrows clamp at ±60', () => {
+      const l: Logo = { ...logo, builder: { ...logo.builder, textOffsetX: 60 } };
+      render(<BuilderPanel logo={l} onPatch={onPatch} />);
+      fireEvent.click(screen.getByRole('button', { name: /Sposta testo a destra/i }));
+      expect(onPatch).toHaveBeenCalledWith('builder.textOffsetX', 60);
+    });
+  });
 });

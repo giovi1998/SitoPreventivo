@@ -199,6 +199,11 @@ function convertAIOutputToBuilder(parsed: LogoAIOutput): LogoBuilder {
     gradientFill: parsed.gradientFill ?? false,
     decorativeElements: parsed.decorativeElements ?? [],
     imagePrompt: parsed.imagePrompt ?? null,
+    textBackdrop: 'none',
+    textColorMode: 'auto',
+    textOffsetX: 0,
+    textOffsetY: 0,
+    textScale: 1,
   };
 }
 

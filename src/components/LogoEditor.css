@@ -319,3 +319,166 @@
   font-size: 0.8rem;
   color: var(--ink-soft, #6b7280);
 }
+
+/* ─── Decorazioni: gradient checkbox, sfondo, chip ─────────────── */
+
+.builder-field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.builder-field-inline input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.builder-field-label {
+  font-size: 0.8rem;
+  color: var(--ink-soft, #6b7280);
+  font-weight: 500;
+}
+
+.builder-field-hint {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  color: var(--ink-soft, #6b7280);
+  line-height: 1.4;
+}
+
+.builder-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.builder-color-preset {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.builder-color-preset:hover {
+  border-color: var(--primary, #01696F);
+}
+
+.builder-color-preset.selected {
+  border-color: var(--primary, #01696F);
+  background: rgba(1, 105, 111, 0.08);
+}
+
+.builder-color-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+
+.builder-color-swatch.transparent {
+  background: repeating-conic-gradient(#ccc 0% 25%, transparent 0% 50%) 50% / 8px 8px;
+}
+
+.builder-color-label {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.builder-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.builder-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.builder-chip:hover {
+  border-color: var(--primary, #01696F);
+}
+
+.builder-chip.active {
+  border-color: var(--primary, #01696F);
+  background: rgba(1, 105, 111, 0.1);
+  color: var(--primary, #01696F);
+  font-weight: 600;
+}
+
+/* ─── Background AI badge/remove (Builder preview) ─────────────── */
+
+.builder-ai-bg-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.builder-ai-bg-badge {
+  font-size: 0.8rem;
+  color: var(--ink-soft, #6b7280);
+}
+
+.builder-ai-bg-remove {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.builder-ai-bg-remove:hover {
+  border-color: var(--primary, #01696F);
+}
+
+/* ─── Leggibilità testo (v2.3): nudge grid ─────────────── */
+
+.builder-nudge-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  grid-template-rows: repeat(3, 40px);
+  gap: 4px;
+  justify-content: start;
+}
+
+.builder-nudge-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.builder-nudge-btn:hover {
+  border-color: var(--primary, #01696F);
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
+}
+
+.nudge-up { grid-column: 2; grid-row: 1; }
+.nudge-left { grid-column: 1; grid-row: 2; }
+.nudge-center { grid-column: 2; grid-row: 2; }
+.nudge-right { grid-column: 3; grid-row: 2; }
+.nudge-down { grid-column: 2; grid-row: 3; }

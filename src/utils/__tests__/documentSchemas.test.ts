@@ -604,6 +604,43 @@ describe('documentSchemas', () => {
       expect(b.secondaryColor).toMatch(/^#[0-9a-fA-F]{6}$/);
       expect(b.layout).toBe('horizontal');
     });
+
+    it('logoBuilderSchema defaults textBackdrop/textColorMode/textOffset/textScale (v2.3 text controls)', () => {
+      const b = logoBuilderSchema.parse({});
+      expect(b.textBackdrop).toBe('none');
+      expect(b.textColorMode).toBe('auto');
+      expect(b.textOffsetX).toBe(0);
+      expect(b.textOffsetY).toBe(0);
+      expect(b.textScale).toBe(1);
+    });
+
+    it('logoBuilderSchema accepts all textBackdrop values', () => {
+      for (const v of ['none', 'pill', 'band'] as const) {
+        expect(logoBuilderSchema.safeParse({ textBackdrop: v }).success).toBe(true);
+      }
+      expect(logoBuilderSchema.safeParse({ textBackdrop: 'invalid' }).success).toBe(false);
+    });
+
+    it('logoBuilderSchema accepts all textColorMode values', () => {
+      for (const v of ['auto', 'light', 'dark'] as const) {
+        expect(logoBuilderSchema.safeParse({ textColorMode: v }).success).toBe(true);
+      }
+      expect(logoBuilderSchema.safeParse({ textColorMode: 'invalid' }).success).toBe(false);
+    });
+
+    it('logoBuilderSchema clamps textOffsetX/Y to [-60, 60]', () => {
+      expect(logoBuilderSchema.safeParse({ textOffsetX: 61 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ textOffsetX: -61 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ textOffsetY: 61 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ textOffsetX: 60, textOffsetY: -60 }).success).toBe(true);
+    });
+
+    it('logoBuilderSchema clamps textScale to [0.7, 1.5]', () => {
+      expect(logoBuilderSchema.safeParse({ textScale: 0.69 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ textScale: 1.51 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ textScale: 0.7 }).success).toBe(true);
+      expect(logoBuilderSchema.safeParse({ textScale: 1.5 }).success).toBe(true);
+    });
   });
 
   describe('createEmptyLogo (Phase 4)', () => {

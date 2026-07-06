@@ -676,6 +676,14 @@ export const logoBuilderSchema = z.object({
   decorativeElements: z.array(logoDecorativeElementSchema).default([]),
   // Spec v2.2 (Nano-Banana): reasoning-driven prompt used by Gemini image generation.
   imagePrompt: z.string().max(600).nullable().default(null),
+  // Spec v2.3 (Text controls): readability + positioning for the SVG
+  // text overlay, especially important against AI-generated photo
+  // backgrounds. 'none' preserves the pre-v2.3 rendering exactly.
+  textBackdrop: z.enum(['none', 'pill', 'band']).default('none'),
+  textColorMode: z.enum(['auto', 'light', 'dark']).default('auto'),
+  textOffsetX: z.number().min(-60).max(60).default(0),
+  textOffsetY: z.number().min(-60).max(60).default(0),
+  textScale: z.number().min(0.7).max(1.5).default(1),
 });
 export type LogoBuilder = z.infer<typeof logoBuilderSchema>;
 
@@ -729,6 +737,11 @@ export function createEmptyLogo(): Logo {
       gradientFill: false,
       decorativeElements: [],
       imagePrompt: null,
+      textBackdrop: 'none',
+      textColorMode: 'auto',
+      textOffsetX: 0,
+      textOffsetY: 0,
+      textScale: 1,
     },
     brief: '',
     concepts: [],
@@ -805,7 +818,21 @@ export function createLogoTemplate(sector: LogoSector): Logo {
     id: `logo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     title: `Logo ${sector}`,
     source: 'builder',
-    builder: { ...preset, fontFamily: 'Inter', icons: [], backgroundImage: null, backgroundColor: null, gradientFill: false, decorativeElements: [], imagePrompt: null },
+    builder: {
+      ...preset,
+      fontFamily: 'Inter',
+      icons: [],
+      backgroundImage: null,
+      backgroundColor: null,
+      gradientFill: false,
+      decorativeElements: [],
+      imagePrompt: null,
+      textBackdrop: 'none',
+      textColorMode: 'auto',
+      textOffsetX: 0,
+      textOffsetY: 0,
+      textScale: 1,
+    },
     brief: '',
     concepts: [],
     selected: -1,

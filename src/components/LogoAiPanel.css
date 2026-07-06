@@ -208,19 +208,27 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 0;
   border: 2px solid #ddd;
   border-radius: 10px;
   background: #fff;
-  cursor: pointer;
   overflow: hidden;
-  text-align: left;
-  font: inherit;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .logo-ai-concept:hover {
   border-color: var(--qb-red, #e62020);
+}
+
+.logo-ai-concept-select {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
 }
 
 .logo-ai-concept.is-selected {
@@ -299,4 +307,140 @@
 .logo-ai-concept-cta {
   background: var(--qb-ink, #1a1a1a);
   color: #fff;
+}
+
+/* Prompt avanzato per concept (Piano B) */
+.logo-ai-concept-advanced {
+  border-top: 1px solid #eee;
+  padding: 0.5rem 0.75rem 0.75rem;
+}
+
+.logo-ai-concept-advanced summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.75;
+  padding: 0.25rem 0;
+}
+
+.logo-ai-concept-advanced textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.4rem 0;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.8rem;
+  resize: vertical;
+}
+
+.logo-ai-concept-advanced button {
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #f5f5f5;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.logo-ai-concept-advanced button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Preset per settore (Piano B) */
+.logo-ai-preset-btn {
+  align-self: flex-start;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px dashed var(--qb-ink, #1a1a1a);
+  background: transparent;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.logo-ai-preset-btn:hover {
+  opacity: 1;
+  border-style: solid;
+}
+
+/* Libreria "I miei prompt" (Piano B) */
+.logo-ai-library {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #eee;
+}
+
+.logo-ai-library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.logo-ai-library-header button {
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #f5f5f5;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.logo-ai-library-header button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.logo-ai-library-empty {
+  font-size: 0.8rem;
+  opacity: 0.6;
+  margin: 0;
+}
+
+.logo-ai-library-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.logo-ai-library-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #eee;
+  border-radius: 6px;
+}
+
+.logo-ai-library-label {
+  font-size: 0.85rem;
+  overflow-wrap: break-word;
+}
+
+.logo-ai-library-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.logo-ai-library-actions button {
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
 }

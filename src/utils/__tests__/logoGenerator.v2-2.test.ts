@@ -18,6 +18,11 @@ const baseBuilder: LogoBuilder = {
   gradientFill: false,
   decorativeElements: [],
   imagePrompt: null,
+  textBackdrop: 'none',
+  textColorMode: 'auto',
+  textOffsetX: 0,
+  textOffsetY: 0,
+  textScale: 1,
 };
 
 describe('logoGenerator v2.2', () => {
@@ -99,6 +104,111 @@ describe('logoGenerator v2.2', () => {
       const imgIdx = svg.indexOf('<image');
       expect(rectIdx).toBeGreaterThan(-1);
       expect(imgIdx).toBeGreaterThan(rectIdx);
+    });
+  });
+});
+
+describe('logoGenerator v2.3 (text readability + position controls)', () => {
+  describe('textColorMode', () => {
+    it('auto keeps the existing secondaryColor for primaryText (unchanged default)', () => {
+      const svg = builderToSvg(baseBuilder);
+      expect(svg).toContain('fill="#1a1a2e"');
+    });
+
+    it('light forces white primaryText fill', () => {
+      const svg = builderToSvg({ ...baseBuilder, textColorMode: 'light' });
+      expect(svg).toContain('fill="#FFFFFF"');
+    });
+
+    it('dark forces near-black primaryText fill', () => {
+      const svg = builderToSvg({ ...baseBuilder, textColorMode: 'dark' });
+      expect(svg).toContain('fill="#0F172A"');
+    });
+
+    it('gradientFill takes priority over textColorMode', () => {
+      const svg = builderToSvg({ ...baseBuilder, textColorMode: 'light', gradientFill: true });
+      expect(svg).toContain('fill="url(#textGrad)"');
+      expect(svg).not.toContain('fill="#FFFFFF"');
+    });
+  });
+
+  describe('textBackdrop', () => {
+    it('none renders no extra backdrop rect (only the icon shape, no additional rect)', () => {
+      const svg = builderToSvg(baseBuilder);
+      // iconType none => no shape rect either; the only rects would come
+      // from a backdrop, so there should be zero <rect> elements.
+      expect(svg.match(/<rect/g)).toBeNull();
+    });
+
+    it('pill renders a rounded rect behind the text', () => {
+      const svg = builderToSvg({ ...baseBuilder, textBackdrop: 'pill' });
+      expect(svg).toMatch(/<rect[^>]*rx="\d+"[^>]*fill="rgba\(/);
+    });
+
+    it('band renders a full-width rect behind the text', () => {
+      const svg = builderToSvg({ ...baseBuilder, textBackdrop: 'band' });
+      expect(svg).toMatch(/<rect x="0" y="[\d.]+" width="400"[^>]*fill="rgba\(/);
+    });
+
+    it('uses a light backdrop when textColorMode=dark (contrast inversion)', () => {
+      const svg = builderToSvg({ ...baseBuilder, textBackdrop: 'pill', textColorMode: 'dark' });
+      expect(svg).toContain('fill="rgba(255,255,255,0.72)"');
+    });
+
+    it('uses a dark backdrop when textColorMode=light', () => {
+      const svg = builderToSvg({ ...baseBuilder, textBackdrop: 'pill', textColorMode: 'light' });
+      expect(svg).toContain('fill="rgba(15,23,42,0.55)"');
+    });
+
+    it('backdrop is placed before the text in the SVG so text renders on top', () => {
+      const svg = builderToSvg({ ...baseBuilder, textBackdrop: 'pill' });
+      const backdropIdx = svg.indexOf('fill="rgba(');
+      const textIdx = svg.indexOf('<text');
+      expect(backdropIdx).toBeGreaterThan(-1);
+      expect(textIdx).toBeGreaterThan(backdropIdx);
+    });
+  });
+
+  describe('textOffsetX/Y', () => {
+    it('shifts primaryText x position for horizontal layout', () => {
+      const base = builderToSvg(baseBuilder);
+      const shifted = builderToSvg({ ...baseBuilder, textOffsetX: 20 });
+      const baseX = Number(base.match(/<text x="([\d.]+)"/)![1]);
+      const shiftedX = Number(shifted.match(/<text x="([\d.]+)"/)![1]);
+      expect(shiftedX).toBeCloseTo(baseX + 20, 0);
+    });
+
+    it('shifts primaryText y position for vertical layout', () => {
+      const vBuilder = { ...baseBuilder, layout: 'vertical' as const };
+      const base = builderToSvg(vBuilder);
+      const shifted = builderToSvg({ ...vBuilder, textOffsetY: 15 });
+      const baseY = Number(base.match(/<text x="[\d.]+" y="([\d.]+)"/)![1]);
+      const shiftedY = Number(shifted.match(/<text x="[\d.]+" y="([\d.]+)"/)![1]);
+      expect(shiftedY).toBeCloseTo(baseY + 15, 0);
+    });
+  });
+
+  describe('textScale', () => {
+    it('increases font-size when textScale > 1', () => {
+      const base = builderToSvg(baseBuilder);
+      const scaled = builderToSvg({ ...baseBuilder, textScale: 1.5 });
+      const baseFontSize = Number(base.match(/font-size="(\d+)"/)![1]);
+      const scaledFontSize = Number(scaled.match(/font-size="(\d+)"/)![1]);
+      expect(scaledFontSize).toBeGreaterThan(baseFontSize);
+    });
+
+    it('decreases font-size when textScale < 1', () => {
+      const base = builderToSvg(baseBuilder);
+      const scaled = builderToSvg({ ...baseBuilder, textScale: 0.7 });
+      const baseFontSize = Number(base.match(/font-size="(\d+)"/)![1]);
+      const scaledFontSize = Number(scaled.match(/font-size="(\d+)"/)![1]);
+      expect(scaledFontSize).toBeLessThan(baseFontSize);
+    });
+
+    it('never shrinks font-size below 10 even at minimum scale', () => {
+      const svg = builderToSvg({ ...baseBuilder, primaryText: 'Pedagogista Susanna Cidu Molto Lungo', textScale: 0.7 });
+      const fontSize = Number(svg.match(/font-size="(\d+)"/)![1]);
+      expect(fontSize).toBeGreaterThanOrEqual(10);
     });
   });
 });

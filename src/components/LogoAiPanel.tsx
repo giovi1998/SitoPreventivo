@@ -18,6 +18,7 @@ const MOODS = ['minimal', 'bold', 'playful', 'elegant', 'tech'] as const;
 
 const LS_KEY = 'logoAiChat:v1';
 const LS_TTL_MS = 24 * 60 * 60 * 1000;
+const PROMPT_LIBRARY_KEY = 'logoPromptLibrary:v1';
 
 type Step = 'chat' | 'result' | 'applied';
 
@@ -26,6 +27,62 @@ interface ChatAnswers {
   mood: string;
   target: string;
   sector: LogoSector;
+}
+
+const SECTOR_LABELS: Record<LogoSector, string> = {
+  tech: 'Tech',
+  food: 'Food',
+  fashion: 'Fashion',
+  professionista: 'Professionista',
+};
+
+/**
+ * Piano B (prompt templates): un esempio pronto per settore, per far
+ * partire velocemente la generazione o mostrare all'utente cosa
+ * scrivere. L'utente può poi modificare liberamente i campi.
+ */
+const SECTOR_PRESET_BRIEFS: Record<LogoSector, { activity: string; mood: (typeof MOODS)[number]; target: string }> = {
+  tech: {
+    activity: 'Startup SaaS per la gestione di progetti in team remoti, con dashboard e integrazioni.',
+    mood: 'tech',
+    target: 'startup e team di sviluppo software',
+  },
+  food: {
+    activity: 'Pizzeria napoletana artigianale nel centro città, forno a legna e ingredienti locali.',
+    mood: 'bold',
+    target: 'famiglie e giovani 20-40 anni',
+  },
+  fashion: {
+    activity: 'Atelier di moda sostenibile con capi su misura, tessuti naturali e produzione etica.',
+    mood: 'elegant',
+    target: 'donne 25-45 anni attente allo stile',
+  },
+  professionista: {
+    activity: 'Studio di consulenza legale specializzato in diritto del lavoro e contrattualistica.',
+    mood: 'minimal',
+    target: 'aziende e piccole-medie imprese',
+  },
+};
+
+interface SavedBrief extends ChatAnswers {
+  id: string;
+  label: string;
+  createdAt: number;
+}
+
+function loadPromptLibrary(): SavedBrief[] {
+  try {
+    const raw = localStorage.getItem(PROMPT_LIBRARY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePromptLibrary(items: SavedBrief[]): void {
+  localStorage.setItem(PROMPT_LIBRARY_KEY, JSON.stringify(items));
 }
 
 interface LogoConfig {
@@ -61,6 +118,8 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail }: Props) {
   const [bgImages, setBgImages] = useState<(string | null)[]>([null, null, null]);
   const [bgErrors, setBgErrors] = useState<(string | null)[]>([null, null, null]);
   const [config, setConfig] = useState<LogoConfig | null>(null);
+  const [library, setLibrary] = useState<SavedBrief[]>(() => loadPromptLibrary());
+  const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
 
   // Load persisted state on mount
   useEffect(() => {
@@ -224,6 +283,81 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail }: Props) {
     localStorage.removeItem(LS_KEY);
   };
 
+  // ─── Piano B: preset per settore + libreria "I miei prompt" ──────
+
+  const applySectorExample = () => {
+    const preset = SECTOR_PRESET_BRIEFS[answers.sector];
+    setAnswers({ ...answers, activity: preset.activity, mood: preset.mood, target: preset.target });
+  };
+
+  const saveBriefToLibrary = () => {
+    const label = window.prompt('Nome per questo brief (es. "Pizzeria Cagliari"):');
+    if (!label || !label.trim()) return;
+    const entry: SavedBrief = {
+      id: `brief_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      label: label.trim(),
+      ...answers,
+      createdAt: Date.now(),
+    };
+    const next = [...library, entry];
+    setLibrary(next);
+    savePromptLibrary(next);
+    addToast('success', `Brief "${entry.label}" salvato.`);
+  };
+
+  const applyBrief = (brief: SavedBrief) => {
+    setAnswers({ activity: brief.activity, mood: brief.mood, target: brief.target, sector: brief.sector });
+  };
+
+  const deleteBrief = (id: string) => {
+    const next = library.filter((b) => b.id !== id);
+    setLibrary(next);
+    savePromptLibrary(next);
+  };
+
+  // ─── Piano B: rigenera background di un singolo concept con prompt editato ──
+
+  const handleRegenerate = async (idx: number, promptText: string) => {
+    const concept = concepts[idx];
+    if (!concept) return;
+    if (config?.provider !== 'gemini') {
+      addToast('info', 'Immagini AI disabilitate. Configura GEMINI_API_KEY per attivarle.');
+      return;
+    }
+    setRegeneratingIdx(idx);
+    try {
+      const ctx = {
+        activity: answers.activity,
+        mood: answers.mood,
+        target: answers.target,
+        imagePrompt: promptText,
+      };
+      const r = await generateBackground({ ...logo, builder: concept }, ctx);
+      if (r.applied && r.logo?.builder.backgroundImage) {
+        setBgImages((prev) => {
+          const next = [...prev];
+          next[idx] = r.logo!.builder.backgroundImage;
+          return next;
+        });
+        setBgErrors((prev) => {
+          const next = [...prev];
+          next[idx] = null;
+          return next;
+        });
+        addToast('success', `Concept ${idx + 1}: immagine rigenerata.`);
+      } else {
+        setBgErrors((prev) => {
+          const next = [...prev];
+          next[idx] = r.error ?? 'unknown';
+          return next;
+        });
+        addToast('error', `Concept ${idx + 1}: rigenerazione fallita.`);
+      }
+    } finally {
+      setRegeneratingIdx(null);
+    }
+  };
+
   return (
     <section className="logo-ai-panel" aria-label="AI Generation">
       <h2>AI Generation</h2>
@@ -254,6 +388,9 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail }: Props) {
               ))}
             </select>
           </label>
+          <button type="button" className="logo-ai-preset-btn" onClick={applySectorExample}>
+            Usa esempio {SECTOR_LABELS[answers.sector]}
+          </button>
           <div className="logo-ai-mood">
             <span className="logo-ai-q">Che mood vuoi?</span>
             <div className="logo-ai-mood-options">
@@ -290,6 +427,34 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail }: Props) {
               Reset chat
             </button>
           </div>
+
+          <div className="logo-ai-library">
+            <div className="logo-ai-library-header">
+              <span className="logo-ai-q">I miei prompt</span>
+              <button type="button" onClick={saveBriefToLibrary} disabled={!canGenerate}>
+                💾 Salva questo brief
+              </button>
+            </div>
+            {library.length === 0 ? (
+              <p className="logo-ai-library-empty">Nessun prompt salvato ancora. Compila il form e salvalo per riusarlo in futuro.</p>
+            ) : (
+              <ul className="logo-ai-library-list">
+                {library.map((b) => (
+                  <li key={b.id} className="logo-ai-library-item">
+                    <span className="logo-ai-library-label">{b.label}</span>
+                    <div className="logo-ai-library-actions">
+                      <button type="button" onClick={() => applyBrief(b)} aria-label={`Applica brief ${b.label}`}>
+                        Applica
+                      </button>
+                      <button type="button" onClick={() => deleteBrief(b.id)} aria-label={`Elimina brief ${b.label}`}>
+                        Elimina
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
@@ -307,6 +472,8 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail }: Props) {
                 bgImage={bgImages[i]}
                 bgError={bgErrors[i]}
                 onSelect={() => applyConcept(i)}
+                onRegenerate={(promptText) => handleRegenerate(i, promptText)}
+                regenerating={regeneratingIdx === i}
               />
             ))}
           </div>
@@ -335,6 +502,8 @@ function ConceptCard({
   bgImage,
   bgError,
   onSelect,
+  onRegenerate,
+  regenerating,
 }: {
   concept: LogoBuilder;
   index: number;
@@ -343,7 +512,11 @@ function ConceptCard({
   bgImage: string | null;
   bgError: string | null;
   onSelect: () => void;
+  onRegenerate: (promptText: string) => void;
+  regenerating: boolean;
 }) {
+  const [promptDraft, setPromptDraft] = useState(concept.imagePrompt || '');
+
   const previewSvg = React.useMemo(() => {
     try {
       const withBg = bgImage ? { ...concept, backgroundImage: bgImage } : concept;
@@ -354,27 +527,48 @@ function ConceptCard({
   }, [concept, bgImage]);
 
   return (
-    <button
-      type="button"
-      className={`logo-ai-concept${selected ? ' is-selected' : ''}${applied ? ' is-applied' : ''}`}
-      onClick={onSelect}
-      aria-pressed={selected}
-    >
-      <div className="logo-ai-concept-preview" dangerouslySetInnerHTML={{ __html: previewSvg }} />
-      <div className="logo-ai-concept-meta">
-        <strong>Concept {index + 1}</strong>
-        <span>{concept.primaryText}</span>
-        <span>{concept.tagline}</span>
-        <span className="logo-ai-concept-tags">
-          {concept.iconType} · {concept.layout}
-          {concept.decorativeElements?.length ? ` · ${concept.decorativeElements.join(', ')}` : ''}
-          {concept.gradientFill ? ' · gradient' : ''}
-        </span>
-        {bgImage && <span className="logo-ai-concept-ai-badge">AI bg ✓</span>}
-        {bgError && <span className="logo-ai-concept-ai-err">AI bg: {bgError}</span>}
-      </div>
-      {applied && <span className="logo-ai-concept-badge">Applicato</span>}
-      {!selected && !applied && <span className="logo-ai-concept-cta">Seleziona</span>}
-    </button>
+    <div className={`logo-ai-concept${selected ? ' is-selected' : ''}${applied ? ' is-applied' : ''}`}>
+      <button
+        type="button"
+        className="logo-ai-concept-select"
+        onClick={onSelect}
+        aria-pressed={selected}
+      >
+        <div className="logo-ai-concept-preview" dangerouslySetInnerHTML={{ __html: previewSvg }} />
+        <div className="logo-ai-concept-meta">
+          <strong>Concept {index + 1}</strong>
+          <span>{concept.primaryText}</span>
+          <span>{concept.tagline}</span>
+          <span className="logo-ai-concept-tags">
+            {concept.iconType} · {concept.layout}
+            {concept.decorativeElements?.length ? ` · ${concept.decorativeElements.join(', ')}` : ''}
+            {concept.gradientFill ? ' · gradient' : ''}
+          </span>
+          {bgImage && <span className="logo-ai-concept-ai-badge">AI bg ✓</span>}
+          {bgError && <span className="logo-ai-concept-ai-err">AI bg: {bgError}</span>}
+        </div>
+        {applied && <span className="logo-ai-concept-badge">Applicato</span>}
+        {!selected && !applied && <span className="logo-ai-concept-cta">Seleziona</span>}
+      </button>
+
+      {concept.imagePrompt && (
+        <details className="logo-ai-concept-advanced">
+          <summary>Prompt avanzato</summary>
+          <textarea
+            value={promptDraft}
+            onChange={(e) => setPromptDraft(e.target.value.slice(0, 600))}
+            rows={4}
+            aria-label={`Prompt immagine concept ${index + 1}`}
+          />
+          <button
+            type="button"
+            onClick={() => onRegenerate(promptDraft)}
+            disabled={regenerating || !promptDraft.trim()}
+          >
+            {regenerating ? 'Rigenerando…' : 'Rigenera immagine'}
+          </button>
+        </details>
+      )}
+    </div>
   );
 }

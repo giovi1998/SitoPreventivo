@@ -59,6 +59,22 @@ const BACKGROUND_PRESETS = [
   { label: 'Scuro', value: '#0F172A' },
   { label: 'Neutro', value: '#F5F5F4' },
 ];
+const TEXT_COLOR_MODE_OPTIONS: { value: import('../utils/documentSchemas').LogoBuilder['textColorMode']; label: string }[] = [
+  { value: 'auto', label: 'Automatico' },
+  { value: 'light', label: 'Chiaro (bianco)' },
+  { value: 'dark', label: 'Scuro' },
+];
+const TEXT_BACKDROP_OPTIONS: { value: import('../utils/documentSchemas').LogoBuilder['textBackdrop']; label: string }[] = [
+  { value: 'none', label: 'Nessuno' },
+  { value: 'pill', label: 'Pillola' },
+  { value: 'band', label: 'Banda' },
+];
+const TEXT_OFFSET_STEP = 4;
+const TEXT_OFFSET_LIMIT = 60;
+
+function clampOffset(v: number): number {
+  return Math.max(-TEXT_OFFSET_LIMIT, Math.min(TEXT_OFFSET_LIMIT, v));
+}
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -361,6 +377,104 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
                   </button>
                 );
               })}
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset className="builder-fieldset">
+          <legend>Leggibilità testo</legend>
+          <p className="builder-field-hint">
+            Utile quando il testo è sovrapposto a un background AI e risulta poco leggibile.
+          </p>
+          <label className="builder-field">
+            <span>Colore testo</span>
+            <select
+              value={b.textColorMode}
+              onChange={(e) => update('textColorMode', e.target.value)}
+              aria-label="Colore testo"
+            >
+              {TEXT_COLOR_MODE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="builder-field">
+            <span>Sfondo dietro al testo</span>
+            <div className="builder-color-row" role="group" aria-label="Sfondo dietro al testo">
+              {TEXT_BACKDROP_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  className={`builder-color-preset${b.textBackdrop === o.value ? ' selected' : ''}`}
+                  onClick={() => update('textBackdrop', o.value)}
+                  aria-label={`Sfondo testo ${o.label}`}
+                  title={o.label}
+                >
+                  <span className="builder-color-label">{o.label}</span>
+                </button>
+              ))}
+            </div>
+          </label>
+          <label className="builder-field">
+            <span>Dimensione testo ({Math.round(b.textScale * 100)}%)</span>
+            <input
+              type="range"
+              min={0.7}
+              max={1.5}
+              step={0.05}
+              value={b.textScale}
+              onChange={(e) => update('textScale', Number(e.target.value))}
+              aria-label="Dimensione testo"
+            />
+          </label>
+          <div className="builder-field">
+            <span className="builder-field-label">Posizione testo</span>
+            <div className="builder-nudge-grid" role="group" aria-label="Posizione testo">
+              <button
+                type="button"
+                className="builder-nudge-btn nudge-up"
+                onClick={() => update('textOffsetY', clampOffset(b.textOffsetY - TEXT_OFFSET_STEP))}
+                aria-label="Sposta testo in alto"
+                title="Sposta testo in alto"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="builder-nudge-btn nudge-left"
+                onClick={() => update('textOffsetX', clampOffset(b.textOffsetX - TEXT_OFFSET_STEP))}
+                aria-label="Sposta testo a sinistra"
+                title="Sposta testo a sinistra"
+              >
+                ←
+              </button>
+              <button
+                type="button"
+                className="builder-nudge-btn nudge-center"
+                onClick={() => { update('textOffsetX', 0); update('textOffsetY', 0); }}
+                aria-label="Centra testo"
+                title="Centra testo (azzera spostamento)"
+              >
+                ⟲
+              </button>
+              <button
+                type="button"
+                className="builder-nudge-btn nudge-right"
+                onClick={() => update('textOffsetX', clampOffset(b.textOffsetX + TEXT_OFFSET_STEP))}
+                aria-label="Sposta testo a destra"
+                title="Sposta testo a destra"
+              >
+                →
+              </button>
+              <button
+                type="button"
+                className="builder-nudge-btn nudge-down"
+                onClick={() => update('textOffsetY', clampOffset(b.textOffsetY + TEXT_OFFSET_STEP))}
+                aria-label="Sposta testo in basso"
+                title="Sposta testo in basso"
+              >
+                ↓
+              </button>
             </div>
           </div>
         </fieldset>

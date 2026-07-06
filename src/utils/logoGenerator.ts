@@ -262,6 +262,58 @@ function buildBackgroundRect(builder: LogoBuilder, W: number, H: number): string
   return `<rect width="${W}" height="${H}" fill="${builder.backgroundColor}"/>`;
 }
 
+// ─── TEXT READABILITY + POSITION (spec v2.3) ──────────────────────
+
+/**
+ * Resolves primaryText/tagline fill colors considering textColorMode.
+ * gradientFill (v2.2) takes priority over textColorMode when enabled,
+ * since it's an explicit stylistic choice independent of readability
+ * mode. 'light'/'dark' force a fixed, high-contrast color regardless
+ * of the brand secondary/primary colors — the whole point is to
+ * guarantee legibility against an unpredictable AI-generated photo.
+ */
+function resolveTextColors(
+  builder: LogoBuilder,
+  primary: string,
+  secondary: string,
+): { primaryTextColor: string; taglineColor: string } {
+  if (builder.gradientFill) {
+    return { primaryTextColor: 'url(#textGrad)', taglineColor: primary };
+  }
+  switch (builder.textColorMode) {
+    case 'light':
+      return { primaryTextColor: '#FFFFFF', taglineColor: 'rgba(255,255,255,0.85)' };
+    case 'dark':
+      return { primaryTextColor: '#0F172A', taglineColor: 'rgba(15,23,42,0.78)' };
+    case 'auto':
+    default:
+      return { primaryTextColor: secondary, taglineColor: primary };
+  }
+}
+
+/**
+ * Renders a semi-transparent backdrop (pill or full-width band) behind
+ * the text block for readability against busy AI-generated photo
+ * backgrounds. The backdrop tone is the inverse of textColorMode so
+ * it always contrasts with the text drawn on top of it.
+ */
+function buildTextBackdrop(
+  builder: LogoBuilder,
+  box: { x: number; y: number; width: number; height: number },
+  viewW: number,
+): string {
+  if (builder.textBackdrop === 'none') return '';
+  const dark = 'rgba(15,23,42,0.55)';
+  const light = 'rgba(255,255,255,0.72)';
+  const fill = builder.textColorMode === 'dark' ? light : dark;
+  if (builder.textBackdrop === 'band') {
+    return `<rect x="0" y="${box.y.toFixed(2)}" width="${viewW}" height="${box.height.toFixed(2)}" fill="${fill}"/>`;
+  }
+  const pad = 10;
+  const rx = Math.round(box.height / 2);
+  return `<rect x="${(box.x - pad).toFixed(2)}" y="${box.y.toFixed(2)}" width="${(box.width + pad * 2).toFixed(2)}" height="${box.height.toFixed(2)}" rx="${rx}" ry="${rx}" fill="${fill}"/>`;
+}
+
 // ─── BUILDER → SVG ──────────────────────────────────────────
 
 function getSafeColors(builder: LogoBuilder): { primary: string; secondary: string } {
@@ -274,8 +326,13 @@ function getSafeColors(builder: LogoBuilder): { primary: string; secondary: stri
 function buildSvgForLayout(builder: LogoBuilder): string {
   const { W, H } = getViewBox(builder.layout, builder.primaryText, builder.tagline);
   const { primary, secondary } = getSafeColors(builder);
-  const textColor = builder.gradientFill ? 'url(#textGrad)' : secondary;
+  const { primaryTextColor, taglineColor } = resolveTextColors(builder, primary, secondary);
   const iconSize = Math.min(W, H) * 0.4;
+  // v2.3: manual nudge + scale on top of the auto-fit layout. Icon
+  // position/size is untouched — only the text block moves/scales.
+  const scale = builder.textScale || 1;
+  const offX = builder.textOffsetX || 0;
+  const offY = builder.textOffsetY || 0;
 
   const bgRect = buildBackgroundRect(builder, W, H);
   const bgImage = builder.backgroundImage
@@ -287,55 +344,64 @@ function buildSvgForLayout(builder: LogoBuilder): string {
   let primaryText = '';
   let taglineText = '';
   let decorations = '';
+  let backdrop = '';
   let iconCenter: { x: number; y: number } = { x: W / 2, y: H / 2 };
-  let textLeft = W / 2;
-  let textTop = H / 2;
-  let primaryFontSize = 36;
 
   if (builder.layout === 'horizontal') {
     iconCenter = { x: iconSize / 2 + 10, y: H / 2 };
     const r = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize);
     icon = r.svg;
-    const textX = iconCenter.x + iconSize / 2 + 14;
+    const textX = iconCenter.x + iconSize / 2 + 14 + offX;
     const maxTextW = W - textX - 28;
-    primaryFontSize = fitText(builder.primaryText, maxTextW, 36, 14);
-    const textY = H / 2;
-    textLeft = textX;
-    textTop = textY;
-    primaryText = renderText(builder, textX, builder.tagline ? textY - 10 : textY + 6, 'start', primaryFontSize, textColor);
-    taglineText = renderTagline(builder, textX, textY + 18, 'start', 14, primary);
+    const baseFontSize = fitText(builder.primaryText, maxTextW, 36, 14);
+    const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
+    const taglineFontSize = Math.max(8, Math.round(14 * scale));
+    const textY = H / 2 + offY;
+    const primaryY = builder.tagline ? textY - 10 : textY + 6;
+    primaryText = renderText(builder, textX, primaryY, 'start', primaryFontSize, primaryTextColor);
+    taglineText = renderTagline(builder, textX, textY + 18, 'start', taglineFontSize, taglineColor);
     const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
-    decorations = renderDecorations(builder, W, iconCenter, iconSize, textX, textY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
-  } else if (builder.layout === 'vertical') {
-    iconCenter = { x: W / 2, y: iconSize / 2 + 10 };
-    const r = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize);
-    icon = r.svg;
-    const textY = iconCenter.y + iconSize / 2 + 30;
-    const maxTextW = W - 40;
-    primaryFontSize = fitText(builder.primaryText, maxTextW, 32, 14);
-    textTop = textY;
-    primaryText = renderText(builder, W / 2, textY, 'middle', primaryFontSize, textColor);
-    taglineText = renderTagline(builder, W / 2, textY + 22, 'middle', 12, primary);
-    const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
-    textLeft = W / 2 - textWidth / 2;
-    decorations = renderDecorations(builder, W, iconCenter, iconSize, textLeft, textY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
+    const taglineWidth = builder.tagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
+    decorations = renderDecorations(builder, W, iconCenter, iconSize, textX, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
+    const boxTop = primaryY - primaryFontSize * 0.85;
+    const boxBottom = builder.tagline ? textY + 18 + taglineFontSize * 0.4 : primaryY + primaryFontSize * 0.3;
+    backdrop = buildTextBackdrop(
+      builder,
+      { x: textX, y: boxTop, width: Math.max(textWidth, taglineWidth), height: boxBottom - boxTop },
+      W,
+    );
   } else {
-    // stacked
+    // vertical / stacked share the same centered-block layout, differing
+    // only in the base font size and tagline gap used by getViewBox().
     iconCenter = { x: W / 2, y: iconSize / 2 + 10 };
     const r = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize);
     icon = r.svg;
-    const textY = iconCenter.y + iconSize / 2 + 30;
+    const startFontSize = builder.layout === 'vertical' ? 32 : 36;
+    const baseTaglineFontSize = builder.layout === 'vertical' ? 12 : 14;
+    const taglineGap = builder.layout === 'vertical' ? 22 : 26;
     const maxTextW = W - 40;
-    primaryFontSize = fitText(builder.primaryText, maxTextW, 36, 14);
-    textTop = textY;
-    primaryText = renderText(builder, W / 2, textY, 'middle', primaryFontSize, textColor);
-    taglineText = renderTagline(builder, W / 2, textY + 26, 'middle', 14, primary);
+    const baseFontSize = fitText(builder.primaryText, maxTextW, startFontSize, 14);
+    const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
+    const taglineFontSize = Math.max(8, Math.round(baseTaglineFontSize * scale));
+    const textY = iconCenter.y + iconSize / 2 + 30 + offY;
+    const textCenterX = W / 2 + offX;
+    primaryText = renderText(builder, textCenterX, textY, 'middle', primaryFontSize, primaryTextColor);
+    taglineText = renderTagline(builder, textCenterX, textY + taglineGap, 'middle', taglineFontSize, taglineColor);
     const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
-    textLeft = W / 2 - textWidth / 2;
+    const taglineWidth = builder.tagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
+    const textLeft = textCenterX - textWidth / 2;
     decorations = renderDecorations(builder, W, iconCenter, iconSize, textLeft, textY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
+    const boxTop = textY - primaryFontSize * 0.85;
+    const boxBottom = builder.tagline ? textY + taglineGap + taglineFontSize * 0.4 : textY + primaryFontSize * 0.3;
+    const boxWidth = Math.max(textWidth, taglineWidth);
+    backdrop = buildTextBackdrop(
+      builder,
+      { x: textCenterX - boxWidth / 2, y: boxTop, width: boxWidth, height: boxBottom - boxTop },
+      W,
+    );
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${bgRect}${bgImage}${defs}${icon}${decorations}${primaryText}${taglineText}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${bgRect}${bgImage}${defs}${icon}${decorations}${backdrop}${primaryText}${taglineText}</svg>`;
 }
 
 export function builderToSvg(b: LogoBuilder): string {
@@ -374,6 +440,11 @@ export function applyLayout(svg: string, layout: LogoLayout): string {
     gradientFill: false,
     decorativeElements: [],
     imagePrompt: null,
+    textBackdrop: 'none',
+    textColorMode: 'auto',
+    textOffsetX: 0,
+    textOffsetY: 0,
+    textScale: 1,
   });
 }
 
