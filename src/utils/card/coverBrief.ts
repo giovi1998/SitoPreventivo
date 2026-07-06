@@ -8,7 +8,7 @@ export interface CardCoverBrief {
 }
 
 const MAX_PROMPT_LEN = 1000;
-const MAX_CONTEXT_LEN = 1200;
+const MAX_CONTEXT_LEN = 2000;
 
 /**
  * Builds a vision-aware cover brief for Gemini image generation.

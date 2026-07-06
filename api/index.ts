@@ -1328,7 +1328,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     const v = validate(
       z.object({
         prompt: z.string().max(1000),
-        context: z.string().max(1000).optional(),
+        context: z.string().max(2000).optional(),
         userEmail: z.string().email().optional(),
       }),
       body,
@@ -1344,7 +1344,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
       const finalPrompt = v.data.context
-        ? `${v.data.prompt}\n\nCARD CONTEXT:\n${v.data.context.slice(0, 1000)}`
+        ? `${v.data.prompt}\n\nCARD CONTEXT:\n${v.data.context.slice(0, 2000)}`
         : v.data.prompt;
       const interaction = await ai.interactions.create(
         {

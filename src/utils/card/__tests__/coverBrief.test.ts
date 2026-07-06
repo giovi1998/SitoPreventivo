@@ -71,7 +71,7 @@ describe('buildCardCoverBrief', () => {
     const card = createGiovanniCardTemplate();
     const { prompt, context } = buildCardCoverBrief(card);
     expect(prompt.length).toBeLessThanOrEqual(1000);
-    expect(context.length).toBeLessThanOrEqual(1200);
+    expect(context.length).toBeLessThanOrEqual(2000);
   });
 
   it('includes the actual card palette hex values in the prompt', () => {
