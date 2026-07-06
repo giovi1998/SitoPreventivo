@@ -1338,17 +1338,36 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       console.info('[ai_card_cover] user', { email: v.data.userEmail, ts: Date.now() });
     }
     try {
-      const { GeminiImageProvider } = await import('../src/ai/providers/gemini');
-      const provider = new GeminiImageProvider(apiKey);
+      // Dynamic require of @google/genai (node_modules, always bundled).
+      // Avoids the ESM/CJS interop issue with static import and the
+      // "Cannot find module src/..." issue with importing from src/.
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
       const finalPrompt = v.data.context
         ? `${v.data.prompt}\n\nCARD CONTEXT:\n${v.data.context.slice(0, 1000)}`
         : v.data.prompt;
-      const result = await provider.generateCardCover(finalPrompt, 30_000);
-      const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
+      const interaction = await ai.interactions.create(
+        {
+          model: 'gemini-3.1-flash-image',
+          input: finalPrompt,
+          generation_config: {
+            image_config: { image_size: '512', aspect_ratio: '1:1' },
+          },
+          response_modalities: ['text', 'image'],
+        },
+        { timeout: 30_000 },
+      );
+      const image = interaction.output_image;
+      if (!image || !image.data) {
+        return json(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' });
+      }
+      const imageBase64 = image.data;
+      const mimeType = image.mime_type || 'image/png';
+      const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > 500_000) {
         return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
       }
-      return json(req, res, 200, { data: result });
+      return json(req, res, 200, { data: { imageBase64, mimeType } });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
       if (msg.startsWith('GEMINI_401')) return json(req, res, 401, { error: 'Chiave Gemini non valida' });
@@ -1385,17 +1404,32 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       console.info('[ai_logo_background] user', { email: v.data.userEmail, ts: Date.now() });
     }
     try {
-      // Inline import to keep the serverless bundle slim and avoid
-      // pulling the Gemini client into the chat path.
-      const { GeminiImageProvider } = await import('../src/ai/providers/gemini');
-      const provider = new GeminiImageProvider(apiKey);
-      const result = await provider.generateBackground(v.data.prompt, 30_000);
+      // Dynamic require of @google/genai (node_modules, always bundled).
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const interaction = await ai.interactions.create(
+        {
+          model: 'gemini-3.1-flash-image',
+          input: v.data.prompt,
+          generation_config: {
+            image_config: { image_size: '512', aspect_ratio: '16:9' },
+          },
+          response_modalities: ['text', 'image'],
+        },
+        { timeout: 30_000 },
+      );
+      const image = interaction.output_image;
+      if (!image || !image.data) {
+        return json(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' });
+      }
+      const imageBase64 = image.data;
+      const mimeType = image.mime_type || 'image/png';
       // Clamp 500KB base64 to stay within Vercel response limits.
-      const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
+      const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > 500_000) {
         return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
       }
-      return json(req, res, 200, { data: result });
+      return json(req, res, 200, { data: { imageBase64, mimeType } });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
       if (msg.startsWith('GEMINI_401')) return json(req, res, 401, { error: 'Chiave Gemini non valida' });
