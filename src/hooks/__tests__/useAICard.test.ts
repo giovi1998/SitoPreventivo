@@ -29,9 +29,24 @@ import { useAICard } from '../useAICard';
 import { createEmptyCard, createGiovanniCardTemplate } from '../../utils/documentSchemas';
 import dataService from '../../utils/dataService';
 
+const originalLocation = window.location;
+
+const setHost = (host: string) => {
+  Object.defineProperty(window, 'location', {
+    value: { ...originalLocation, hostname: host },
+    writable: true,
+    configurable: true,
+  });
+};
+
 describe('useAICard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setHost('localhost');
+  });
+
+  afterEach(() => {
+    setHost('localhost');
   });
 
   it('returns initial state (not processing, empty logs)', () => {
@@ -151,6 +166,7 @@ describe('useAICard', () => {
     });
 
     it('throws when token limit reached', async () => {
+      setHost('quickbrand.vercel.app');
       const ds = await import('../../utils/dataService');
       (ds.default.getUserProfile as any).mockResolvedValueOnce({ tokensUsed: 1_000_000, tokenLimit: 1_000_000 });
       const { result } = renderHook(() => useAICard('user@test.com'));

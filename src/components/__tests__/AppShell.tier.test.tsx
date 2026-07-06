@@ -48,7 +48,7 @@ const authValue = (user: any = { email: 'u@t.com', username: 'u', role: 'user' }
 
 beforeEach(() => {
   Object.defineProperty(window, 'location', {
-    value: { ...originalLocation, hostname: 'localhost' },
+    value: { ...originalLocation, hostname: 'quickbrand.vercel.app' },
     writable: true,
     configurable: true,
   });
@@ -182,5 +182,28 @@ describe('AppShell, tier integration (Phase 5)', () => {
     });
     expect(ctxRef.value.tier).toBe('unlocked');
     expect(tierSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('localhost: any logged-in user is unlocked (admin-like, no dashboard)', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { ...originalLocation, hostname: 'localhost' },
+      writable: true,
+      configurable: true,
+    });
+    vi.spyOn(dataService, 'getUserSettings').mockResolvedValue({ userEmail: 'u@t.com' } as any);
+    const tierSpy = vi.spyOn(dataService, 'getUserTier');
+    render(
+      <AuthContext.Provider value={authValue() as any}>
+        <MemoryRouter initialEntries={['/']}>
+          <AppShell />
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    );
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 50));
+    });
+    expect(ctxRef.value.tier).toBe('unlocked');
+    // No dataService.getUserTier call in localhost
+    expect(tierSpy).not.toHaveBeenCalled();
   });
 });

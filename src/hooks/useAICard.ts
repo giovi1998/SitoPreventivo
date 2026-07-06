@@ -13,6 +13,7 @@ import {
 import dataService from '../utils/dataService';
 import { buildCardCoverBrief } from '../utils/card/coverBrief';
 import { logger } from '../utils/logger';
+import { isLocalhost } from '../utils/env';
 
 const MAX_LOG_ENTRIES = 40;
 
@@ -88,22 +89,12 @@ export function useAICard(userEmail?: string): UseAICardReturn {
 
       setIsCardProcessing(true);
 
-      // Token check (skip for admin)
-      if (userEmail && userEmail !== 'admin@gmail.com') {
+      // Token check (skip for admin and localhost)
+      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
         try {
           const profile = await dataService.getUserProfile(userEmail);
-          // v2.5.1: in locale, se il profile non si trova (utente non
-          // in registeredUsers, sessione stale, ecc.) non bloccare
-          // l'AI. Usa un fallback generoso e continua. In produzione
-          // l'errore è reale e va propagato.
           if (profile.error) {
-            const isLocal = typeof window !== 'undefined' &&
-              (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-            if (isLocal) {
-              // fallback: 0 token usati, 1M limite → continua
-            } else {
-              throw new Error(profile.error);
-            }
+            throw new Error(profile.error);
           } else if (profile.tokensUsed >= profile.tokenLimit) {
             throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
           }
@@ -234,13 +225,10 @@ export function useAICard(userEmail?: string): UseAICardReturn {
 
   const generateCover = useCallback(
     async (card: BusinessCard, side: 'front' | 'back' = 'front', promptOverride?: string, options?: { onProgress?: (msg: string) => void }) => {
-      if (userEmail && userEmail !== 'admin@gmail.com') {
+      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
         const profile = await dataService.getUserProfile(userEmail);
-        // v2.5.1: stesso fallback locale di processCardPrompt.
-        const isLocal = typeof window !== 'undefined' &&
-          (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-        if (profile.error && !isLocal) throw new Error(profile.error);
-        if (!profile.error && profile.tokensUsed >= profile.tokenLimit) {
+        if (profile.error) throw new Error(profile.error);
+        if (profile.tokensUsed >= profile.tokenLimit) {
           throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
         }
       }

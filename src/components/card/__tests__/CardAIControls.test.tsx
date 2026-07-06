@@ -21,27 +21,19 @@ const baseProps = {
   } as any,
 };
 
-const originalLocation = window.location;
-
 beforeEach(() => {
-  vi.stubGlobal('location', { ...originalLocation, hostname: 'localhost' });
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
 describe('CardAIControls', () => {
-  it('keeps cover buttons disabled when tier is free in production', () => {
-    window.location.hostname = 'quickbrand.vercel.app';
+  it('keeps cover buttons disabled when tier is free', () => {
     render(<CardAIControls {...baseProps} tier="free" />);
 
     expect(screen.getByRole('button', { name: /sblocca per generare entrambi/i })).toBeDisabled();
   });
 
-  it('enables cover buttons in localhost even with tier free', () => {
-    render(<CardAIControls {...baseProps} tier="free" />);
+  it('enables cover buttons when tier is unlocked', () => {
+    render(<CardAIControls {...baseProps} tier="unlocked" />);
 
     expect(screen.getByRole('button', { name: /genera entrambi/i })).toBeEnabled();
     expect(screen.getByRole('button', { name: /genera fronte/i })).toBeEnabled();
@@ -49,7 +41,7 @@ describe('CardAIControls', () => {
   });
 
   it('calls onGenerateCover with both sides when clicking primary button', () => {
-    render(<CardAIControls {...baseProps} tier="free" />);
+    render(<CardAIControls {...baseProps} tier="unlocked" />);
     fireEvent.click(screen.getByRole('button', { name: /genera entrambi/i }));
     expect(baseProps.onGenerateCover).toHaveBeenCalledWith('both');
   });

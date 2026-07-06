@@ -357,11 +357,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, [card, aiText, aiModel, processCardPrompt, addToast]);
 
   const handleGenerateCover = useCallback(async (side: 'front' | 'back' | 'both' = 'front') => {
-    // v2.5.1: in locale, permetti la generazione cover anche con
-    // tier free (per testing). In produzione, mantieni il gate.
-    const isLocal = typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    if (tier !== 'unlocked' && !isLocal) {
+    if (tier !== 'unlocked') {
       addToast('info', 'Sblocca il piano per generare cover AI.', 4000);
       return;
     }
