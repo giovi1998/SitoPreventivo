@@ -99,6 +99,37 @@
   text-align: right;
 }
 
+/* ─── Hero AI prompt editor (v2.4) ───────────────────────────── */
+
+.flyer-hero-prompt-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2, rgba(0, 0, 0, 0.02));
+}
+
+.flyer-hero-prompt-editor textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  box-sizing: border-box;
+}
+
+.flyer-hero-prompt-hint {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 @media (max-width: 640px) {
   .flyer-editor .editor-actions-row {
     flex-direction: column;

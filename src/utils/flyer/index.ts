@@ -44,5 +44,17 @@ export {
 } from './geometry';
 export { fitText, fitBodyText, approxCharsPerLine } from './textFit';
 export { FLYER_TEMPLATES_BY_SECTOR_LAYOUT, heroBoxMmForLayout } from './templateCatalog';
+export { getDefaultHeroImage } from './templateFactory';
+export {
+  buildHeroPrompt,
+  buildHeroContext,
+  aspectRatioForFlyer,
+  aspectRatioForHeroBox,
+  getDefaultHeroSector,
+  getDefaultHeroTone,
+  hasHeroBox,
+  type HeroAspectRatio,
+} from './heroPrompt';
+export { renderFlyerScreenshot, buildFlyerHeroPayload, type FlyerHeroImages } from './heroImage';
 export type { FlyerTemplatePreset } from './templateCatalog';
 export { inlineQrSvg, escapeXmlAttr, escapeHtml, safeHex } from './qrRenderer';

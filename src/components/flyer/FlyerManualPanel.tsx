@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Flyer, FlyerSize, FlyerOrientation, FlyerLayout, FlyerContent } from '../../utils/documentSchemas';
+import type { Flyer, FlyerSize, FlyerOrientation, FlyerLayout, FlyerContent, FlyerTone } from '../../utils/documentSchemas';
 import {
   FLYER_SIZES, FLYER_LAYOUTS, FLYER_SECTORS, FLYER_HEADLINE_MAX, FLYER_SUBHEADLINE_MAX,
   FLYER_BODY_MAX, FLYER_CTA_LABEL_MAX, FLYER_HERO_MAX_RAW_BYTES,
@@ -46,6 +46,7 @@ interface FlyerManualPanelProps {
   setShowCustomFont: (v: boolean) => void;
   limitReached: boolean;
   exporting: 'pdf' | 'png' | null;
+  tier?: 'free' | 'unlocked';
   onCollapse: () => void;
   onTitleChange: (title: string) => void;
   onUpdateContent: (patch: Partial<FlyerContent>) => void;
@@ -58,6 +59,17 @@ interface FlyerManualPanelProps {
   onCloseTemplateBanner: () => void;
   onHeroUpload: (file: File) => void;
   onRemoveHero: () => void;
+  onGenerateHero: () => void;
+  onResetHero: () => void;
+  isGeneratingHero?: boolean;
+  heroPrompt: string;
+  setHeroPrompt: (v: string) => void;
+  heroSector: typeof FLYER_SECTORS[number];
+  setHeroSector: (v: typeof FLYER_SECTORS[number]) => void;
+  heroTone: FlyerTone;
+  setHeroTone: (v: FlyerTone) => void;
+  showHeroPromptEditor: boolean;
+  setShowHeroPromptEditor: (v: boolean) => void;
   onReset: () => void;
   onSave: () => void;
   onExportPdf: () => void;
@@ -69,10 +81,12 @@ interface FlyerManualPanelProps {
 
 export function FlyerManualPanel({
   flyer, showTemplateBanner, activeSector, heroError, showCustomFont, setShowCustomFont,
-  limitReached, exporting, onCollapse, onTitleChange, onUpdateContent, onUpdateStyle,
+  limitReached, exporting, tier = 'unlocked', onCollapse, onTitleChange, onUpdateContent, onUpdateStyle,
   onUpdateSize, onUpdateOrientation, onUpdateLayout, onApplySector, onApplySectorLayout,
-  onCloseTemplateBanner, onHeroUpload, onRemoveHero, onReset, onSave, onExportPdf, onExportPng,
-  flyerHasContent, budgetWarning, copyBudget,
+  onCloseTemplateBanner, onHeroUpload, onRemoveHero, onGenerateHero, onResetHero, isGeneratingHero,
+  heroPrompt, setHeroPrompt, heroSector, setHeroSector, heroTone, setHeroTone,
+  showHeroPromptEditor, setShowHeroPromptEditor,
+  onReset, onSave, onExportPdf, onExportPng, flyerHasContent, budgetWarning, copyBudget,
 }: FlyerManualPanelProps): React.ReactElement {
   const ctaUrlValid = !flyer.content.cta.url || isHttpUrl(flyer.content.cta.url);
   const headlineMax = Math.min(FLYER_HEADLINE_MAX, copyBudget?.headlineMaxChars ?? FLYER_HEADLINE_MAX);
@@ -173,6 +187,72 @@ export function FlyerManualPanel({
       <Section title="Immagine hero" defaultOpen={false} badge={flyer.content.heroImage ? '1' : undefined}>
         <div className="stack">
           <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { const f = e.target.files?.[0]; if (f) onHeroUpload(f); }} />
+          {flyer.style.layout !== 'centered' && (
+            tier === 'unlocked' ? (
+              <>
+                <div className="mini-row">
+                  <label>Settore hero
+                    <select value={heroSector} onChange={(e) => setHeroSector(e.target.value as typeof FLYER_SECTORS[number])} aria-label="Settore hero AI">
+                      {FLYER_SECTORS.map((s) => <option key={s} value={s}>{getSectorLabel(s)}</option>)}
+                    </select>
+                  </label>
+                  <label>Tono hero
+                    <select value={heroTone} onChange={(e) => setHeroTone(e.target.value as FlyerTone)} aria-label="Tono hero AI">
+                      <option value="formale">Formale</option>
+                      <option value="giovanile">Giovanile</option>
+                      <option value="tecnico">Tecnico</option>
+                    </select>
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowHeroPromptEditor(!showHeroPromptEditor)}
+                  disabled={isGeneratingHero}
+                  aria-expanded={showHeroPromptEditor}
+                >
+                  {showHeroPromptEditor ? 'Nascondi prompt' : '✏️ Modifica prompt'}
+                </button>
+                {showHeroPromptEditor && (
+                  <div className="flyer-hero-prompt-editor" aria-label="Editor prompt hero AI">
+                    <textarea
+                      value={heroPrompt}
+                      onChange={(e) => setHeroPrompt(e.target.value.slice(0, 1500))}
+                      rows={4}
+                      placeholder="Lascia vuoto per usare il prompt automatico (settore + tono), oppure descrivi l'immagine che vuoi (es. tagliere di salumi su legno scuro, luce calda, senza persone)"
+                      aria-label="Prompt hero AI"
+                    />
+                    <p className="flyer-hero-prompt-hint">
+                      Vuoto = prompt automatico da settore/tono. Il testo del volantino resta SVG e viene sovrapposto. Max 1500 caratteri.
+                    </p>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={onGenerateHero}
+                  disabled={isGeneratingHero}
+                  title="Genera un'immagine hero coerente con il settore, il tono e il layout"
+                >
+                  {isGeneratingHero ? 'Generazione…' : '✨ Genera hero AI'}
+                </button>
+                {flyer.content.heroImage?.startsWith('data:') && (
+                  <button
+                    type="button"
+                    className="btn-remove"
+                    onClick={onResetHero}
+                    title="Ripristina l'immagine predefinita del template"
+                  >
+                    Ripristina immagine default
+                  </button>
+                )}
+              </>
+            ) : (
+              <button type="button" className="btn-secondary" disabled title="Disponibile nella versione Pro">
+                🔒 Genera hero AI (Pro)
+              </button>
+            )
+          )}
           {flyer.content.heroImage && <button type="button" className="btn-remove" onClick={onRemoveHero}>Rimuovi immagine</button>}
           {heroError && <p style={{ color: 'var(--red)', fontSize: '.78rem' }} role="alert">{heroError}</p>}
         </div>

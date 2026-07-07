@@ -4,6 +4,7 @@ import FlyerManualPanel from './FlyerManualPanel';
 import FlyerPreviewPanel from './FlyerPreviewPanel';
 import type { Flyer, FlyerSize, FlyerOrientation, FlyerLayout, FlyerContent, FlyerTone } from '../../utils/documentSchemas';
 import { createEmptyFlyer, createFlyerTemplate, mergeFlyerWithDefaults, FLYER_SECTORS, FLYER_SECTOR_DEFAULT_LAYOUT } from '../../utils/documentSchemas';
+import { getDefaultHeroImage } from '../../utils/flyer';
 import { useAIFlyer } from '../../hooks/useAIFlyer';
 import { useToast } from '../../hooks/useToast';
 import { useDocumentSave } from '../../hooks/useDocumentSave';
@@ -107,6 +108,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
   const limitReached = tier === 'free' && documentLimit !== null && documentCount >= documentLimit;
   const [showTemplateBanner, setShowTemplateBanner] = React.useState(() => !initialFlyer);
   const [showSaveDialog, setShowSaveDialog] = React.useState(false);
+  const [isGeneratingHero, setIsGeneratingHero] = React.useState(false);
   const [showCustomFont, setShowCustomFont] = React.useState(() => {
     if (!initialFlyer) return false;
     const safeFonts = ['Inter, sans-serif', 'Roboto, sans-serif', 'Open Sans, sans-serif', 'Lato, sans-serif', 'Montserrat, sans-serif', 'Poppins, sans-serif', 'Georgia, serif', 'Times New Roman, serif', 'Courier New, monospace'];
@@ -123,6 +125,12 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
   const [aiModel, setAiModel] = React.useState('deepseek-chat');
   const [aiTone, setAiTone] = React.useState<FlyerTone>('formale');
   const [activeSector, setActiveSector] = React.useState<typeof FLYER_SECTORS[number]>('ristorante');
+  // Hero AI prompt editor (v2.4): user can override the auto-built
+  // prompt and pick sector/tone for the hero generation.
+  const [heroPrompt, setHeroPrompt] = React.useState('');
+  const [heroSector, setHeroSector] = React.useState<typeof FLYER_SECTORS[number]>('ristorante');
+  const [heroTone, setHeroTone] = React.useState<FlyerTone>('formale');
+  const [showHeroPromptEditor, setShowHeroPromptEditor] = React.useState(false);
   const ai = useAIFlyer(userEmail);
   const debouncedFlyer = useDebouncedValue(flyer, 300);
   const layoutPlan = React.useMemo(() => computeFlyerLayout(flyer), [flyer]);
@@ -254,7 +262,10 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
     try {
       const result = await ai.generate(debouncedFlyer, brief, aiTone, { modelId: aiModel });
       if (result.applied) { setFlyer(result.flyer); addToast('success', 'Copy generato e applicato'); setAiPrompt(''); }
-      else { addToast('error', "L'AI non ha restituito un risultato valido."); }
+      else {
+        const reason = result.changes.find((c) => c.startsWith('error:')) || 'risposta non valida';
+        addToast('error', `Copy non generato: ${reason}. Verifica la chiave DeepSeek in Impostazioni o il credito residuo.`);
+      }
     } catch (err) { addToast('error', (err as Error).message); }
   }, [ai, aiPrompt, aiTone, aiModel, debouncedFlyer, addToast]);
 
@@ -268,6 +279,33 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
   }, [ai, aiModel, flyer, addToast]);
 
   const handleAiReset = React.useCallback(() => { ai.reset(); addToast('info', 'Sessione AI azzerata'); }, [ai, addToast]);
+
+  const handleGenerateHero = React.useCallback(async () => {
+    if (flyer.style.layout === 'centered') { addToast('info', 'Il layout centrato non ha un box hero.'); return; }
+    setIsGeneratingHero(true);
+    try {
+      const trimmedPrompt = heroPrompt.trim();
+      const result = await ai.generateHero(flyer, {
+        sector: heroSector,
+        tone: heroTone,
+        promptOverride: trimmedPrompt.length > 0 ? trimmedPrompt.slice(0, 1500) : undefined,
+      });
+      if (result.applied && result.flyer) {
+        setFlyer(result.flyer);
+        addToast('success', 'Hero AI generato');
+      } else {
+        addToast('error', result.error || "L'AI non ha restituito un'immagine.");
+      }
+    } catch (err) { addToast('error', (err as Error).message); }
+    finally { setIsGeneratingHero(false); }
+  }, [ai, flyer, heroSector, heroTone, heroPrompt, addToast]);
+
+  const handleResetHero = React.useCallback(() => {
+    if (flyer.style.layout === 'centered') { updateContent({ heroImage: null }); return; }
+    const defaultHero = getDefaultHeroImage(activeSector, flyer.style.layout, flyer.size, flyer.orientation);
+    updateContent({ heroImage: defaultHero });
+    addToast('info', 'Immagine hero predefinita ripristinata');
+  }, [flyer, activeSector, updateContent, addToast]);
 
   const handleSave = React.useCallback((customName: string) => {
     const title = customName || flyer.title || 'Volantino';
@@ -300,7 +338,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
     <FlyerManualPanel
       flyer={flyer} showTemplateBanner={showTemplateBanner} activeSector={activeSector}
       heroError={heroError} showCustomFont={showCustomFont} setShowCustomFont={setShowCustomFont}
-      limitReached={limitReached} exporting={exporting}
+      limitReached={limitReached} exporting={exporting} tier={tier}
       onCollapse={() => setShowManual(false)}
       onTitleChange={updateTitle} onUpdateContent={updateContent} onUpdateStyle={updateStyle}
       onUpdateSize={updateSize} onUpdateOrientation={updateOrientation} onUpdateLayout={updateLayout}
@@ -308,6 +346,11 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
       onApplySectorLayout={applySectorLayout}
       onCloseTemplateBanner={() => setShowTemplateBanner(false)}
       onHeroUpload={handleHeroUpload} onRemoveHero={removeHero}
+      onGenerateHero={handleGenerateHero} onResetHero={handleResetHero} isGeneratingHero={isGeneratingHero}
+      heroPrompt={heroPrompt} setHeroPrompt={setHeroPrompt}
+      heroSector={heroSector} setHeroSector={setHeroSector}
+      heroTone={heroTone} setHeroTone={setHeroTone}
+      showHeroPromptEditor={showHeroPromptEditor} setShowHeroPromptEditor={setShowHeroPromptEditor}
       onReset={resetFlyer} onSave={openSaveDialog}
       onExportPdf={() => setExporting('pdf')} onExportPng={() => setExporting('png')}
       flyerHasContent={flyerHasContent}
