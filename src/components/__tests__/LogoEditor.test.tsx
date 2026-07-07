@@ -176,6 +176,56 @@ describe('LogoEditor', () => {
     expect(screen.queryByRole('heading', { name: /Salva logo/i })).not.toBeInTheDocument();
   });
 
+  it('saves logo with backgroundImage intact when SaveDialog is confirmed (AC-012 v2.4 regression)', async () => {
+    const bg = 'data:image/png;base64,BGIMAGE';
+    const initial: Logo = {
+      ...createEmptyLogo(),
+      builder: { ...createEmptyLogo().builder, primaryText: 'Acme', backgroundImage: bg },
+    };
+    render(<LogoEditor userEmail="user@test.com" initialLogo={initial} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Salva$/i, hidden: true }));
+    const input = screen.getByPlaceholderText(/Es\. Logo/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Acme Logo' } });
+    fireEvent.click(screen.getByRole('button', { name: /Conferma salvataggio/i }));
+    await waitFor(() => expect(mockSave).toHaveBeenCalled());
+    const saved = mockSave.mock.calls[0][1] as Logo;
+    expect(saved.documentType).toBe('logo');
+    expect(saved.builder.backgroundImage).toBe(bg);
+    expect(saved.title).toBe('Acme Logo');
+    expect(saved.userEmail).toBe('user@test.com');
+  });
+
+  it('keeps backgroundImage when switching from AI tab back to Builder tab (regression AC-013)', () => {
+    const bg = 'data:image/png;base64,BGIMAGE';
+    const initial: Logo = {
+      ...createEmptyLogo(),
+      builder: { ...createEmptyLogo().builder, primaryText: 'Acme', backgroundImage: bg },
+    };
+    render(<LogoEditor userEmail="user@test.com" initialLogo={initial} />);
+    fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
+    expect(screen.getByRole('tab', { name: /AI Generation/i })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: /Builder/i }));
+    expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
+    // Builder should still show the AI background badge and controls
+    expect(screen.getByText(/Background AI attivo/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Rimuovi background AI/i })).toBeInTheDocument();
+  });
+
+  it('passes the structured error through when saveDocument returns an error (regression AC-014)', async () => {
+    mockSave.mockResolvedValueOnce({ success: false, error: 'Spazio locale esaurito (immagine troppo grande)' });
+    const initial: Logo = {
+      ...createEmptyLogo(),
+      builder: { ...createEmptyLogo().builder, primaryText: 'Acme', backgroundImage: 'data:image/png;base64,HUGE' },
+    };
+    render(<LogoEditor userEmail="user@test.com" initialLogo={initial} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Salva$/i, hidden: true }));
+    fireEvent.click(screen.getByRole('button', { name: /Conferma salvataggio/i }));
+    await waitFor(() => expect(mockSave).toHaveBeenCalled());
+    const result = await mockSave.mock.results[mockSave.mock.results.length - 1].value;
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Spazio locale esaurito/i);
+  });
+
   it('sector template click loads that template into the editor', () => {
     render(<LogoEditor userEmail="user@test.com" />);
     fireEvent.click(screen.getByRole('button', { name: /^Tech$/i }));

@@ -23,6 +23,8 @@ vi.mock('../../../hooks/useToast', () => ({
   }),
 }));
 
+const mockGenerateCover = vi.fn().mockImplementation((_: any, side: 'front' | 'back') => Promise.resolve(`data:image/png;base64,${side.toUpperCase()}`));
+
 vi.mock('../../../hooks/useAICard', () => ({
   useAICard: () => ({
     processCardPrompt: vi.fn().mockResolvedValue({
@@ -30,6 +32,7 @@ vi.mock('../../../hooks/useAICard', () => ({
       changes: [],
       rawResponse: '{}',
     }),
+    generateCover: mockGenerateCover,
     resetCardChat: vi.fn(),
     cardAiLogs: [],
     isCardProcessing: false,
@@ -147,5 +150,30 @@ describe('CardEditorShell', () => {
     expect(screen.getByLabelText(/Modello AI/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Prompt AI personalizzato/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Applica prompt$/i })).toBeInTheDocument();
+  });
+
+  it('serializes front/back cover generation when both is requested', async () => {
+    let frontResolved = false;
+    mockGenerateCover.mockImplementation(async (_card: any, side: 'front' | 'back') => {
+      if (side === 'front') {
+        await Promise.resolve();
+        frontResolved = true;
+        return 'data:image/png;base64,FRONT';
+      }
+      expect(frontResolved).toBe(true);
+      return 'data:image/png;base64,BACK';
+    });
+
+    const { container } = render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
+    const bothBtn = container.querySelector('.card-ai-both-btn') as HTMLButtonElement;
+    expect(bothBtn).not.toBeNull();
+    fireEvent.click(bothBtn);
+
+    await waitFor(() => expect(mockGenerateCover).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    expect(mockGenerateCover).toHaveBeenNthCalledWith(1, expect.anything(), 'front');
+    expect(mockGenerateCover).toHaveBeenNthCalledWith(2, expect.anything(), 'back');
+
+    await waitFor(() => expect(container.querySelector('img[alt="Cover fronte"]')).toBeInTheDocument(), { timeout: 3000 });
+    expect(container.querySelector('img[alt="Cover retro"]')).toBeInTheDocument();
   });
 });

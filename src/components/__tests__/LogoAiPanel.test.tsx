@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import LogoAiPanel from '../LogoAiPanel';
+import type { LogoBuilder } from '../../utils/documentSchemas';
 
 const { generateMock, generateBackgroundMock, hookState } = vi.hoisted(() => ({
   generateMock: vi.fn(),
@@ -285,6 +286,87 @@ describe('LogoAiPanel (spec 11/12 UI integration)', () => {
         await waitFor(() => expect(generateBackgroundMock).toHaveBeenCalled());
         const [, ctxArg] = generateBackgroundMock.mock.calls[0];
         expect(ctxArg.imagePrompt).toBe('A brand new artistic prompt');
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('preservazione background pagato (regressione v2.4)', () => {
+    const baseConcept = {
+      primaryText: 'Acme', tagline: 'Tag', iconType: 'none', iconGlyph: '', iconShape: 'circle',
+      primaryColor: '#000000', secondaryColor: '#111111', fontFamily: 'Inter', layout: 'horizontal',
+      icons: [], backgroundImage: null, backgroundColor: null, gradientFill: false, decorativeElements: [],
+      imagePrompt: null, textBackdrop: 'none', textColorMode: 'auto',
+      textOffsetX: 0, textOffsetY: 0, textScale: 1,
+    };
+
+    const seedWithPaidBg = () => {
+      localStorage.setItem('logoAiChat:v1', JSON.stringify({
+        answers: { activity: 'X', mood: 'minimal', target: 'Y', sector: 'tech' },
+        step: 'result',
+        concepts: [baseConcept],
+        selected: -1,
+        bgImages: [null], // background AI non ancora pronto
+        ts: Date.now(),
+      }));
+    };
+
+    it('applicare un concept senza background pronto NON cancella il backgroundImage pagato già applicato', () => {
+      seedWithPaidBg();
+      const onPatch = vi.fn();
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ enabled: true, provider: 'gemini' }),
+      } as Response);
+      try {
+        render(
+          <LogoAiPanel
+            logo={{ builder: { ...baseConcept, backgroundImage: 'data:image/png;base64,PAID' } } as never}
+            onPatch={onPatch}
+            tier="unlocked"
+            userEmail="t@e.com"
+          />,
+        );
+        const selectBtn = screen.getByRole('button', { pressed: false });
+        fireEvent.click(selectBtn);
+        // LogoAiPanel.onPatch riceve un oggetto patch (Partial<LogoBuilder>).
+        // La chiave backgroundImage DEVE essere assente, NON null, così non
+        // sovrascrive il background pagato già presente nel builder.
+        expect(onPatch).toHaveBeenCalled();
+        const patchArg = onPatch.mock.calls[0][0] as Partial<LogoBuilder>;
+        expect(patchArg.backgroundImage).toBeUndefined();
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it('applicare un concept CON background pronto usa il nuovo background', () => {
+      localStorage.setItem('logoAiChat:v1', JSON.stringify({
+        answers: { activity: 'X', mood: 'minimal', target: 'Y', sector: 'tech' },
+        step: 'result',
+        concepts: [baseConcept],
+        selected: -1,
+        bgImages: ['data:image/png;base64,NEW'],
+        ts: Date.now(),
+      }));
+      const onPatch = vi.fn();
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ enabled: true, provider: 'gemini' }),
+      } as Response);
+      try {
+        render(
+          <LogoAiPanel
+            logo={{ builder: { ...baseConcept, backgroundImage: 'data:image/png;base64,OLD' } } as never}
+            onPatch={onPatch}
+            tier="unlocked"
+            userEmail="t@e.com"
+          />,
+        );
+        fireEvent.click(screen.getByRole('button', { pressed: false }));
+        const patchArg = onPatch.mock.calls[0][0] as LogoBuilder;
+        expect(patchArg.backgroundImage).toBe('data:image/png;base64,NEW');
       } finally {
         fetchSpy.mockRestore();
       }

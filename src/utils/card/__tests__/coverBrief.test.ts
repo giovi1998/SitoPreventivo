@@ -115,11 +115,28 @@ describe('buildCardCoverBrief', () => {
     expect(lower).toContain('faces');
     expect(lower).toContain('people');
     expect(lower).toContain('real objects');
+    expect(lower).toContain('watermarks');
+    expect(lower).toContain('photographic details');
     // Creative abstract styles are ALLOWED, requested as Subject.
     expect(lower).toContain('soft geometric shapes');
     expect(lower).toContain('layered translucent planes');
     expect(lower).toContain('flowing wave-like curves');
     expect(lower).toContain('gentle bokeh circles');
     expect(lower).toContain('abstract topographic contour lines');
+  });
+
+  it('prompt never asks to generate text, QR, logos, faces, or real objects (negative constraints only)', () => {
+    const card = createGiovanniCardTemplate();
+    const { prompt } = buildCardCoverBrief(card);
+    const lower = prompt.toLowerCase();
+    // The prompt must forbid these, not request them. The v3.0 prompt
+    // uses "free of any text, words, letters, numbers, QR codes, ...".
+    expect(lower).toContain('free of any text');
+    expect(lower).toContain('qr codes');
+    expect(lower).toContain('logos');
+    expect(lower).toContain('faces');
+    expect(lower).toContain('people');
+    expect(lower).toContain('real objects');
+    expect(lower).toContain('recognizable icons');
   });
 });

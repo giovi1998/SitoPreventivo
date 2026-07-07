@@ -88,7 +88,7 @@ describe('SaveDialog', () => {
     );
     const input = screen.getByPlaceholderText(/Es\. Logo/);
     fireEvent.change(input, { target: { value: '  Logo Acme  ' } });
-    fireEvent.click(screen.getByRole('button', { name: /^Salva$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Conferma salvataggio/i }));
     expect(onSave).toHaveBeenCalledWith('Logo Acme');
   });
 

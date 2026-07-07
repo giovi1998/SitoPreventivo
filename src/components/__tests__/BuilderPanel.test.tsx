@@ -4,6 +4,27 @@ import BuilderPanel from '../BuilderPanel';
 import { createEmptyLogo, createLogoTemplate } from '../../utils/documentSchemas';
 import type { Logo } from '../../utils/documentSchemas';
 
+const { generateBackgroundMock, addToastMock, hookState } = vi.hoisted(() => ({
+  generateBackgroundMock: vi.fn(),
+  addToastMock: vi.fn(),
+  hookState: { isGeneratingBg: false },
+}));
+
+vi.mock('../../hooks/useAILogo', () => ({
+  useAILogo: () => ({
+    generateBackground: generateBackgroundMock,
+    isGeneratingBg: hookState.isGeneratingBg,
+    isProcessing: false,
+    logs: [],
+    reset: vi.fn(),
+    availableModels: [],
+  }),
+}));
+
+vi.mock('../../hooks/useToast', () => ({
+  useToast: () => ({ addToast: addToastMock }),
+}));
+
 vi.mock('lucide-react', () => {
   const makeIcon = (name: string) => (props: any) => (
     <svg data-testid={`icon-${name}`} data-iconname={name} {...props} />
@@ -296,6 +317,88 @@ describe('BuilderPanel', () => {
       };
       render(<BuilderPanel logo={l} onPatch={onPatch} />);
       expect(screen.queryByRole('img', { name: /icona coffee/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('AI background regenerate/edit controls (v2.4)', () => {
+    const bgLogo = (): Logo => ({
+      ...logo,
+      builder: {
+        ...logo.builder,
+        backgroundImage: 'data:image/png;base64,OLD',
+        imagePrompt: 'A tech texture background',
+      },
+    });
+
+    beforeEach(() => {
+      generateBackgroundMock.mockReset();
+      addToastMock.mockReset();
+      hookState.isGeneratingBg = false;
+    });
+
+    it('renders Modifica prompt, Rigenera sfondo and Rimuovi background when backgroundImage is set', () => {
+      render(<BuilderPanel logo={bgLogo()} onPatch={onPatch} />);
+      expect(screen.getByRole('button', { name: /Modifica prompt sfondo AI/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Rigenera sfondo AI/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Rimuovi background AI/i })).toBeInTheDocument();
+    });
+
+    it('does NOT render the AI bg controls when backgroundImage is null', () => {
+      render(<BuilderPanel logo={logo} onPatch={onPatch} />);
+      expect(screen.queryByRole('button', { name: /Modifica prompt sfondo AI/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Rigenera sfondo AI/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Rimuovi background AI/i })).not.toBeInTheDocument();
+    });
+
+    it('toggles the prompt editor visible on Modifica prompt click', () => {
+      render(<BuilderPanel logo={bgLogo()} onPatch={onPatch} />);
+      expect(screen.queryByLabelText(/Editor prompt sfondo AI/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Modifica prompt sfondo AI/i }));
+      const ta = screen.getByRole('textbox', { name: 'Prompt sfondo AI' }) as HTMLTextAreaElement;
+      expect(ta.value).toBe('A tech texture background');
+    });
+
+    it('Rigenera sfondo calls generateBackground with the edited prompt and applies the new image', async () => {
+      generateBackgroundMock.mockResolvedValue({
+        logo: { builder: { backgroundImage: 'data:image/png;base64,NEW' } },
+        applied: true,
+      });
+      render(<BuilderPanel logo={bgLogo()} onPatch={onPatch} userEmail="u@e.com" />);
+      fireEvent.click(screen.getByRole('button', { name: /Modifica prompt sfondo AI/i }));
+      const ta = screen.getByRole('textbox', { name: 'Prompt sfondo AI' }) as HTMLTextAreaElement;
+      fireEvent.change(ta, { target: { value: 'A brand new texture' } });
+      fireEvent.click(screen.getByRole('button', { name: /Rigenera sfondo AI/i }));
+      await waitFor(() => expect(generateBackgroundMock).toHaveBeenCalled());
+      const [logoArg, ctxArg] = generateBackgroundMock.mock.calls[0];
+      expect(ctxArg.imagePrompt).toBe('A brand new texture');
+      // The new background image and the edited prompt are applied via onPatch
+      expect(onPatch).toHaveBeenCalledWith('builder.backgroundImage', 'data:image/png;base64,NEW');
+      expect(onPatch).toHaveBeenCalledWith('builder.imagePrompt', 'A brand new texture');
+      expect(addToastMock).toHaveBeenCalledWith('success', 'Sfondo AI rigenerato.');
+    });
+
+    it('shows an error toast when regeneration fails (applied:false)', async () => {
+      generateBackgroundMock.mockResolvedValue({ logo: bgLogo(), applied: false, error: 'http_500' });
+      render(<BuilderPanel logo={bgLogo()} onPatch={onPatch} userEmail="u@e.com" />);
+      fireEvent.click(screen.getByRole('button', { name: /Rigenera sfondo AI/i }));
+      await waitFor(() => expect(generateBackgroundMock).toHaveBeenCalled());
+      expect(addToastMock).toHaveBeenCalledWith('error', expect.stringContaining('http_500'));
+      expect(onPatch).not.toHaveBeenCalledWith('builder.backgroundImage', expect.anything());
+    });
+
+    it('disables Rigenera sfondo while generating', () => {
+      hookState.isGeneratingBg = true;
+      render(<BuilderPanel logo={bgLogo()} onPatch={onPatch} />);
+      const regenBtn = screen.getByRole('button', { name: /Rigenera sfondo AI/i });
+      expect(regenBtn).toBeDisabled();
+      expect(regenBtn.textContent).toMatch(/Rigenerando/i);
+      expect(screen.getByRole('button', { name: /Rimuovi background AI/i })).toBeDisabled();
+    });
+
+    it('Rimuovi background sets backgroundImage to null', () => {
+      render(<BuilderPanel logo={bgLogo()} onPatch={onPatch} />);
+      fireEvent.click(screen.getByRole('button', { name: /Rimuovi background AI/i }));
+      expect(onPatch).toHaveBeenCalledWith('builder.backgroundImage', null);
     });
   });
 });

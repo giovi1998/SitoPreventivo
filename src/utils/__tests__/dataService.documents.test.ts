@@ -79,4 +79,31 @@ describe('dataService documents (local path)', () => {
     const { documents } = await dataService.getDocuments('user@test.com');
     expect(documents).toHaveLength(0);
   });
+
+  it('saveDocument returns a structured error when localStorage.setItem fails (QuotaExceeded)', async () => {
+    const logo = {
+      ...createGiovanniQrTemplate(),
+      id: 'logo-1',
+      documentType: 'logo',
+      userEmail: 'user@test.com',
+      builder: { backgroundImage: 'x'.repeat(6_000_000) },
+    };
+    const realSetItem = Storage.prototype.setItem;
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key: string, val: string) {
+      if (key === LS_KEY) {
+        const e = new Error('QuotaExceeded');
+        e.name = 'QuotaExceededError';
+        throw e;
+      }
+      return realSetItem.call(this, key, val);
+    });
+    try {
+      const result = await dataService.saveDocument('user@test.com', logo);
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/Spazio locale esaurito/i);
+      expect(localStorage.getItem(LS_KEY)).toBeNull();
+    } finally {
+      setItemSpy.mockRestore();
+    }
+  });
 });
