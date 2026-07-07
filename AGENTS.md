@@ -637,6 +637,23 @@ Always run `git status` before any git operation. See `.agents/guardrails/git-gu
     The `/api/*` path is served directly by the single `api/index.ts` function. Do **not** add per-route `/api/*` rewrites, they break the monolithic function and cause `ERR_MODULE_NOT_FOUND` on shared imports.
 3. **Before pushing features that require Vercel env vars** (DEEPSEEK_API_KEY, DATABASE_URL, ADMIN_PASSWORD, ALLOWED_ORIGIN), confirm the variables are set in the Vercel dashboard. Missing env vars cause 503/500 errors in production. `REPLICATE_API_TOKEN` is **optional** in v1 (logo AI tab mostra docs page).
 
+### Gotchas Dev / Localhost per AI
+
+1. **Flyer copy AI in localhost richiede `VITE_DEEPSEEK_API_KEY` in `.env` (o `deepseekApiKey` in localStorage).**
+   `src/hooks/useAIFlyer.ts` esegue un token-check per gli utenti normali. In precedenza il check non escludeva `localhost`, quindi un utente non-admin in dev veniva bloccato da `dataService.getUserProfile` (utente non trovato in `registeredUsers`). Fix: aggiungere `!isLocalhost()` al token-check, come già fatto per `useAICard`.
+
+2. **Generazione cover card "entrambi i lati" NON deve essere parallela.**
+   `CardEditorShell.handleGenerateCover('both')` chiamava `Promise.all([generateCover('front'), generateCover('back')])`. Due chiamate simultanee a Gemini tramite il dev proxy possono sovraccaricare l'upstream o il proxy stesso e restituire `502 Bad Gateway`. Fix: serializzare fronte → retro.
+
+3. **Background AI del logo non deve essere sovrascritto a null quando si applica un concept senza immagine pronta.**
+   I concept generati da DeepSeek in `logoOrchestrator.ts` hanno `backgroundImage: null` di default. `LogoAiPanel.applyConcept` li spreadava direttamente, sovrascrivendo il background pagato (Gemini) già applicato. Fix: escludere `backgroundImage` dal patch di default, e impostarlo solo se `bgImages[idx]` è effettivamente disponibile.
+
+4. **`vite.config.js` deve ricaricarsi dopo modifiche.**
+   Se vedi `404` o `502` su `/api/ai/card-cover`, `/api/ai/flyer-hero`, ecc. dopo aver modificato il dev proxy, riavvia il dev server (`npm run dev`). Vite non ricarica i middleware custom su hot-reload.
+
+5. **`/api/ai/card-cover` in dev: il proxy truncava il `context` a 1000 char mentre `coverBrief.ts` e il server accettano 2000.**
+   Disallineamento che poteva troncare silenziosamente il contesto con card complesse. Mantenere il limite del dev proxy allineato a quello del server (2000).
+
 ## Active Skills
 
 Queste skill vengono caricate automaticamente. Quando modifichi il codice riferito a esse, **leggi la skill prima** (`.agents/skills/<name>/SKILL.md`).
