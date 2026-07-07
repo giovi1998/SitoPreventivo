@@ -11,6 +11,7 @@ export { generateCardPng, renderCardSideDataUrl, buildMinimalPng, resolveToBase6
 export { compressImage, loadImage, type CompressImageOptions } from './imageCompress';
 export { resolveCardQrPayload, getEffectiveQrPayload } from './qrPayload';
 export { buildCardCoverBrief, type CardCoverBrief } from './coverBrief';
+export { renderCardCoverScreenshot, resolveCardCoverLogo, buildCardCoverPayload, type CardCoverImages } from './coverImage';
 export {
   computePageCardEntries,
   getCardDimensionsMm,

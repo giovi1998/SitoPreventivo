@@ -151,6 +151,40 @@ function getClientIp(req: { headers: Record<string, string | string[] | undefine
   return ip.split(',')[0]?.trim() || 'unknown';
 }
 
+/**
+ * Builds the `input` payload for the @google/genai image-generation
+ * endpoints. Accepts a text prompt plus optional inline image parts.
+ * The part shape (`inlineData`) is the SDK convention for the
+ * `interactions.create` API. If the SDK rejects it, the caller falls
+ * back to the `contents: [{ role, parts }]` shape manually.
+ */
+type GeminiInputStep = {
+  type: 'user_input';
+  content: Array<
+    | { type: 'text'; text: string }
+    | { type: 'image'; data: string; mime_type: string }
+  >;
+};
+
+type GeminiInputPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mime_type: string };
+
+function buildGeminiMultimodalInput(
+  text: string,
+  images: Array<{ data: string; mimeType: string } | null>,
+): string | GeminiInputPart[] {
+  const hasImages = images.some((img) => !!img);
+  if (!hasImages) return text;
+  const parts: GeminiInputPart[] = [{ type: 'text', text }];
+  for (const img of images) {
+    if (!img) continue;
+    const b64 = img.data.includes(',') ? img.data.split(',')[1] : img.data;
+    parts.push({ type: 'image', data: b64, mime_type: img.mimeType });
+  }
+  return parts;
+}
+
 const rateLimitStore = new Map<string, { count: number; firstAttempt: number }>();
 
 function checkRateLimit(
@@ -1329,6 +1363,9 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       z.object({
         prompt: z.string().max(1000),
         context: z.string().max(2000).optional(),
+        cardImage: z.string().max(600_000).optional(),
+        logoImage: z.string().max(150_000).optional(),
+        side: z.enum(['front', 'back']).optional(),
         userEmail: z.string().email().optional(),
       }),
       body,
@@ -1343,13 +1380,21 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       // "Cannot find module src/..." issue with importing from src/.
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
-      const finalPrompt = v.data.context
+      const basePrompt = v.data.context
         ? `${v.data.prompt}\n\nCARD CONTEXT:\n${v.data.context.slice(0, 2000)}`
         : v.data.prompt;
+      const hasImages = !!(v.data.cardImage || v.data.logoImage);
+      const grounding =
+        'The attached image(s) show the business card layout I am designing a background for. Use them as reference for text placement, colour harmony, and profession. Do NOT reproduce any text, QR code, logo, face, or UI element visible in the reference — generate only the abstract background. If a background is already visible in the reference image, treat it as the previous iteration to improve upon, not as a constraint to copy.';
+      const finalPrompt = hasImages ? `${grounding}\n\n${basePrompt}` : basePrompt;
+      const input = buildGeminiMultimodalInput(finalPrompt, [
+        v.data.cardImage ? { data: v.data.cardImage, mimeType: 'image/jpeg' } : null,
+        v.data.logoImage ? { data: v.data.logoImage, mimeType: 'image/png' } : null,
+      ]);
       const interaction = await ai.interactions.create(
         {
           model: 'gemini-3.1-flash-image',
-          input: finalPrompt,
+          input,
           generation_config: {
             image_config: { image_size: '512', aspect_ratio: '1:1' },
           },
@@ -1395,6 +1440,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     const v = validate(
       z.object({
         prompt: z.string().max(1000),
+        logoImage: z.string().max(600_000).optional(),
+        previousBackground: z.string().max(300_000).optional(),
         userEmail: z.string().email().optional(),
       }),
       body,
@@ -1407,10 +1454,18 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       // Dynamic require of @google/genai (node_modules, always bundled).
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
+      const hasImages = !!(v.data.logoImage || v.data.previousBackground);
+      const grounding =
+        'The first attached image shows the logo layout I am designing a background for (title, tagline, icon). Use it as reference for text placement and colour harmony. Do NOT reproduce any text, icon, or shape visible in the reference — generate only the abstract decorative background that sits behind it. The second attached image (if present) is the previous background iteration to improve upon, not a constraint to copy.';
+      const finalPrompt = hasImages ? `${grounding}\n\n${v.data.prompt}` : v.data.prompt;
+      const input = buildGeminiMultimodalInput(finalPrompt, [
+        v.data.logoImage ? { data: v.data.logoImage, mimeType: 'image/png' } : null,
+        v.data.previousBackground ? { data: v.data.previousBackground, mimeType: 'image/jpeg' } : null,
+      ]);
       const interaction = await ai.interactions.create(
         {
           model: 'gemini-3.1-flash-image',
-          input: v.data.prompt,
+          input,
           generation_config: {
             image_config: { image_size: '512', aspect_ratio: '16:9' },
           },
@@ -1425,6 +1480,75 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const imageBase64 = image.data;
       const mimeType = image.mime_type || 'image/png';
       // Clamp 500KB base64 to stay within Vercel response limits.
+      const sizeBytes = Math.ceil(imageBase64.length * 0.75);
+      if (sizeBytes > 500_000) {
+        return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+      }
+      return json(req, res, 200, { data: { imageBase64, mimeType } });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      if (msg.startsWith('GEMINI_401')) return json(req, res, 401, { error: 'Chiave Gemini non valida' });
+      if (msg.startsWith('GEMINI_429')) return json(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+      if (msg.startsWith('GEMINI_TIMEOUT')) return json(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' });
+      return json(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+    }
+  }
+
+  if (path === '/ai/flyer-hero' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiFlyerHero', 5, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe generazioni hero. Attendi un minuto.' });
+    }
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      return json(req, res, 503, { error: 'Hero AI non configurata (GEMINI_API_KEY mancante)' });
+    }
+    const v = validate(
+      z.object({
+        prompt: z.string().max(1500),
+        context: z.string().max(1500).optional(),
+        flyerImage: z.string().max(600_000).optional(),
+        aspectRatio: z.enum(['16:9', '1:1', '3:2', '2:3', '3:4']).optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
+    if (v.data.userEmail) {
+      console.info('[ai_flyer_hero] user', { email: v.data.userEmail, ts: Date.now() });
+    }
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const basePrompt = v.data.context
+        ? `${v.data.prompt}\n\nFLYER CONTEXT:\n${v.data.context.slice(0, 1500)}`
+        : v.data.prompt;
+      const hasImages = !!v.data.flyerImage;
+      const grounding =
+        'The attached image shows the flyer layout I am designing a hero image for. Use it as reference for the hero box position, the copy placement, and the overall visual style. Generate only the hero image that fits the hero box area; do NOT reproduce any text, QR code, logo, or UI element visible in the reference.';
+      const finalPrompt = hasImages ? `${grounding}\n\n${basePrompt}` : basePrompt;
+      const input = buildGeminiMultimodalInput(finalPrompt, [
+        v.data.flyerImage ? { data: v.data.flyerImage, mimeType: 'image/jpeg' } : null,
+      ]);
+      const interaction = await ai.interactions.create(
+        {
+          model: 'gemini-3.1-flash-image',
+          input,
+          generation_config: {
+            image_config: { image_size: '512', aspect_ratio: v.data.aspectRatio ?? '3:2' },
+          },
+          response_modalities: ['text', 'image'],
+        },
+        { timeout: 30_000 },
+      );
+      const image = interaction.output_image;
+      if (!image || !image.data) {
+        return json(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' });
+      }
+      const imageBase64 = image.data;
+      const mimeType = image.mime_type || 'image/png';
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > 500_000) {
         return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });

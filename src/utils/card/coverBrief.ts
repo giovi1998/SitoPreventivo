@@ -53,9 +53,9 @@ export function buildCardCoverBrief(
       `Style: minimal abstract artwork, calm and professional. ` +
       `Ensure the background remains completely free of any text, ` +
       `words, letters, numbers, QR codes, barcodes, logos, symbols, ` +
-      `faces, people, silhouettes, real objects, UI elements, or ` +
-      `recognizable icons. Every region stays light enough for ` +
-      `overlaid text to remain legible.`,
+      `faces, people, silhouettes, real objects, UI elements, ` +
+      `recognizable icons, watermarks, or photographic details. ` +
+      `Every region stays light enough for overlaid text to remain legible.`,
     MAX_PROMPT_LEN,
   );
 
