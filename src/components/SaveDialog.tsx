@@ -70,7 +70,7 @@ export default function SaveDialog({
             />
             <div className="save-dialog-actions">
               <button className="btn-ghost" onClick={handleCancel}>Annulla</button>
-              <button className="btn-primary" onClick={() => onSave(name.trim())} disabled={!name.trim()}>Salva</button>
+              <button className="btn-primary" onClick={() => onSave(name.trim())} disabled={!name.trim()} aria-label="Conferma salvataggio">Salva</button>
             </div>
           </>
         )}

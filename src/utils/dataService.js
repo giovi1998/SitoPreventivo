@@ -12,7 +12,9 @@ function lsGet(key) {
 }
 
 function lsSet(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+  try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) {
+    return { error: e?.name === 'QuotaExceededError' ? 'Spazio locale esaurito (immagine troppo grande)' : 'Errore scrittura locale' };
+  }
 }
 
 // ─── API CALL ─────────────────────────────────────────
@@ -176,7 +178,10 @@ const dataService = {
       const owned = all.filter(d => d.userEmail === ownerEmail);
       const others = all.filter(d => d.userEmail !== ownerEmail);
       const updated = [document, ...owned.filter(d => d.id !== document.id), ...others];
-      lsSet('precisionQuote_documents:v1', updated);
+      const write = lsSet('precisionQuote_documents:v1', updated);
+      if (write && write.error) {
+        return { success: false, error: write.error };
+      }
       if (isNew) {
         // fire-and-forget; failure here is non-fatal (best-effort counting)
         dataService.incrementDocumentCount(ownerEmail).catch(() => {});

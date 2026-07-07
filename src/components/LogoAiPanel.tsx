@@ -263,9 +263,15 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail }: Props) {
     const concept = concepts[idx];
     if (!concept) return;
     setSelected(idx);
-    const patch = { ...concept };
+    // Bug fix v2.4.1: il concept generato da DeepSeek contiene sempre
+    // backgroundImage=null. Se lo spreadiamo così com'è, onPatch sovrascrive
+    // il background pagato (Gemini) dell'utente con null. Rimuoviamo
+    // backgroundImage dal patch di default e lo impostiamo SOLO quando
+    // bgImages[idx] è effettivamente pronto.
+    const patch: Partial<LogoBuilder> = { ...concept };
+    delete (patch as Partial<LogoBuilder>).backgroundImage;
     if (bgImages[idx]) {
-      (patch as LogoBuilder).backgroundImage = bgImages[idx]!;
+      patch.backgroundImage = bgImages[idx]!;
     }
     onPatch(patch);
     addToast('success', 'Logo applicato. Vai nel Builder per modificare.');

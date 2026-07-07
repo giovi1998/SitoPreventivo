@@ -455,6 +455,60 @@
   border-color: var(--primary, #01696F);
 }
 
+.builder-ai-bg-regen {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.builder-ai-bg-regen:hover:not(:disabled) {
+  border-color: var(--primary, #01696F);
+  background: rgba(1, 105, 111, 0.06);
+}
+
+.builder-ai-bg-regen:disabled,
+.builder-ai-bg-remove:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.builder-ai-bg-prompt-editor {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface-2, rgba(0, 0, 0, 0.02));
+  box-sizing: border-box;
+}
+
+.builder-ai-bg-prompt-editor textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  box-sizing: border-box;
+}
+
+.builder-ai-bg-prompt-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-soft, #6b7280);
+  line-height: 1.4;
+}
+
 /* ─── Leggibilità testo (v2.3): nudge grid ─────────────── */
 
 .builder-nudge-grid {

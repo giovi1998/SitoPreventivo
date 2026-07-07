@@ -17,12 +17,15 @@ import { LUCIDE_ICONS } from '../utils/logoGenerator';
 import { builderToSvg, sanitizeSvg, isValidLucideIcon, isHexColor } from '../utils/logoGenerator';
 import type { Tier } from '../utils/watermark';
 import PreviewWatermark from './PreviewWatermark';
+import { useAILogo } from '../hooks/useAILogo';
+import { useToast } from '../hooks/useToast';
 
 interface BuilderPanelProps {
   logo: Logo;
   onPatch: (path: string, value: any) => void;
   onTemplate?: (sector: LogoSector) => void;
   tier?: Tier;
+  userEmail?: string;
 }
 
 const LUCIDE_NAME_TO_COMPONENT: Record<string, React.ComponentType<any>> = {
@@ -101,10 +104,14 @@ function PreviewIcon({ builder }: { builder: LogoBuilder }) {
   return <IconComp size={20} aria-hidden="true" />;
 }
 
-export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlocked' }: BuilderPanelProps) {
+export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlocked', userEmail }: BuilderPanelProps) {
   const b = logo.builder;
   const [search, setSearch] = useState('');
   const debouncedBuilder = useDebouncedValue(b, 200);
+  const { generateBackground, isGeneratingBg } = useAILogo(userEmail);
+  const { addToast } = useToast();
+  const [promptDraft, setPromptDraft] = useState(b.imagePrompt || '');
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
 
   const previewSvg = useMemo(() => {
     try {
@@ -117,6 +124,38 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
   const update = useCallback((key: keyof LogoBuilder, value: any) => {
     onPatch(`builder.${key}`, value);
   }, [onPatch]);
+
+  // Keep the prompt draft in sync when the applied imagePrompt changes
+  // (e.g. after a regeneration from the AI tab or a new concept applied).
+  useEffect(() => {
+    setPromptDraft(b.imagePrompt || '');
+  }, [b.imagePrompt]);
+
+  const handleRegenerateBackground = useCallback(async () => {
+    const promptText = promptDraft.trim();
+    if (!promptText) {
+      addToast('info', 'Scrivi un prompt per rigenerare lo sfondo.');
+      return;
+    }
+    addToast('info', 'Rigenerazione sfondo AI in corso…');
+    try {
+      const result = await generateBackground(logo, {
+        activity: '',
+        mood: 'minimal',
+        target: '',
+        imagePrompt: promptText,
+      });
+      if (result.applied && result.logo?.builder.backgroundImage) {
+        onPatch('builder.backgroundImage', result.logo.builder.backgroundImage);
+        onPatch('builder.imagePrompt', promptText);
+        addToast('success', 'Sfondo AI rigenerato.');
+      } else {
+        addToast('error', `Rigenerazione fallita: ${result.error ?? 'errore sconosciuto'}`);
+      }
+    } catch (err) {
+      addToast('error', `Errore rigenerazione: ${(err as Error)?.message ?? 'unknown'}`);
+    }
+  }, [promptDraft, logo, generateBackground, onPatch, addToast]);
 
   const filteredIcons = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -547,12 +586,47 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
             <span className="builder-ai-bg-badge">Background AI attivo</span>
             <button
               type="button"
+              className="builder-ai-bg-regen"
+              onClick={() => setShowPromptEditor((v) => !v)}
+              disabled={isGeneratingBg}
+              aria-label="Modifica prompt sfondo AI"
+              aria-expanded={showPromptEditor}
+            >
+              {showPromptEditor ? 'Nascondi prompt' : 'Modifica prompt'}
+            </button>
+            <button
+              type="button"
+              className="builder-ai-bg-regen"
+              onClick={handleRegenerateBackground}
+              disabled={isGeneratingBg || !promptDraft.trim()}
+              aria-label="Rigenera sfondo AI"
+            >
+              {isGeneratingBg ? 'Rigenerando…' : 'Rigenera sfondo'}
+            </button>
+            <button
+              type="button"
               className="builder-ai-bg-remove"
               onClick={() => update('backgroundImage', null)}
               aria-label="Rimuovi background AI"
+              disabled={isGeneratingBg}
             >
               Rimuovi background
             </button>
+          </div>
+        )}
+        {b.backgroundImage && showPromptEditor && (
+          <div className="builder-ai-bg-prompt-editor" aria-label="Editor prompt sfondo AI">
+            <textarea
+              value={promptDraft}
+              onChange={(e) => setPromptDraft(e.target.value.slice(0, 600))}
+              rows={4}
+              placeholder="Descrivi lo sfondo che vuoi generare (es. texture geometrica tech, toni blu/teal, senza testo)"
+              aria-label="Prompt sfondo AI"
+            />
+            <p className="builder-ai-bg-prompt-hint">
+              Il prompt viene inviato a Gemini Nano Banana. Il testo e l'icona del logo restano SVG editabili e vengono
+              sovrapposti allo sfondo generato. Max 600 caratteri.
+            </p>
           </div>
         )}
         {b.iconType === 'lucide' && b.iconGlyph && !b.backgroundImage && (

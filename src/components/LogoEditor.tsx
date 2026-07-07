@@ -46,7 +46,11 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
     autoSaveTimerRef.current = setTimeout(() => {
       if (!logoHasContent(logo)) return;
       const sanitized: Logo = { ...logo, userEmail, updatedAt: new Date().toISOString() };
-      dataService.saveDocument(userEmail, sanitized).catch((err) => {
+      dataService.saveDocument(userEmail, sanitized).then((result) => {
+        if (result?.error) {
+          logger.error('Logo auto-save failed', { err: result.error });
+        }
+      }).catch((err) => {
         logger.error('Logo auto-save failed', { err: (err as Error).message });
       });
     }, 30000);
@@ -130,6 +134,10 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
         }
         setLogo(toSave);
         addToast('success', `«${title}» salvato`);
+      })
+      .catch((err) => {
+        logger.error('Logo save failed', { err: (err as Error)?.message });
+        addToast('error', (err as Error)?.message || 'Errore salvataggio');
       });
   }, [logo, userEmail, addToast, saveDocumentGuarded]);
 
@@ -243,7 +251,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
 
       <div id="logo-tab-panel" role="tabpanel" aria-labelledby={tab === 'builder' ? 'tab-builder' : 'tab-ai'}>
         {tab === 'builder' ? (
-          <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} />
+          <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} userEmail={userEmail} />
         ) : (
           <LogoAiPanel
             key={aiPanelResetKey}
