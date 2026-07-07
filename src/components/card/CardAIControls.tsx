@@ -176,7 +176,7 @@ export default function CardAIControls({
         className="card-action-primary card-ai-both-btn"
         onClick={() => onGenerateCover('both')}
         disabled={isProcessing || coverLocked}
-        title="Genera sfondo AI per fronte e retro in parallelo"
+        title="Genera sfondo AI per fronte e retro (fronte → retro)"
       >
         {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca per generare entrambi' : '✨ Genera entrambi i lati'}
       </button>

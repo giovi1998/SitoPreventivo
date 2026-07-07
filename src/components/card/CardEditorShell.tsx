@@ -364,10 +364,10 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     setIsCoverGenerating(true);
     try {
       if (side === 'both') {
-        const [frontCover, backCover] = await Promise.all([
-          generateCover(card, 'front'),
-          generateCover(card, 'back'),
-        ]);
+        // Serializziamo fronte e retro: due chiamate Gemini in parallelo
+        // possono sovraccaricare il dev proxy / l'upstream e ritornare 502.
+        const frontCover = await generateCover(card, 'front');
+        const backCover = await generateCover(card, 'back');
         patchFront({ coverImageUrl: frontCover });
         patchBack({ coverImageUrl: backCover });
         addToast('success', 'Cover AI generate per fronte e retro.', 4000);

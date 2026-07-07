@@ -12,6 +12,11 @@ import {
 } from '../ai/eventLog';
 import dataService from '../utils/dataService';
 import { buildCardCoverBrief } from '../utils/card/coverBrief';
+import {
+  buildCardCoverPayload,
+  renderCardCoverScreenshot,
+  resolveCardCoverLogo,
+} from '../utils/card/coverImage';
 import { logger } from '../utils/logger';
 import { isLocalhost } from '../utils/env';
 
@@ -239,11 +244,18 @@ export function useAICard(userEmail?: string): UseAICardReturn {
       addLog(createEntry('info', '🎨 Generazione cover AI in corso...', { detail: coverPrompt }));
       options?.onProgress?.('🎨 Generazione cover AI in corso...');
 
+      const [cardImage, logoImage] = await Promise.all([
+        renderCardCoverScreenshot(card, side),
+        side === 'front' ? resolveCardCoverLogo(card) : Promise.resolve(undefined),
+      ]);
+
+      const payload = buildCardCoverPayload(coverPrompt, coverContext, { cardImage, logoImage }, side, userEmail);
+
       const apiBase = import.meta.env?.VITE_API_BASE || '';
       const res = await fetch(`${apiBase}/api/ai/card-cover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: coverPrompt, context: coverContext, userEmail }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
