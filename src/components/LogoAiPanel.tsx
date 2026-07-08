@@ -648,7 +648,9 @@ function ConceptCard({
         type="button"
         className="logo-ai-concept-select"
         onClick={onSelect}
+        disabled={bgLoading}
         aria-pressed={selected}
+        aria-busy={bgLoading}
       >
         <div className="logo-ai-concept-preview">
           <div className="logo-ai-concept-preview-inner" dangerouslySetInnerHTML={{ __html: previewSvg }} />
