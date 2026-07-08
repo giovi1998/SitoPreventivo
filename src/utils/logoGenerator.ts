@@ -83,10 +83,11 @@ export function fitText(text: string, maxWidth: number, startSize = 36, minSize 
   return lo;
 }
 
-function getViewBox(layout: LogoLayout, primaryText: string, tagline: string, textPosition?: 'overlay' | 'below'): ViewBox {
+function getViewBox(layout: LogoLayout, primaryText: string, tagline: string, textPosition?: 'overlay' | 'above' | 'below'): ViewBox {
   const min = MIN_VIEWBOX[layout];
   const max = MAX_VIEWBOX[layout];
   const TEXT_AREA_EXTRA = 120;
+  const isTextOutside = textPosition === 'above' || textPosition === 'below';
   switch (layout) {
     case 'horizontal': {
       const iconSize = Math.min(min.W, min.H) * 0.4;
@@ -95,7 +96,7 @@ function getViewBox(layout: LogoLayout, primaryText: string, tagline: string, te
       const fontSize = fitText(primaryText, maxTextW, 36, 14);
       const textW = estimateTextWidth(primaryText, fontSize);
       const W = Math.max(min.W, Math.min(max.W, Math.round(textStartX + textW + 28)));
-      const H = min.H + (textPosition === 'below' ? TEXT_AREA_EXTRA : 0);
+      const H = min.H + (isTextOutside ? TEXT_AREA_EXTRA : 0);
       return { W, H };
     }
     case 'vertical':
@@ -106,7 +107,7 @@ function getViewBox(layout: LogoLayout, primaryText: string, tagline: string, te
       const W = Math.max(min.W, Math.min(max.W, Math.round(textW + 40)));
       const extraH = tagline ? 40 : 20;
       const baseH = layout === 'stacked' ? 320 : 300;
-      const H = Math.max(min.H, Math.min(max.H, baseH + extraH)) + (textPosition === 'below' ? TEXT_AREA_EXTRA : 0);
+      const H = Math.max(min.H, Math.min(max.H, baseH + extraH)) + (isTextOutside ? TEXT_AREA_EXTRA : 0);
       return { W, H };
     }
   }
@@ -333,14 +334,18 @@ function getSafeColors(builder: LogoBuilder): { primary: string; secondary: stri
 
 function buildSvgForLayout(builder: LogoBuilder): string {
   const hasBgImage = !!builder.backgroundImage;
+  const isTextAbove = builder.textPosition === 'above' && hasBgImage;
   const isTextBelow = builder.textPosition === 'below' && hasBgImage;
+  const isTextOutside = isTextAbove || isTextBelow;
   const TEXT_AREA_H = 120;
-  const { W, H: baseH } = getViewBox(builder.layout, builder.primaryText, builder.tagline, isTextBelow ? 'below' : 'overlay');
-  const H = baseH + (isTextBelow ? TEXT_AREA_H : 0);
-  const imageAreaH = isTextBelow ? H - TEXT_AREA_H : H;
+  const { W, H: baseH } = getViewBox(builder.layout, builder.primaryText, builder.tagline, isTextAbove ? 'above' : isTextBelow ? 'below' : 'overlay');
+  const H = baseH + (isTextOutside ? TEXT_AREA_H : 0);
+  const imageAreaH = isTextOutside ? H - TEXT_AREA_H : H;
+  const imageY = isTextAbove ? TEXT_AREA_H : 0;
+  const textAreaTop = isTextBelow ? imageAreaH : 0;
   const { primary, secondary } = getSafeColors(builder);
   const { primaryTextColor, taglineColor } = resolveTextColors(builder, primary, secondary, hasBgImage);
-  const iconSize = Math.min(W, isTextBelow ? imageAreaH : H) * 0.4;
+  const iconSize = Math.min(W, isTextOutside ? imageAreaH : H) * 0.4;
   const scale = builder.textScale || 1;
   const offX = builder.textOffsetX || 0;
   const offY = builder.textOffsetY || 0;
@@ -350,7 +355,7 @@ function buildSvgForLayout(builder: LogoBuilder): string {
 
   const bgRect = buildBackgroundRect(builder, W, H);
   const bgImage = hasBgImage
-    ? `<image href="${escapeXml(builder.backgroundImage!)}" x="0" y="0" width="100%" height="${imageAreaH}" preserveAspectRatio="xMidYMid slice"/>`
+    ? `<image href="${escapeXml(builder.backgroundImage!)}" x="0" y="${imageY}" width="100%" height="${imageAreaH}" preserveAspectRatio="xMidYMid slice"/>`
     : '';
   const defs = buildGradientDefs(builder);
 
@@ -359,21 +364,22 @@ function buildSvgForLayout(builder: LogoBuilder): string {
   let taglineText = '';
   let decorations = '';
   let backdrop = '';
-  let iconCenter: { x: number; y: number } = { x: W / 2, y: (isTextBelow ? imageAreaH : H) / 2 };
-  const showIconAndDecorations = !hasBgImage || isTextBelow;
+  const suppressOverlay = hasBgImage && builder.textPosition === 'overlay';
+  let iconCenter: { x: number; y: number } = { x: W / 2, y: (isTextBelow ? imageAreaH / 2 : isTextAbove ? imageY + imageAreaH / 2 : H / 2) };
+  // Icona e decorazioni nascoste in overlay (testo sull'immagine) perché
+  // il background AI è già il soggetto visivo. In above/below (testo fuori
+  // dall'area immagine), icona e decorazioni sono visibili.
 
   if (builder.layout === 'horizontal') {
-    iconCenter = { x: iconSize / 2 + 10, y: (isTextBelow ? imageAreaH : H) / 2 };
-    if (showIconAndDecorations) {
-      icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
-    }
-    const baseTextX = hasBgImage ? W / 2 : iconCenter.x + iconSize / 2 + 14;
-    const textAnchor: 'start' | 'middle' = hasBgImage ? 'middle' : 'start';
-    const maxTextW = hasBgImage ? W - 40 : W - baseTextX - 28;
+    iconCenter = { x: iconSize / 2 + 10, y: isTextBelow ? imageAreaH / 2 : isTextAbove ? imageY + imageAreaH / 2 : H / 2 };
+    if (!suppressOverlay) icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
+    const baseTextX = isTextOutside ? W / 2 : (hasBgImage ? W / 2 : iconCenter.x + iconSize / 2 + 14);
+    const textAnchor: 'start' | 'middle' = isTextOutside || hasBgImage ? 'middle' : 'start';
+    const maxTextW = isTextOutside || hasBgImage ? W - 40 : W - baseTextX - 28;
     const baseFontSize = fitText(builder.primaryText, maxTextW, 36, 14);
     const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
     const taglineFontSize = Math.max(8, Math.round(14 * scale));
-    const baseY = isTextBelow ? imageAreaH + TEXT_AREA_H / 2 : H / 2;
+    const baseY = isTextOutside ? textAreaTop + TEXT_AREA_H / 2 : H / 2;
     const primaryX = baseTextX + offX;
     const primaryY = baseY + offY + (hasTagline ? -10 : 6);
     const taglineX = baseTextX + tagOffX;
@@ -382,19 +388,15 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     taglineText = renderTagline(builder, taglineX, taglineY, textAnchor, taglineFontSize, taglineColor);
     const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
     const taglineWidth = hasTagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
-    if (showIconAndDecorations) {
-      decorations = renderDecorations(builder, W, iconCenter, iconSize, primaryX, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
-    }
+    if (!suppressOverlay) decorations = renderDecorations(builder, W, iconCenter, iconSize, primaryX, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
     const box = unionTextBox(
       { x: primaryX, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
       hasTagline ? { x: taglineX, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
     );
     backdrop = buildTextBackdrop(builder, box, W);
   } else {
-    iconCenter = { x: W / 2, y: iconSize / 2 + 10 };
-    if (showIconAndDecorations) {
-      icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
-    }
+    iconCenter = { x: W / 2, y: isTextBelow ? imageAreaH / 2 : (isTextAbove ? imageY + iconSize / 2 + 10 : iconSize / 2 + 10) };
+    if (!suppressOverlay) icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
     const startFontSize = builder.layout === 'vertical' ? 32 : 36;
     const baseTaglineFontSize = builder.layout === 'vertical' ? 12 : 14;
     const taglineGap = builder.layout === 'vertical' ? 22 : 26;
@@ -402,8 +404,8 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     const baseFontSize = fitText(builder.primaryText, maxTextW, startFontSize, 14);
     const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
     const taglineFontSize = Math.max(8, Math.round(baseTaglineFontSize * scale));
-    const baseY = isTextBelow
-      ? imageAreaH + TEXT_AREA_H / 2 - taglineGap / 2
+    const baseY = isTextOutside
+      ? textAreaTop + TEXT_AREA_H / 2 - taglineGap / 2
       : (hasBgImage ? H / 2 : iconCenter.y + iconSize / 2 + 30);
     const baseCenterX = W / 2;
     const primaryCenterX = baseCenterX + offX;
@@ -416,9 +418,7 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     const taglineWidth = hasTagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
     const primaryLeft = primaryCenterX - textWidth / 2;
     const taglineLeft = taglineCenterX - taglineWidth / 2;
-    if (showIconAndDecorations) {
-      decorations = renderDecorations(builder, W, iconCenter, iconSize, primaryLeft, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
-    }
+    if (!suppressOverlay) decorations = renderDecorations(builder, W, iconCenter, iconSize, primaryLeft, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
     const box = unionTextBox(
       { x: primaryLeft, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
       hasTagline ? { x: taglineLeft, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,

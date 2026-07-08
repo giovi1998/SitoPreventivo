@@ -228,20 +228,36 @@ describe('logoGenerator v2.3 (text readability + position controls)', () => {
       expect(svg).toContain('<line');
     });
 
-    it('suppresses the icon shape when backgroundImage is set', () => {
+    it('hides the icon shape when backgroundImage is set in overlay mode', () => {
       const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC' });
       expect(svg).not.toContain('<circle');
     });
 
-    it('suppresses decorativeElements when backgroundImage is set', () => {
+    it('hides decorativeElements when backgroundImage is set in overlay mode', () => {
       const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC' });
       expect(svg).not.toContain('<line');
     });
 
-    it('still renders backgroundImage + text when icon/decorations are suppressed', () => {
+    it('renders backgroundImage + text (but NOT icon) when all are set in overlay mode', () => {
       const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC' });
       expect(svg).toContain('<image');
       expect(svg).toContain('Acme');
+      expect(svg).not.toContain('<circle');
+    });
+
+    it('renders icon when backgroundImage is set in above mode', () => {
+      const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC', textPosition: 'above' });
+      expect(svg).toContain('<circle');
+    });
+
+    it('renders icon when backgroundImage is set in below mode', () => {
+      const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC', textPosition: 'below' });
+      expect(svg).toContain('<circle');
+    });
+
+    it('renders decorativeElements when backgroundImage is set in above mode', () => {
+      const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC', textPosition: 'above' });
+      expect(svg).toContain('<line');
     });
   });
 

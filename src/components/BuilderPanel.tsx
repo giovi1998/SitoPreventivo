@@ -73,7 +73,8 @@ const TEXT_BACKDROP_OPTIONS: { value: import('../utils/documentSchemas').LogoBui
   { value: 'band', label: 'Banda' },
 ];
 const TEXT_POSITION_OPTIONS: { value: import('../utils/documentSchemas').LogoBuilder['textPosition']; label: string }[] = [
-  { value: 'overlay', label: 'Sopra' },
+  { value: 'overlay', label: 'Sovrapposto' },
+  { value: 'above', label: 'Sopra' },
   { value: 'below', label: 'Sotto' },
 ];
 const TEXT_OFFSET_STEP = 4;
@@ -490,8 +491,8 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
             />
           </label>
           <div className="builder-field">
-            <span className="builder-field-label">Posizione titolo</span>
-            <div className="builder-nudge-grid" role="group" aria-label="Posizione titolo">
+            <span className="builder-field-label">Posizione titolo all'interno del background</span>
+            <div className="builder-nudge-grid" role="group" aria-label="Posizione titolo all'interno del background">
               <button
                 type="button"
                 className="builder-nudge-btn nudge-up"

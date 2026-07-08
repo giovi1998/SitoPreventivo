@@ -711,7 +711,7 @@ export const logoBuilderSchema = z.object({
   // muoversi sempre insieme con textOffsetX/Y.
   taglineOffsetX: z.number().min(-60).max(60).default(0),
   taglineOffsetY: z.number().min(-60).max(60).default(0),
-  textPosition: z.enum(['overlay', 'below']).default('overlay'),
+  textPosition: z.enum(['overlay', 'above', 'below']).default('overlay'),
 });
 export type LogoBuilder = z.infer<typeof logoBuilderSchema>;
 

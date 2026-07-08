@@ -368,6 +368,14 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
     delete (patch as Partial<LogoBuilder>).backgroundImage;
     if (bgImages[idx]) {
       patch.backgroundImage = bgImages[idx]!;
+      // Default per overlay: icona 'none' + decorazioni vuote
+      // (l'utente può cambiarli nel Builder). Per above/below l'icona
+      // è visibile perché il testo è fuori dall'area immagine.
+      const curPos = logo?.builder?.textPosition;
+      if (!curPos || curPos === 'overlay') {
+        patch.iconType = 'none';
+        patch.decorativeElements = [];
+      }
     }
     onPatch(patch);
     addToast('success', 'Logo applicato. Vai nel Builder per modificare.');
