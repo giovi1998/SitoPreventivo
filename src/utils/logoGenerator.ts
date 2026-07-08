@@ -83,9 +83,10 @@ export function fitText(text: string, maxWidth: number, startSize = 36, minSize 
   return lo;
 }
 
-function getViewBox(layout: LogoLayout, primaryText: string, tagline: string): ViewBox {
+function getViewBox(layout: LogoLayout, primaryText: string, tagline: string, textPosition?: 'overlay' | 'below'): ViewBox {
   const min = MIN_VIEWBOX[layout];
   const max = MAX_VIEWBOX[layout];
+  const TEXT_AREA_EXTRA = 120;
   switch (layout) {
     case 'horizontal': {
       const iconSize = Math.min(min.W, min.H) * 0.4;
@@ -94,9 +95,8 @@ function getViewBox(layout: LogoLayout, primaryText: string, tagline: string): V
       const fontSize = fitText(primaryText, maxTextW, 36, 14);
       const textW = estimateTextWidth(primaryText, fontSize);
       const W = Math.max(min.W, Math.min(max.W, Math.round(textStartX + textW + 28)));
-      // Keep horizontal height fixed at 160 to preserve v1 previews/tests;
-      // the tagline fits at y=textY+18 with H=160.
-      return { W, H: min.H };
+      const H = min.H + (textPosition === 'below' ? TEXT_AREA_EXTRA : 0);
+      return { W, H };
     }
     case 'vertical':
     case 'stacked': {
@@ -106,7 +106,7 @@ function getViewBox(layout: LogoLayout, primaryText: string, tagline: string): V
       const W = Math.max(min.W, Math.min(max.W, Math.round(textW + 40)));
       const extraH = tagline ? 40 : 20;
       const baseH = layout === 'stacked' ? 320 : 300;
-      const H = Math.max(min.H, Math.min(max.H, baseH + extraH));
+      const H = Math.max(min.H, Math.min(max.H, baseH + extraH)) + (textPosition === 'below' ? TEXT_AREA_EXTRA : 0);
       return { W, H };
     }
   }
@@ -309,18 +309,12 @@ function buildTextBackdrop(
   builder: LogoBuilder,
   box: { x: number; y: number; width: number; height: number },
   viewW: number,
-  hasBgImage: boolean,
 ): string {
-  // When a background image is present and the user hasn't chosen a
-  // backdrop, auto-enable a dark pill so the text is always legible
-  // against an unpredictable photo. The user can override via
-  // textBackdrop: 'none'.
-  const effective = builder.textBackdrop === 'none' && hasBgImage ? 'pill' : builder.textBackdrop;
-  if (effective === 'none') return '';
+  if (builder.textBackdrop === 'none') return '';
   const dark = 'rgba(15,23,42,0.55)';
   const light = 'rgba(255,255,255,0.72)';
   const fill = builder.textColorMode === 'dark' ? light : dark;
-  if (effective === 'band') {
+  if (builder.textBackdrop === 'band') {
     return `<rect x="0" y="${box.y.toFixed(2)}" width="${viewW}" height="${box.height.toFixed(2)}" fill="${fill}"/>`;
   }
   const pad = 10;
@@ -338,30 +332,25 @@ function getSafeColors(builder: LogoBuilder): { primary: string; secondary: stri
 }
 
 function buildSvgForLayout(builder: LogoBuilder): string {
-  const { W, H } = getViewBox(builder.layout, builder.primaryText, builder.tagline);
-  const { primary, secondary } = getSafeColors(builder);
   const hasBgImage = !!builder.backgroundImage;
+  const isTextBelow = builder.textPosition === 'below' && hasBgImage;
+  const TEXT_AREA_H = 120;
+  const { W, H: baseH } = getViewBox(builder.layout, builder.primaryText, builder.tagline, isTextBelow ? 'below' : 'overlay');
+  const H = baseH + (isTextBelow ? TEXT_AREA_H : 0);
+  const imageAreaH = isTextBelow ? H - TEXT_AREA_H : H;
+  const { primary, secondary } = getSafeColors(builder);
   const { primaryTextColor, taglineColor } = resolveTextColors(builder, primary, secondary, hasBgImage);
-  const iconSize = Math.min(W, H) * 0.4;
-  // v2.3: manual nudge + scale on top of the auto-fit layout. Icon
-  // position/size is untouched — only the text block moves/scales.
+  const iconSize = Math.min(W, isTextBelow ? imageAreaH : H) * 0.4;
   const scale = builder.textScale || 1;
   const offX = builder.textOffsetX || 0;
   const offY = builder.textOffsetY || 0;
   const tagOffX = builder.taglineOffsetX || 0;
   const tagOffY = builder.taglineOffsetY || 0;
   const hasTagline = !!builder.tagline;
-  // v2.3.1: an AI photo background already carries the visual identity
-  // (illustration/photo) — a lucide icon or decorative underline/dotRing
-  // drawn on top of it reads as visual clutter and usually overlaps the
-  // artwork. Icon + decorations are suppressed automatically whenever a
-  // backgroundImage is present; the text is recentered and a dark pill
-  // backdrop is auto-enabled for legibility (the user can override via
-  // textBackdrop / textColorMode).
 
   const bgRect = buildBackgroundRect(builder, W, H);
-  const bgImage = builder.backgroundImage
-    ? `<image href="${escapeXml(builder.backgroundImage)}" x="0" y="0" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"/>`
+  const bgImage = hasBgImage
+    ? `<image href="${escapeXml(builder.backgroundImage!)}" x="0" y="0" width="100%" height="${imageAreaH}" preserveAspectRatio="xMidYMid slice"/>`
     : '';
   const defs = buildGradientDefs(builder);
 
@@ -370,24 +359,21 @@ function buildSvgForLayout(builder: LogoBuilder): string {
   let taglineText = '';
   let decorations = '';
   let backdrop = '';
-  let iconCenter: { x: number; y: number } = { x: W / 2, y: H / 2 };
+  let iconCenter: { x: number; y: number } = { x: W / 2, y: (isTextBelow ? imageAreaH : H) / 2 };
+  const showIconAndDecorations = !hasBgImage || isTextBelow;
 
   if (builder.layout === 'horizontal') {
-    iconCenter = { x: iconSize / 2 + 10, y: H / 2 };
-    if (!hasBgImage) {
+    iconCenter = { x: iconSize / 2 + 10, y: (isTextBelow ? imageAreaH : H) / 2 };
+    if (showIconAndDecorations) {
       icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
     }
-    // When a background image is present, the icon is suppressed but its
-    // layout space would leave the text floating off-center over the photo.
-    // Recenter the text block horizontally instead, so it sits cleanly in
-    // the middle of the image. The user can still nudge with textOffsetX/Y.
     const baseTextX = hasBgImage ? W / 2 : iconCenter.x + iconSize / 2 + 14;
     const textAnchor: 'start' | 'middle' = hasBgImage ? 'middle' : 'start';
     const maxTextW = hasBgImage ? W - 40 : W - baseTextX - 28;
     const baseFontSize = fitText(builder.primaryText, maxTextW, 36, 14);
     const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
     const taglineFontSize = Math.max(8, Math.round(14 * scale));
-    const baseY = H / 2;
+    const baseY = isTextBelow ? imageAreaH + TEXT_AREA_H / 2 : H / 2;
     const primaryX = baseTextX + offX;
     const primaryY = baseY + offY + (hasTagline ? -10 : 6);
     const taglineX = baseTextX + tagOffX;
@@ -396,19 +382,17 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     taglineText = renderTagline(builder, taglineX, taglineY, textAnchor, taglineFontSize, taglineColor);
     const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
     const taglineWidth = hasTagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
-    if (!hasBgImage) {
+    if (showIconAndDecorations) {
       decorations = renderDecorations(builder, W, iconCenter, iconSize, primaryX, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
     }
     const box = unionTextBox(
       { x: primaryX, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
       hasTagline ? { x: taglineX, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
     );
-    backdrop = buildTextBackdrop(builder, box, W, hasBgImage);
+    backdrop = buildTextBackdrop(builder, box, W);
   } else {
-    // vertical / stacked share the same centered-block layout, differing
-    // only in the base font size and tagline gap used by getViewBox().
     iconCenter = { x: W / 2, y: iconSize / 2 + 10 };
-    if (!hasBgImage) {
+    if (showIconAndDecorations) {
       icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
     }
     const startFontSize = builder.layout === 'vertical' ? 32 : 36;
@@ -418,10 +402,9 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     const baseFontSize = fitText(builder.primaryText, maxTextW, startFontSize, 14);
     const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
     const taglineFontSize = Math.max(8, Math.round(baseTaglineFontSize * scale));
-    // When a background image is present, the icon is suppressed. Center
-    // the text block vertically (H/2) instead of below the icon area,
-    // so the title+tagline sit cleanly in the middle of the photo.
-    const baseY = hasBgImage ? H / 2 : iconCenter.y + iconSize / 2 + 30;
+    const baseY = isTextBelow
+      ? imageAreaH + TEXT_AREA_H / 2 - taglineGap / 2
+      : (hasBgImage ? H / 2 : iconCenter.y + iconSize / 2 + 30);
     const baseCenterX = W / 2;
     const primaryCenterX = baseCenterX + offX;
     const primaryY = baseY + offY;
@@ -433,14 +416,14 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     const taglineWidth = hasTagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
     const primaryLeft = primaryCenterX - textWidth / 2;
     const taglineLeft = taglineCenterX - taglineWidth / 2;
-    if (!hasBgImage) {
+    if (showIconAndDecorations) {
       decorations = renderDecorations(builder, W, iconCenter, iconSize, primaryLeft, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
     }
     const box = unionTextBox(
       { x: primaryLeft, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
       hasTagline ? { x: taglineLeft, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
     );
-    backdrop = buildTextBackdrop(builder, box, W, hasBgImage);
+    backdrop = buildTextBackdrop(builder, box, W);
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${bgRect}${bgImage}${defs}${icon}${decorations}${backdrop}${primaryText}${taglineText}</svg>`;
@@ -504,6 +487,7 @@ export function applyLayout(svg: string, layout: LogoLayout): string {
     textScale: 1,
     taglineOffsetX: 0,
     taglineOffsetY: 0,
+    textPosition: 'overlay',
   });
 }
 

@@ -25,6 +25,7 @@ const baseBuilder: LogoBuilder = {
   textScale: 1,
   taglineOffsetX: 0,
   taglineOffsetY: 0,
+  textPosition: 'overlay',
 };
 
 describe('logoGenerator v2.2', () => {
@@ -310,9 +311,9 @@ describe('logoGenerator v2.3 (text readability + position controls)', () => {
       expect(svg).toContain('fill="#FFFFFF"');
     });
 
-    it('auto-enables a dark pill backdrop when backgroundImage is set and textBackdrop=none (AC-002)', () => {
+    it('respects textBackdrop=none even with backgroundImage (user override wins, AC-002)', () => {
       const svg = builderToSvg(withBg);
-      expect(svg).toContain('fill="rgba(15,23,42,0.55)"');
+      expect(svg).not.toContain('fill="rgba(15,23,42,0.55)"');
     });
 
     it('respects manual textColorMode=dark override (AC-003)', () => {
@@ -326,9 +327,9 @@ describe('logoGenerator v2.3 (text readability + position controls)', () => {
       expect(svg).toMatch(/<rect x="0" y="[\d.]+" width="\d+"[^>]*fill="rgba\(/);
     });
 
-    it('keeps dark pill even when user explicitly keeps textBackdrop=none (auto overrides for AI bg)', () => {
+    it('respects user choice: textBackdrop=none blocks any backdrop (no auto-override)', () => {
       const svg = builderToSvg(withBg);
-      expect(svg).toContain('fill="rgba(15,23,42,0.55)"');
+      expect(svg).not.toContain('fill="rgba(15,23,42,0.55)"');
     });
   });
 });

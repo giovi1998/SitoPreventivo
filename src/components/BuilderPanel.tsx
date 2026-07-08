@@ -72,6 +72,10 @@ const TEXT_BACKDROP_OPTIONS: { value: import('../utils/documentSchemas').LogoBui
   { value: 'pill', label: 'Pillola' },
   { value: 'band', label: 'Banda' },
 ];
+const TEXT_POSITION_OPTIONS: { value: import('../utils/documentSchemas').LogoBuilder['textPosition']; label: string }[] = [
+  { value: 'overlay', label: 'Sopra' },
+  { value: 'below', label: 'Sotto' },
+];
 const TEXT_OFFSET_STEP = 4;
 const TEXT_OFFSET_LIMIT = 60;
 
@@ -454,6 +458,25 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
               ))}
             </div>
           </label>
+          {b.backgroundImage && (
+            <label className="builder-field">
+              <span>Posizione testo</span>
+              <div className="builder-color-row" role="group" aria-label="Posizione testo">
+                {TEXT_POSITION_OPTIONS.map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    className={`builder-color-preset${b.textPosition === o.value ? ' selected' : ''}`}
+                    onClick={() => update('textPosition', o.value)}
+                    aria-label={`Testo ${o.label}`}
+                    title={o.label}
+                  >
+                    <span className="builder-color-label">{o.label}</span>
+                  </button>
+                ))}
+              </div>
+            </label>
+          )}
           <label className="builder-field">
             <span>Dimensione testo ({Math.round(b.textScale * 100)}%)</span>
             <input

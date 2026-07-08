@@ -711,6 +711,7 @@ export const logoBuilderSchema = z.object({
   // muoversi sempre insieme con textOffsetX/Y.
   taglineOffsetX: z.number().min(-60).max(60).default(0),
   taglineOffsetY: z.number().min(-60).max(60).default(0),
+  textPosition: z.enum(['overlay', 'below']).default('overlay'),
 });
 export type LogoBuilder = z.infer<typeof logoBuilderSchema>;
 
@@ -771,6 +772,7 @@ export function createEmptyLogo(): Logo {
       textScale: 1,
       taglineOffsetX: 0,
       taglineOffsetY: 0,
+      textPosition: 'overlay',
     },
     brief: '',
     concepts: [],
@@ -863,6 +865,7 @@ export function createLogoTemplate(sector: LogoSector): Logo {
       textScale: 1,
       taglineOffsetX: 0,
       taglineOffsetY: 0,
+      textPosition: 'overlay',
     },
     brief: '',
     concepts: [],
