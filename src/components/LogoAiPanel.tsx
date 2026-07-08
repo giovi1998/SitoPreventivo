@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Logo, LogoBuilder, LogoSector } from '../utils/documentSchemas';
 import { builderToSvg, sanitizeSvg } from '../utils/logoGenerator';
 import { useAILogo } from '../hooks/useAILogo';
@@ -6,11 +6,46 @@ import { useToast } from '../hooks/useToast';
 import AILogPanel from './AILogPanel';
 import './LogoAiPanel.css';
 
+export type Step = 'chat' | 'result' | 'applied';
+
+export interface ChatAnswers {
+  activity: string;
+  mood: string;
+  target: string;
+  sector: LogoSector;
+}
+
+/**
+ * Stato completo del pannello AI (chat + concept + immagini generate).
+ * Va sollevato al genitore (`LogoEditor`) tramite `initialState` /
+ * `onStateChange` in modo che sopravviva allo smontaggio di
+ * `LogoAiPanel` quando l'utente cambia tab (Builder <-> AI). Prima di
+ * questa modifica lo stato viveva SOLO qui dentro + un backup su
+ * `localStorage`, ma le immagini AI (base64, centinaia di KB l'una)
+ * possono superare la quota di `localStorage` (5-10MB per origin,
+ * condivisa con altri documenti salvati) e `localStorage.setItem` non
+ * era protetto da try/catch: un `QuotaExceededError` non catturato
+ * crashava l'intera app (schermata "Qualcosa è andato storto"). Vedi
+ * AGENTS.md § "Logo AI, Gemini background gotchas".
+ */
+export interface LogoAiState {
+  answers: ChatAnswers;
+  step: Step;
+  concepts: LogoBuilder[];
+  selected: number;
+  bgImages: (string | null)[];
+  bgErrors: (string | null)[];
+}
+
 interface Props {
   logo: Logo;
   onPatch: (patch: Partial<Logo['builder']>) => void;
   tier: 'free' | 'unlocked';
   userEmail?: string;
+  /** Stato iniziale sollevato dal genitore (sopravvive al cambio tab). */
+  initialState?: LogoAiState;
+  /** Chiamato ad ogni cambio di stato per sincronizzare il genitore. */
+  onStateChange?: (state: LogoAiState) => void;
 }
 
 const SECTORS: LogoSector[] = ['tech', 'food', 'fashion', 'professionista'];
@@ -19,15 +54,6 @@ const MOODS = ['minimal', 'bold', 'playful', 'elegant', 'tech'] as const;
 const LS_KEY = 'logoAiChat:v1';
 const LS_TTL_MS = 24 * 60 * 60 * 1000;
 const PROMPT_LIBRARY_KEY = 'logoPromptLibrary:v1';
-
-type Step = 'chat' | 'result' | 'applied';
-
-interface ChatAnswers {
-  activity: string;
-  mood: string;
-  target: string;
-  sector: LogoSector;
-}
 
 const SECTOR_LABELS: Record<LogoSector, string> = {
   tech: 'Tech',
@@ -81,8 +107,26 @@ function loadPromptLibrary(): SavedBrief[] {
   }
 }
 
+/**
+ * Wrapper difensivo su `localStorage.setItem`: non deve MAI propagare
+ * un'eccezione (es. `QuotaExceededError` quando il payload contiene
+ * immagini base64 di centinaia di KB). Senza questo guard, un errore
+ * di quota non catturato fa crashare l'intera app (bug reale
+ * osservato in produzione: schermata "Qualcosa è andato storto").
+ */
+function safeLocalStorageSet(key: string, value: string): boolean {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`[LogoAiPanel] localStorage.setItem('${key}') fallito`, (err as Error)?.message);
+    return false;
+  }
+}
+
 function savePromptLibrary(items: SavedBrief[]): void {
-  localStorage.setItem(PROMPT_LIBRARY_KEY, JSON.stringify(items));
+  safeLocalStorageSet(PROMPT_LIBRARY_KEY, JSON.stringify(items));
 }
 
 interface LogoConfig {
@@ -99,30 +143,55 @@ interface PersistedState {
   ts: number;
 }
 
+/**
+ * Scrive lo stato su `localStorage`, mai a costo zero: le immagini AI
+ * (base64, centinaia di KB l'una × fino a 3 concept) possono superare
+ * la quota di `localStorage` (5-10MB/origin, condivisa con altri
+ * documenti salvati). Se il payload completo fallisce, ritentiamo
+ * SENZA `bgImages` così testo/risposte/concept sopravvivono comunque a
+ * un refresh pagina; le immagini restano disponibili nella sessione
+ * corrente tramite lo stato sollevato al genitore (`onStateChange` /
+ * `LogoEditor`), quindi l'utente non le perde finché non ricarica la
+ * pagina per intero.
+ */
+function persistState(payload: PersistedState): void {
+  const ok = safeLocalStorageSet(LS_KEY, JSON.stringify(payload));
+  if (!ok) {
+    safeLocalStorageSet(LS_KEY, JSON.stringify({ ...payload, bgImages: payload.bgImages.map(() => null) }));
+  }
+}
+
 function nowTime(): string {
   return new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-export default function LogoAiPanel({ logo, onPatch, tier, userEmail }: Props) {
+const DEFAULT_ANSWERS: ChatAnswers = { activity: '', mood: 'minimal', target: '', sector: 'tech' };
+
+export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialState, onStateChange }: Props) {
   const { generate, generateBackground, isProcessing, isGeneratingBg, logs, reset } = useAILogo(userEmail);
   const { addToast } = useToast();
-  const [step, setStep] = useState<Step>('chat');
-  const [answers, setAnswers] = useState<ChatAnswers>({
-    activity: '',
-    mood: 'minimal',
-    target: '',
-    sector: 'tech',
-  });
-  const [concepts, setConcepts] = useState<LogoBuilder[]>([]);
-  const [selected, setSelected] = useState<number>(-1);
-  const [bgImages, setBgImages] = useState<(string | null)[]>([null, null, null]);
-  const [bgErrors, setBgErrors] = useState<(string | null)[]>([null, null, null]);
+  // Se il genitore (LogoEditor) fornisce `initialState`, lo stato vive
+  // sollevato in un useRef lì e sopravvive allo smontaggio di questo
+  // componente quando l'utente cambia tab (Builder <-> AI). Senza
+  // questo, ogni cambio di tab smonta/rimonta LogoAiPanel e perde le
+  // immagini AI generate ma non ancora persistite su localStorage
+  // (bug reale: "immagine sparisce cambiando tab"). Il fallback su
+  // localStorage resta solo per il caso senza genitore che solleva lo
+  // stato (retrocompatibilità test / primo mount senza sessione).
+  const [step, setStep] = useState<Step>(initialState?.step ?? 'chat');
+  const [answers, setAnswers] = useState<ChatAnswers>(initialState?.answers ?? DEFAULT_ANSWERS);
+  const [concepts, setConcepts] = useState<LogoBuilder[]>(initialState?.concepts ?? []);
+  const [selected, setSelected] = useState<number>(initialState?.selected ?? -1);
+  const [bgImages, setBgImages] = useState<(string | null)[]>(initialState?.bgImages ?? [null, null, null]);
+  const [bgErrors, setBgErrors] = useState<(string | null)[]>(initialState?.bgErrors ?? [null, null, null]);
   const [config, setConfig] = useState<LogoConfig | null>(null);
   const [library, setLibrary] = useState<SavedBrief[]>(() => loadPromptLibrary());
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
 
-  // Load persisted state on mount
+  // Load persisted state on mount — SOLO se il genitore non ha già
+  // fornito uno stato più fresco via `initialState` (vedi sopra).
   useEffect(() => {
+    if (initialState) return;
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (raw) {
@@ -140,23 +209,50 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail }: Props) {
     } catch {
       localStorage.removeItem(LS_KEY);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist state on change (debounced)
+  // Specchia lo stato nel genitore (LogoEditor) ad OGNI cambiamento,
+  // senza debounce: è una semplice assegnazione di riferimento a un
+  // useRef del genitore (nessun costo, nessuna serializzazione), quindi
+  // non c'è motivo di ritardarla. Questo è il meccanismo primario che
+  // fa sopravvivere le immagini AI al cambio tab, indipendentemente da
+  // localStorage/quota.
+  useEffect(() => {
+    onStateChange?.({ answers, step, concepts, selected, bgImages, bgErrors });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers, step, concepts, selected, bgImages, bgErrors]);
+
+  // Persist state on change (debounced) su localStorage, MA con flush
+  // immediato all'unmount. Questo resta solo un backup "best effort"
+  // per sopravvivere a un refresh completo della pagina (F5): il
+  // meccanismo primario anti-perdita-immagine durante il cambio tab è
+  // lo stato sollevato al genitore sopra, non più questo localStorage.
+  //
+  // Bug fix (costoso, ogni rigenerazione consuma una chiamata Gemini a
+  // pagamento): il debounce di 500ms usava solo `clearTimeout` nella
+  // cleanup. Se l'utente cambiava tab (Builder <-> AI, che smonta
+  // LogoAiPanel) ENTRO i 500ms dall'arrivo di un'immagine AI, il timer
+  // veniva cancellato e il salvataggio non avveniva mai. `latestStateRef`
+  // tiene sempre l'ultimo stato pronto; l'effect con deps [] flusha
+  // quello stato alla vera unmount, indipendentemente dal debounce.
+  const latestStateRef = useRef<PersistedState>({ answers, step, concepts, selected, bgImages, ts: 0 });
+  useEffect(() => {
+    latestStateRef.current = { answers, step, concepts, selected, bgImages, ts: Date.now() };
+  });
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      const payload: PersistedState = {
-        answers,
-        step,
-        concepts,
-        selected,
-        bgImages,
-        ts: Date.now(),
-      };
-      localStorage.setItem(LS_KEY, JSON.stringify(payload));
+      persistState(latestStateRef.current);
     }, 500);
     return () => clearTimeout(timer);
-  }, [answers, step, concepts, selected]);
+  }, [answers, step, concepts, selected, bgImages]);
+
+  useEffect(() => {
+    return () => {
+      persistState(latestStateRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     fetch('/api/ai/logo-config')
@@ -477,7 +573,10 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail }: Props) {
                 applied={step === 'applied' && selected === i}
                 bgImage={bgImages[i]}
                 bgError={bgErrors[i]}
-                bgLoading={isGeneratingBg && !bgImages[i] && !bgErrors[i]}
+                bgLoading={
+                  regeneratingIdx === i ||
+                  (isGeneratingBg && regeneratingIdx === null && !bgImages[i] && !bgErrors[i])
+                }
                 onSelect={() => applyConcept(i)}
                 onRegenerate={(promptText) => handleRegenerate(i, promptText)}
                 regenerating={regeneratingIdx === i}

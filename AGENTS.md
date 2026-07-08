@@ -420,6 +420,114 @@ sé. Leggere prima di rimettere mano a questa parte.
     card reali (grid + snapshot JSON superavano 1000). Fix: entrambi
     a 2000. Verificare SEMPRE che i due limiti coincidano dopo
     modifiche a `buildCoverContext`.
+12. **`LogoAiPanel`: il background AI generato per i concept in preview
+    si perdeva cambiando tab AI → Builder → AI (bug già presente in
+    prod prima di essere scoperto/fixato, non una regressione di uno
+    sviluppo recente)**. Costoso da riprodurre: ogni rigenerazione
+    consuma una chiamata Gemini a pagamento. Tre cause distinte, tutte
+    in `LogoAiPanel.tsx` (due delle quali sullo stesso effect di
+    persistenza, scoperte in due passate successive):
+    - **`bgImages` mancante dal dependency array dell'effect di
+      persistenza** (`useEffect(..., [answers, step, concepts,
+      selected])`). Il primo persist scatta quando `concepts` cambia
+      (subito dopo la generazione DeepSeek), catturando
+      `bgImages = [null, null, null]`. Gli aggiornamenti successivi di
+      `bgImages` (quando arrivano le immagini Gemini, con
+      `Promise.allSettled` su 3 chiamate parallele) **non ritriggerano
+      il persist** perché `bgImages` non è nelle dipendenze. Al
+      remount (cambio tab: `LogoEditor` smonta `LogoAiPanel` quando
+      `tab !== 'ai'`), il componente ricarica lo snapshot vecchio senza
+      immagini. Fix: aggiungere `bgImages` alle dipendenze.
+    - **Race condition sul debounce di persistenza (500ms), causa
+      residua dopo il fix precedente**. Anche con `bgImages` nelle
+      dipendenze, la cleanup dell'effect faceva solo `clearTimeout`. Se
+      l'utente cambiava tab ENTRO i 500ms dall'arrivo dell'immagine
+      (scenario comune con test rapidi in locale, meno probabile in
+      produzione dove la latenza naturale di rete/interazione supera
+      spesso i 500ms — questo spiegava la percezione "in prod
+      funziona, in locale no"), lo unmount cancellava il timer
+      **prima** che scrivesse in localStorage, perdendo comunque
+      l'immagine. Fix: `latestStateRef` (un `useRef`) tiene sempre
+      l'ultimo stato via un effect senza dipendenze (rieseguito ad
+      ogni render); un secondo effect con `useEffect(() => () => {...},
+      [])` flusha `latestStateRef.current` in localStorage nella
+      cleanup, che scatta SOLO alla vera unmount — garantendo lo
+      salvataggio indipendentemente dal timer di debounce.
+    - **Spinner condiviso su tutti i 3 concept durante rigenerazione
+      singola**. `bgLoading` nella `ConceptCard` usava solo
+      `isGeneratingBg` (bool unico dell'hook `useAILogo`, true per
+      QUALSIASI chiamata `generateBackground` in corso, sia la
+      generazione iniziale parallela sia la rigenerazione di un solo
+      concept via "Prompt avanzato" → "Rigenera immagine"). Risultato:
+      rigenerando il concept 1, anche i concept 2 e 3 (senza bg pronto)
+      mostravano lo spinner. Fix: `bgLoading = regeneratingIdx === i ||
+      (isGeneratingBg && regeneratingIdx === null && !bgImages[i] &&
+      !bgErrors[i])` — lo spinner globale (generazione iniziale, tutti
+      e 3 in parallelo) resta quando `regeneratingIdx` è `null`; la
+      rigenerazione di un solo concept mostra lo spinner SOLO su quella
+      card tramite `regeneratingIdx === i`.
+    - **`SaveDialog` non si chiudeva dopo un salvataggio riuscito** in
+      `LogoEditor.tsx`: `handleSave` faceva `addToast('success', ...)`
+      ma non chiamava mai `setShowSaveDialog(false)`. Fix: chiudere il
+      dialog subito dopo il toast di successo.
+    - **Causa radice definitiva: `localStorage` non è il posto giusto
+      per immagini base64, il fix "aggiungi `bgImages` alle
+      dipendenze" sopra era solo un cerotto**. Con `bgImages` nelle
+      dipendenze, OGNI generazione/rigenerazione scrive su
+      `localStorage` un payload con fino a 3 immagini base64 (centinaia
+      di KB l'una). `localStorage` ha una quota di 5-10MB/origin
+      condivisa con `precisionQuote_documents:v1` (altri documenti
+      salvati, anch'essi con immagini). Risultato reale osservato in
+      produzione: `Failed to execute 'setItem' on 'Storage': Setting
+      the value of 'logoAiChat:v1' exceeded the quota` **non
+      catturato**, che crasha l'intera app (schermata "Qualcosa è
+      andato storto"). La cleanup di `useEffect(() => () => {...},
+      [])` (flush-on-unmount) gira SINCRONAMENTE dentro il commit React
+      quando l'utente cambia tab: un errore lì propaga fino
+      all'`ErrorBoundary` più vicino, mentre lo stesso errore dentro il
+      `setTimeout` del debounce (asincrono, fuori dal ciclo di vita
+      React) sarebbe finito solo in console senza crashare la UI — per
+      questo il crash reale si manifestava proprio AL CAMBIO TAB, non
+      durante l'attesa del debounce.
+      **Fix definitivo (due parti)**:
+      (a) **Stato sollevato al genitore**: `LogoAiPanel` accetta ora
+      `initialState`/`onStateChange` (tipo esportato `LogoAiState`).
+      `LogoEditor` tiene `aiStateRef = useRef<LogoAiState|undefined>()`
+      e passa `initialState={aiStateRef.current}` +
+      `onStateChange={(s) => { aiStateRef.current = s; }}`. Un
+      `useRef` nel genitore (che NON si smonta mai cambiando tab, a
+      differenza di `LogoAiPanel`) sopravvive al ciclo
+      smontaggio/rimontaggio senza passare da `localStorage`: le
+      immagini restano semplici riferimenti in memoria, nessun limite
+      di quota, nessuna serializzazione. Questo è ora il meccanismo
+      PRIMARIO anti-perdita-immagine al cambio tab.
+      (b) **`localStorage` resta solo backup "best effort" per il
+      refresh pagina (F5)**, ma va sempre protetto da try/catch:
+      `safeLocalStorageSet()` non propaga mai un'eccezione; se il
+      payload completo fallisce per quota, si ritenta SENZA `bgImages`
+      (`payload.bgImages.map(() => null)`) così almeno testo/risposte/
+      concept sopravvivono a un refresh — le immagini si perdono solo
+      in quel caso limite (refresh completo, non cambio tab), mai per
+      un errore non gestito.
+      **Regola generale**: qualunque dato che può contenere immagini
+      base64 (screenshot, background AI, cover, hero) non deve MAI
+      essere l'unica fonte di persistenza in-sessione tramite
+      `localStorage` — usare stato sollevato al componente genitore
+      stabile (`useRef` o `useState` con lazy init) come fonte
+      primaria, e trattare `localStorage` come cache opzionale sempre
+      avvolta in try/catch.
+    Regression test: `LogoAiPanel.test.tsx` → describe "persistenza
+    bgImages su cambio tab" (simula unmount/remount e unmount immediato
+    prima dei 500ms di debounce) e "spinner durante generazione
+    background" → "shows spinner ONLY on the concept being
+    regenerated". `LogoEditor.test.tsx` → "keeps a generated
+    (not-yet-applied) concept preview background across AI -> Builder
+    -> AI tab switches" (verifica lo stato sollevato via `aiStateRef`)
+    e "does not throw when switching tabs while localStorage.setItem
+    throws QuotaExceededError" (verifica che il cambio tab, che
+    scatena la cleanup sincrona, non propaghi mai l'eccezione di
+    quota). Tutti verificati manualmente disattivando i rispettivi fix:
+    senza di essi i test falliscono (non falsi positivi).
 
 ### ⚠️ Cover AI Card gotchas (leggi prima di toccare `coverBrief.ts` o `/ai/card-cover`)
 
