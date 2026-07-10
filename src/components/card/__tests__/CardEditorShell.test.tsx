@@ -105,13 +105,20 @@ describe('CardEditorShell', () => {
     expect(screen.getByTestId('card-preview-front').className).toContain('grid-mode');
   });
 
-  it('calls save via desktop save action', async () => {
-    render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
+  it('calls save via desktop save action (dialog → confirm name)', async () => {
+    const filled = {
+      ...createEmptyCard(),
+      front: { ...createEmptyCard().front, name: 'Mario Rossi' },
+    };
+    render(<CardAIFloatingProvider><CardEditorShell {...baseProps} initialCard={filled} /></CardAIFloatingProvider>);
     fireEvent.click(screen.getByRole('button', { name: /^Salva$/i }));
+    expect(await screen.findByRole('heading', { name: /Salva bigliettino/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Conferma salvataggio/i }));
     await waitFor(() => expect(mockSave).toHaveBeenCalled());
     const last = mockSave.mock.calls[mockSave.mock.calls.length - 1];
     expect(last[0]).toBe('user@test.com');
     expect(last[1].documentType).toBe('businessCard');
+    expect(last[1].title).toMatch(/Mario|Bigliettino/i);
   });
 
   it('exports PDF through the export menu', async () => {
@@ -123,7 +130,7 @@ describe('CardEditorShell', () => {
       render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
       const exportBtn = screen.getByRole('button', { name: /Esporta ▾/i });
       fireEvent.click(exportBtn);
-      fireEvent.click(screen.getByRole('menuitem', { name: /PDF 10-up/i }));
+      fireEvent.click(screen.getByRole('menuitem', { name: /PDF 10-up \(tipografia/i }));
       await waitFor(() => expect(mockGenPDF).toHaveBeenCalled());
       expect(createObjectURL).toHaveBeenCalled();
     } finally {

@@ -379,13 +379,16 @@ const qrDocumentSchema = z.object({
 // boundary and trust the schema on the client (documentSchemas.ts)
 // for the deep shape. This keeps the API surface small and avoids
 // duplicating the Zod tree for nested card/grid style fields.
+// .passthrough() keeps flat client fields (builder/front/content) so
+// extractDocumentData can nest them under jsonb `data` if `data` is
+// missing. Without passthrough Zod strips unknown keys → data:null in prod.
 const genericDocumentSchema = z.object({
   id: z.string().min(1),
   title: z.string().default(''),
   data: z.any().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
-});
+}).passthrough();
 const businessCardDocumentSchema = genericDocumentSchema.extend({
   documentType: z.literal('businessCard'),
 });
@@ -885,16 +888,28 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, document } = v.data;
 
-    const isQr = document.documentType === 'qrCode';
+    // Extract payload for jsonb `data` column.
+    // Client may send either:
+    //   a) wrapped: { id, documentType, title, data: {...} }  (preferred)
+    //   b) flat:    { id, documentType, title, builder|front|content|... }
+    // Without this, flat logo/card/flyer used to store data:null in prod.
+    const extractDocumentData = (doc: any): unknown => {
+      if (doc.documentType === 'qrCode') return doc.data ?? null;
+      if (doc.data != null) return doc.data;
+      const META = new Set(['id', 'documentType', 'title', 'userEmail', 'createdAt', 'updatedAt', 'isTemplate', 'data']);
+      const domain: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(doc)) {
+        if (!META.has(k)) domain[k] = val;
+      }
+      return Object.keys(domain).length > 0 ? domain : null;
+    };
+
+    const dataToStore = extractDocumentData(document);
     const existing = await db.select().from(documentsTable).where(eq(documentsTable.id, document.id));
     if (existing.length > 0) {
       if (existing[0].userEmail !== email) {
         return json(req, res, 403, { error: 'Non autorizzato' });
       }
-      // For QR we still type-check the payload via qrPayloadDataSchema
-      // (the discriminated union above). For businessCard / logo the
-      // `data` is opaque jsonb, stored as-is.
-      const dataToStore = isQr ? (document.data as never) : ((document as any).data ?? null);
       const [updated] = await db.update(documentsTable).set({
         documentType: document.documentType,
         title: document.title,
@@ -903,7 +918,6 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
       }).where(eq(documentsTable.id, document.id)).returning();
       return json(req, res, 200, updated);
     }
-    const dataToStore = isQr ? (document.data as never) : ((document as any).data ?? null);
     const [saved] = await db.insert(documentsTable).values({
       id: document.id,
       userEmail: email,

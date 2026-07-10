@@ -10,7 +10,6 @@ import { useToast } from '../../hooks/useToast';
 import { useDocumentSave } from '../../hooks/useDocumentSave';
 import { computeFlyerLayout, getFlyerCopyBudget } from '../../utils/flyer';
 import { generateFlyerPdf, generateFlyerPng } from '../../utils/flyerGenerator';
-import dataService from '../../utils/dataService';
 import SaveDialog from '../SaveDialog';
 import { logger } from '../../utils/logger';
 import {
@@ -350,12 +349,16 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
   const handleSave = React.useCallback((customName: string) => {
     const title = customName || flyer.title || 'Volantino';
     const toSave = sanitizeForSave({ ...flyer, title }, userEmail);
-    dataService.saveDocument(userEmail, toSave).then((result) => {
+    saveDocumentGuarded(userEmail, toSave).then((result) => {
+      if (result.blocked) {
+        addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
+        return;
+      }
       if (result.error) { addToast('error', result.error); return; }
       setFlyer(toSave);
       addToast('success', `«${title}» salvato`);
     }).catch((err) => addToast('error', (err as Error).message || 'Errore salvataggio'));
-  }, [flyer, userEmail, addToast]);
+  }, [flyer, userEmail, addToast, saveDocumentGuarded]);
 
   const openSaveDialog = React.useCallback(() => {
     if (!flyerHasContent(flyer)) { addToast('info', 'Compila almeno il titolo o il copy prima di salvare.'); return; }

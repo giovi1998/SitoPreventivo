@@ -312,9 +312,15 @@ describe('CardEditor', () => {
 
   it('saves to collection with documentType businessCard (AC-012)', async () => {
     renderEditor();
+    // Need content before save dialog opens
+    fireEvent.change(screen.getByLabelText(/Nome \(fronte\)/i), { target: { value: 'Mario' } });
     const saveBtn = screen.getByRole('button', { name: /^Salva$/i });
     await act(async () => {
       fireEvent.click(saveBtn);
+    });
+    expect(await screen.findByRole('heading', { name: /Salva bigliettino/i })).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Conferma salvataggio/i }));
     });
     await waitFor(() => expect(mockSave).toHaveBeenCalled());
     const calls = mockSave.mock.calls;

@@ -80,6 +80,15 @@ describe('dataService documents (local path)', () => {
     expect(documents).toHaveLength(0);
   });
 
+  it('saveDocument stamps userEmail even if document omits it', async () => {
+    const qr = { ...createGiovanniQrTemplate(), id: 'qr-stamp' };
+    delete (qr as any).userEmail;
+    await dataService.saveDocument('user@test.com', qr);
+    const { documents } = await dataService.getDocuments('user@test.com');
+    expect(documents).toHaveLength(1);
+    expect(documents[0].userEmail).toBe('user@test.com');
+  });
+
   it('saveDocument returns a structured error when localStorage.setItem fails (QuotaExceeded)', async () => {
     const logo = {
       ...createGiovanniQrTemplate(),

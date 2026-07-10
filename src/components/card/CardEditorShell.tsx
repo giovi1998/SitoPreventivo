@@ -26,7 +26,6 @@ import {
 import { compressImage } from '../../utils/cardGenerator';
 import { useCardExport } from '../../hooks/useCardExport';
 import { isAllowedLogoMime, isHttpUrl } from '../../utils/qrGenerator';
-import dataService from '../../utils/dataService';
 import { useToast } from '../../hooks/useToast';
 import { useAICard } from '../../hooks/useAICard';
 import { findCardQuickAction } from '../../ai/prompts/cardQuickActions';
@@ -42,6 +41,7 @@ import CardEditorTabs from './CardEditorTabs';
 import MobileGridEditor from '../MobileGridEditor';
 import CardAIFab from '../CardAIFab';
 import CardAIBottomSheet from '../CardAIBottomSheet';
+import SaveDialog from '../SaveDialog';
 import {
   loadPromptLibrary,
   addPromptEntry,
@@ -54,6 +54,26 @@ import { buildCardPhotoBrief } from '../../utils/card/photoBrief';
 const MAX_RAW_BYTES = 5_000_000;
 const AUTO_SAVE_DELAY_MS = 30_000;
 
+function cardHasContent(c: BusinessCard): boolean {
+  return !!(
+    c.title?.trim()
+    || c.front.name?.trim()
+    || c.front.title?.trim()
+    || c.front.company?.trim()
+    || c.front.photoUrl
+    || c.front.logoUrl
+    || c.back.phone?.trim()
+    || c.back.email?.trim()
+    || c.back.website?.trim()
+  );
+}
+
+function defaultCardTitle(c: BusinessCard): string {
+  if (c.title?.trim()) return c.title.trim();
+  if (c.front.name?.trim()) return `Bigliettino ${c.front.name.trim()}`;
+  return 'Bigliettino';
+}
+
 export interface CardEditorShellProps {
   userEmail: string;
   initialCard?: BusinessCard;
@@ -65,6 +85,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const { save: saveDocumentGuarded } = useDocumentSave();
   const [card, setCard] = useState<BusinessCard>(() => mergeCardWithDefaults(initialCard));
   const [showTemplateBanner, setShowTemplateBanner] = useState<boolean>(() => !initialCard);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -74,6 +95,16 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const [showGrid, setShowGrid] = useState(false);
   const [isCoverGenerating, setIsCoverGenerating] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedIdRef = useRef<string | undefined>(initialCard?.id);
+
+  // When Collection opens a different card, replace local state.
+  useEffect(() => {
+    if (!initialCard?.id) return;
+    if (initialCard.id === loadedIdRef.current) return;
+    loadedIdRef.current = initialCard.id;
+    setCard(mergeCardWithDefaults(initialCard));
+    setShowTemplateBanner(false);
+  }, [initialCard]);
   const isMobile = useMediaQuery('(max-width: 900px)');
   const aiFloating = useCardAIFloating();
   const previewZoom = useCardPreviewZoom(1);
@@ -302,7 +333,10 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     setExportMenuOpen(false);
     switch (action) {
       case 'pdf':
-        void exportPdf();
+        void exportPdf({ cropMarks: true });
+        break;
+      case 'pdf-clean':
+        void exportPdf({ cropMarks: false });
         break;
       case 'png-front':
         void exportPng('front');
@@ -322,8 +356,30 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
   }, [exportPdf, exportPng, exportSvg, exportJson]);
 
-  const handleSave = useCallback(async () => {
-    const sanitized: BusinessCard = { ...card, userEmail, updatedAt: new Date().toISOString() };
+  const openSaveDialog = useCallback(() => {
+    if (!userEmail) {
+      addToast('error', 'Devi essere loggato per salvare.');
+      return;
+    }
+    if (!cardHasContent(card)) {
+      addToast('info', 'Compila almeno nome o contatti prima di salvare.');
+      return;
+    }
+    setShowSaveDialog(true);
+  }, [card, userEmail, addToast]);
+
+  const handleSave = useCallback(async (customName?: string) => {
+    if (!userEmail) {
+      addToast('error', 'Devi essere loggato per salvare.');
+      return;
+    }
+    const title = (customName?.trim() || defaultCardTitle(card));
+    const sanitized: BusinessCard = {
+      ...card,
+      title,
+      userEmail,
+      updatedAt: new Date().toISOString(),
+    };
     const result = await saveDocumentGuarded(userEmail, sanitized);
     if (result.blocked) {
       addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
@@ -333,8 +389,11 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       addToast('error', result.error);
       return;
     }
-    addToast('success', 'Bigliettino salvato in locale. Visibile in Collection dalla prossima release.');
-  }, [card, userEmail, addToast]);
+    setCard(sanitized);
+    loadedIdRef.current = sanitized.id;
+    setShowSaveDialog(false);
+    addToast('success', `«${title}» salvato. Visibile in Collection.`);
+  }, [card, userEmail, addToast, saveDocumentGuarded]);
 
   const runCardAI = useCallback(async (mode: string = 'custom') => {
     const quick = findCardQuickAction(mode);
@@ -465,20 +524,30 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   useEffect(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    if (!userEmail || !cardHasContent(card)) return;
     autoSaveTimerRef.current = setTimeout(() => {
-      const sanitized: BusinessCard = { ...card, userEmail, updatedAt: new Date().toISOString() };
+      const title = defaultCardTitle(card);
+      const sanitized: BusinessCard = {
+        ...card,
+        title,
+        userEmail,
+        updatedAt: new Date().toISOString(),
+      };
       saveDocumentGuarded(userEmail, sanitized).then((result) => {
         if (result.blocked) {
           addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
         } else if (result.error) {
           logger.error('Card auto-save failed', { err: result.error });
+        } else {
+          // Keep title in sync if auto-derived (no toast noise).
+          if (card.title !== title) setCard((prev) => (prev.title === title ? prev : { ...prev, title }));
         }
       });
     }, AUTO_SAVE_DELAY_MS);
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [card, userEmail]);
+  }, [card, userEmail, saveDocumentGuarded, addToast]);
 
   const updateSocial = useCallback((idx: number, key: 'platform' | 'url', value: string) => {
     setCard((prev) => {
@@ -644,7 +713,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   const desktopActions = (
     <div className="card-actions">
-      <CardSaveAction variant="desktop" onClick={handleSave} />
+      <CardSaveAction variant="desktop" onClick={openSaveDialog} />
       <CardExportMenu
         variant="desktop"
         open={exportMenuOpen}
@@ -731,7 +800,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
             {formContent}
             {desktopActions}
             <p className="card-export-hint">
-              Esporta subito PDF/PNG/SVG. Le card salvate appariranno in <em>Collection</em> dalla prossima release.
+              Esporta PDF/PNG/SVG. I bigliettini salvati compaiono in <em>Collection</em>.
+              In Stile → «Stile bordo» scegli <em>Nessuno</em> per rimuovere strisce/bordi sul bigliettino.
             </p>
           </section>
 
@@ -776,7 +846,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       {isMobile && (
         <>
           <div className="card-mobile-toolbar" data-testid="mobile-toolbar">
-            <CardSaveAction variant="mobile" onClick={handleSave} />
+            <CardSaveAction variant="mobile" onClick={openSaveDialog} />
             <CardExportMenu
               variant="mobile"
               open={exportMenuOpen}
@@ -810,6 +880,15 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
           </CardAIBottomSheet>
         </>
       )}
+
+      <SaveDialog
+        open={showSaveDialog}
+        defaultName={defaultCardTitle(card)}
+        documentLabel="bigliettino"
+        placeholder="Es. Bigliettino Mario Rossi"
+        onSave={(name) => { void handleSave(name); }}
+        onCancel={() => setShowSaveDialog(false)}
+      />
     </div>
   );
 }

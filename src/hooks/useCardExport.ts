@@ -4,7 +4,7 @@ import { SIZE_PRESETS_MM } from '../utils/documentSchemas';
 import { generateCardPDF, generateCardPng, buildCardSvg } from '../utils/cardGenerator';
 import type { Tier } from '../utils/watermark';
 
-export type ExportingState = 'pdf' | 'png-front' | 'png-back' | null;
+export type ExportingState = 'pdf' | 'pdf-clean' | 'png-front' | 'png-back' | null;
 
 // Phase 2.2 refactor: estratti gli handler di export da CardEditor.tsx in
 // un hook dedicato. Tutto resta client-side (PDF/PNG/SVG/JSON) come da
@@ -31,16 +31,24 @@ export function useCardExport(
     window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   };
 
-  const exportPdf = useCallback(async () => {
-    setExporting('pdf');
-    console.info('[CardExport] PDF export start', { cardId: card.id, tier });
+  const exportPdf = useCallback(async (opts?: { cropMarks?: boolean }) => {
+    const cropMarks = opts?.cropMarks !== false;
+    const state: ExportingState = cropMarks ? 'pdf' : 'pdf-clean';
+    setExporting(state);
+    console.info('[CardExport] PDF export start', { cardId: card.id, tier, cropMarks });
     try {
-      const bytes = await generateCardPDF(card, { tier });
+      const bytes = await generateCardPDF(card, { tier, cropMarks });
       console.info('[CardExport] PDF generated', { bytes: bytes.length });
       const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-      downloadBlob(new Blob([arrayBuffer], { type: 'application/pdf' }), `card_${card.id}.pdf`);
+      const suffix = cropMarks ? '' : '_clean';
+      downloadBlob(new Blob([arrayBuffer], { type: 'application/pdf' }), `card_${card.id}${suffix}.pdf`);
       console.info('[CardExport] PDF download triggered');
-      addToast('success', 'PDF 10-up scaricato (pronto per la tipografia)');
+      addToast(
+        'success',
+        cropMarks
+          ? 'PDF 10-up scaricato (con segni di taglio)'
+          : 'PDF 10-up scaricato (senza bordi / segni di taglio)',
+      );
     } catch (err) {
       console.error('[CardExport] PDF export failed', err);
       addToast('error', err instanceof Error ? err.message : 'Errore export PDF');

@@ -50,13 +50,15 @@ describe('CardExportMenu', () => {
       />,
     );
     const actions = [
-      ['PDF 10-up', 'pdf'],
+      ['PDF 10-up \\(tipografia', 'pdf'],
+      ['PDF 10-up \\(pulito', 'pdf-clean'],
       ['PNG fronte', 'png-front'],
       ['PNG retro', 'png-back'],
       ['SVG fronte', 'svg-front'],
       ['SVG retro', 'svg-back'],
       ['JSON', 'json'],
     ] as const;
+    // labels use RegExp(label) below
     for (const [label, key] of actions) {
       onAction.mockClear();
       fireEvent.click(screen.getByRole('menuitem', { name: new RegExp(label) }));

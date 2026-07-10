@@ -89,7 +89,21 @@ function getDocTimestamp(doc: any, field: 'updated' | 'created'): number {
 }
 
 function getDocTitle(doc: any): string {
-  return String(doc.title || doc.id || 'Senza titolo');
+  if (doc.title) return String(doc.title);
+  // Cards often saved without title field filled — fall back to person name.
+  if (doc.documentType === 'businessCard' && doc.front?.name) {
+    return `Bigliettino ${doc.front.name}`;
+  }
+  if (doc.documentType === 'logo' && doc.builder?.primaryText) {
+    return String(doc.builder.primaryText);
+  }
+  if (doc.documentType === 'flyer' && doc.content?.headline) {
+    return String(doc.content.headline);
+  }
+  if (doc.documentType === 'qrCode' && doc.data?.payload) {
+    return String(doc.data.payload).slice(0, 40);
+  }
+  return String(doc.id || 'Senza titolo');
 }
 
 function truncate(s: string, n: number): string {
