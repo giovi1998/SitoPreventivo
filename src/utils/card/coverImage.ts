@@ -43,10 +43,6 @@ export async function renderCardCoverScreenshot(
   }
 }
 
-/**
- * Resolves and compresses the user logo for the card cover AI.
- * Returns undefined when there is no logo or compression fails.
- */
 export async function resolveCardCoverLogo(
   card: BusinessCard,
 ): Promise<string | undefined> {
@@ -54,7 +50,13 @@ export async function resolveCardCoverLogo(
   try {
     const resolved = await resolveToBase64DataUrl(card.front.logoUrl);
     if (!resolved) return undefined;
-    const compressed = await compressForAI(resolved, LOGO_TARGET_BYTES, LOGO_MAX_SIDE);
+    
+    // Convert to a raster JPEG data URL (even if it's an SVG)
+    // so we don't send URL-encoded SVG text to Gemini, which expects base64.
+    const { imageToJpegDataUrl } = await import('../ai/compressForAI');
+    const rasterized = await imageToJpegDataUrl(resolved, LOGO_MAX_SIDE);
+    
+    const compressed = await compressForAI(rasterized, LOGO_TARGET_BYTES, LOGO_MAX_SIDE);
     return compressed.dataUrl;
   } catch (err) {
     console.warn('[resolveCardCoverLogo] fallback to no logo image', err);

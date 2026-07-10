@@ -1387,9 +1387,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const grounding =
         'The attached image(s) show the business card layout I am designing a background for. Use them as reference for text placement, colour harmony, and profession. Do NOT reproduce any text, QR code, logo, face, or UI element visible in the reference — generate only the abstract background. If a background is already visible in the reference image, treat it as the previous iteration to improve upon, not as a constraint to copy.';
       const finalPrompt = hasImages ? `${grounding}\n\n${basePrompt}` : basePrompt;
+      const extractMime = (dataUrl: string, fallback: string) => {
+        const match = dataUrl.match(/^data:([^;]+);base64,/);
+        return match ? match[1] : fallback;
+      };
+
       const input = buildGeminiMultimodalInput(finalPrompt, [
-        v.data.cardImage ? { data: v.data.cardImage, mimeType: 'image/jpeg' } : null,
-        v.data.logoImage ? { data: v.data.logoImage, mimeType: 'image/png' } : null,
+        v.data.cardImage ? { data: v.data.cardImage, mimeType: extractMime(v.data.cardImage, 'image/jpeg') } : null,
+        v.data.logoImage ? { data: v.data.logoImage, mimeType: extractMime(v.data.logoImage, 'image/jpeg') } : null,
       ]);
       const interaction = await ai.interactions.create(
         {
@@ -1458,9 +1463,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const grounding =
         'The first attached image shows the logo layout I am designing a background for (title, tagline, icon). Use it as reference for text placement and colour harmony. Do NOT reproduce any text, icon, or shape visible in the reference — generate only the abstract decorative background that sits behind it. The second attached image (if present) is the previous background iteration to improve upon, not a constraint to copy.';
       const finalPrompt = hasImages ? `${grounding}\n\n${v.data.prompt}` : v.data.prompt;
+      const extractMime = (dataUrl: string, fallback: string) => {
+        const match = dataUrl.match(/^data:([^;]+);base64,/);
+        return match ? match[1] : fallback;
+      };
+
       const input = buildGeminiMultimodalInput(finalPrompt, [
-        v.data.logoImage ? { data: v.data.logoImage, mimeType: 'image/png' } : null,
-        v.data.previousBackground ? { data: v.data.previousBackground, mimeType: 'image/jpeg' } : null,
+        v.data.logoImage ? { data: v.data.logoImage, mimeType: extractMime(v.data.logoImage, 'image/jpeg') } : null,
+        v.data.previousBackground ? { data: v.data.previousBackground, mimeType: extractMime(v.data.previousBackground, 'image/jpeg') } : null,
       ]);
       const interaction = await ai.interactions.create(
         {

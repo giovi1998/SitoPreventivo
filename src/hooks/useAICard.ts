@@ -228,47 +228,53 @@ export function useAICard(userEmail?: string): UseAICardReturn {
     streamEntryIdRef.current = null;
   }, [getOrchestrator]);
 
-  const generateCover = useCallback(
-    async (card: BusinessCard, side: 'front' | 'back' = 'front', promptOverride?: string, options?: { onProgress?: (msg: string) => void }) => {
-      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
-        const profile = await dataService.getUserProfile(userEmail);
-        if (profile.error) throw new Error(profile.error);
-        if (profile.tokensUsed >= profile.tokenLimit) {
-          throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
+    const generateCover = useCallback(
+      async (card: BusinessCard, side: 'front' | 'back' = 'front', promptOverride?: string, options?: { onProgress?: (msg: string) => void }) => {
+        if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
+          const profile = await dataService.getUserProfile(userEmail);
+          if (profile.error) throw new Error(profile.error);
+          if (profile.tokensUsed >= profile.tokenLimit) {
+            throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
+          }
         }
-      }
-
-      const { prompt: coverPrompt, context: coverContext } =
-        promptOverride ? { prompt: promptOverride, context: '' } : buildCardCoverBrief(card, side);
-
-      addLog(createEntry('info', '🎨 Generazione cover AI in corso...', { detail: coverPrompt }));
-      options?.onProgress?.('🎨 Generazione cover AI in corso...');
-
-      const [cardImage, logoImage] = await Promise.all([
-        renderCardCoverScreenshot(card, side),
-        side === 'front' ? resolveCardCoverLogo(card) : Promise.resolve(undefined),
-      ]);
-
-      const payload = buildCardCoverPayload(coverPrompt, coverContext, { cardImage, logoImage }, side, userEmail);
-
-      const apiBase = import.meta.env?.VITE_API_BASE || '';
-      const res = await fetch(`${apiBase}/api/ai/card-cover`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Errore generazione cover' }));
-        throw new Error(err.error || `Cover AI ${res.status}`);
-      }
-
-      const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
-      addLog(createSuccessEntry('Cover AI generata', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`));
-      return `data:${data.mimeType};base64,${data.imageBase64}`;
-    },
-    [userEmail, addLog]
-  );
+  
+        const { prompt: coverPrompt, context: coverContext } =
+          promptOverride ? { prompt: promptOverride, context: '' } : buildCardCoverBrief(card, side);
+  
+        addLog(createEntry('info', `🎨 Generazione cover AI in corso (${side})...`, { detail: coverPrompt }));
+        options?.onProgress?.(`🎨 Generazione cover AI in corso (${side})...`);
+  
+        try {
+          const [cardImage, logoImage] = await Promise.all([
+            renderCardCoverScreenshot(card, side),
+            side === 'front' ? resolveCardCoverLogo(card) : Promise.resolve(undefined),
+          ]);
+  
+          const payload = buildCardCoverPayload(coverPrompt, coverContext, { cardImage, logoImage }, side, userEmail);
+  
+          const apiBase = import.meta.env?.VITE_API_BASE || '';
+          const res = await fetch(`${apiBase}/api/ai/card-cover`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+  
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: 'Errore generazione cover' }));
+            throw new Error(err.error || `Cover AI ${res.status}`);
+          }
+  
+          const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
+          addLog(createSuccessEntry(`Cover AI (${side}) generata`, `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`));
+          return `data:${data.mimeType};base64,${data.imageBase64}`;
+        } catch (err: any) {
+          const msg = err.message || 'Errore durante la generazione della cover';
+          addLog(createErrorEntry(`❌ ${msg}`));
+          throw err;
+        }
+      },
+      [userEmail, addLog]
+    );
 
   return {
     processCardPrompt,

@@ -150,7 +150,7 @@ export default function CardAIControls({
             onClick={() => onGenerateCover('front')}
             disabled={isProcessing || coverLocked}
           >
-            {coverLocked ? '🔒 Sblocca' : 'Genera fronte'}
+            {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca' : 'Genera fronte'}
           </button>
         </div>
         <div className="card-ai-cover-item">
@@ -167,7 +167,7 @@ export default function CardAIControls({
             onClick={() => onGenerateCover('back')}
             disabled={isProcessing || coverLocked}
           >
-            {coverLocked ? '🔒 Sblocca' : 'Genera retro'}
+            {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca' : 'Genera retro'}
           </button>
         </div>
       </div>
