@@ -6,6 +6,14 @@ import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } 
 import { CSS } from '@dnd-kit/utilities';
 import type { PremiumQuote, DocumentTemplateId, QuoteOption } from '../utils/quoteSchema';
 import { getTheme } from '../utils/documentThemes';
+import {
+  AiSection,
+  AiPromptTextarea,
+  AiSelect,
+  AiGenerateButton,
+  AiActionChip,
+  AiActionGrid,
+} from './ai-ui';
 
 function Section({ title, defaultOpen = false, children, extra, badge }: { title: string; defaultOpen?: boolean; children: React.ReactNode; extra?: React.ReactNode; badge?: string | number }) {
   const [open, setOpen] = React.useState(defaultOpen);
@@ -178,50 +186,73 @@ export default function EditorView({
     </Section>
   );
 
+  const modelOptions = availableModels.length > 0 
+    ? availableModels.map(m => ({ value: m.id, label: `${m.name}, ${m.model}` }))
+    : [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }];
+
+  const QUICK_ACTIONS = [
+    { mode: 'premium', label: 'Rendi premium' },
+    { mode: 'faq', label: 'Aggiungi FAQ' },
+    { mode: 'discount', label: 'Sconto finale' },
+    { mode: 'simple', label: 'Semplifica' },
+  ];
+
   const aiPanel = (
-    <section className="panel ai-panel">
+    <section className="panel ai-panel" aria-label="AI del preventivo">
       <div className="panel-kicker">
         <span>AI Design Mode</span>
         <button className="panel-toggle" onClick={() => setShowAi(false)} title="Collassa pannello" aria-label="Collassa AI">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
       </div>
-      <h2>AI che modifica il preventivo</h2>
-      <Section title="Configurazione AI" defaultOpen={true}>
-        <div className="api-key-section">
-          <div className="ai-model-selector">
-            <label>Modello AI</label>
-            <select value={aiModel} onChange={(e) => onAiModelChange(e.target.value)}>
-              {availableModels.length > 0 ? availableModels.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}, {m.model}</option>
-              )) : (
-                <option value="deepseek-chat">DeepSeek Chat</option>
-              )}
-            </select>
-          </div>
-          <span className="api-key-status ok">● Chiave via server (env var)</span>
-        </div>
-      </Section>
-      <Section title="Prompt e azioni rapide" defaultOpen={true}>
-        <textarea value={aiText} onChange={(e) => setAiText(e.target.value)} aria-label="Prompt modifica AI" placeholder="Es. Rendi il preventivo più premium, aggiungi FAQ, applica sconto 10%..." />
-        <div className="ai-actions">
-          <button onClick={() => onRunAI("premium")}>Rendi premium</button>
-          <button onClick={() => onRunAI("faq")}>Aggiungi FAQ</button>
-          <button onClick={() => onRunAI("discount")}>Sconto finale</button>
-          <button onClick={() => onRunAI("simple")}>Semplifica</button>
-        </div>
-        <div className="ai-extra-actions">
-          <button className="primary wide" onClick={() => onRunAI("custom")} disabled={isProcessing}>
-            {isProcessing ? 'Elaborazione...' : 'Applica prompt personalizzato'}
-          </button>
-          <button className="btn-ghost" onClick={onResetChat} style={{ width: '100%', marginTop: '4px', fontSize: '.75rem' }}>
+      <AiSection title="Modello AI" collapsible defaultOpen>
+        <AiSelect
+          value={aiModel}
+          onChange={(e) => onAiModelChange(e.target.value)}
+          options={modelOptions}
+          aria-label="Modello AI"
+        />
+      </AiSection>
+      <AiSection title="Prompt e azioni rapide" collapsible defaultOpen hint='Descrivi cosa vuoi cambiare. Es. "Rendi il preventivo più premium, aggiungi FAQ".'>
+        <AiPromptTextarea
+          value={aiText}
+          onChange={(e) => setAiText(e.target.value)}
+          aria-label="Prompt modifica AI"
+          placeholder='Es. "Rendi il preventivo più premium, aggiungi FAQ, applica sconto 10%..."'
+          rows={3}
+        />
+        <AiActionGrid groupLabel="Azioni rapide">
+          {QUICK_ACTIONS.map((a) => (
+            <AiActionChip
+              key={a.mode}
+              label={a.label}
+              onClick={() => onRunAI(a.mode)}
+              disabled={isProcessing}
+            />
+          ))}
+        </AiActionGrid>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+          <AiGenerateButton
+            isProcessing={isProcessing}
+            onClick={() => onRunAI('custom')}
+            disabled={!aiText.trim()}
+          >
+            {isProcessing ? 'Elaborazione...' : 'Applica prompt'}
+          </AiGenerateButton>
+          <button
+            type="button"
+            className="card-ai-reset"
+            onClick={onResetChat}
+            disabled={isProcessing}
+            style={{ flexShrink: 0 }}
+          >
             Nuova conversazione
           </button>
         </div>
-      </Section>
-      <Section title="Log AI" defaultOpen={true}>
+      </AiSection>
+      <AiSection title="Log AI" collapsible defaultOpen>
         <AILogPanel logs={aiLogs} isProcessing={isProcessing} />
-      </Section>
+      </AiSection>
     </section>
   );
 

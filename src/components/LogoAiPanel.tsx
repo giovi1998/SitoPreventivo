@@ -4,6 +4,14 @@ import { builderToSvg, sanitizeSvg } from '../utils/logoGenerator';
 import { useAILogo } from '../hooks/useAILogo';
 import { useToast } from '../hooks/useToast';
 import AILogPanel from './AILogPanel';
+import {
+  AiTierGuard,
+  AiPromptTextarea,
+  AiSelect,
+  AiGenerateButton,
+  AiActionChip,
+  AiActionGrid,
+} from './ai-ui';
 import './LogoAiPanel.css';
 
 export type Step = 'chat' | 'result' | 'applied';
@@ -269,12 +277,13 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
 
   if (tier === 'free') {
     return (
-      <section className="logo-ai-disabled" aria-label="AI Generation riservata">
-        <div className="logo-ai-card" role="status">
-          <h2>AI Generation</h2>
-          <p>AI generation è disponibile nel piano Pro o con codice sblocco. Riscatta un codice in Impostazioni.</p>
-        </div>
-      </section>
+      <AiTierGuard 
+        tier="free" 
+        featureName="AI Generation" 
+        fallbackMessage="AI generation è disponibile nel piano Pro o con codice sblocco. Riscatta un codice in Impostazioni."
+      >
+        {null}
+      </AiTierGuard>
     );
   }
 
@@ -481,42 +490,36 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
 
       {step === 'chat' && (
         <div className="logo-ai-chat">
-          <label>
-            <span className="logo-ai-q">Cosa fa la tua attività?</span>
-            <textarea
-              value={answers.activity}
-              onChange={(e) => setAnswers({ ...answers, activity: e.target.value.slice(0, 500) })}
-              rows={3}
-              placeholder="Es. Pizzeria moderna nel centro di Cagliari"
-            />
-          </label>
-          <label>
-            <span className="logo-ai-q">Settore</span>
-            <select value={answers.sector} onChange={(e) => setAnswers({ ...answers, sector: e.target.value as LogoSector })}>
-              {SECTORS.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </label>
+          <AiPromptTextarea
+            label="Cosa fa la tua attività?"
+            value={answers.activity}
+            onChange={(e) => setAnswers({ ...answers, activity: e.target.value.slice(0, 500) })}
+            rows={3}
+            placeholder="Es. Pizzeria moderna nel centro di Cagliari"
+          />
+          <AiSelect
+            label="Settore"
+            value={answers.sector}
+            onChange={(e) => setAnswers({ ...answers, sector: e.target.value as LogoSector })}
+            options={SECTORS.map((s) => ({ value: s, label: s }))}
+          />
           <button type="button" className="logo-ai-preset-btn" onClick={applySectorExample}>
             Usa esempio {SECTOR_LABELS[answers.sector]}
           </button>
           <div className="logo-ai-mood">
             <span className="logo-ai-q">Che mood vuoi?</span>
-            <div className="logo-ai-mood-options">
+            <AiActionGrid>
               {MOODS.map((m) => (
-                <button
+                <AiActionChip
                   key={m}
-                  type="button"
+                  label={m}
                   className={answers.mood === m ? 'is-selected' : ''}
                   onClick={() => setAnswers({ ...answers, mood: m })}
-                >
-                  {m}
-                </button>
+                />
               ))}
-            </div>
+            </AiActionGrid>
           </div>
-          <label>
+          <div className="logo-ai-target-wrapper">
             <span className="logo-ai-q">Chi è il tuo target?</span>
             <input
               type="text"
@@ -524,15 +527,16 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
               onChange={(e) => setAnswers({ ...answers, target: e.target.value.slice(0, 200) })}
               placeholder="Es. giovani 25-35, foodies"
             />
-          </label>
+          </div>
           <div className="logo-ai-actions">
-            <button
-              type="button"
+            <AiGenerateButton
+              isProcessing={isProcessing || isGeneratingBg}
+              loadingText={isProcessing ? 'Generando concept…' : 'Generando background…'}
               onClick={handleGenerate}
-              disabled={isProcessing || isGeneratingBg || !canGenerate}
+              disabled={!canGenerate}
             >
-              {isProcessing ? 'Generando concept…' : isGeneratingBg ? 'Generando background…' : 'Genera 3 concept'}
-            </button>
+              Genera 3 concept
+            </AiGenerateButton>
             <button type="button" onClick={handleReset} disabled={isProcessing || isGeneratingBg}>
               Reset chat
             </button>

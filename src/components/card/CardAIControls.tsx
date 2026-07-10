@@ -2,12 +2,14 @@ import React from 'react';
 import AILogPanel from '../AILogPanel';
 import type { AILogEntry } from '../../ai/types';
 import type { BusinessCard } from '../../utils/documentSchemas';
-
-// Phase 2.2 refactor: pannello AI condiviso del bigliettino.
-// v2.4 redesign: pannello diviso in sezioni con gerarchia visiva chiara
-// (Sfondo AI / Stile veloce / Prompt libero), CTA primari distinti, e
-// microcopy che spiega ogni azione. Le azioni esistenti (onRun per le
-// quick action, onGenerateCover per la cover AI) restano identiche.
+import {
+  AiSection,
+  AiPromptTextarea,
+  AiSelect,
+  AiGenerateButton,
+  AiActionChip,
+  AiActionGrid,
+} from '../ai-ui';
 
 export interface CardAIModel {
   id: string;
@@ -25,19 +27,13 @@ export interface CardAIControlsProps {
   onRun: (mode: string) => void;
   onReset: () => void;
   logs: AILogEntry[];
-  /** 'desktop' = colonna 3. 'mobile' = tab/bottom-sheet. */
   variant: 'desktop' | 'mobile';
-  /** Spec v2.4: tier guard for cover image generation. */
   tier?: 'free' | 'unlocked';
-  /** Spec v2.4: callback for "Genera cover AI" button. */
   onGenerateCover?: (side: 'front' | 'back' | 'both') => void;
-  /** v2.4: callback to remove a generated cover image. */
   onRemoveCover?: (side: 'front' | 'back') => void;
-  /** v2.4: card snapshot, used to show cover thumbnails in the AI panel. */
   card?: BusinessCard;
 }
 
-/** Quick actions split into two semantic groups. */
 const QUICK_GROUP_CLEAN: { mode: string; label: string; title: string }[] = [
   { mode: 'minimal', label: 'Pulisci', title: 'Rimuovi campi vuoti e placeholder, layout essenziale' },
   { mode: 'print', label: 'Stampa', title: 'Verifica contrasto e leggibilità per la stampa fisica' },
@@ -108,33 +104,26 @@ export default function CardAIControls({
   const hasFrontCover = !!card?.front.coverImageUrl;
   const hasBackCover = !!card?.back.coverImageUrl;
 
+  const modelOptions = availableModels.length > 0 
+    ? availableModels.map(m => ({ value: m.id, label: `${m.name}, ${m.model}` }))
+    : [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }];
+
   const modelSelect = (
-    <select
-      value={aiModel}
-      onChange={(e) => onModelChange(e.target.value)}
+    <AiSelect 
+      value={aiModel} 
+      onChange={(e) => onModelChange(e.target.value)} 
+      options={modelOptions}
       aria-label="Modello AI"
       className="card-ai-model-select"
-    >
-      {availableModels.length > 0 ? (
-        availableModels.map((m) => (
-          <option key={m.id} value={m.id}>{m.name}, {m.model}</option>
-        ))
-      ) : (
-        <option value="deepseek-chat">DeepSeek Chat</option>
-      )}
-    </select>
+    />
   );
 
   const backgroundSection = onGenerateCover ? (
-    <section className="card-ai-section" aria-labelledby="card-ai-section-bg">
-      <header className="card-ai-section__head">
-        <h3 id="card-ai-section-bg" className="card-ai-section__title">
-          Sfondo AI
-        </h3>
-        <p className="card-ai-section__hint">
-          Texture con i colori della card. Nessun testo, nessun logo.
-        </p>
-      </header>
+    <AiSection 
+      title="Sfondo AI" 
+      id="card-ai-section-bg" 
+      hint="Texture con i colori della card. Nessun testo, nessun logo."
+    >
       <div className="card-ai-cover-grid">
         <div className="card-ai-cover-item">
           <span className="card-ai-cover-item__label">Fronte</span>
@@ -180,85 +169,56 @@ export default function CardAIControls({
       >
         {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca per generare entrambi' : '✨ Genera entrambi i lati'}
       </button>
-    </section>
+    </AiSection>
   ) : null;
 
-  const quickGroup = (items: { mode: string; label: string; title: string }[]) => (
-    <div className="card-ai-chip-row">
+  const quickGroup = (items: { mode: string; label: string; title: string }[], label: string) => (
+    <AiActionGrid groupLabel={label}>
       {items.map((a) => (
-        <button
+        <AiActionChip
           key={a.mode}
-          type="button"
-          className="card-ai-chip"
+          label={a.label}
           onClick={() => onRun(a.mode)}
           disabled={isProcessing}
           title={a.title}
-        >
-          {a.label}
-        </button>
+        />
       ))}
-    </div>
+    </AiActionGrid>
   );
 
   const quickSection = (
-    <section className="card-ai-section" aria-labelledby="card-ai-section-style">
-      <header className="card-ai-section__head">
-        <h3 id="card-ai-section-style" className="card-ai-section__title">
-          Stile veloce
-        </h3>
-        <p className="card-ai-section__hint">
-          Modifiche rapide con un click. Cambiano solo i campi della card.
-        </p>
-      </header>
-      <div className="card-ai-quick-group">
-        <span className="card-ai-quick-group__label">Pulisci</span>
-        {quickGroup(QUICK_GROUP_CLEAN)}
-      </div>
-      <div className="card-ai-quick-group">
-        <span className="card-ai-quick-group__label">Personalizza</span>
-        {quickGroup(QUICK_GROUP_PERSONALIZE)}
-      </div>
-    </section>
+    <AiSection 
+      title="Stile veloce" 
+      id="card-ai-section-style" 
+      hint="Modifiche rapide con un click. Cambiano solo i campi della card."
+    >
+      {quickGroup(QUICK_GROUP_CLEAN, 'Pulisci')}
+      {quickGroup(QUICK_GROUP_PERSONALIZE, 'Personalizza')}
+    </AiSection>
   );
 
   const promptSection = (
-    <section className="card-ai-section" aria-labelledby="card-ai-section-prompt">
-      <header className="card-ai-section__head">
-        <h3 id="card-ai-section-prompt" className="card-ai-section__title">
-          Prompt libero
-        </h3>
-        <p className="card-ai-section__hint">
-          Descrivi cosa vuoi cambiare. Es. "titolo in inglese, accent bordeaux".
-        </p>
-      </header>
-      {isDesktop ? (
-        <textarea
-          className="card-ai-textarea"
-          value={aiText}
-          onChange={(e) => onTextChange(e.target.value)}
-          aria-label="Prompt AI personalizzato"
-          placeholder='Es. "titolo in inglese, accent bordeaux, niente social"'
-          rows={2}
-        />
-      ) : (
-        <textarea
-          className="card-ai-textarea"
-          value={aiText}
-          onChange={(e) => onTextChange(e.target.value)}
-          aria-label="Prompt AI personalizzato"
-          placeholder='Es. "titolo in inglese, accent bordeaux, niente social"'
-          rows={4}
-        />
-      )}
+    <AiSection 
+      title="Prompt libero" 
+      id="card-ai-section-prompt" 
+      hint='Descrivi cosa vuoi cambiare. Es. "titolo in inglese, accent bordeaux".'
+    >
+      <AiPromptTextarea
+        value={aiText}
+        onChange={(e) => onTextChange(e.target.value)}
+        aria-label="Prompt AI personalizzato"
+        placeholder='Es. "titolo in inglese, accent bordeaux, niente social"'
+        rows={isDesktop ? 2 : 4}
+      />
       <div className="card-ai-prompt-row">
-        <button
-          type="button"
-          className="card-action-primary"
+        <AiGenerateButton
+          isProcessing={isProcessing}
           onClick={() => onRun('custom')}
-          disabled={isProcessing || !aiText.trim()}
+          disabled={!aiText.trim()}
+          className="card-action-primary"
         >
-          {isProcessing ? 'Elaborazione…' : 'Applica prompt'}
-        </button>
+          Applica prompt
+        </AiGenerateButton>
         <button
           type="button"
           className="card-ai-reset"
@@ -268,32 +228,17 @@ export default function CardAIControls({
           Nuova conversazione
         </button>
       </div>
-    </section>
+    </AiSection>
   );
 
-  if (isDesktop) {
-    return (
-      <div className="card-ai-panel" data-testid="card-ai-panel">
-        <div className="card-ai-model-row">
-          <label className="card-ai-model-label">
-            <span>Modello</span>
-            {modelSelect}
-          </label>
-        </div>
-        {backgroundSection}
-        {quickSection}
-        {promptSection}
-        <AILogPanel logs={logs} isProcessing={isProcessing} />
-      </div>
-    );
-  }
-  // mobile (tab + bottom sheet)
   return (
     <div className="card-ai-panel" data-testid="card-ai-panel">
-      <label className="card-ai-model-label">
-        <span>Modello</span>
-        {modelSelect}
-      </label>
+      <div className="card-ai-model-row" style={!isDesktop ? { display: 'flex', flexDirection: 'column', gap: '4px' } : undefined}>
+        <label className="card-ai-model-label">
+          <span>Modello</span>
+          {modelSelect}
+        </label>
+      </div>
       {backgroundSection}
       {quickSection}
       {promptSection}
