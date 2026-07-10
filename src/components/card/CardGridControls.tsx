@@ -4,6 +4,7 @@ import { deriveGridFromLayout } from '../../utils/documentSchemas';
 import {
   allElementOptionsForSide,
   getAvailableGridElements,
+  gridForCollisions,
   type GridSide,
 } from '../../utils/card/gridElements';
 import {
@@ -63,6 +64,11 @@ export function CardGridControls({
 
   const availableElements = useMemo(() => getAvailableGridElements(side, card), [side, card]);
   const selectedEl = selected ? activeGrid.elements[selected] : undefined;
+  // Collisioni solo vs elementi con contenuto (services vuoto non blocca socials).
+  const collisionGrid = useMemo(
+    () => gridForCollisions(activeGrid, card, side, selected || undefined),
+    [activeGrid, card, side, selected],
+  );
 
   // Fix: il preset selezionato deve restare visibile nel dropdown (prima
   // si resettava subito a ", seleziona preset:"). Stato locale persistente,
@@ -71,19 +77,19 @@ export function CardGridControls({
   useEffect(() => { setPresetChoice(''); }, [side]);
 
   const canMoveLeft  = !!selectedEl && selectedEl.x > 0
-    && !wouldCollideOnMove(activeGrid, selected, -1, 0);
+    && !wouldCollideOnMove(collisionGrid, selected, -1, 0);
   const canMoveUp    = !!selectedEl && selectedEl.y > 0
-    && !wouldCollideOnMove(activeGrid, selected, 0, -1);
+    && !wouldCollideOnMove(collisionGrid, selected, 0, -1);
   const canMoveRight = !!selectedEl && selectedEl.x + selectedEl.w < activeGrid.cols
-    && !wouldCollideOnMove(activeGrid, selected, 1, 0);
+    && !wouldCollideOnMove(collisionGrid, selected, 1, 0);
   const canMoveDown  = !!selectedEl && selectedEl.y + selectedEl.h < activeGrid.rows
-    && !wouldCollideOnMove(activeGrid, selected, 0, 1);
+    && !wouldCollideOnMove(collisionGrid, selected, 0, 1);
   const canShrinkW = !!selectedEl && selectedEl.w > 1;
   const canGrowW   = !!selectedEl && selectedEl.x + selectedEl.w < activeGrid.cols
-    && !wouldCollideOnResize(activeGrid, selected, 1, 0);
+    && !wouldCollideOnResize(collisionGrid, selected, 1, 0);
   const canShrinkH = !!selectedEl && selectedEl.h > 1;
   const canGrowH   = !!selectedEl && selectedEl.y + selectedEl.h < activeGrid.rows
-    && !wouldCollideOnResize(activeGrid, selected, 0, 1);
+    && !wouldCollideOnResize(collisionGrid, selected, 0, 1);
 
   const isSideDisabled = !gridEnabled;
   const disabledTitle = gridEnabled ? '' : 'Griglia OFF, attivala per spostare elementi';
@@ -97,7 +103,7 @@ export function CardGridControls({
       onAfterMove?.({ element: selected, dx, dy, applied: false, reason: 'border' });
       return;
     }
-    if (wouldCollideOnMove(activeGrid, selected, dx, dy)) {
+    if (wouldCollideOnMove(collisionGrid, selected, dx, dy)) {
       onAfterMove?.({ element: selected, dx, dy, applied: false, reason: 'collision' });
       return;
     }
@@ -116,7 +122,7 @@ export function CardGridControls({
       onAfterResize?.({ element: selected, dw, dh, applied: false, reason: 'border' });
       return;
     }
-    if (wouldCollideOnResize(activeGrid, selected, dw, dh)) {
+    if (wouldCollideOnResize(collisionGrid, selected, dw, dh)) {
       onAfterResize?.({ element: selected, dw, dh, applied: false, reason: 'collision' });
       return;
     }
@@ -131,19 +137,20 @@ export function CardGridControls({
     onChangeGrid({ ...activeGrid, cols, rows });
   };
 
-  const handleAlignH = (alignH: 'left' | 'center' | 'right') => {
+  // Atomic: un solo onChangeGrid. Due chiamate separate (alignH poi alignV)
+  // si basavano sullo stesso selectedEl e la seconda sovrascriveva la prima
+  // → es. click "Centro" applicava solo alignV e il nome restava a destra.
+  const handleAlign = (
+    alignH: 'left' | 'center' | 'right',
+    alignV: 'top' | 'center' | 'bottom',
+  ) => {
     if (!selected || !selectedEl) return;
     onChangeGrid({
       ...activeGrid,
-      elements: { ...activeGrid.elements, [selected]: { ...selectedEl, alignH } },
-    });
-  };
-
-  const handleAlignV = (alignV: 'top' | 'center' | 'bottom') => {
-    if (!selected || !selectedEl) return;
-    onChangeGrid({
-      ...activeGrid,
-      elements: { ...activeGrid.elements, [selected]: { ...selectedEl, alignV } },
+      elements: {
+        ...activeGrid.elements,
+        [selected]: { ...selectedEl, alignH, alignV },
+      },
     });
   };
 
@@ -322,8 +329,10 @@ export function CardGridControls({
                   aria-label={pos.title}
                   title={pos.title}
                   onClick={() => {
-                    handleAlignH(pos.alignH as 'left' | 'center' | 'right');
-                    handleAlignV(pos.alignV as 'top' | 'center' | 'bottom');
+                    handleAlign(
+                      pos.alignH as 'left' | 'center' | 'right',
+                      pos.alignV as 'top' | 'center' | 'bottom',
+                    );
                   }}
                   data-testid={`grid-align-${pos.alignH}-${pos.alignV}`}
                 >

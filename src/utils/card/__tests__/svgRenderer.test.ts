@@ -135,6 +135,148 @@ describe('svgRenderer', () => {
       expect(svg).toContain('Supporto');
     });
 
+    it('export socials y follows backGrid.elements.socials.y (preview/export parity)', () => {
+      const base = createGiovanniCardTemplate();
+      const atBottom = {
+        ...base,
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 2, h: 2 },
+            socials: { x: 0, y: 3, w: 2, h: 1 },
+            qr: { x: 2, y: 0, w: 2, h: 4 },
+          },
+        },
+      };
+      const movedUp = {
+        ...atBottom,
+        backGrid: {
+          ...atBottom.backGrid,
+          elements: {
+            ...atBottom.backGrid.elements,
+            socials: { x: 0, y: 2, w: 2, h: 1 },
+          },
+        },
+      };
+      const svgBottom = buildBackSvg(atBottom, 1024, 663);
+      const svgUp = buildBackSvg(movedUp, 1024, 663);
+      // Extract first socials <text> y= attribute (italic socials lines).
+      const yOf = (svg: string) => {
+        const m = svg.match(/font-style="italic"[^>]*y="([\d.]+)"|y="([\d.]+)"[^>]*font-style="italic"/);
+        // socials lines always have font-style italic — find y near LinkedIn
+        const idx = svg.indexOf('LinkedIn');
+        const slice = svg.slice(Math.max(0, idx - 200), idx + 50);
+        const ym = slice.match(/y="([\d.]+)"/);
+        return ym ? parseFloat(ym[1]) : NaN;
+      };
+      const yBottom = yOf(svgBottom);
+      const yUp = yOf(svgUp);
+      expect(yBottom).not.toBeNaN();
+      expect(yUp).not.toBeNaN();
+      expect(yUp).toBeLessThan(yBottom);
+    });
+
+    it('export name respects alignH center (not stuck on right)', () => {
+      const base = createGiovanniCardTemplate();
+      const card = {
+        ...base,
+        grid: {
+          ...base.grid!,
+          elements: {
+            ...base.grid!.elements,
+            name: { x: 2, y: 0, w: 2, h: 1, alignH: 'center' as const, alignV: 'center' as const },
+          },
+        },
+      };
+      const svg = buildFrontSvg(card, 1024, 663);
+      // name cell: x=2/4*1024=512, w=512 → center textX = 512+256 = 768
+      expect(svg).toMatch(/text-anchor="middle"/);
+      const nameIdx = svg.indexOf('GIOVANNI CIDU');
+      const slice = svg.slice(Math.max(0, nameIdx - 250), nameIdx);
+      expect(slice).toContain('text-anchor="middle"');
+      const xMatch = slice.match(/x="([\d.]+)"[^>]*font-weight="800"|font-weight="800"[^>]*x="([\d.]+)"/);
+      // Fallback: last x= before the name text
+      const xs = [...slice.matchAll(/x="([\d.]+)"/g)].map((m) => parseFloat(m[1]));
+      const textX = xs[xs.length - 1];
+      expect(textX).toBeGreaterThan(700);
+      expect(textX).toBeLessThan(850);
+    });
+
+    it('contacts font is decent (comparable to socials) even in a short (h:1) cell', () => {
+      // Regression: contacts used a fixed 0.09/0.12 factor of min(cw,ch)
+      // with no shrink-to-fit, so a resized h:1 contacts cell rendered
+      // "microscopic" text next to socials/services (~0.22-0.25 factor).
+      const base = createGiovanniCardTemplate();
+      const card = {
+        ...base,
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 2, h: 1 },
+            socials: { x: 0, y: 1, w: 2, h: 1 },
+            qr: { x: 2, y: 0, w: 2, h: 4 },
+          },
+        },
+      };
+      const svg = buildBackSvg(card, 1024, 663);
+      const keySizeMatch = svg.match(/font-size="([\d.]+)"[^>]*font-weight="700"[^>]*opacity="0\.55"/);
+      const valSizeMatch = svg.match(/font-size="([\d.]+)"[^>]*font-weight="500"[^>]*fill="#1a1a2e"[^>]*dominant-baseline/);
+      expect(keySizeMatch).not.toBeNull();
+      const keySize = parseFloat(keySizeMatch![1]);
+      // Old behaviour produced ~7-9px key size on a 663/4≈166px-tall cell.
+      // New behaviour should be clearly larger (double digits).
+      expect(keySize).toBeGreaterThanOrEqual(10);
+      if (valSizeMatch) {
+        expect(parseFloat(valSizeMatch[1])).toBeGreaterThanOrEqual(10);
+      }
+    });
+
+    it('export honours card.style.fontFamily instead of hardcoded Inter (preview/export parity)', () => {
+      // Regression: every <text> in the SVG export hardcoded
+      // font-family="Inter, system-ui, sans-serif" regardless of the
+      // font the user picked in the style panel (e.g. "Oswald"), while
+      // CardPreview.tsx applies card.style.fontFamily via CSS. Preview
+      // and export showed different fonts as a result.
+      const base = createGiovanniCardTemplate();
+      const card = { ...base, style: { ...base.style, fontFamily: 'Oswald' } };
+      const frontSvg = buildFrontSvg(card, 1024, 663);
+      const backSvg = buildBackSvg(card, 1024, 663);
+      expect(frontSvg).not.toContain('font-family="Inter, system-ui, sans-serif"');
+      expect(backSvg).not.toContain('font-family="Inter, system-ui, sans-serif"');
+      expect(frontSvg).toContain('font-family="Oswald, sans-serif"');
+      expect(backSvg).toContain('font-family="Oswald, sans-serif"');
+    });
+
+    it('quotes multi-word font families and applies a serif fallback for serif fonts', () => {
+      const base = createGiovanniCardTemplate();
+      const serifCard = { ...base, style: { ...base.style, fontFamily: 'Playfair Display' } };
+      const svg = buildFrontSvg(serifCard, 1024, 663);
+      expect(svg).toContain("font-family=\"'Playfair Display', serif\"");
+    });
+
+    it('socials in preview/export never render an isolated "·" separator (regression)', () => {
+      // Regression: joining "Platform · handle" entries with ' · ' and
+      // then wrapping the flat string at whitespace could leave a lone
+      // "·" as the first token of a wrapped line (e.g. "· GitHub ...").
+      const base = createGiovanniCardTemplate();
+      const card = {
+        ...base,
+        back: {
+          ...base.back,
+          socials: [
+            { platform: 'LinkedIn', url: 'https://linkedin.com/in/giovanni-cidu-16162b212' },
+            { platform: 'GitHub', url: 'https://github.com/GiovanniCidu' },
+          ],
+        },
+      };
+      const svg = buildBackSvg(card, 1024, 663);
+      expect(svg).not.toContain('·');
+      expect(svg).toContain('LinkedIn');
+      expect(svg).toContain('GitHub');
+    });
+
     it('buildCardSvg rotate=90 swaps dimensions and wraps content in rotated group', () => {
       const svg = buildCardSvg(createEmptyCard(), 'front', 1000, 600, { rotate: 90 });
       expect(svg).toMatch(/viewBox="0 0 600 1000"/);

@@ -106,6 +106,30 @@ describe('Grid editor (B2)', () => {
     expect(front.className).toContain('grid-mode');
   });
 
+  it('applies BOTH alignH and alignV atomically (regression: center only flipped V)', () => {
+    // Template Giovanni starts with name alignH=center (after fix). Force right first,
+    // then click center-center and assert both axes land on the cell style.
+    const base = createGiovanniCardTemplate();
+    const card = {
+      ...base,
+      grid: {
+        ...base.grid!,
+        elements: {
+          ...base.grid!.elements,
+          name: { ...base.grid!.elements.name!, alignH: 'right' as const, alignV: 'bottom' as const },
+        },
+      },
+    };
+    renderEditor({ initialCard: card });
+    fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
+    fireEvent.change(screen.getByLabelText(/Elemento selezionato/i), { target: { value: 'name' } });
+    fireEvent.click(screen.getByTestId('grid-align-center-center'));
+    const nameCell = screen.getByTestId('grid-el-name');
+    expect(nameCell.style.justifyContent).toBe('center');
+    expect(nameCell.style.alignItems).toBe('center');
+    expect(nameCell.style.textAlign).toBe('center');
+  });
+
   it('moves the selected element left when ← is pressed', () => {
     renderEditor();
     const gridToggle = screen.getByLabelText(/Mostra griglia/i);
@@ -389,9 +413,11 @@ describe('Grid editor (B2)', () => {
     expect(growH).toBeDisabled();
   });
 
-  it('grid editor back: moves socials up blocked by services (Giovanni template)', () => {
+  it('grid editor back: moves socials up blocked by services with content', () => {
+    const base = createGiovanniCardTemplate();
     const card = {
-      ...createGiovanniCardTemplate(),
+      ...base,
+      back: { ...base.back, services: ['Siti web', 'SEO'] },
       backGrid: {
         cols: 4,
         rows: 4,
@@ -412,6 +438,22 @@ describe('Grid editor (B2)', () => {
     fireEvent.change(elSelect, { target: { value: 'socials' } });
     const upBtn = screen.getByRole('button', { name: /Sposta su/i });
     expect(upBtn).toBeDisabled();
+  });
+
+  it('grid editor back: moves socials up allowed when services cell is empty', () => {
+    // Giovanni template has services rect but empty services list → ghost
+    // cell must not block socials (regression: freccia Su sempre disabled).
+    const card = createGiovanniCardTemplate();
+    renderEditor({ initialCard: card });
+    const gridToggle = screen.getByLabelText(/Mostra griglia/i);
+    fireEvent.click(gridToggle);
+    const sideSelect = screen.getByLabelText(/Lato griglia/i) as HTMLSelectElement;
+    fireEvent.change(sideSelect, { target: { value: 'back' } });
+    const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+    fireEvent.change(elSelect, { target: { value: 'socials' } });
+    const upBtn = screen.getByRole('button', { name: /Sposta su/i });
+    expect(upBtn).not.toBeDisabled();
+    fireEvent.click(upBtn);
   });
 
   it('grid editor back: shrinks contacts width (Giovanni template)', () => {

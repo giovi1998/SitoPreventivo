@@ -14,6 +14,24 @@ export function fs(base: number, fontScale: number): number {
   return Math.max(1, Math.round(base * clamped));
 }
 
+// v2.7 (bug fix): l'export SVG/PDF/PNG ignorava `card.style.fontFamily`
+// e usava sempre "Inter, system-ui, sans-serif" a prescindere dal font
+// scelto dall'utente (es. "Oswald"), mentre la preview React lo applica
+// via CSS su tutta la card (`CardPreview.tsx`). Risultato: preview ed
+// export mostravano font diversi. Fix: deriviamo lo stesso valore CSS
+// (con fallback generico coerente: serif/monospace/sans-serif) e lo
+// usiamo in ogni `font-family="..."` dell'SVG generato.
+const SERIF_FONTS = new Set(['Georgia', 'Times New Roman', 'Playfair Display', 'Merriweather']);
+const MONOSPACE_FONTS = new Set(['Courier New']);
+
+export function svgFontFamily(card: BusinessCard): string {
+  const raw = (card.style.fontFamily || 'Inter').trim() || 'Inter';
+  const generic = MONOSPACE_FONTS.has(raw) ? 'monospace' : SERIF_FONTS.has(raw) ? 'serif' : 'sans-serif';
+  const safe = raw.replace(/['"]/g, '');
+  const quoted = safe.includes(' ') ? `'${safe}'` : safe;
+  return `${quoted}, ${generic}`;
+}
+
 export function escapeXml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -54,6 +72,7 @@ export function buildFrontSvg(
   const hasPhoto = !!card.front.photoUrl;
   const hasLogo = !!card.front.logoUrl;
   const fontScale = card.style.fontScale ?? 1;
+  const fontFamily = svgFontFamily(card);
 
   const pad = Math.max(10, Math.round(pxW * 0.04));
   const stripW = Math.max(2, Math.round(pxW * 0.008));
@@ -179,7 +198,7 @@ export function buildFrontSvg(
       const anchor = alignH === 'left' ? 'start' : alignH === 'right' ? 'end' : 'middle';
       const opacityAttr = cfg.opacity !== undefined ? ` opacity="${cfg.opacity}"` : '';
       const letterAttr = cfg.letterSpacing ? ` letter-spacing="${cfg.letterSpacing}"` : '';
-      out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${fontSize}" font-weight="${cfg.weight}" fill="${cfg.color}" text-anchor="${anchor}" dominant-baseline="text-before-edge"${letterAttr}${opacityAttr}>${escapeXml(cfg.text)}</text>`;
+      out += `<text x="${textX}" y="${textY}" font-family="${fontFamily}" font-size="${fontSize}" font-weight="${cfg.weight}" fill="${cfg.color}" text-anchor="${anchor}" dominant-baseline="text-before-edge"${letterAttr}${opacityAttr}>${escapeXml(cfg.text)}</text>`;
     }
   }
 
@@ -204,15 +223,15 @@ export function buildFrontSvg(
     const titleSize = fs(photoSize * 0.09, fontScale);
     const companySize = fs(photoSize * 0.075, fontScale);
     if (card.front.name) {
-      out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${nameSize}" font-weight="800" fill="${text}" letter-spacing="0.5">${escapeXml(card.front.name.toUpperCase())}</text>`;
+      out += `<text x="${textX}" y="${textY}" font-family="${fontFamily}" font-size="${nameSize}" font-weight="800" fill="${text}" letter-spacing="0.5">${escapeXml(card.front.name.toUpperCase())}</text>`;
       textY += nameSize * 1.2;
     }
     if (card.front.title) {
-      out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${titleSize}" font-weight="600" fill="${accent}">${escapeXml(card.front.title)}</text>`;
+      out += `<text x="${textX}" y="${textY}" font-family="${fontFamily}" font-size="${titleSize}" font-weight="600" fill="${accent}">${escapeXml(card.front.title)}</text>`;
       textY += titleSize * 1.3;
     }
     if (card.front.company) {
-      out += `<text x="${textX}" y="${textY}" font-family="Inter, system-ui, sans-serif" font-size="${companySize}" font-weight="400" fill="${text}" opacity="0.78">${escapeXml(card.front.company)}</text>`;
+      out += `<text x="${textX}" y="${textY}" font-family="${fontFamily}" font-size="${companySize}" font-weight="400" fill="${text}" opacity="0.78">${escapeXml(card.front.company)}</text>`;
     }
   }
 
@@ -235,6 +254,7 @@ export function buildBackSvg(
   const stripW = Math.max(2, Math.round(pxW * 0.008));
   const pad = Math.max(10, Math.round(pxW * 0.04));
   const fontScale = card.style.fontScale ?? 1;
+  const fontFamily = svgFontFamily(card);
 
   const hostname = deriveHostname(card);
   const headerWord = hostname || card.front.company || '';
@@ -281,9 +301,9 @@ export function buildBackSvg(
     const eyebrowSize = fs(pxH * 0.055, fontScale);
     const wordmarkSize = fs(pxH * 0.052, fontScale);
     const headerTextH = Math.max(eyebrowSize, wordmarkSize);
-    out += `<text x="${pad + stripW}" y="${pad + eyebrowSize}" font-family="Inter, system-ui, sans-serif" font-size="${eyebrowSize}" font-weight="700" fill="${accent}" letter-spacing="2.5">CONTATTI</text>`;
+    out += `<text x="${pad + stripW}" y="${pad + eyebrowSize}" font-family="${fontFamily}" font-size="${eyebrowSize}" font-weight="700" fill="${accent}" letter-spacing="2.5">CONTATTI</text>`;
     if (headerWord) {
-      out += `<text x="${pxW - pad}" y="${pad + eyebrowSize}" font-family="Inter, system-ui, sans-serif" font-size="${wordmarkSize}" font-weight="600" fill="${accent}" text-anchor="end">${escapeXml(headerWord)}</text>`;
+      out += `<text x="${pxW - pad}" y="${pad + eyebrowSize}" font-family="${fontFamily}" font-size="${wordmarkSize}" font-weight="600" fill="${accent}" text-anchor="end">${escapeXml(headerWord)}</text>`;
     }
     const divY = pad + headerTextH + Math.round(pxH * 0.02);
     out += `<line x1="${pad + stripW}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.4" stroke-dasharray="3,2" opacity="0.18"/>`;
@@ -305,29 +325,59 @@ export function buildBackSvg(
       const cy = contactsEl.y * cellH + bodyTop + pad * 0.5;
       const cw = contactsEl.w * cellW - pad;
       const ch = contactsEl.h * cellH - pad;
-      const keySize = fs(Math.min(cw, ch) * 0.09, fontScale);
-      const valSize = fs(Math.min(cw, ch) * 0.12, fontScale);
-      const lineGap = Math.max(keySize, valSize) * 1.25;
+
+      const contactEntries: Array<{ key: string; value: string; color?: string; isAccent?: boolean }> = [];
+      if (card.back.phone) contactEntries.push({ key: 'Telefono', value: card.back.phone });
+      if (card.back.email) contactEntries.push({ key: 'Email', value: card.back.email });
+      if (card.back.website && !hasQr) contactEntries.push({ key: 'Web', value: card.back.website, color: accent, isAccent: true });
+      if (card.back.address) contactEntries.push({ key: 'Indirizzo', value: card.back.address });
+      if (card.back.vatNumber) contactEntries.push({ key: 'P.IVA', value: card.back.vatNumber });
+
+      // v2.6: contacts were rendering at 0.09/0.12 of min(cw,ch), far
+      // smaller than socials/services (~0.22-0.25) in the same body
+      // grid, so a resized (h:1) contacts cell looked "microscopic"
+      // next to socials. Start from a comparable base and shrink-to-fit
+      // like socials/services do, instead of a fixed tiny factor.
+      let keySize = fs(Math.min(cw, ch) * 0.16, fontScale);
+      let valSize = fs(Math.min(cw, ch) * 0.2, fontScale);
+      const wrappableKeys = new Set(['Email', 'Telefono']);
+      const colLabelWFor = (ks: number) => Math.max(cw * 0.22, ks * 6, pad * 1.5);
+      const lineGapFor = (ks: number, vs: number) => Math.max(ks, vs) * 1.25;
+      const linesFor = (vs: number, ks: number) => {
+        const colLabelW = colLabelWFor(ks);
+        const valueMaxW = Math.max(10, cw - colLabelW - pad * 0.5);
+        return contactEntries.reduce((total, entry) => {
+          const wrapped = wrappableKeys.has(entry.key)
+            ? wrapTextAtWhitespace(entry.value, valueMaxW, vs)
+            : [entry.value];
+          return total + wrapped.length;
+        }, 0);
+      };
+      const neededHeight = (ks: number, vs: number) => {
+        const lines = Math.max(1, linesFor(vs, ks));
+        return ks + pad * 0.25 + lines * lineGapFor(ks, vs);
+      };
+      while (keySize > 8 && neededHeight(keySize, valSize) > ch) {
+        keySize *= 0.9;
+        valSize *= 0.9;
+      }
+
+      const lineGap = lineGapFor(keySize, valSize);
       let lineY = cy + keySize + pad * 0.25;
-      // Empirical width for the uppercase bold label column.
-      // Longest common labels: "INDIRIZZO" (~5.4*keySize), "TELEFONO" (~4.8*keySize).
-      const colLabelW = Math.max(cw * 0.22, keySize * 6, pad * 1.5);
+      const colLabelW = colLabelWFor(keySize);
       const valueMaxW = Math.max(10, cw - colLabelW - pad * 0.5);
-      const renderContact = (key: string, value: string, color: string = text, isAccent: boolean = false) => {
-        const isWrap = key === 'Email' || key === 'Telefono';
-        const wrapped = isWrap ? wrapTextAtWhitespace(value, valueMaxW, valSize) : [value];
-        out += `<text x="${cx}" y="${lineY}" font-family="Inter, system-ui, sans-serif" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4" dominant-baseline="text-before-edge">${escapeXml(key.toUpperCase())}</text>`;
+      const renderContact = (entry: { key: string; value: string; color?: string; isAccent?: boolean }) => {
+        const wrapped = wrappableKeys.has(entry.key)
+          ? wrapTextAtWhitespace(entry.value, valueMaxW, valSize)
+          : [entry.value];
+        out += `<text x="${cx}" y="${lineY}" font-family="${fontFamily}" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4" dominant-baseline="text-before-edge">${escapeXml(entry.key.toUpperCase())}</text>`;
         const valueX = cx + colLabelW;
         wrapped.forEach((line) => {
-          out += `<text x="${valueX}" y="${lineY}" font-family="Inter, system-ui, sans-serif" font-size="${valSize}" font-weight="500" fill="${isAccent ? accent : color}" dominant-baseline="text-before-edge">${escapeXml(line)}</text>`;
+          out += `<text x="${valueX}" y="${lineY}" font-family="${fontFamily}" font-size="${valSize}" font-weight="500" fill="${entry.isAccent ? accent : (entry.color ?? text)}" dominant-baseline="text-before-edge">${escapeXml(line)}</text>`;
           lineY += lineGap;
         });
       };
-      if (card.back.phone) renderContact('Telefono', card.back.phone);
-      if (card.back.email) renderContact('Email', card.back.email);
-      if (card.back.website && !hasQr) renderContact('Web', card.back.website, accent, true);
-      if (card.back.address) renderContact('Indirizzo', card.back.address);
-      if (card.back.vatNumber) renderContact('P.IVA', card.back.vatNumber);
+      contactEntries.forEach(renderContact);
       // v2.5: fallback — when the grid has no socials cell (the new
       // default back grid gives that space to services), render the
       // socials as a small italic line at the bottom of the contacts
@@ -337,11 +387,11 @@ export function buildBackSvg(
           .map((s) => {
             const handle = deriveHandle(s.url);
             const value = handle || s.url;
-            return `${s.platform} · ${value}`;
+            return `${s.platform} ${value}`;
           })
-          .join(' · ');
-        const socialSize = fs(Math.min(cw, ch) * 0.1, fontScale);
-        out += `<text x="${cx}" y="${lineY + Math.round(ch * 0.04)}" font-family="Inter, system-ui, sans-serif" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" dominant-baseline="text-before-edge">${escapeXml(socialsText)}</text>`;
+          .join('   ');
+        const socialSize = fs(Math.min(cw, ch) * 0.14, fontScale);
+        out += `<text x="${cx}" y="${lineY + Math.round(ch * 0.04)}" font-family="${fontFamily}" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" dominant-baseline="text-before-edge">${escapeXml(socialsText)}</text>`;
       }
     }
 
@@ -359,7 +409,7 @@ export function buildBackSvg(
       if (servicesLabelText) {
         // v2.5: bumped from 0.18 — label was getting lost in the cell.
         labelSize = fs(Math.min(sw, sh) * 0.22, fontScale);
-        out += `<text x="${sx}" y="${svcY + labelSize}" font-family="Inter, system-ui, sans-serif" font-size="${labelSize}" font-weight="700" fill="${accent}" letter-spacing="1.2" opacity="0.7" dominant-baseline="text-before-edge">${escapeXml(servicesLabelText.toUpperCase())}</text>`;
+        out += `<text x="${sx}" y="${svcY + labelSize}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="700" fill="${accent}" letter-spacing="1.2" opacity="0.7" dominant-baseline="text-before-edge">${escapeXml(servicesLabelText.toUpperCase())}</text>`;
         svcY += labelSize * 1.4;
       }
       const hasLongService = services.some((s) => s.length >= 40);
@@ -381,35 +431,53 @@ export function buildBackSvg(
       }
       const finalLineH = svcLineH(svcSize);
       services.forEach((svc, idx) => {
-        out += `<text x="${sx}" y="${svcY + (idx + 1) * finalLineH}" font-family="Inter, system-ui, sans-serif" font-size="${svcSize}" font-weight="800" fill="${accent}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
+        out += `<text x="${sx}" y="${svcY + (idx + 1) * finalLineH}" font-family="${fontFamily}" font-size="${svcSize}" font-weight="800" fill="${accent}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
       });
     }
 
     const socialsEl = grid.elements.socials;
     if (socialsEl && socials.length > 0) {
-      const sx = socialsEl.x * cellW + pad * 0.5;
-      const sy = socialsEl.y * cellH + bodyTop + pad * 0.5;
-      const sw = socialsEl.w * cellW - pad;
-      const sh = socialsEl.h * cellH - pad;
+      // Full cell box (same coordinate system as preview CSS grid).
+      const cellX = socialsEl.x * cellW;
+      const cellY = socialsEl.y * cellH + bodyTop;
+      const cellBoxW = socialsEl.w * cellW;
+      const cellBoxH = socialsEl.h * cellH;
+      const innerPad = pad * 0.35;
+      const sx = cellX + innerPad;
+      const sw = Math.max(10, cellBoxW - innerPad * 2);
+      const sh = Math.max(10, cellBoxH - innerPad * 2);
       const socialsText = socials
         .map((s) => {
           const handle = deriveHandle(s.url);
           const value = handle || s.url;
-          return `${s.platform} · ${value}`;
+          return `${s.platform} ${value}`;
         })
-        .join(' · ');
+        .join('   ');
       let socialSize = fs(Math.min(sw, sh) * 0.22, fontScale);
       const socialLineH = (s: number) => s * 1.35;
       const neededSocialH = (s: number) => {
-        const lines = wrapTextAtWhitespace(socialsText, Math.max(10, sw - pad * 0.5), s);
-        return lines.length * socialLineH(s) + pad * 0.5;
+        const lines = wrapTextAtWhitespace(socialsText, sw, s);
+        return lines.length * socialLineH(s);
       };
       while (socialSize > 6 && neededSocialH(socialSize) > sh) {
         socialSize *= 0.92;
       }
-      const lines = wrapTextAtWhitespace(socialsText, Math.max(10, sw - pad * 0.5), socialSize);
+      const lines = wrapTextAtWhitespace(socialsText, sw, socialSize);
+      const blockH = lines.length * socialLineH(socialSize);
+      const alignV = socialsEl.alignV ?? 'top';
+      const alignH = socialsEl.alignH ?? 'left';
+      let startY = cellY + innerPad;
+      if (alignV === 'center') startY = cellY + (cellBoxH - blockH) / 2;
+      else if (alignV === 'bottom') startY = cellY + cellBoxH - blockH - innerPad;
+      const anchor = alignH === 'right' ? 'end' : alignH === 'center' ? 'middle' : 'start';
+      const textX = alignH === 'right'
+        ? cellX + cellBoxW - innerPad
+        : alignH === 'center'
+          ? cellX + cellBoxW / 2
+          : sx;
       lines.forEach((line, idx) => {
-        out += `<text x="${sx}" y="${sy + pad * 0.25 + (idx + 1) * socialLineH(socialSize)}" font-family="Inter, system-ui, sans-serif" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" dominant-baseline="text-before-edge">${escapeXml(line)}</text>`;
+        const lineY = startY + idx * socialLineH(socialSize);
+        out += `<text x="${textX}" y="${lineY}" font-family="${fontFamily}" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" text-anchor="${anchor}" dominant-baseline="text-before-edge">${escapeXml(line)}</text>`;
       });
     }
 
@@ -458,7 +526,7 @@ export function buildBackSvg(
       const belowY = qrY + qrSize + Math.round(cellH * 0.04);
       if (card.back.qrLabel) {
         const labelSize = fs(Math.min(qw, qh) * 0.08, fontScale);
-        out += `<text x="${qx + qw / 2}" y="${belowY + labelSize}" font-family="Inter, system-ui, sans-serif" font-size="${labelSize}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
+        out += `<text x="${qx + qw / 2}" y="${belowY + labelSize}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
       }
     }
   }
@@ -482,8 +550,8 @@ export function buildBackSvg(
     let lineY = hasQr ? qrY - Math.round(pxH * 0.02) : pad + Math.round(pxH * 0.08);
     const lineGap = valSize * 1.35;
     const renderContact = (key: string, value: string, color: string = text, isAccent: boolean = false) => {
-      out += `<text x="${contactsX}" y="${lineY}" font-family="Inter, system-ui, sans-serif" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4">${escapeXml(key.toUpperCase())}</text>`;
-      out += `<text x="${contactsX + Math.round(contactsW * 0.22)}" y="${lineY}" font-family="Inter, system-ui, sans-serif" font-size="${valSize}" font-weight="500" fill="${isAccent ? accent : color}">${escapeXml(value)}</text>`;
+      out += `<text x="${contactsX}" y="${lineY}" font-family="${fontFamily}" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4">${escapeXml(key.toUpperCase())}</text>`;
+      out += `<text x="${contactsX + Math.round(contactsW * 0.22)}" y="${lineY}" font-family="${fontFamily}" font-size="${valSize}" font-weight="500" fill="${isAccent ? accent : color}">${escapeXml(value)}</text>`;
       lineY += lineGap;
     };
     if (card.back.phone) renderContact('Telefono', card.back.phone);
@@ -498,10 +566,10 @@ export function buildBackSvg(
         .map((s) => {
           const handle = deriveHandle(s.url);
           const value = handle || s.url;
-          return `${s.platform} · ${value}`;
+          return `${s.platform} ${value}`;
         })
-        .join(' · ');
-      out += `<text x="${contactsX}" y="${socialsY + valSize * 0.3}" font-family="Inter, system-ui, sans-serif" font-size="${fs(pxH * 0.04, fontScale)}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic">${escapeXml(socialsText)}</text>`;
+        .join('   ');
+      out += `<text x="${contactsX}" y="${socialsY + valSize * 0.3}" font-family="${fontFamily}" font-size="${fs(pxH * 0.04, fontScale)}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic">${escapeXml(socialsText)}</text>`;
     }
 
     if (hasQr) {
@@ -530,7 +598,7 @@ export function buildBackSvg(
       out += `<g transform="translate(${qrX + 4} ${qrY + 4}) scale(${innerScale})">${extractQrInner(qrSvg)}</g>`;
     }
     if (card.back.qrLabel && hasQr) {
-      out += `<text x="${qrX + fallbackQrSize / 2}" y="${qrY + fallbackQrSize + Math.round(pxH * 0.035)}" font-family="Inter, system-ui, sans-serif" font-size="${Math.round(pxH * 0.034)}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
+      out += `<text x="${qrX + fallbackQrSize / 2}" y="${qrY + fallbackQrSize + Math.round(pxH * 0.035)}" font-family="${fontFamily}" font-size="${Math.round(pxH * 0.034)}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
     }
   }
 

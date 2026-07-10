@@ -50,6 +50,7 @@ import {
   type PromptLibraryEntry,
 } from '../../utils/promptLibrary';
 import { buildCardPhotoBrief } from '../../utils/card/photoBrief';
+import { pruneCardGrids } from '../../utils/card/gridElements';
 
 const MAX_RAW_BYTES = 5_000_000;
 const AUTO_SAVE_DELAY_MS = 30_000;
@@ -375,7 +376,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
     const title = (customName?.trim() || defaultCardTitle(card));
     const sanitized: BusinessCard = {
-      ...card,
+      ...pruneCardGrids(card),
       title,
       userEmail,
       updatedAt: new Date().toISOString(),
@@ -528,7 +529,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     autoSaveTimerRef.current = setTimeout(() => {
       const title = defaultCardTitle(card);
       const sanitized: BusinessCard = {
-        ...card,
+        ...pruneCardGrids(card),
         title,
         userEmail,
         updatedAt: new Date().toISOString(),

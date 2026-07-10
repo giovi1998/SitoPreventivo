@@ -396,9 +396,9 @@ const BackPreview = React.memo(function BackPreview({
         .map((s) => {
           const handle = deriveHandle(s.url);
           const value = handle || s.url;
-          return `${s.platform} · ${value}`;
+          return `${s.platform} ${value}`;
         })
-        .join(' · ')}
+        .join('   ')}
     </div>
   ) : null;
 

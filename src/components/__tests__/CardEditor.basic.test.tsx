@@ -134,7 +134,7 @@ describe('CardEditor', () => {
       renderEditor();
       const exportBtn = screen.getByRole('button', { name: /Esporta ▾|Esporta/i });
       fireEvent.click(exportBtn);
-      const pdfItem = await screen.findByRole('menuitem', { name: /PDF 10-up/i });
+      const pdfItem = await screen.findByRole('menuitem', { name: /PDF 10-up \(tipografia/i });
       fireEvent.click(pdfItem);
       await waitFor(() => expect(mockGenPDF).toHaveBeenCalled());
       expect(createObjectURL).toHaveBeenCalled();
@@ -282,7 +282,8 @@ describe('CardEditor', () => {
     renderEditor();
     const exportBtn = screen.getByRole('button', { name: /Esporta ▾|Esporta/i });
     fireEvent.click(exportBtn);
-    expect(screen.getByRole('menuitem', { name: /PDF 10-up/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /PDF 10-up \(tipografia/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /PDF 10-up \(pulito/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /PNG fronte/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /PNG retro/i })).toBeInTheDocument();
   });

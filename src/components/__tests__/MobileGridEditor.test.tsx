@@ -91,7 +91,11 @@ describe('MobileGridEditor (Phase 2.2 API)', () => {
   it('arrow buttons are disabled when move would cause collision (BLOCK)', () => {
     const card: BusinessCard = {
       ...createEmptyCard(),
-      front: { ...createEmptyCard().front, name: 'Mario' },
+      // photoUrl required: gridForCollisions ignores elements with no real
+      // content (e.g. an empty photo cell must not block movement), so the
+      // photo element only participates in the collision check below when
+      // it actually has an image.
+      front: { ...createEmptyCard().front, name: 'Mario', photoUrl: 'data:image/png;base64,PHOTO' },
       grid: {
         cols: 4,
         rows: 4,

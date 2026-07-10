@@ -116,11 +116,22 @@ export function mergeCardWithDefaults(input: Partial<BusinessCard> | null | unde
     front: { ...base.front, ...(input.front || {}) },
     back: { ...base.back, ...(input.back || {}) },
     style: { ...base.style, ...(input.style || {}) },
+    // Prefer the saved grid elements as-is. Do NOT re-inject empty cells from
+    // base presets (e.g. services) — that recreated ghost collision blockers
+    // and made export/preview diverge after reopen from Collection.
     grid: input.grid
-      ? { ...base.grid!, ...input.grid, elements: { ...base.grid!.elements, ...(input.grid.elements || {}) } }
+      ? {
+          cols: input.grid.cols ?? base.grid!.cols,
+          rows: input.grid.rows ?? base.grid!.rows,
+          elements: { ...(input.grid.elements || {}) },
+        }
       : base.grid,
     backGrid: input.backGrid
-      ? { ...base.backGrid!, ...input.backGrid, elements: { ...base.backGrid!.elements, ...(input.backGrid.elements || {}) } }
+      ? {
+          cols: input.backGrid.cols ?? base.backGrid!.cols,
+          rows: input.backGrid.rows ?? base.backGrid!.rows,
+          elements: { ...(input.backGrid.elements || {}) },
+        }
       : base.backGrid,
   };
 }
@@ -649,7 +660,7 @@ export function createGiovanniCardTemplate(): BusinessCard {
       rows: 4,
       elements: {
         photo: { x: 0, y: 0, w: 2, h: 4 },
-        name: { x: 2, y: 0, w: 2, h: 1, alignH: 'right', alignV: 'bottom' },
+        name: { x: 2, y: 0, w: 2, h: 1, alignH: 'center', alignV: 'center' },
         title: { x: 2, y: 1, w: 2, h: 1, alignH: 'center', alignV: 'top' },
         logo: { x: 2, y: 2, w: 2, h: 2, alignH: 'center', alignV: 'center' },
       },

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type { BusinessCard } from '../utils/documentSchemas';
 import { SIZE_PRESETS_MM } from '../utils/documentSchemas';
 import { generateCardPDF, generateCardPng, buildCardSvg } from '../utils/cardGenerator';
+import { pruneCardGrids } from '../utils/card/gridElements';
 import type { Tier } from '../utils/watermark';
 
 export type ExportingState = 'pdf' | 'pdf-clean' | 'png-front' | 'png-back' | null;
@@ -86,7 +87,7 @@ export function useCardExport(
 
   const exportJson = useCallback(() => {
     try {
-      const json = JSON.stringify(card, null, 2);
+      const json = JSON.stringify(pruneCardGrids(card), null, 2);
       downloadBlob(new Blob([json], { type: 'application/json' }), `card_${card.id}.json`);
       addToast('success', 'JSON scaricato (backup card data)');
     } catch (err) {
