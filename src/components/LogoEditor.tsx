@@ -259,7 +259,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
           className={`logo-tab${tab === 'ai' ? ' active' : ''}`}
           onClick={() => setTab('ai')}
         >
-          AI Generation
+          AI Assist
           {logo.builder.backgroundImage && (
             <span className="logo-tab-ai-badge" aria-label="Background AI attivo" title="Background AI attivo" />
           )}

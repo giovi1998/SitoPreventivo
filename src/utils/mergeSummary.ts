@@ -4,6 +4,8 @@ export interface MergeSummary {
   summary: string;
 }
 
+import { mapAiError } from './ai/mapAiError';
+
 export function summarizeMergeChanges(changes: string[]): MergeSummary {
   let tools = 0;
   let errors = 0;
@@ -24,18 +26,5 @@ export function summarizeMergeChanges(changes: string[]): MergeSummary {
 }
 
 export function buildErrorSuggestion(errorMessage: string): string {
-  const lower = errorMessage.toLowerCase();
-  if (lower.includes('402') || lower.includes('payment') || lower.includes('credito')) {
-    return 'Credito DeepSeek esaurito. Ricarica su platform.deepseek.com e riprova.';
-  }
-  if (lower.includes('429') || lower.includes('rate limit') || lower.includes('troppe')) {
-    return 'Troppe richieste AI. Attendi 30s e riprova.';
-  }
-  if (lower.includes('timeout') || lower.includes('network') || lower.includes('fetch')) {
-    return 'Connessione assente o lenta. Verifica la rete e riprova.';
-  }
-  if (lower.includes('json') || lower.includes('parse')) {
-    return 'AI non ha restituito JSON valido. Prova con un prompt più specifico (es. "cambia il titolo in X" invece di "migliora").';
-  }
-  return 'Errore AI. Riprova, o modifica manualmente dalla colonna di sinistra.';
+  return mapAiError(errorMessage);
 }

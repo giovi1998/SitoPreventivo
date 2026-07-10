@@ -10,6 +10,7 @@ import {
   createInfoEntry,
 } from '../ai/eventLog';
 import type { AILogEntry } from '../ai/types';
+import { mapAiError } from '../utils/ai/mapAiError';
 
 export interface UseAILogoReturn {
   generate: (
@@ -122,9 +123,9 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
         }
         return result;
       } catch (err) {
-        const msg = (err as Error)?.message || 'unknown';
-        addLog(createErrorEntry(`Errore AI: ${msg.slice(0, 200)}`));
-        throw err;
+        const hint = mapAiError(err);
+        addLog(createErrorEntry(hint));
+        throw new Error(hint);
       } finally {
         setIsProcessing(false);
         streamBufferRef.current.clear();
@@ -144,13 +145,13 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
         if (result.applied) {
           addLog(createSuccessEntry('Background generato', `${result.logo.builder.backgroundImage?.length ?? 0} char base64`));
         } else {
-          addLog(createErrorEntry('Background non generato', result.error ?? 'unknown'));
+          addLog(createErrorEntry(mapAiError(result.error ?? 'Background non generato')));
         }
         return result;
       } catch (err) {
-        const msg = (err as Error)?.message || 'unknown';
-        addLog(createErrorEntry(`Errore background: ${msg.slice(0, 200)}`));
-        throw err;
+        const hint = mapAiError(err);
+        addLog(createErrorEntry(hint));
+        throw new Error(hint);
       } finally {
         setIsGeneratingBg(false);
       }

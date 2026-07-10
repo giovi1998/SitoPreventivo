@@ -43,7 +43,7 @@ describe('LogoAiPanel (spec 11/12 UI integration)', () => {
         userEmail="t@e.com"
       />
     );
-    expect(screen.getByText('AI Generation')).toBeDefined();
+    expect(screen.getByText('AI Assist')).toBeDefined();
     expect(screen.getByText(/Riscatta un codice/i)).toBeDefined();
   });
 
@@ -181,7 +181,7 @@ describe('LogoAiPanel (spec 11/12 UI integration)', () => {
         );
         fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: 'Studio pedagogico' } });
         fireEvent.change(screen.getByPlaceholderText(/giovani 25-35/i), { target: { value: 'Genitori' } });
-        fireEvent.click(screen.getByText(/Salva questo brief/i));
+        fireEvent.click(screen.getByText(/Salva prompt/i));
         expect(screen.getByText('Il mio brief preferito')).toBeInTheDocument();
       } finally {
         promptSpy.mockRestore();
@@ -196,7 +196,7 @@ describe('LogoAiPanel (spec 11/12 UI integration)', () => {
         );
         fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: 'Studio pedagogico' } });
         fireEvent.change(screen.getByPlaceholderText(/giovani 25-35/i), { target: { value: 'Genitori' } });
-        fireEvent.click(screen.getByText(/Salva questo brief/i));
+        fireEvent.click(screen.getByText(/Salva prompt/i));
         expect(screen.getByText(/Nessun prompt salvato/i)).toBeInTheDocument();
       } finally {
         promptSpy.mockRestore();
@@ -211,10 +211,10 @@ describe('LogoAiPanel (spec 11/12 UI integration)', () => {
         );
         fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: 'Studio pedagogico' } });
         fireEvent.change(screen.getByPlaceholderText(/giovani 25-35/i), { target: { value: 'Genitori' } });
-        fireEvent.click(screen.getByText(/Salva questo brief/i));
+        fireEvent.click(screen.getByText(/Salva prompt/i));
         // clear the fields, then apply the saved brief back
         fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: '' } });
-        fireEvent.click(screen.getByRole('button', { name: /Applica brief Brief A/i }));
+        fireEvent.click(screen.getByText('Brief A'));
         expect((screen.getByPlaceholderText(/Pizzeria moderna/i) as HTMLTextAreaElement).value).toBe('Studio pedagogico');
       } finally {
         promptSpy.mockRestore();
@@ -229,9 +229,9 @@ describe('LogoAiPanel (spec 11/12 UI integration)', () => {
         );
         fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: 'Brief di prova' } });
         fireEvent.change(screen.getByPlaceholderText(/giovani 25-35/i), { target: { value: 'Target prova' } });
-        fireEvent.click(screen.getByText(/Salva questo brief/i));
+        fireEvent.click(screen.getByText(/Salva prompt/i));
         expect(screen.getByText('Brief da eliminare')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: /Elimina brief Brief da eliminare/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Elimina prompt Brief da eliminare/i }));
         expect(screen.queryByText('Brief da eliminare')).not.toBeInTheDocument();
       } finally {
         promptSpy.mockRestore();

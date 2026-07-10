@@ -14,6 +14,7 @@ import {
 import dataService from '../utils/dataService';
 import { isLocalhost } from '../utils/env';
 import { logger } from '../utils/logger';
+import { mapAiError } from '../utils/ai/mapAiError';
 
 const MAX_LOG_ENTRIES = 40;
 
@@ -171,19 +172,14 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         return result;
       } catch (err: any) {
         const msg = err?.message || 'Errore AI';
-        const hint =
-          msg.includes('402') ? 'Credito DeepSeek esaurito.'
-          : msg.includes('401') ? 'Chiave API DeepSeek non valida.'
-          : msg.includes('429') ? 'Troppe richieste. Attendi e riprova.'
-          : msg.includes('fetch') || msg.includes('NetworkError') ? 'Connessione fallita.'
-          : null;
+        const hint = mapAiError(err);
         const streamId = streamEntryIdRef.current;
         if (streamId) {
           updateLog(streamId, { status: 'error', msg: '❌ Generazione fallita', detail: msg });
         }
         logger.error('Flyer AI failed', { route: 'useAIFlyer', err: msg });
-        addLog(createErrorEntry(hint || msg));
-        throw new Error(hint || msg);
+        addLog(createErrorEntry(hint));
+        throw new Error(hint);
       } finally {
         setIsProcessing(false);
         streamEntryIdRef.current = null;
@@ -251,8 +247,9 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: 'Errore generazione hero' }));
-          addLog(createErrorEntry(err.error || `Hero AI ${res.status}`));
-          return { flyer, applied: false, error: err.error || `Hero AI ${res.status}` };
+          const hint = mapAiError(err.error || `Hero AI ${res.status}`);
+          addLog(createErrorEntry(hint));
+          return { flyer, applied: false, error: hint };
         }
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
         const heroImage = `data:${data.mimeType};base64,${data.imageBase64}`;
@@ -264,9 +261,10 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         addLog(createSuccessEntry('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`));
         return { flyer: updated, applied: true };
       } catch (err) {
-        const msg = (err as Error)?.message || 'unknown';
-        addLog(createErrorEntry(`Errore hero AI: ${msg.slice(0, 200)}`));
-        return { flyer, applied: false, error: msg };
+        const hint = mapAiError(err);
+        logger.error('Flyer AI generateHero failed', { route: 'useAIFlyer.generateHero', err: hint });
+        addLog(createErrorEntry(hint));
+        return { flyer, applied: false, error: hint };
       }
     },
     [addLog, userEmail],

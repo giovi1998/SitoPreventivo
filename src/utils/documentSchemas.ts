@@ -162,10 +162,11 @@ export const FONT_SCALE_MAX = 1.5;
 export const FONT_SCALE_STEP = 0.05;
 export const FONT_SCALE_DEFAULT = 1;
 
-// Phase 2.2 REQ-D01: set sicuro di font mostrati nel selettore UI.
-// Card importate con altri font restano valide (lo schema usa stringa
-// libera); il selettore mostra l'opzione corrente come "Personalizzato"
-// senza sovrascriverla.
+// Phase 2.2 REQ-D01 + AI Assist unification: set sicuro di font
+// mostrati nel selettore UI (allineato a SHARED_FONT_FAMILIES in
+// AiFontPicker). Card importate con altri font restano valide (schema
+// stringa libera); il selettore mostra "Personalizzato" senza
+// sovrascriverle.
 export const SAFE_FONT_FAMILIES = [
   'Inter',
   'Roboto',
@@ -173,13 +174,23 @@ export const SAFE_FONT_FAMILIES = [
   'Lato',
   'Montserrat',
   'Poppins',
+  'Source Sans 3',
+  'DM Sans',
+  'Figtree',
+  'Plus Jakarta Sans',
+  'Oswald',
+  'Raleway',
   'Georgia',
   'Times New Roman',
+  'Playfair Display',
+  'Merriweather',
   'Courier New',
 ] as const;
 export type SafeFontFamily = (typeof SAFE_FONT_FAMILIES)[number];
 export function isSafeFontFamily(value: string): value is SafeFontFamily {
-  return (SAFE_FONT_FAMILIES as readonly string[]).includes(value);
+  const base = value.split(',')[0]?.trim() || value;
+  return (SAFE_FONT_FAMILIES as readonly string[]).includes(base)
+    || (SAFE_FONT_FAMILIES as readonly string[]).includes(value);
 }
 
 // Phase 2.2 REQ-E02: dimensione QR in flexbox-mode (px). In grid-mode

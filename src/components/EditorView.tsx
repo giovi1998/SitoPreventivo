@@ -200,7 +200,7 @@ export default function EditorView({
   const aiPanel = (
     <section className="panel ai-panel" aria-label="AI del preventivo">
       <div className="panel-kicker">
-        <span>AI Design Mode</span>
+        <span>AI Assist</span>
         <button className="panel-toggle" onClick={() => setShowAi(false)} title="Collassa pannello" aria-label="Collassa AI">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>

@@ -53,26 +53,26 @@ describe('LogoEditor', () => {
     const tablist = screen.getByRole('tablist');
     expect(tablist).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: /AI Generation/i })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'false');
   });
 
-  it('shows the AI Generation tab as enabled (button not disabled, message inside panel)', () => {
+  it('shows the AI Assist tab as enabled (button not disabled, message inside panel)', () => {
     render(<LogoEditor userEmail="user@test.com" />);
-    const aiTab = screen.getByRole('tab', { name: /AI Generation/i });
+    const aiTab = screen.getByRole('tab', { name: /AI Assist/i });
     expect(aiTab).not.toBeDisabled();
   });
 
-  it('switching to AI tab shows the AI Generation panel (AC-010 v2)', () => {
+  it('switching to AI tab shows the AI Assist panel (AC-010 v2)', () => {
     render(<LogoEditor userEmail="user@test.com" />);
-    fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
-    expect(screen.getByRole('tab', { name: /AI Generation/i })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
+    expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'true');
     // v2: tab now shows the namelix-like chat form
     expect(screen.getByText(/Cosa fa la tua attività/i)).toBeInTheDocument();
   });
 
   it('switching to AI tab with tier=free shows the locked message', () => {
     render(<LogoEditor userEmail="user@test.com" tier="free" />);
-    fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
     expect(screen.getByText(/Riscatta un codice/i)).toBeInTheDocument();
   });
 
@@ -210,8 +210,8 @@ describe('LogoEditor', () => {
       builder: { ...createEmptyLogo().builder, primaryText: 'Acme', backgroundImage: bg },
     };
     render(<LogoEditor userEmail="user@test.com" initialLogo={initial} />);
-    fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
-    expect(screen.getByRole('tab', { name: /AI Generation/i })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
+    expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'true');
     fireEvent.click(screen.getByRole('tab', { name: /Builder/i }));
     expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
     // Builder should still show the AI background badge and controls
@@ -249,7 +249,7 @@ describe('LogoEditor', () => {
     });
     try {
       render(<LogoEditor userEmail="user@test.com" />);
-      fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
       await waitFor(() => expect(screen.getByText(/Cosa fa la tua attività/i)).toBeInTheDocument());
       fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: 'Attività di prova lunga' } });
       fireEvent.change(screen.getByPlaceholderText(/giovani 25-35/i), { target: { value: 'Target di prova' } });
@@ -263,7 +263,7 @@ describe('LogoEditor', () => {
       // rimontato; senza il fix lo stato interno (concepts/bgImages) si
       // azzera e il preview torna vuoto o "nudo" (senza background).
       fireEvent.click(screen.getByRole('tab', { name: /Builder/i }));
-      fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
       const htmlAfter = document.querySelector('.logo-ai-concept-preview-inner')?.innerHTML ?? '';
       expect(htmlAfter).toContain('LIFTED_STATE');
     } finally {
@@ -309,7 +309,7 @@ describe('LogoEditor', () => {
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       render(<LogoEditor userEmail="user@test.com" />);
-      fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
       await waitFor(() => expect(screen.getByText(/Cosa fa la tua attività/i)).toBeInTheDocument());
       fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: 'Attività di prova lunga' } });
       fireEvent.change(screen.getByPlaceholderText(/giovani 25-35/i), { target: { value: 'Target di prova' } });

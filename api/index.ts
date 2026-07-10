@@ -1573,6 +1573,71 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     }
   }
 
+  // Profession-style photo for business card portrait slot (replaces photoUrl).
+  // Same Gemini stack as card-cover / flyer-hero; all logic stays in this monolith.
+  if (path === '/ai/card-photo' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiCardPhoto', 5, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe generazioni foto. Attendi un minuto.' });
+    }
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      return json(req, res, 503, { error: 'Foto AI non configurata (GEMINI_API_KEY mancante)' });
+    }
+    const v = validate(
+      z.object({
+        prompt: z.string().max(1000),
+        context: z.string().max(1500).optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
+    if (v.data.userEmail) {
+      console.info('[ai_card_photo] user', { email: v.data.userEmail, ts: Date.now() });
+    }
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const finalPrompt = v.data.context
+        ? `${v.data.prompt}\n\nCARD PHOTO CONTEXT:\n${v.data.context.slice(0, 1500)}`
+        : v.data.prompt;
+      const interaction = await ai.interactions.create(
+        {
+          model: 'gemini-3.1-flash-image',
+          input: finalPrompt,
+          generation_config: {
+            image_config: { image_size: '512', aspect_ratio: '1:1' },
+          },
+          response_modalities: ['text', 'image'],
+        },
+        { timeout: 30_000 },
+      );
+      const image = interaction.output_image;
+      if (!image || !image.data) {
+        return json(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' });
+      }
+      const imageBase64 = image.data;
+      const mimeType = image.mime_type || 'image/png';
+      const sizeBytes = Math.ceil(imageBase64.length * 0.75);
+      if (sizeBytes > 500_000) {
+        return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+      }
+      return json(req, res, 200, { data: { imageBase64, mimeType } });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      if (msg.startsWith('GEMINI_401')) return json(req, res, 401, { error: 'Chiave Gemini non valida' });
+      if (msg.startsWith('GEMINI_429')) return json(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+      if (msg.startsWith('GEMINI_TIMEOUT')) return json(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' });
+      if (msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation')) {
+        return json(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' });
+      }
+      return json(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+    }
+  }
+
   if (path === '/ai/logo-generate' && method === 'POST') {
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'aiLogo', 10, 60 * 1000);

@@ -19,6 +19,7 @@ import type { Tier } from '../utils/watermark';
 import PreviewWatermark from './PreviewWatermark';
 import { useAILogo } from '../hooks/useAILogo';
 import { useToast } from '../hooks/useToast';
+import { AiFontPicker } from './ai-ui';
 
 interface BuilderPanelProps {
   logo: Logo;
@@ -48,7 +49,6 @@ const SECTOR_LABELS: Record<LogoSector, string> = {
   professionista: 'Professionista',
 };
 
-const FONT_OPTIONS = ['Inter', 'Georgia', 'system-ui', 'serif', 'sans-serif'];
 const LAYOUT_OPTIONS: LogoLayout[] = ['horizontal', 'vertical', 'stacked'];
 const ICON_SHAPE_OPTIONS: LogoIconShape[] = ['circle', 'square', 'rounded', 'hex'];
 const DECORATION_OPTIONS: { value: import('../utils/documentSchemas').LogoDecorativeElement; label: string }[] = [
@@ -332,18 +332,12 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
               aria-label="Colore secondario"
             />
           </label>
-          <label className="builder-field">
-            <span>Font</span>
-            <select
-              value={b.fontFamily}
-              onChange={(e) => update('fontFamily', e.target.value)}
-              aria-label="Font"
-            >
-              {FONT_OPTIONS.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
-          </label>
+          <AiFontPicker
+            label="Font"
+            value={b.fontFamily}
+            onChange={(font) => update('fontFamily', font)}
+            aria-label="Font"
+          />
           <label className="builder-field">
             <span>Layout</span>
             <select

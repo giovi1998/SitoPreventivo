@@ -11,7 +11,16 @@ import {
   AiGenerateButton,
   AiActionChip,
   AiActionGrid,
+  AiPromptLibrary,
 } from './ai-ui';
+import {
+  loadPromptLibrary as loadSharedPromptLibrary,
+  addPromptEntry,
+  removePromptEntry,
+  safeLocalStorageSet,
+  PROMPT_LIBRARY_KEYS,
+  type PromptLibraryEntry,
+} from '../utils/promptLibrary';
 import './LogoAiPanel.css';
 
 export type Step = 'chat' | 'result' | 'applied';
@@ -61,7 +70,6 @@ const MOODS = ['minimal', 'bold', 'playful', 'elegant', 'tech'] as const;
 
 const LS_KEY = 'logoAiChat:v1';
 const LS_TTL_MS = 24 * 60 * 60 * 1000;
-const PROMPT_LIBRARY_KEY = 'logoPromptLibrary:v1';
 
 const SECTOR_LABELS: Record<LogoSector, string> = {
   tech: 'Tech',
@@ -97,45 +105,6 @@ const SECTOR_PRESET_BRIEFS: Record<LogoSector, { activity: string; mood: (typeof
     target: 'aziende e piccole-medie imprese',
   },
 };
-
-interface SavedBrief extends ChatAnswers {
-  id: string;
-  label: string;
-  createdAt: number;
-}
-
-function loadPromptLibrary(): SavedBrief[] {
-  try {
-    const raw = localStorage.getItem(PROMPT_LIBRARY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Wrapper difensivo su `localStorage.setItem`: non deve MAI propagare
- * un'eccezione (es. `QuotaExceededError` quando il payload contiene
- * immagini base64 di centinaia di KB). Senza questo guard, un errore
- * di quota non catturato fa crashare l'intera app (bug reale
- * osservato in produzione: schermata "Qualcosa è andato storto").
- */
-function safeLocalStorageSet(key: string, value: string): boolean {
-  try {
-    localStorage.setItem(key, value);
-    return true;
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn(`[LogoAiPanel] localStorage.setItem('${key}') fallito`, (err as Error)?.message);
-    return false;
-  }
-}
-
-function savePromptLibrary(items: SavedBrief[]): void {
-  safeLocalStorageSet(PROMPT_LIBRARY_KEY, JSON.stringify(items));
-}
 
 interface LogoConfig {
   enabled: boolean;
@@ -193,7 +162,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
   const [bgImages, setBgImages] = useState<(string | null)[]>(initialState?.bgImages ?? [null, null, null]);
   const [bgErrors, setBgErrors] = useState<(string | null)[]>(initialState?.bgErrors ?? [null, null, null]);
   const [config, setConfig] = useState<LogoConfig | null>(null);
-  const [library, setLibrary] = useState<SavedBrief[]>(() => loadPromptLibrary());
+  const [library, setLibrary] = useState<PromptLibraryEntry[]>(() => loadSharedPromptLibrary(PROMPT_LIBRARY_KEYS.logo));
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
 
   // Load persisted state on mount — SOLO se il genitore non ha già
@@ -279,7 +248,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
     return (
       <AiTierGuard 
         tier="free" 
-        featureName="AI Generation" 
+        featureName="AI Assist" 
         fallbackMessage="AI generation è disponibile nel piano Pro o con codice sblocco. Riscatta un codice in Impostazioni."
       >
         {null}
@@ -412,26 +381,28 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
   const saveBriefToLibrary = () => {
     const label = window.prompt('Nome per questo brief (es. "Pizzeria Cagliari"):');
     if (!label || !label.trim()) return;
-    const entry: SavedBrief = {
-      id: `brief_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    setLibrary(addPromptEntry(PROMPT_LIBRARY_KEYS.logo, {
       label: label.trim(),
-      ...answers,
-      createdAt: Date.now(),
-    };
-    const next = [...library, entry];
-    setLibrary(next);
-    savePromptLibrary(next);
-    addToast('success', `Brief "${entry.label}" salvato.`);
+      activity: answers.activity,
+      mood: answers.mood,
+      target: answers.target,
+      sector: answers.sector,
+      module: 'logo',
+    }));
+    addToast('success', `Brief "${label.trim()}" salvato.`);
   };
 
-  const applyBrief = (brief: SavedBrief) => {
-    setAnswers({ activity: brief.activity, mood: brief.mood, target: brief.target, sector: brief.sector });
+  const applyBrief = (brief: PromptLibraryEntry) => {
+    setAnswers({
+      activity: brief.activity || '',
+      mood: (brief.mood as ChatAnswers['mood']) || 'minimal',
+      target: brief.target || '',
+      sector: (brief.sector as LogoSector) || 'tech',
+    });
   };
 
   const deleteBrief = (id: string) => {
-    const next = library.filter((b) => b.id !== id);
-    setLibrary(next);
-    savePromptLibrary(next);
+    setLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.logo, id));
   };
 
   // ─── Piano B: rigenera background di un singolo concept con prompt editato ──
@@ -478,8 +449,8 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
   };
 
   return (
-    <section className="logo-ai-panel" aria-label="AI Generation">
-      <h2>AI Generation</h2>
+    <section className="logo-ai-panel" aria-label="AI Assist">
+      <h2>AI Assist</h2>
       {config?.provider === 'gemini' && (
         <p className="logo-ai-provider">Powered by Gemini Nano Banana 2 Lite (background) + DeepSeek (parametri)</p>
       )}
@@ -542,33 +513,16 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
             </button>
           </div>
 
-          <div className="logo-ai-library">
-            <div className="logo-ai-library-header">
-              <span className="logo-ai-q">I miei prompt</span>
-              <button type="button" onClick={saveBriefToLibrary} disabled={!canGenerate}>
-                💾 Salva questo brief
-              </button>
-            </div>
-            {library.length === 0 ? (
-              <p className="logo-ai-library-empty">Nessun prompt salvato ancora. Compila il form e salvalo per riusarlo in futuro.</p>
-            ) : (
-              <ul className="logo-ai-library-list">
-                {library.map((b) => (
-                  <li key={b.id} className="logo-ai-library-item">
-                    <span className="logo-ai-library-label">{b.label}</span>
-                    <div className="logo-ai-library-actions">
-                      <button type="button" onClick={() => applyBrief(b)} aria-label={`Applica brief ${b.label}`}>
-                        Applica
-                      </button>
-                      <button type="button" onClick={() => deleteBrief(b.id)} aria-label={`Elimina brief ${b.label}`}>
-                        Elimina
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <AiPromptLibrary
+            items={library}
+            onSave={saveBriefToLibrary}
+            onApply={applyBrief}
+            onDelete={deleteBrief}
+            saveDisabled={!canGenerate}
+            title="I miei prompt"
+            emptyHint="Nessun prompt salvato ancora. Compila il form e salvalo per riusarlo in futuro."
+            className="logo-ai-library"
+          />
         </div>
       )}
 

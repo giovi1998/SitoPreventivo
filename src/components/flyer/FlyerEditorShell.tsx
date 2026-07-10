@@ -13,6 +13,13 @@ import { generateFlyerPdf, generateFlyerPng } from '../../utils/flyerGenerator';
 import dataService from '../../utils/dataService';
 import SaveDialog from '../SaveDialog';
 import { logger } from '../../utils/logger';
+import {
+  loadPromptLibrary,
+  addPromptEntry,
+  removePromptEntry,
+  PROMPT_LIBRARY_KEYS,
+  type PromptLibraryEntry,
+} from '../../utils/promptLibrary';
 
 const FLYER_HERO_MAX_RAW_BYTES = 5_000_000;
 const FLYER_HERO_MAX_DIMENSION = 4000;
@@ -131,6 +138,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
   const [heroSector, setHeroSector] = React.useState<typeof FLYER_SECTORS[number]>('ristorante');
   const [heroTone, setHeroTone] = React.useState<FlyerTone>('formale');
   const [showHeroPromptEditor, setShowHeroPromptEditor] = React.useState(false);
+  const [heroLibrary, setHeroLibrary] = React.useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.flyerHero));
   const ai = useAIFlyer(userEmail);
   const debouncedFlyer = useDebouncedValue(flyer, 300);
   const layoutPlan = React.useMemo(() => computeFlyerLayout(flyer), [flyer]);
@@ -280,6 +288,38 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
 
   const handleAiReset = React.useCallback(() => { ai.reset(); addToast('info', 'Sessione AI azzerata'); }, [ai, addToast]);
 
+  const handleSaveHeroPrompt = React.useCallback(() => {
+    const text = heroPrompt.trim();
+    if (!text) { addToast('info', 'Scrivi un prompt hero prima di salvarlo.'); return; }
+    const label = window.prompt('Nome del prompt', text.slice(0, 40)) || text.slice(0, 40);
+    setHeroLibrary(addPromptEntry(PROMPT_LIBRARY_KEYS.flyerHero, {
+      label: label.trim() || 'Prompt hero',
+      prompt: text,
+      sector: heroSector,
+      tone: heroTone,
+      module: 'flyer-hero',
+    }));
+    addToast('success', 'Prompt hero salvato.');
+  }, [heroPrompt, heroSector, heroTone, addToast]);
+
+  const handleApplyHeroPrompt = React.useCallback((entry: PromptLibraryEntry) => {
+    if (entry.prompt) {
+      setHeroPrompt(entry.prompt);
+      setShowHeroPromptEditor(true);
+      if (entry.sector && FLYER_SECTORS.includes(entry.sector as typeof FLYER_SECTORS[number])) {
+        setHeroSector(entry.sector as typeof FLYER_SECTORS[number]);
+      }
+      if (entry.tone === 'formale' || entry.tone === 'giovanile' || entry.tone === 'tecnico') {
+        setHeroTone(entry.tone);
+      }
+      addToast('info', `Prompt «${entry.label}» applicato.`);
+    }
+  }, [addToast]);
+
+  const handleDeleteHeroPrompt = React.useCallback((id: string) => {
+    setHeroLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.flyerHero, id));
+  }, []);
+
   const handleGenerateHero = React.useCallback(async () => {
     if (flyer.style.layout === 'centered') { addToast('info', 'Il layout centrato non ha un box hero.'); return; }
     setIsGeneratingHero(true);
@@ -331,6 +371,23 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
       hasCopy={flyerHasCopy(flyer)}
       onGenerate={handleGenerate} onRefine={handleRefine} onReset={handleAiReset}
       onCollapse={() => setShowAi(false)}
+      tier={tier}
+      onGenerateHero={handleGenerateHero}
+      onRemoveHero={removeHero}
+      onResetHero={handleResetHero}
+      isGeneratingHero={isGeneratingHero}
+      heroPrompt={heroPrompt}
+      setHeroPrompt={setHeroPrompt}
+      heroSector={heroSector}
+      setHeroSector={setHeroSector}
+      heroTone={heroTone}
+      setHeroTone={setHeroTone}
+      showHeroPromptEditor={showHeroPromptEditor}
+      setShowHeroPromptEditor={setShowHeroPromptEditor}
+      heroLibrary={heroLibrary}
+      onSaveHeroPrompt={handleSaveHeroPrompt}
+      onApplyHeroPrompt={handleApplyHeroPrompt}
+      onDeleteHeroPrompt={handleDeleteHeroPrompt}
     />
   );
 

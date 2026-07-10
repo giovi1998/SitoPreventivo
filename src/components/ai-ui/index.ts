@@ -4,3 +4,5 @@ export * from './AiSelect';
 export * from './AiGenerateButton';
 export * from './AiActionChips';
 export * from './AiTierGuard';
+export * from './AiFontPicker';
+export * from './AiPromptLibrary';

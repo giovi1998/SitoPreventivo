@@ -1,8 +1,9 @@
 import React from 'react';
 import AILogPanel from '../AILogPanel';
 import type { Flyer, FlyerTone } from '../../utils/documentSchemas';
-import { FLYER_BRIEF_MAX } from '../../utils/documentSchemas';
+import { FLYER_BRIEF_MAX, FLYER_SECTORS } from '../../utils/documentSchemas';
 import type { useAIFlyer } from '../../hooks/useAIFlyer';
+import { getSectorLabel } from '../../utils/flyer';
 import {
   AiSection,
   AiPromptTextarea,
@@ -11,7 +12,10 @@ import {
   AiActionChip,
   AiQuickActionCard,
   AiActionGrid,
+  AiTierGuard,
+  AiPromptLibrary,
 } from '../ai-ui';
+import type { PromptLibraryEntry } from '../../utils/promptLibrary';
 
 const SUGGESTED_PROMPTS: string[] = [
   'Sagra del paese, 15-17 agosto, ingresso gratis, musica dal vivo, cucina tipica',
@@ -43,11 +47,34 @@ interface FlyerAiPanelProps {
   onRefine: (action: 'simplify' | 'formal' | 'young' | 'urgent') => void;
   onReset: () => void;
   onCollapse: () => void;
+  tier?: 'free' | 'unlocked';
+  onGenerateHero?: () => void;
+  onRemoveHero?: () => void;
+  onResetHero?: () => void;
+  isGeneratingHero?: boolean;
+  heroPrompt?: string;
+  setHeroPrompt?: (v: string) => void;
+  heroSector?: typeof FLYER_SECTORS[number];
+  setHeroSector?: (v: typeof FLYER_SECTORS[number]) => void;
+  heroTone?: FlyerTone;
+  setHeroTone?: (v: FlyerTone) => void;
+  showHeroPromptEditor?: boolean;
+  setShowHeroPromptEditor?: (v: boolean) => void;
+  heroLibrary?: PromptLibraryEntry[];
+  onSaveHeroPrompt?: () => void;
+  onApplyHeroPrompt?: (entry: PromptLibraryEntry) => void;
+  onDeleteHeroPrompt?: (id: string) => void;
 }
 
 export function FlyerAiPanel({
   aiPrompt, setAiPrompt, aiModel, setAiModel, aiTone, setAiTone, ai,
-  onGenerate, onRefine, onReset, hasCopy, onCollapse,
+  flyer, onGenerate, onRefine, onReset, hasCopy, onCollapse,
+  tier = 'free',
+  onGenerateHero, onRemoveHero, onResetHero, isGeneratingHero = false,
+  heroPrompt = '', setHeroPrompt, heroSector, setHeroSector,
+  heroTone = 'formale', setHeroTone,
+  showHeroPromptEditor = false, setShowHeroPromptEditor,
+  heroLibrary = [], onSaveHeroPrompt, onApplyHeroPrompt, onDeleteHeroPrompt,
 }: FlyerAiPanelProps): React.ReactElement {
   const modelOptions = ai.availableModels.length > 0 
     ? ai.availableModels.map(m => ({ value: m.id, label: m.name }))
@@ -60,13 +87,100 @@ export function FlyerAiPanel({
   ];
 
   return (
-    <section className="panel ai-panel" aria-label="AI copy del volantino">
+    <section className="panel ai-panel" aria-label="AI Assist del volantino">
       <div className="panel-kicker">
-        <span>✨ AI copy</span>
+        <span>AI Assist</span>
         <button className="panel-toggle" onClick={onCollapse} title="Collassa" aria-label="Collassa AI">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
         </button>
       </div>
+
+      {onGenerateHero && flyer.style.layout !== 'centered' && (
+        <AiSection title="Hero Image" collapsible defaultOpen={false} hint="Immagine hero del volantino generata da AI.">
+          <AiTierGuard tier={tier} featureName="Hero AI">
+            <div className="stack">
+              {flyer.content.heroImage && (
+                <img
+                  src={flyer.content.heroImage}
+                  alt="Hero attuale"
+                  style={{ maxWidth: '100%', maxHeight: 120, objectFit: 'cover', borderRadius: 6 }}
+                />
+              )}
+              <div className="mini-row">
+                {heroSector && setHeroSector && (
+                  <AiSelect
+                    label="Settore"
+                    value={heroSector}
+                    onChange={(e) => setHeroSector(e.target.value as typeof FLYER_SECTORS[number])}
+                    options={FLYER_SECTORS.map((s) => ({ value: s, label: getSectorLabel(s) }))}
+                  />
+                )}
+                {setHeroTone && (
+                  <AiSelect
+                    label="Tono"
+                    value={heroTone}
+                    onChange={(e) => setHeroTone(e.target.value as FlyerTone)}
+                    options={[
+                      { value: 'formale', label: 'Formale' },
+                      { value: 'giovanile', label: 'Giovanile' },
+                      { value: 'tecnico', label: 'Tecnico' },
+                    ]}
+                  />
+                )}
+              </div>
+              {setShowHeroPromptEditor && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowHeroPromptEditor(!showHeroPromptEditor)}
+                  disabled={isGeneratingHero}
+                >
+                  {showHeroPromptEditor ? 'Nascondi prompt' : 'Modifica prompt'}
+                </button>
+              )}
+              {showHeroPromptEditor && setHeroPrompt && (
+                <>
+                  <AiPromptTextarea
+                    label="Prompt hero"
+                    value={heroPrompt}
+                    onChange={(e) => setHeroPrompt(e.target.value.slice(0, 1500))}
+                    rows={3}
+                    maxLength={1500}
+                    placeholder="Vuoto = prompt automatico da settore/tono"
+                  />
+                  {onSaveHeroPrompt && onApplyHeroPrompt && onDeleteHeroPrompt && (
+                    <AiPromptLibrary
+                      items={heroLibrary}
+                      onSave={onSaveHeroPrompt}
+                      onApply={onApplyHeroPrompt}
+                      onDelete={onDeleteHeroPrompt}
+                      saveDisabled={!heroPrompt.trim()}
+                      title="I miei prompt hero"
+                    />
+                  )}
+                </>
+              )}
+              <AiGenerateButton
+                isProcessing={isGeneratingHero}
+                loadingText="Generazione…"
+                onClick={onGenerateHero}
+              >
+                Genera hero AI
+              </AiGenerateButton>
+              {flyer.content.heroImage?.startsWith('data:') && onResetHero && (
+                <button type="button" className="btn-remove" onClick={onResetHero}>
+                  Ripristina immagine default
+                </button>
+              )}
+              {flyer.content.heroImage && onRemoveHero && (
+                <button type="button" className="btn-remove" onClick={onRemoveHero}>
+                  Rimuovi immagine
+                </button>
+              )}
+            </div>
+          </AiTierGuard>
+        </AiSection>
+      )}
 
       <AiSection title="Genera copy" collapsible defaultOpen>
         <div className="stack">

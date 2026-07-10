@@ -187,72 +187,9 @@ export function FlyerManualPanel({
       <Section title="Immagine hero" defaultOpen={false} badge={flyer.content.heroImage ? '1' : undefined}>
         <div className="stack">
           <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { const f = e.target.files?.[0]; if (f) onHeroUpload(f); }} />
-          {flyer.style.layout !== 'centered' && (
-            tier === 'unlocked' ? (
-              <>
-                <div className="mini-row">
-                  <label>Settore hero
-                    <select value={heroSector} onChange={(e) => setHeroSector(e.target.value as typeof FLYER_SECTORS[number])} aria-label="Settore hero AI">
-                      {FLYER_SECTORS.map((s) => <option key={s} value={s}>{getSectorLabel(s)}</option>)}
-                    </select>
-                  </label>
-                  <label>Tono hero
-                    <select value={heroTone} onChange={(e) => setHeroTone(e.target.value as FlyerTone)} aria-label="Tono hero AI">
-                      <option value="formale">Formale</option>
-                      <option value="giovanile">Giovanile</option>
-                      <option value="tecnico">Tecnico</option>
-                    </select>
-                  </label>
-                </div>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setShowHeroPromptEditor(!showHeroPromptEditor)}
-                  disabled={isGeneratingHero}
-                  aria-expanded={showHeroPromptEditor}
-                >
-                  {showHeroPromptEditor ? 'Nascondi prompt' : '✏️ Modifica prompt'}
-                </button>
-                {showHeroPromptEditor && (
-                  <div className="flyer-hero-prompt-editor" aria-label="Editor prompt hero AI">
-                    <textarea
-                      value={heroPrompt}
-                      onChange={(e) => setHeroPrompt(e.target.value.slice(0, 1500))}
-                      rows={4}
-                      placeholder="Lascia vuoto per usare il prompt automatico (settore + tono), oppure descrivi l'immagine che vuoi (es. tagliere di salumi su legno scuro, luce calda, senza persone)"
-                      aria-label="Prompt hero AI"
-                    />
-                    <p className="flyer-hero-prompt-hint">
-                      Vuoto = prompt automatico da settore/tono. Il testo del volantino resta SVG e viene sovrapposto. Max 1500 caratteri.
-                    </p>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={onGenerateHero}
-                  disabled={isGeneratingHero}
-                  title="Genera un'immagine hero coerente con il settore, il tono e il layout"
-                >
-                  {isGeneratingHero ? 'Generazione…' : '✨ Genera hero AI'}
-                </button>
-                {flyer.content.heroImage?.startsWith('data:') && (
-                  <button
-                    type="button"
-                    className="btn-remove"
-                    onClick={onResetHero}
-                    title="Ripristina l'immagine predefinita del template"
-                  >
-                    Ripristina immagine default
-                  </button>
-                )}
-              </>
-            ) : (
-              <button type="button" className="btn-secondary" disabled title="Disponibile nella versione Pro">
-                🔒 Genera hero AI (Pro)
-              </button>
-            )
-          )}
+          <p style={{ fontSize: '.78rem', color: 'var(--muted)', margin: 0 }}>
+            Carica un&apos;immagine manuale, oppure genera l&apos;hero da AI Assist.
+          </p>
           {flyer.content.heroImage && <button type="button" className="btn-remove" onClick={onRemoveHero}>Rimuovi immagine</button>}
           {heroError && <p style={{ color: 'var(--red)', fontSize: '.78rem' }} role="alert">{heroError}</p>}
         </div>

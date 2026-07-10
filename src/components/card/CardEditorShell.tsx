@@ -42,6 +42,14 @@ import CardEditorTabs from './CardEditorTabs';
 import MobileGridEditor from '../MobileGridEditor';
 import CardAIFab from '../CardAIFab';
 import CardAIBottomSheet from '../CardAIBottomSheet';
+import {
+  loadPromptLibrary,
+  addPromptEntry,
+  removePromptEntry,
+  PROMPT_LIBRARY_KEYS,
+  type PromptLibraryEntry,
+} from '../../utils/promptLibrary';
+import { buildCardPhotoBrief } from '../../utils/card/photoBrief';
 
 const MAX_RAW_BYTES = 5_000_000;
 const AUTO_SAVE_DELAY_MS = 30_000;
@@ -71,7 +79,11 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const previewZoom = useCardPreviewZoom(1);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
-  const { processCardPrompt, generateCover, resetCardChat, cardAiLogs, isCardProcessing, availableModels } = useAICard(userEmail);
+  const { processCardPrompt, generateCover, generatePhoto, resetCardChat, cardAiLogs, isCardProcessing, availableModels } = useAICard(userEmail);
+  const [isPhotoGenerating, setIsPhotoGenerating] = useState(false);
+  const [photoPrompt, setPhotoPrompt] = useState('');
+  const [showPhotoPromptEditor, setShowPhotoPromptEditor] = useState(false);
+  const [photoLibrary, setPhotoLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardPhoto));
 
   useEffect(() => {
     const defaultZoom = isMobile ? 0.7 : 1;
@@ -387,6 +399,57 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
   }, [card, tier, generateCover, patchFront, patchBack, addToast]);
 
+  const handleGeneratePhoto = useCallback(async () => {
+    if (tier !== 'unlocked') {
+      addToast('info', 'Sblocca il piano per generare la foto AI.', 4000);
+      return;
+    }
+    setIsPhotoGenerating(true);
+    try {
+      const photoUrl = await generatePhoto(card, {
+        promptOverride: photoPrompt.trim() || undefined,
+      });
+      patchFront({ photoUrl });
+      addToast('success', 'Foto AI generata e applicata al bigliettino.', 4000);
+    } catch (err: any) {
+      addToast('error', err.message || 'Errore generazione foto AI', 5000);
+    } finally {
+      setIsPhotoGenerating(false);
+    }
+  }, [card, tier, generatePhoto, patchFront, addToast, photoPrompt]);
+
+  const handleFillAutoPhotoPrompt = useCallback(() => {
+    setPhotoPrompt(buildCardPhotoBrief(card).prompt);
+    setShowPhotoPromptEditor(true);
+  }, [card]);
+
+  const handleSavePhotoPrompt = useCallback(() => {
+    const text = photoPrompt.trim();
+    if (!text) {
+      addToast('info', 'Scrivi un prompt prima di salvarlo.');
+      return;
+    }
+    const label = window.prompt('Nome del prompt', text.slice(0, 40)) || text.slice(0, 40);
+    setPhotoLibrary(addPromptEntry(PROMPT_LIBRARY_KEYS.cardPhoto, {
+      label: label.trim() || 'Prompt foto',
+      prompt: text,
+      module: 'card-photo',
+    }));
+    addToast('success', 'Prompt salvato nella libreria.');
+  }, [photoPrompt, addToast]);
+
+  const handleApplyPhotoPrompt = useCallback((entry: PromptLibraryEntry) => {
+    if (entry.prompt) {
+      setPhotoPrompt(entry.prompt);
+      setShowPhotoPromptEditor(true);
+      addToast('info', `Prompt «${entry.label}» applicato.`);
+    }
+  }, [addToast]);
+
+  const handleDeletePhotoPrompt = useCallback((id: string) => {
+    setPhotoLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.cardPhoto, id));
+  }, []);
+
   const handleRemoveCover = useCallback(
     (side: 'front' | 'back') => {
       if (side === 'front') {
@@ -485,6 +548,18 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         onRemoveCover={removeCoverImage}
         onRemoveBackCover={removeBackCoverImage}
         uploadError={uploadError}
+        tier={tier}
+        onGeneratePhoto={handleGeneratePhoto}
+        isGeneratingPhoto={isPhotoGenerating}
+        photoPrompt={photoPrompt}
+        setPhotoPrompt={setPhotoPrompt}
+        showPhotoPromptEditor={showPhotoPromptEditor}
+        setShowPhotoPromptEditor={setShowPhotoPromptEditor}
+        photoLibrary={photoLibrary}
+        onSavePhotoPrompt={handleSavePhotoPrompt}
+        onApplyPhotoPrompt={handleApplyPhotoPrompt}
+        onDeletePhotoPrompt={handleDeletePhotoPrompt}
+        onFillAutoPhotoPrompt={handleFillAutoPhotoPrompt}
       />
       <CardBackFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
       <fieldset className="card-fieldset">
@@ -517,7 +592,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       <CardQrAdvanced card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
       <CardStyleFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
     </>
-  ), [card, patchFront, patchBack, patchStyle, handleUpload, removePhoto, removeLogo, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial]);
+  ), [card, patchFront, patchBack, patchStyle, handleUpload, removePhoto, removeLogo, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial, tier, handleGeneratePhoto, isPhotoGenerating, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt]);
 
   const aiPanel = useMemo(() => (
     <CardAIControls
@@ -668,7 +743,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
           {showAi ? (
             <section className="card-editor-ai" aria-label="AI che modifica il bigliettino">
               <div className="panel-kicker">
-                <span>AI Design Mode</span>
+                <span>AI Assist</span>
                 <button
                   className="panel-toggle"
                   onClick={() => setShowAi(false)}
@@ -722,7 +797,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
           >
             <div className="card-ai-mobile-content">
               <div className="panel-kicker">
-                <span>AI Design Mode</span>
+                <span>AI Assist</span>
                 <button
                   type="button"
                   onClick={aiFloating.close}

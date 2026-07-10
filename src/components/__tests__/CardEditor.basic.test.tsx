@@ -357,7 +357,7 @@ describe('CardEditor', () => {
 
   it('renders AI panel with redesigned quick action chips', () => {
     renderEditor();
-    expect(screen.getByText(/AI Design Mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI Assist/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Premium$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Pulisci$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Suggerisci$/i })).toBeInTheDocument();

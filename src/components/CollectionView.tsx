@@ -159,6 +159,8 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   const [dateFilter, setDateFilter] = useState<'all' | 'week' | 'month' | 'year'>('all');
   const [sort, setSort] = useState<'updated' | 'created' | 'title' | 'type'>('updated');
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -291,12 +293,65 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
       : dataService.deleteDocument(target.id, userEmail);
     promise.then(() => {
       addToast('success', 'Documento eliminato');
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(target.id);
+        return next;
+      });
       if (ctx?.refreshDocuments) ctx.refreshDocuments();
       setRefreshKey((k) => k + 1);
     }).catch(() => {
       addToast('error', 'Eliminazione fallita');
     });
   };
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAllFiltered = useCallback(() => {
+    setSelectedIds(new Set(filtered.map((d) => d.id)));
+  }, [filtered]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const onConfirmBulkDelete = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      setBulkDeleteOpen(false);
+      return;
+    }
+    setBulkDeleteOpen(false);
+    let ok = 0;
+    let fail = 0;
+    for (const id of ids) {
+      const doc = documents.find((d) => d.id === id);
+      if (!doc) {
+        fail += 1;
+        continue;
+      }
+      const isLegacy = !doc.documentType || !doc.userEmail;
+      try {
+        if (isLegacy) await dataService.deleteQuote(id, userEmail);
+        else await dataService.deleteDocument(id, userEmail);
+        ok += 1;
+      } catch {
+        fail += 1;
+      }
+    }
+    setSelectedIds(new Set());
+    if (ok > 0) addToast('success', ok === 1 ? '1 documento eliminato' : `${ok} documenti eliminati`);
+    if (fail > 0) addToast('error', `${fail} eliminazioni fallite`);
+    if (ctx?.refreshDocuments) ctx.refreshDocuments();
+    setRefreshKey((k) => k + 1);
+  }, [selectedIds, documents, userEmail, addToast, ctx]);
 
   const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, tabId: TabId) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -410,6 +465,28 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
             >
               {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+            {filtered.length > 0 && (
+              <div className="collection-bulk-actions" data-testid="collection-bulk-actions">
+                <button type="button" className="btn-secondary" onClick={selectAllFiltered} data-testid="collection-select-all">
+                  Seleziona visibili ({filtered.length})
+                </button>
+                {selectedIds.size > 0 && (
+                  <>
+                    <button type="button" className="btn-secondary" onClick={clearSelection} data-testid="collection-clear-selection">
+                      Deseleziona
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-danger"
+                      onClick={() => setBulkDeleteOpen(true)}
+                      data-testid="collection-bulk-delete"
+                    >
+                      Elimina {selectedIds.size}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {filtered.length === 0 ? (
@@ -421,14 +498,24 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                 const title = truncate(getDocTitle(doc), 50);
                 const meta = `${TYPE_LABELS[type] || 'Documento'} · ${formatRelative(doc.updatedAt)}`;
                 const isActive = activeId && doc.id === activeId;
+                const isSelected = selectedIds.has(doc.id);
                 return (
                   <article
                     key={doc.id}
-                    className={isActive ? 'collection-card active' : 'collection-card'}
+                    className={`collection-card${isActive ? ' active' : ''}${isSelected ? ' selected' : ''}`}
                     data-type={type}
                     data-testid={`card-${doc.id}`}
                   >
                     <div className="card-top">
+                      <label className="collection-select-label" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(doc.id)}
+                          aria-label={`Seleziona ${title}`}
+                          data-testid={`select-${doc.id}`}
+                        />
+                      </label>
                       <span className={`doc-icon doc-icon-${type}`} aria-hidden="true">
                         <Icon name={TYPE_ICONS[type] || 'doc'} />
                       </span>
@@ -473,6 +560,15 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
         confirmClass="danger"
         onConfirm={onConfirmDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+      <ConfirmModal
+        open={bulkDeleteOpen}
+        title="Elimina documenti selezionati"
+        message={`Stai per eliminare ${selectedIds.size} document${selectedIds.size === 1 ? 'o' : 'i'} visibili/selezionati. Non potrai recuperarli.`}
+        confirmLabel={`Elimina ${selectedIds.size}`}
+        confirmClass="danger"
+        onConfirm={onConfirmBulkDelete}
+        onCancel={() => setBulkDeleteOpen(false)}
       />
     </div>
   );
