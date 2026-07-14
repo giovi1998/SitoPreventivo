@@ -235,7 +235,10 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       const next = !showGrid;
       if (!next) {
         addToast('info', 'Griglia disattivata', 2500);
-        return c;
+        // v2.8.1: turning the grid OFF only hides the overlay/controls;
+        // we keep useGrid=true so the persisted grid layout is still used
+        // by both preview and export (REQ-E01: OFF hides overlay, not layout).
+        return { ...c, updatedAt: new Date().toISOString() };
       }
       let mutated = false;
       let nextCard: BusinessCard = c;
@@ -256,6 +259,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       } else {
         addToast('info', 'Griglia attiva', 2500);
       }
+      // v2.8.1: when the user turns grid ON, persist useGrid=true so the
+      // persisted grids become the single source of truth for preview AND
+      // export. Otherwise the export would keep deriving from flexbox layout.
+      nextCard = {
+        ...nextCard,
+        front: { ...nextCard.front, useGrid: true },
+        back: { ...nextCard.back, useGrid: true },
+      };
       return { ...nextCard, updatedAt: new Date().toISOString() };
     });
   }, [addToast, showGrid]);
@@ -346,10 +357,10 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         void exportPng('back');
         break;
       case 'svg-front':
-        exportSvg('front');
+        void exportSvg('front');
         break;
       case 'svg-back':
-        exportSvg('back');
+        void exportSvg('back');
         break;
       case 'json':
         exportJson();
