@@ -91,12 +91,11 @@
   pointer-events: none;
 }
 
-/* QR in grid-mode keeps its configured size (small/medium/large)
- * and stays centered in its cell; it does NOT stretch to fill the cell.
- * If the cell is smaller than the QR, the QR shrinks to fit. */
+/* QR in grid-mode: size = min(cell, --card-qr-size), centered by flex
+ * on the cell (gridPlacement). Matches svgRenderer backQrSizePx. */
 .card-preview-side.grid-mode .card-grid-cell--qr .card-back-qr-svg {
-  width: var(--card-qr-size, 120px);
-  height: var(--card-qr-size, 120px);
+  width: min(100%, var(--card-qr-size, 120px));
+  height: min(100%, var(--card-qr-size, 120px));
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: 1 / 1;
@@ -147,6 +146,13 @@
   overflow-wrap: break-word;
   word-break: break-word;
   white-space: normal;
+}
+
+/* Own-cell socials: no dashed top border (that was for fallback-in-contacts). */
+.card-preview-side.grid-mode .card-grid-cell--socials .card-back-socials {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 /* Reduce spacing between stacked identity fields in grid mode. */
@@ -480,6 +486,7 @@
 
 /* ─── BACK, redesigned with proper filling ─── */
 .card-preview-back {
+  /* v2.10: padding ratios match backPad() in backLayout.ts (WYSIWYG). */
   padding: 10px 14px 10px;
   gap: 0;
 }
@@ -488,12 +495,13 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding-bottom: 6px;
-  margin-bottom: 6px;
+  /* Tighter header so body grid gets more room (matches backHeaderMetrics). */
+  padding-bottom: 4px;
+  margin-bottom: 4px;
   border-bottom: 1px dashed currentColor;
   border-color: color-mix(in srgb, currentColor 18%, transparent);
   gap: 8px;
-  min-height: 18px;
+  min-height: 16px;
 }
 
 .card-back-eyebrow {
@@ -626,12 +634,9 @@
   display: block;
 }
 
-/* In grid-mode il QR riempie la cella. */
-.card-preview-side.grid-mode .card-back-qr-svg {
-  width: 100%;
-  height: 100%;
-  aspect-ratio: 1 / 1;
-}
+/* In grid-mode the QR is capped by --card-qr-size (see rule above).
+ * Do NOT force 100% of the cell — that made export (capped) look smaller
+ * than preview (full cell). */
 
 .card-back-qr-label {
   font-size: calc(0.6rem * var(--card-font-scale));
@@ -648,8 +653,9 @@
  * side is preserved (see .card-back-wordmark). */
 
 .card-back-socials {
-  margin-top: 5px;
-  padding-top: 5px;
+  /* v2.10 density: less top margin when socials have their own grid cell. */
+  margin-top: 2px;
+  padding-top: 2px;
   border-top: 1px dashed color-mix(in srgb, currentColor 14%, transparent);
   font-size: calc(0.62rem * var(--card-font-scale));
   font-weight: 500;

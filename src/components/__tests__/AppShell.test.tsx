@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, Outlet } from 'react-router-dom';
+import { Route, Routes, Outlet } from 'react-router-dom';
 import React from 'react';
 import AppShell from '../AppShell';
 import { AuthContext } from '../../contexts';
+import { TestRouter } from '../../test/TestRouter';
 
 const mocks = vi.hoisted(() => ({
   topbar: vi.fn(),
@@ -47,7 +48,7 @@ function renderAppShellAt(initialPath: string, user?: any) {
   mocks.layout.mockClear();
   return render(
     <AuthContext.Provider value={authValue(user) as any}>
-      <MemoryRouter initialEntries={[initialPath]}>
+      <TestRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/app" element={<AppShell />}>
             <Route index element={<div data-testid="child-default">default</div>} />
@@ -58,7 +59,7 @@ function renderAppShellAt(initialPath: string, user?: any) {
             <Route path="settings" element={<div data-testid="child-settings">settings</div>} />
           </Route>
         </Routes>
-      </MemoryRouter>
+      </TestRouter>
     </AuthContext.Provider>
   );
 }

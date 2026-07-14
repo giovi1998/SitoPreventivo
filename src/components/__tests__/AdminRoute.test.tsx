@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { MemoryRouter, Routes, Route, Outlet } from 'react-router-dom';
+import { Routes, Route, Outlet } from 'react-router-dom';
 import React from 'react';
 import AdminRoute from '../AdminRoute';
 import { AuthContext } from '../../contexts';
+import { TestRouter } from '../../test/TestRouter';
 
 const mocks = vi.hoisted(() => ({ navigate: vi.fn() }));
 
@@ -22,14 +23,14 @@ const authValue = (user: any) => ({
 function renderAdminRoute(user: any, initialPath: string) {
   return render(
     <AuthContext.Provider value={authValue(user) as any}>
-      <MemoryRouter initialEntries={[initialPath]}>
+      <TestRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/app" element={<div data-testid="app-shell"><Outlet /></div>}>
             <Route path="admin" element={<AdminRoute><div data-testid="admin-content">admin-ok</div></AdminRoute>} />
             <Route path="editor" element={<div data-testid="editor-content">editor</div>} />
           </Route>
         </Routes>
-      </MemoryRouter>
+      </TestRouter>
     </AuthContext.Provider>
   );
 }

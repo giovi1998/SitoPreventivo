@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, within, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { TestRouter } from '../../test/TestRouter';
 import React from 'react';
 import { AuthContext, AppContext } from '../../contexts';
 import { seedDocumentsLocalStorage, makeDocument, buildContextValue, AUTH_VALUE } from './collectionTestUtils';
@@ -25,9 +25,9 @@ async function renderCollection(ctxOverrides: Record<string, any> = {}) {
   render(
     <AuthContext.Provider value={AUTH_VALUE as any}>
       <AppContext.Provider value={ctx as any}>
-        <MemoryRouter>
+        <TestRouter>
           <CollectionViewForTest />
-        </MemoryRouter>
+        </TestRouter>
       </AppContext.Provider>
     </AuthContext.Provider>,
   );
@@ -50,9 +50,9 @@ describe('CollectionView, actions (phase 6, AC-007/008/009/010)', () => {
     render(
       <AuthContext.Provider value={authValue as any}>
         <AppContext.Provider value={ctx as any}>
-          <MemoryRouter>
+          <TestRouter>
             <CollectionViewForTest />
-          </MemoryRouter>
+          </TestRouter>
         </AppContext.Provider>
       </AuthContext.Provider>,
     );

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { TestRouter } from '../../test/TestRouter';
 import React from 'react';
 import { AuthContext, AppContext } from '../../contexts';
 import CollectionPage from '../app/CollectionPage';
@@ -47,9 +47,9 @@ function renderPage(role: 'user' | 'admin') {
       } as any}
     >
       <AppContext.Provider value={buildCtx() as any}>
-        <MemoryRouter>
+        <TestRouter>
           <CollectionPage />
-        </MemoryRouter>
+        </TestRouter>
       </AppContext.Provider>
     </AuthContext.Provider>,
   );

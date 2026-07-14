@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { TestRouter } from '../../test/TestRouter';
 import HomePage from '../HomePage';
 
 vi.mock('../../components/CardPreview', () => ({
@@ -9,9 +9,9 @@ vi.mock('../../components/CardPreview', () => ({
 
 function renderHome(props: { user?: any } = {}) {
   return render(
-    <MemoryRouter>
+    <TestRouter>
       <HomePage user={props.user ?? null} />
-    </MemoryRouter>
+    </TestRouter>
   );
 }
 

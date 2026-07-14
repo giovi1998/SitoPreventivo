@@ -1,8 +1,17 @@
 import type { BusinessCard, CardGrid } from '../documentSchemas';
-import { FONT_SCALE_MIN, FONT_SCALE_MAX, QR_SIZE_PX, deriveGridFromLayout, hasGridElements } from '../documentSchemas';
+import { FONT_SCALE_MIN, FONT_SCALE_MAX, deriveGridFromLayout, hasGridElements } from '../documentSchemas';
 import { generateQrSvg } from '../qrGenerator';
 import { resolveCardQrPayload, getEffectiveQrPayload } from './qrPayload';
 import { deriveHostname, deriveHandle } from './textDerivation';
+import {
+  backPad,
+  backHeaderMetrics,
+  gridCellRect,
+  gridCellBox,
+  alignBoxInCell,
+  backQrSizePx,
+  effectiveBackGridForRender,
+} from './backLayout';
 
 // Phase 2.2 REQ-D04: helper per scalare la dimensione del testo in base
 // a `card.style.fontScale` (clamp 0.7-1.5, default 1). Da usare in tutti
@@ -271,13 +280,33 @@ export function buildFrontSvg(
       const y = logoEl.y * cellH;
       const w = logoEl.w * cellW;
       const h = logoEl.h * cellH;
+      // v2.10: logo respects 3×3 alignH/alignV (preview CSS already does via
+      // gridPlacement). Previously the image always filled the whole cell
+      // with a fixed 8% inset, so "Posizione 3×3" had no effect on export.
+      const alignH = logoEl.alignH ?? 'center';
+      const alignV = logoEl.alignV ?? 'center';
+      const inset = Math.min(w, h) * 0.08;
+      // Logo content box ~60% of the cell so 3×3 align is visible (if the
+      // logo filled ~100% of the cell, left/right and top/bottom would
+      // collapse to the same position).
+      const logoBox = Math.min(w, h) * 0.6;
+      const logoW = Math.min(w - inset * 2, logoBox);
+      const logoH = Math.min(h - inset * 2, logoBox);
+      const pos = alignBoxInCell(
+        { x: x + inset, y: y + inset, w: w - inset * 2, h: h - inset * 2 },
+        logoW,
+        logoH,
+        alignH,
+        alignV,
+      );
       if (card.front.logoBackground === 'card') {
         out += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${escapeXml(bg)}"/>`;
       }
-      // Inset 8% for padding within the cell
-      const inset = Math.min(w, h) * 0.08;
-      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${x + inset}" y="${y + inset}" width="${w - inset * 2}" height="${h - inset * 2}" preserveAspectRatio="xMidYMid meet"/>`;
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${pos.x}" y="${pos.y}" width="${logoW}" height="${logoH}" preserveAspectRatio="xMidYMid meet"/>`;
     }
+
+    // Photo also respects 3×3 when not filling the whole cell (photo-circle
+    // already centers). For non-circle, keep full-bleed slice (photo is media).
 
     const textKeys: Array<keyof CardGrid['elements'] & ('name' | 'title' | 'company')> = ['name', 'title', 'company'];
     const textValues: Record<
@@ -362,7 +391,9 @@ export function buildBackSvg(
   const text = card.style.textColor;
   const accent = card.style.accentColor;
   const stripW = Math.max(2, Math.round(pxW * 0.008));
-  const pad = Math.max(10, Math.round(pxW * 0.04));
+  // v2.10: pad/header metrics shared with CardPreview CSS (hard WYSIWYG).
+  const padBox = backPad(pxW, pxH);
+  const pad = padBox.x; // legacy local name used in fallback layout below
   const fontScale = card.style.fontScale ?? 1;
   const fontFamily = svgFontFamily(card);
 
@@ -402,28 +433,18 @@ export function buildBackSvg(
     out += `<rect x="0" y="${pxH - stripH}" width="${pxW}" height="${stripH}" fill="${accent}"/>`;
   }
 
-  // Header — v2.5: show "CONTATTI" eyebrow whenever there is at least
-  // one contact OR a wordmark (hostname or company). The wordmark is
-  // optional and shown only if present.
+  // Header — v2.10: sizes from backHeaderMetrics (matches .card-back-header).
   let headerH = 0;
   const hasAnyContact = !!(card.back.phone || card.back.email || card.back.website || card.back.address || card.back.vatNumber);
+  const headerMetrics = backHeaderMetrics(pxW, pxH, fontScale, padBox);
   if (hasAnyContact || headerWord) {
-    const eyebrowSize = fs(pxH * 0.055, fontScale);
-    const wordmarkSize = fs(pxH * 0.052, fontScale);
-    const headerTextH = Math.max(eyebrowSize, wordmarkSize);
-    // Align eyebrow with contacts grid cell content (pad * 0.5 from left edge).
-    // When accent-strip-left is active, stripW > 0; otherwise stripW = 0.
-    // The contacts cell starts at x = 0 * cellW + pad * 0.5 = pad * 0.5.
-    // So we use pad * 0.5 consistently for both header and contacts content.
-    const headerX = pad * 0.5;
-    out += `<text x="${headerX}" y="${pad + eyebrowSize}" font-family="${fontFamily}" font-size="${eyebrowSize}" font-weight="700" fill="${accent}" letter-spacing="2.5">CONTATTI</text>`;
+    const { eyebrowSize, wordmarkSize, textY, dividerY, headerX } = headerMetrics;
+    out += `<text x="${headerX}" y="${textY}" font-family="${fontFamily}" font-size="${eyebrowSize}" font-weight="700" fill="${accent}" letter-spacing="2.5" dominant-baseline="alphabetic">CONTATTI</text>`;
     if (headerWord) {
-      out += `<text x="${pxW - pad}" y="${pad + eyebrowSize}" font-family="${fontFamily}" font-size="${wordmarkSize}" font-weight="600" fill="${accent}" text-anchor="end">${escapeXml(headerWord)}</text>`;
+      out += `<text x="${pxW - padBox.x}" y="${textY}" font-family="${fontFamily}" font-size="${wordmarkSize}" font-weight="600" fill="${accent}" text-anchor="end" dominant-baseline="alphabetic">${escapeXml(headerWord)}</text>`;
     }
-    const divY = pad + headerTextH + Math.round(pxH * 0.02);
-    out += `<line x1="${headerX}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.4" stroke-dasharray="3,2" opacity="0.18"/>`;
-    // Reserve the same vertical space the preview uses for the header + divider + margin.
-    headerH = divY + Math.round(pxH * 0.025);
+    out += `<line x1="${headerX}" y1="${dividerY}" x2="${pxW - padBox.x}" y2="${dividerY}" stroke="${text}" stroke-width="0.4" stroke-dasharray="3,2" opacity="0.18"/>`;
+    headerH = headerMetrics.bodyTop;
   }
   const bodyTop = headerH;
   const bodyH = pxH - bodyTop;
@@ -432,24 +453,25 @@ export function buildBackSvg(
   // v2.8: when back.useGrid is false OR the persisted backGrid has no
   // usable elements, derive fresh from the default preset so the export
   // never goes blank.
+  // v2.10: collapse empty services row so socials sit under contacts
+  // (same density as preview when servicesContent is null).
   const useBackGrid = card.back.useGrid && hasGridElements('back', card);
   const persistedBackGrid = useBackGrid ? card.backGrid : undefined;
   const rawBackGrid = persistedBackGrid ?? (useBackGrid ? card.grid : undefined);
-  const grid = rawBackGrid ?? deriveGridFromLayout(card, 'back');
+  const baseGrid = rawBackGrid ?? deriveGridFromLayout(card, 'back');
+  const grid = baseGrid ? effectiveBackGridForRender(baseGrid, card) : baseGrid;
   if (grid && grid.cols > 0 && grid.rows > 0) {
     const cellW = pxW / grid.cols;
     const cellH = bodyH / grid.rows;
 
     const contactsEl = grid.elements.contacts;
     if (contactsEl) {
-      // v2.9.1: respect the persisted grid exactly, like CardPreview.tsx does.
-      // Do not auto-expand contacts: it overlaps the socials/services cells when
-      // the user has manually added them. If services/socials are missing, the
-      // cells below contacts simply stay empty (matching the preview).
-      const cx = contactsEl.x * cellW + pad * 0.5;
-      const cy = contactsEl.y * cellH + bodyTop + pad * 0.5;
-      const cw = contactsEl.w * cellW - pad;
-      const ch = contactsEl.h * cellH - pad;
+      // v2.10: cell rect from shared backLayout (matches preview padding).
+      const cell = gridCellRect(contactsEl, cellW, cellH, bodyTop, padBox);
+      const cx = cell.x;
+      const cy = cell.y;
+      const cw = cell.w;
+      const ch = cell.h;
 
       const contactEntries: Array<{ key: string; value: string; color?: string; isAccent?: boolean }> = [];
       if (card.back.phone) contactEntries.push({ key: 'Telefono', value: card.back.phone });
@@ -556,13 +578,14 @@ export function buildBackSvg(
       servicesRenderEl = { ...servicesEl, h: servicesEl.h + 1 };
     }
     if (servicesRenderEl && services.length > 0) {
-      const sx = servicesRenderEl.x * cellW + pad * 0.5;
-      const sy = servicesRenderEl.y * cellH + bodyTop + pad * 0.5;
-      const sw = servicesRenderEl.w * cellW - pad;
-      const sh = servicesRenderEl.h * cellH - pad;
+      const svcCell = gridCellRect(servicesRenderEl, cellW, cellH, bodyTop, padBox);
+      const sx = svcCell.x;
+      const sy = svcCell.y;
+      const sw = svcCell.w;
+      const sh = svcCell.h;
       const servicesAlignH = servicesRenderEl.alignH ?? 'left';
       const servicesAlignV = servicesRenderEl.alignV ?? 'top';
-      let svcY = sy + pad * 0.25;
+      let svcY = sy + padBox.cellY * 0.25;
       const servicesLabelText = (card.back.servicesLabel ?? '').trim();
       let labelSize = 0;
       if (servicesLabelText) {
@@ -593,7 +616,7 @@ export function buildBackSvg(
       else if (servicesAlignV === 'bottom') startY = sy + sh - blockH;
       const textAnchor = servicesAlignH === 'right' ? 'end' : servicesAlignH === 'center' ? 'middle' : 'start';
       const textX = servicesAlignH === 'right'
-        ? sx + sw - pad * 0.5
+        ? sx + sw - padBox.cellX * 0.5
         : servicesAlignH === 'center'
           ? sx + sw / 2
           : sx;
@@ -641,11 +664,12 @@ export function buildBackSvg(
 
     if (socialsEl && socials.length > 0) {
       // Full cell box (same coordinate system as preview CSS grid).
-      const cellX = socialsEl.x * cellW;
-      const cellY = socialsEl.y * cellH + bodyTop;
-      const cellBoxW = socialsEl.w * cellW;
-      const cellBoxH = socialsEl.h * cellH;
-      const innerPad = pad * 0.35;
+      const box = gridCellBox(socialsEl, cellW, cellH, bodyTop);
+      const cellX = box.x;
+      const cellY = box.y;
+      const cellBoxW = box.w;
+      const cellBoxH = box.h;
+      const innerPad = padBox.cellX * 0.5;
       const sx = cellX + innerPad;
       const sw = Math.max(10, cellBoxW - innerPad * 2);
       const sh = Math.max(10, cellBoxH - innerPad * 2);
@@ -690,25 +714,27 @@ export function buildBackSvg(
 
     const qrEl = grid.elements.qr;
     if (qrEl && hasQr) {
-      // Phase 2.2 REQ-E02: in grid-mode la dimensione QR deriva dalla cella,
-      // ma rispetta comunque `qrSize` (small/medium/large) come upper bound
-      // per coerenza con la preview (CardPreview.tsx usa qrSizePxFor).
-      // Mappa i px di QR_SIZE_PX (84/120/160) proporzionalmente alla carta:
-      // la preview è ~340px di altezza per eu-85x55, qui pxH varia con DPI.
-      const qrMaxPx = Math.round(pxH * (QR_SIZE_PX[card.back.qrSize] ?? QR_SIZE_PX.medium) / 340);
-      const qx = qrEl.x * cellW + pad * 0.5;
-      const qy = qrEl.y * cellH + bodyTop + pad * 0.5;
-      const qw = qrEl.w * cellW - pad;
-      const qh = qrEl.h * cellH - pad;
+      // v2.10: QR size from shared backQrSizePx (same scale as preview CSS
+      // --card-qr-size / PREVIEW_REF_H). Cell rect + align from backLayout.
+      const qrCell = gridCellRect(qrEl, cellW, cellH, bodyTop, padBox);
+      const qx = qrCell.x;
+      const qy = qrCell.y;
+      const qw = qrCell.w;
+      const qh = qrCell.h;
       const qrAlignH = qrEl.alignH ?? 'center';
       const qrAlignV = qrEl.alignV ?? 'center';
-      const qrSize = Math.min(qw, qh, qrMaxPx);
-      let qrX = qx + (qw - qrSize) / 2;
-      let qrY = qy + (qh - qrSize) / 2;
-      if (qrAlignH === 'left') qrX = qx;
-      else if (qrAlignH === 'right') qrX = qx + qw - qrSize;
-      if (qrAlignV === 'top') qrY = qy;
-      else if (qrAlignV === 'bottom') qrY = qy + qh - qrSize;
+      // Reserve space for qrLabel under the QR inside the cell.
+      const labelReserve = card.back.qrLabel ? Math.round(Math.min(qw, qh) * 0.12) : 0;
+      const qrSize = backQrSizePx(card, qw, qh - labelReserve, pxH);
+      const pos = alignBoxInCell(
+        { x: qx, y: qy, w: qw, h: qh - labelReserve },
+        qrSize,
+        qrSize,
+        qrAlignH,
+        qrAlignV,
+      );
+      const qrX = pos.x;
+      const qrY = pos.y;
       const qrObj: any = {
         documentType: 'qrCode',
         id: 'card-back',
@@ -733,12 +759,10 @@ export function buildBackSvg(
       const innerScale = (qrSize - 8) / totalSize;
       out += `<g transform="translate(${qrX + 4} ${qrY + 4}) scale(${innerScale})">${extractQrInner(qrSvg)}</g>`;
 
-      // QR label below QR cell (v2.5: removed hostname wordmark, it
-      // was redundant with the header wordmark at the top of the back
-      // side and overlapped the qrLabel visually).
-      const belowY = qrY + qrSize + Math.round(cellH * 0.04);
+      // QR label below QR, still inside the cell (matches preview density).
       if (card.back.qrLabel) {
-        const labelSize = fs(Math.min(qw, qh) * 0.08, fontScale);
+        const labelSize = fs(Math.min(qw, qh) * 0.07, fontScale);
+        const belowY = qrY + qrSize + Math.round(labelSize * 0.4);
         out += `<text x="${qx + qw / 2}" y="${belowY + labelSize}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
       }
     }

@@ -12,6 +12,7 @@ import {
   qrSizePxFor,
   sideGrid,
 } from '../utils/card/previewHelpers';
+import { effectiveBackGridForRender } from '../utils/card/backLayout';
 import { deriveHandle, deriveHostname } from '../utils/card/textDerivation';
 import PreviewWatermark from './PreviewWatermark';
 
@@ -348,7 +349,7 @@ const BackPreview = React.memo(function BackPreview({
     !Object.keys(rawGrid.elements).some((k) =>
       ['contacts', 'services', 'socials', 'qr'].includes(k),
     );
-  const grid = needsBackGrid
+  const baseGrid = needsBackGrid
     ? deriveGridFromLayout(
         {
           ...card,
@@ -357,6 +358,9 @@ const BackPreview = React.memo(function BackPreview({
         'back',
       )
     : rawGrid;
+  // v2.10: same collapse as SVG export — empty services row is removed so
+  // socials sit under contacts (hard WYSIWYG).
+  const grid = baseGrid ? effectiveBackGridForRender(baseGrid, card) : baseGrid;
 
   const qrSizePx = qrSizePxFor(card);
 

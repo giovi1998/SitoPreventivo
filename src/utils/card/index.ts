@@ -45,6 +45,15 @@ export {
   qrSizePxFor,
   sideGrid,
 } from './previewHelpers';
+export {
+  backPad,
+  backHeaderMetrics,
+  backQrSizePx,
+  effectiveBackGridForRender,
+  alignBoxInCell,
+  gridCellRect,
+  PREVIEW_REF_H,
+} from './backLayout';
 export { mm2pt, MM_TO_PT } from './units';
 export {
   SIZE_PRESETS_MM,

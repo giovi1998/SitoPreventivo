@@ -178,15 +178,18 @@ describe('svgRenderer', () => {
     });
 
     it('export socials y follows backGrid.elements.socials.y (preview/export parity)', () => {
+      // With services content present, collapse does not run — socials.y is
+      // respected as-is (y:3 lower than y:2).
       const base = createGiovanniCardTemplate();
       const atBottom = {
         ...base,
-        back: { ...base.back, useGrid: true },
+        back: { ...base.back, useGrid: true, services: ['UX Design'] },
         backGrid: {
           cols: 4,
           rows: 4,
           elements: {
             contacts: { x: 0, y: 0, w: 2, h: 2 },
+            services: { x: 0, y: 2, w: 2, h: 1 },
             socials: { x: 0, y: 3, w: 2, h: 1 },
             qr: { x: 2, y: 0, w: 2, h: 4 },
           },
@@ -198,16 +201,16 @@ describe('svgRenderer', () => {
           ...atBottom.backGrid,
           elements: {
             ...atBottom.backGrid.elements,
+            // Move socials into services row (services still present but
+            // socials y is what we measure).
             socials: { x: 0, y: 2, w: 2, h: 1 },
+            services: { x: 0, y: 3, w: 2, h: 1 },
           },
         },
       };
       const svgBottom = buildBackSvg(atBottom, 1024, 663);
       const svgUp = buildBackSvg(movedUp, 1024, 663);
-      // Extract first socials <text> y= attribute (italic socials lines).
       const yOf = (svg: string) => {
-        const m = svg.match(/font-style="italic"[^>]*y="([\d.]+)"|y="([\d.]+)"[^>]*font-style="italic"/);
-        // socials lines always have font-style italic — find y near LinkedIn
         const idx = svg.indexOf('LinkedIn');
         const slice = svg.slice(Math.max(0, idx - 200), idx + 50);
         const ym = slice.match(/y="([\d.]+)"/);
@@ -570,6 +573,79 @@ describe('svgRenderer', () => {
       // collapses to invisible.
       servicesFontSizes.forEach((size) => expect(size).toBeGreaterThanOrEqual(14));
       servicesFontSizes.forEach((size) => expect(size).toBeLessThan(50));
+    });
+
+    it('v2.10: logo respects alignH/alignV (3×3) in front SVG export', () => {
+      const base = createEmptyCard();
+      const make = (alignH: 'left' | 'center' | 'right', alignV: 'top' | 'center' | 'bottom') => ({
+        ...base,
+        front: {
+          ...base.front,
+          useGrid: true,
+          logoUrl: 'data:image/png;base64,LOGO',
+          name: 'MARIO',
+        },
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            logo: { x: 0, y: 0, w: 2, h: 2, alignH, alignV },
+            name: { x: 2, y: 0, w: 2, h: 1 },
+          },
+        },
+      });
+      const leftTop = buildFrontSvg(make('left', 'top'), 1024, 663);
+      const rightBottom = buildFrontSvg(make('right', 'bottom'), 1024, 663);
+      const xOf = (svg: string) => {
+        const idx = svg.indexOf('data:image/png;base64,LOGO');
+        const tag = svg.slice(Math.max(0, idx - 30), idx + 200);
+        const m = tag.match(/x="([\d.]+)"/);
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      const yOf = (svg: string) => {
+        const idx = svg.indexOf('data:image/png;base64,LOGO');
+        const tag = svg.slice(Math.max(0, idx - 30), idx + 200);
+        const m = tag.match(/y="([\d.]+)"/);
+        return m ? parseFloat(m[1]) : NaN;
+      };
+      expect(xOf(leftTop)).toBeLessThan(xOf(rightBottom));
+      expect(yOf(leftTop)).toBeLessThan(yOf(rightBottom));
+    });
+
+    it('v2.10: empty services collapses so socials sit under contacts (no ghost gap)', () => {
+      const card = createGiovanniCardTemplate();
+      card.back.services = [];
+      const withGap = {
+        ...card,
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 2, h: 2 },
+            services: { x: 0, y: 2, w: 2, h: 1 },
+            socials: { x: 0, y: 3, w: 2, h: 1 },
+            qr: { x: 2, y: 0, w: 2, h: 4 },
+          },
+        },
+      };
+      // With services content, socials stay at y=3 (lower).
+      const withServices = {
+        ...withGap,
+        back: { ...withGap.back, services: ['UX Design'] },
+      };
+      const yOf = (svg: string) => {
+        const idx = svg.indexOf('LinkedIn');
+        expect(idx).toBeGreaterThan(0);
+        const slice = svg.slice(Math.max(0, idx - 200), idx + 20);
+        const ym = slice.match(/y="([\d.]+)"/);
+        return ym ? parseFloat(ym[1]) : NaN;
+      };
+      const yCollapsed = yOf(buildBackSvg(withGap, 1024, 663));
+      const yWithServices = yOf(buildBackSvg(withServices, 1024, 663));
+      expect(yCollapsed).not.toBeNaN();
+      expect(yWithServices).not.toBeNaN();
+      // Collapse moves socials up under contacts (y smaller than with services gap).
+      expect(yCollapsed).toBeLessThan(yWithServices);
     });
   });
 });
