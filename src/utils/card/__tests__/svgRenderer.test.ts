@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildCardSvg, buildFrontSvg, buildBackSvg, buildEmbeddedFontImport } from '../svgRenderer';
-import { createEmptyCard, createGiovanniCardTemplate } from '../../documentSchemas';
+import { createEmptyCard, createGiovanniCardTemplate, gridPresetBackDefault } from '../../documentSchemas';
 
 describe('svgRenderer', () => {
   describe('font-size attributes', () => {
@@ -639,6 +639,27 @@ describe('svgRenderer', () => {
       const size = parseFloat(m![1]);
       expect(size).toBeGreaterThanOrEqual(12);
       expect(size).toBeLessThan(28);
+    });
+
+    it('v2.13: default back preset keeps socials inside contacts half (clip, no full-card spill)', () => {
+      // Regression: preset without socials cell put socials as one long <text>
+      // that spilled across the whole export (user screenshot 2026-07-14).
+      const card = createGiovanniCardTemplate();
+      card.back.services = [];
+      card.backGrid = gridPresetBackDefault();
+      const svg = buildBackSvg(card, 1024, 663);
+      expect(svg).toContain('LinkedIn');
+      // Must use a clipPath for the socials (or contacts fallback) cell.
+      expect(svg).toMatch(/clipPath id="clip(Socials|Contacts)/);
+      // Collect LinkedIn text x positions — all must be in left half (x < 520).
+      const re = /<text[^>]*x="([\d.]+)"[^>]*>[^<]*LinkedIn/g;
+      let m: RegExpExecArray | null;
+      let found = 0;
+      while ((m = re.exec(svg)) !== null) {
+        found += 1;
+        expect(parseFloat(m[1])).toBeLessThan(520);
+      }
+      expect(found).toBeGreaterThan(0);
     });
 
     it('v2.12: empty services drops services cell; socials stay at persisted y (3×3 match)', () => {

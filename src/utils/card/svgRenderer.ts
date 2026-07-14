@@ -537,10 +537,15 @@ export function buildBackSvg(
         : contactsAlignH === 'center'
           ? cx + cw / 2 + colLabelW / 2
           : cx + colLabelW;
+      // v2.13: hard clip — text must NEVER paint outside the contacts cell.
+      const contactsClipId = `clipContacts${contactsEl.x}${contactsEl.y}${contactsEl.w}${contactsEl.h}`;
+      const contactsBox = gridCellBox(contactsEl, cellW, cellH, bodyTop);
+      out += `<defs><clipPath id="${contactsClipId}"><rect x="${contactsBox.x}" y="${contactsBox.y}" width="${contactsBox.w}" height="${contactsBox.h}"/></clipPath></defs>`;
+      out += `<g clip-path="url(#${contactsClipId})">`;
       const renderContact = (entry: { key: string; value: string; color?: string; isAccent?: boolean }) => {
-        const wrapped = wrappableKeys.has(entry.key)
-          ? wrapTextAtWhitespace(entry.value, valueMaxW, valSize)
-          : [entry.value];
+        // Always wrap values to valueMaxW (not only email/phone) so long
+        // strings never spill past the cell even without clip.
+        const wrapped = wrapTextAtWhitespace(entry.value, valueMaxW, valSize);
         out += `<text x="${labelX}" y="${lineY}" font-family="${fontFamily}" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4" text-anchor="${labelAnchor}" dominant-baseline="alphabetic">${escapeXml(entry.key.toUpperCase())}</text>`;
         wrapped.forEach((line) => {
           out += `<text x="${valueXBase}" y="${lineY}" font-family="${fontFamily}" font-size="${valSize}" font-weight="500" fill="${entry.isAccent ? accent : (entry.color ?? text)}" text-anchor="${valueAnchor}" dominant-baseline="alphabetic">${escapeXml(line)}</text>`;
@@ -548,9 +553,7 @@ export function buildBackSvg(
         });
       };
       contactEntries.forEach(renderContact);
-      // v2.5: fallback — when the grid has no socials cell, render the
-      // socials as a small italic line at the bottom of the contacts
-      // cell, mirroring the CardPreview React fallback.
+      // Fallback: no dedicated socials cell → socials inside contacts, CLIPPED.
       if (!grid.elements.socials && socials.length > 0) {
         const socialsText = socials
           .map((s) => {
@@ -559,9 +562,22 @@ export function buildBackSvg(
             return `${s.platform} ${value}`;
           })
           .join('   ');
-        const socialSize = fs(Math.min(cw, ch) * 0.14, fontScale);
-        out += `<text x="${cx}" y="${lineY + Math.round(ch * 0.04)}" font-family="${fontFamily}" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" dominant-baseline="text-before-edge">${escapeXml(socialsText)}</text>`;
+        // Size vs card height (same as dedicated socials cell), then wrap.
+        let socialSize = fs(pxH * (10 / 340), fontScale);
+        const socialLineH = (s: number) => s * 1.35;
+        const remainH = Math.max(8, cy + ch - lineY - pad * 0.25);
+        while (socialSize > 6 && wrapTextAtWhitespace(socialsText, cw, socialSize).length * socialLineH(socialSize) > remainH) {
+          socialSize *= 0.9;
+        }
+        const lines = wrapTextAtWhitespace(socialsText, cw, socialSize);
+        let sy = lineY + Math.round(socialSize * 0.4);
+        lines.forEach((line) => {
+          if (sy > cy + ch) return;
+          out += `<text x="${cx}" y="${sy}" font-family="${fontFamily}" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" dominant-baseline="text-before-edge">${escapeXml(line)}</text>`;
+          sy += socialLineH(socialSize);
+        });
       }
+      out += '</g>';
     }
 
     // Services (separate grid element)
@@ -624,9 +640,14 @@ export function buildBackSvg(
         labelY += labelSize * 1.3;
       }
       const finalLineH = svcLineH(svcSize);
+      const svcClipId = `clipServices${servicesRenderEl.x}${servicesRenderEl.y}${servicesRenderEl.w}${servicesRenderEl.h}`;
+      const svcBox = gridCellBox(servicesRenderEl, cellW, cellH, bodyTop);
+      out += `<defs><clipPath id="${svcClipId}"><rect x="${svcBox.x}" y="${svcBox.y}" width="${svcBox.w}" height="${svcBox.h}"/></clipPath></defs>`;
+      out += `<g clip-path="url(#${svcClipId})">`;
       services.forEach((svc, idx) => {
         out += `<text x="${textX}" y="${labelY + idx * finalLineH}" font-family="${fontFamily}" font-size="${svcSize}" font-weight="800" fill="${accent}" text-anchor="${textAnchor}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
       });
+      out += '</g>';
     }
 
     if (services.length > 0 && !servicesEl && !socialsEl && contactsEl) {

@@ -351,10 +351,15 @@ describe('CardPreview', () => {
     });
 
     it('renders socials INSIDE the contacts grid cell when no socials cell exists (grid-only refactor)', () => {
+      // Explicit backGrid WITHOUT socials cell → fallback into contacts.
+      // Need phone so hasGridElements('back') is true and this backGrid is used
+      // (empty contacts would force deriveGridFromLayout → default with socials cell).
       const card = {
         ...createEmptyCard(),
         back: {
           ...createEmptyCard().back,
+          useGrid: true,
+          phone: '123',
           socials: [
             { platform: 'LinkedIn', url: 'XXXX' },
           ],
@@ -466,13 +471,15 @@ describe('CardPreview', () => {
       const bodyGrid = back.querySelector('.card-back-body-grid') as HTMLElement;
       expect(bodyGrid).not.toBeNull();
       expect(window.getComputedStyle(bodyGrid).display).toBe('grid');
-      // gridPresetBackDefault: contacts at x=0 (w=2), qr at x=3 (w=1)
+      // gridPresetBackDefault v2.13: contacts x=0 w=2, qr x=2 w=2
       const qrEl = document.querySelector('[data-testid="grid-el-qr"]') as HTMLElement;
       expect(qrEl).not.toBeNull();
-      expect(window.getComputedStyle(qrEl).gridColumn).toBe('4 / span 1');
+      expect(window.getComputedStyle(qrEl).gridColumn).toBe('3 / span 2');
       const contactsEl = document.querySelector('[data-testid="grid-el-contacts"]') as HTMLElement;
       expect(contactsEl).not.toBeNull();
       expect(window.getComputedStyle(contactsEl).gridColumn).toBe('1 / span 2');
+      // Socials have their own cell (not fallback into contacts)
+      expect(document.querySelector('[data-testid="grid-el-socials"]')).not.toBeNull();
     });
 
     it('back: socials renderizzati UNA sola volta in grid-mode (regression: no doppioni)', () => {

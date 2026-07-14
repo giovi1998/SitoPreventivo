@@ -170,12 +170,18 @@
   white-space: normal;
 }
 
-/* Own-cell socials: no dashed top border (that was for fallback-in-contacts).
- * Clip + full-size so 3×3 align keeps text inside the SOCIALS cell. */
-.card-preview-side.grid-mode .card-grid-cell--socials {
+/* v2.13: every back text cell hard-clips. Text must never paint outside
+ * its grid cell (preview = export rule). */
+.card-preview-side.grid-mode .card-grid-cell--contacts,
+.card-preview-side.grid-mode .card-grid-cell--services,
+.card-preview-side.grid-mode .card-grid-cell--socials,
+.card-back-body-grid .card-grid-cell--contacts,
+.card-back-body-grid .card-grid-cell--services,
+.card-back-body-grid .card-grid-cell--socials {
   overflow: hidden;
 }
 
+/* Own-cell socials: no dashed top border (that was for fallback-in-contacts). */
 .card-preview-side.grid-mode .card-grid-cell--socials .card-back-socials {
   margin-top: 0;
   padding-top: 0;

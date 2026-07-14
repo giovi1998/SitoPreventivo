@@ -216,8 +216,18 @@ export function CardGridControls({
               'photo-circle': { cols: 4, rows: 4, elements: { photo: { x: 1, y: 0, w: 2, h: 2 }, name: { x: 0, y: 2, w: 4, h: 1 }, title: { x: 0, y: 3, w: 3, h: 1 }, company: { x: 3, y: 3, w: 1, h: 1 }, logo: { x: 3, y: 3, w: 1, h: 1 } } },
               compact: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 1, h: 2 }, logo: { x: 0, y: 2, w: 1, h: 2 }, name: { x: 1, y: 0, w: 3, h: 1 }, title: { x: 1, y: 1, w: 3, h: 1 }, company: { x: 1, y: 2, w: 3, h: 1 } } },
             };
+            // Must match gridPresetBackDefault() (contacts + services + socials + qr).
             const grid = side === 'back'
-              ? { cols: 4, rows: 4, elements: { contacts: { x: 0, y: 0, w: 2, h: 3 }, socials: { x: 0, y: 3, w: 2, h: 1 }, qr: { x: 2, y: 0, w: 2, h: 4 } } }
+              ? {
+                cols: 4,
+                rows: 4,
+                elements: {
+                  contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left' as const, alignV: 'top' as const },
+                  services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left' as const, alignV: 'top' as const },
+                  socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left' as const, alignV: 'top' as const },
+                  qr: { x: 2, y: 0, w: 2, h: 4, alignH: 'center' as const, alignV: 'center' as const },
+                },
+              }
               : FRONT_PRESETS[v as BusinessCardLayout] ?? FRONT_PRESETS.left;
             onChangeGrid(grid);
           }}
