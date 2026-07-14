@@ -36,14 +36,14 @@ describe('backLayout', () => {
     const grid = card.backGrid!;
     expect(grid.elements.services).toBeDefined();
     expect(grid.elements.socials).toBeDefined();
-
     const effective = effectiveBackGridForRender(grid, card);
     expect(effective.elements.services).toBeUndefined();
     expect(effective.elements.socials).toBeDefined();
     const contacts = effective.elements.contacts!;
     const socials = effective.elements.socials!;
-    // Socials start right under contacts
+    // Socials start right under contacts and fill remaining rows
     expect(socials.y).toBe(contacts.y + contacts.h);
+    expect(socials.y + socials.h).toBe(grid.rows);
   });
 
   it('effectiveBackGridForRender keeps services when content exists', () => {

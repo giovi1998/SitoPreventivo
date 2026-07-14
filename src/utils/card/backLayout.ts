@@ -180,21 +180,21 @@ export function effectiveBackGridForRender(
   const contactsEl = grid.elements.contacts;
   if (!socialsEl || !contactsEl) return grid;
 
-  // Collapse: socials takes contacts.y+h through former socials bottom.
-  const socialsBottom = socialsEl.y + socialsEl.h;
+  // Collapse empty services: socials moves under contacts and expands to
+  // fill remaining left-column rows so we don't leave a dead empty row
+  // (v2.10.1: keep height expansion for density, fonts are now sized vs
+  // card height so expansion no longer makes text giant).
   const newSocialsY = contactsEl.y + contactsEl.h;
-  const newSocialsH = Math.max(1, socialsBottom - newSocialsY);
+  const remainingH = Math.max(socialsEl.h, grid.rows - newSocialsY);
 
   const elements = { ...grid.elements };
   delete elements.services;
   elements.socials = {
     ...socialsEl,
     y: newSocialsY,
-    h: newSocialsH,
+    h: remainingH,
   };
 
-  // If services existed above socials and we had no services content,
-  // also let contacts keep original h (already). Done.
   void servicesEl;
   return { ...grid, elements };
 }

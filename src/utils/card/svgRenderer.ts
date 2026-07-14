@@ -280,33 +280,19 @@ export function buildFrontSvg(
       const y = logoEl.y * cellH;
       const w = logoEl.w * cellW;
       const h = logoEl.h * cellH;
-      // v2.10: logo respects 3×3 alignH/alignV (preview CSS already does via
-      // gridPlacement). Previously the image always filled the whole cell
-      // with a fixed 8% inset, so "Posizione 3×3" had no effect on export.
+      // v2.10.1: logo fills the cell (preview CSS object-fit:contain on 100%
+      // cell). 3×3 alignment is done via SVG preserveAspectRatio, NOT by
+      // shrinking the image box (shrinking to 60% made logos tiny).
       const alignH = logoEl.alignH ?? 'center';
       const alignV = logoEl.alignV ?? 'center';
+      const xAlign = alignH === 'left' ? 'xMin' : alignH === 'right' ? 'xMax' : 'xMid';
+      const yAlign = alignV === 'top' ? 'YMin' : alignV === 'bottom' ? 'YMax' : 'YMid';
       const inset = Math.min(w, h) * 0.08;
-      // Logo content box ~60% of the cell so 3×3 align is visible (if the
-      // logo filled ~100% of the cell, left/right and top/bottom would
-      // collapse to the same position).
-      const logoBox = Math.min(w, h) * 0.6;
-      const logoW = Math.min(w - inset * 2, logoBox);
-      const logoH = Math.min(h - inset * 2, logoBox);
-      const pos = alignBoxInCell(
-        { x: x + inset, y: y + inset, w: w - inset * 2, h: h - inset * 2 },
-        logoW,
-        logoH,
-        alignH,
-        alignV,
-      );
       if (card.front.logoBackground === 'card') {
         out += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${escapeXml(bg)}"/>`;
       }
-      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${pos.x}" y="${pos.y}" width="${logoW}" height="${logoH}" preserveAspectRatio="xMidYMid meet"/>`;
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${x + inset}" y="${y + inset}" width="${w - inset * 2}" height="${h - inset * 2}" preserveAspectRatio="${xAlign}${yAlign} meet"/>`;
     }
-
-    // Photo also respects 3×3 when not filling the whole cell (photo-circle
-    // already centers). For non-circle, keep full-bleed slice (photo is media).
 
     const textKeys: Array<keyof CardGrid['elements'] & ('name' | 'title' | 'company')> = ['name', 'title', 'company'];
     const textValues: Record<
@@ -480,16 +466,22 @@ export function buildBackSvg(
       if (card.back.address) contactEntries.push({ key: 'Indirizzo', value: card.back.address });
       if (card.back.vatNumber) contactEntries.push({ key: 'P.IVA', value: card.back.vatNumber });
 
-      // v2.6: contacts were rendering at 0.09/0.12 of min(cw,ch), far
-      // smaller than socials/services (~0.22-0.25) in the same body
-      // grid, so a resized (h:1) contacts cell looked "microscopic"
-      // next to socials. Start from a comparable base and shrink-to-fit
-      // like socials/services do, instead of a fixed tiny factor.
-      let keySize = fs(Math.min(cw, ch) * 0.16, fontScale);
-      let valSize = fs(Math.min(cw, ch) * 0.2, fontScale);
+      // v2.10.1: size fonts vs CARD height (pxH), matching CSS rem on a
+      // ~340px-tall preview (.card-back-key 0.58rem≈9.3px, .card-back-val
+      // 0.78rem≈12.5px). Sizing vs min(cw,ch) blew up at export DPI
+      // (cell ~300px → 48px labels). Then shrink-to-fit short cells.
+      let keySize = fs(pxH * (9.3 / 340), fontScale);
+      let valSize = fs(pxH * (12.5 / 340), fontScale);
       const wrappableKeys = new Set(['Email', 'Telefono']);
-      const colLabelWFor = (ks: number) => Math.max(cw * 0.22, ks * 6, pad * 1.5);
-      const lineGapFor = (ks: number, vs: number) => Math.max(ks, vs) * 1.25;
+      // Label column = longest key glyph width + gap (never overlaps value).
+      // "TELEFONO" ≈ 8 chars; uppercase sans ≈ 0.62em per char + letter-spacing.
+      const longestKey = contactEntries.reduce((n, e) => Math.max(n, e.key.length), 1);
+      const colLabelWFor = (ks: number) => {
+        const textW = ks * longestKey * 0.62 + ks * 0.4; // letter-spacing budget
+        const gap = Math.max(8, ks * 0.5);
+        return Math.min(cw * 0.42, textW + gap);
+      };
+      const lineGapFor = (ks: number, vs: number) => Math.max(ks, vs) * 1.35;
       const linesFor = (vs: number, ks: number) => {
         const colLabelW = colLabelWFor(ks);
         const valueMaxW = Math.max(10, cw - colLabelW - pad * 0.5);
@@ -589,13 +581,13 @@ export function buildBackSvg(
       const servicesLabelText = (card.back.servicesLabel ?? '').trim();
       let labelSize = 0;
       if (servicesLabelText) {
-        // v2.5: bumped from 0.18 — label was getting lost in the cell.
-        labelSize = fs(Math.min(sw, sh) * 0.22, fontScale);
+        // v2.10.1: vs card height (CSS ~0.62rem services label)
+        labelSize = fs(pxH * (10 / 340), fontScale);
         svcY += labelSize * 1.1;
       }
       const hasLongService = services.some((s) => s.length >= 40);
-      // v2.5: bumped from 0.2 — services were too small to read.
-      let svcSize = fs(Math.min(sw, sh) * 0.25, fontScale) * (hasLongService ? 0.85 : 1);
+      // v2.10.1: vs card height, not min(cell) which explodes at export DPI
+      let svcSize = fs(pxH * (13 / 340), fontScale) * (hasLongService ? 0.85 : 1);
       // v2.5.1: tighter line-height (1.2 instead of 1.35) so 2-3
       // services + label fit a 1-row cell without shrinking too much.
       const svcLineH = (s: number) => s * 1.2;
@@ -680,7 +672,8 @@ export function buildBackSvg(
           return `${s.platform} ${value}`;
         })
         .join('   ');
-      let socialSize = fs(Math.min(sw, sh) * 0.22, fontScale);
+      // v2.10.1: vs card height (CSS .card-back-socials ~0.62rem ≈ 10px @340)
+      let socialSize = fs(pxH * (10 / 340), fontScale);
       const socialLineH = (s: number) => s * 1.35;
       const neededSocialH = (s: number) => {
         const lines = wrapTextAtWhitespace(socialsText, sw, s);

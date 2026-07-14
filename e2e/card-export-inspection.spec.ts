@@ -143,6 +143,45 @@ test.describe('Card export inspection', () => {
 
     assertInside(parsed, parsed.texts, 2);
     assertInside(parsed, parsed.qrRects, 2);
+
+    // v2.10.1: fonts as fraction of card height (rem-scale). Absolute px
+    // grows with export resolution (SVG uses mm*20 ≈ 1100px tall).
+    // Regression was min(cell)*0.16 → ~8% of height (giant). Target ~2–4%.
+    const H = parsed.height;
+    const phoneKey = parsed.texts.find((t) => t.text === 'TELEFONO' || t.text.includes('TELEFONO'));
+    expect(phoneKey, 'TELEFONO key must exist').toBeTruthy();
+    expect(phoneKey!.fontSize / H, 'TELEFONO too small').toBeGreaterThan(0.015);
+    expect(phoneKey!.fontSize / H, 'TELEFONO too large (cell-based regression)').toBeLessThan(0.04);
+
+    const emailVal = parsed.texts.find((t) => t.text.includes('webdevcaglian') || t.text.includes('@gmail'));
+    expect(emailVal, 'email value must exist').toBeTruthy();
+    expect(emailVal!.fontSize / H, 'email font too large').toBeLessThan(0.05);
+
+    const social = parsed.texts.find((t) => t.text.includes('LinkedIn'));
+    expect(social, 'LinkedIn social must exist').toBeTruthy();
+    expect(social!.fontSize / H).toBeGreaterThan(0.012);
+    expect(social!.fontSize / H).toBeLessThan(0.04);
+
+    // QR on the right half, not microscopic
+    const qr = parsed.qrRects[0];
+    expect(qr.x).toBeGreaterThan(parsed.width * 0.4);
+    expect(qr.width / H).toBeGreaterThan(0.15);
+    expect(qr.width / H).toBeLessThan(0.55);
+  });
+
+  test('SVG front logo fills its grid cell (not 60% shrink regression)', async ({ page }) => {
+    await applyGiovanniTemplate(page);
+
+    const { buffer } = await exportAndRead(page, 'SVG fronte');
+    const svg = buffer.toString('utf8');
+    const parsed = parseSvgBounds(svg);
+
+    // Logo is typically the second image (photo is first). Cell is ~half width.
+    // Full-cell logo (minus 8% inset) ≈ 0.42 * width. 60% shrink was ≈0.25.
+    const logos = parsed.images.filter((i) => i.width < parsed.width * 0.6);
+    const logo = logos.sort((a, b) => b.width - a.width)[0];
+    expect(logo, 'logo image must exist').toBeTruthy();
+    expect(logo!.width / parsed.width, 'logo too small (60% shrink regression)').toBeGreaterThan(0.35);
   });
 
   test('PNG front export is a valid non-empty image', async ({ page }) => {

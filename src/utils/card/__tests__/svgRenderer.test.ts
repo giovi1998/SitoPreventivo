@@ -575,7 +575,7 @@ describe('svgRenderer', () => {
       servicesFontSizes.forEach((size) => expect(size).toBeLessThan(50));
     });
 
-    it('v2.10: logo respects alignH/alignV (3×3) in front SVG export', () => {
+    it('v2.10.1: logo fills cell and uses preserveAspectRatio for 3×3 align', () => {
       const base = createEmptyCard();
       const make = (alignH: 'left' | 'center' | 'right', alignV: 'top' | 'center' | 'bottom') => ({
         ...base,
@@ -596,20 +596,34 @@ describe('svgRenderer', () => {
       });
       const leftTop = buildFrontSvg(make('left', 'top'), 1024, 663);
       const rightBottom = buildFrontSvg(make('right', 'bottom'), 1024, 663);
-      const xOf = (svg: string) => {
+      const center = buildFrontSvg(make('center', 'center'), 1024, 663);
+      // Same box size (full cell with inset) — alignment via preserveAspectRatio
+      expect(leftTop).toContain('preserveAspectRatio="xMinYMin meet"');
+      expect(rightBottom).toContain('preserveAspectRatio="xMaxYMax meet"');
+      expect(center).toContain('preserveAspectRatio="xMidYMid meet"');
+      // Logo image width should be ~cell width (not 60% shrink regression)
+      const wOf = (svg: string) => {
         const idx = svg.indexOf('data:image/png;base64,LOGO');
-        const tag = svg.slice(Math.max(0, idx - 30), idx + 200);
-        const m = tag.match(/x="([\d.]+)"/);
+        const tag = svg.slice(Math.max(0, idx - 30), idx + 250);
+        const m = tag.match(/width="([\d.]+)"/);
         return m ? parseFloat(m[1]) : NaN;
       };
-      const yOf = (svg: string) => {
-        const idx = svg.indexOf('data:image/png;base64,LOGO');
-        const tag = svg.slice(Math.max(0, idx - 30), idx + 200);
-        const m = tag.match(/y="([\d.]+)"/);
-        return m ? parseFloat(m[1]) : NaN;
-      };
-      expect(xOf(leftTop)).toBeLessThan(xOf(rightBottom));
-      expect(yOf(leftTop)).toBeLessThan(yOf(rightBottom));
+      // cell w = 512, inset 8% of min(512,331.5)≈26 → width ≈ 512-52 ≈ 460
+      expect(wOf(center)).toBeGreaterThan(400);
+    });
+
+    it('v2.10.1: contact font sizes stay readable-but-not-huge at export DPI', () => {
+      const card = createGiovanniCardTemplate();
+      const svg = buildBackSvg(card, 1024, 663);
+      // TELEFONO key: should be ~18px (9.3/340*663), not 50+
+      const idx = svg.indexOf('TELEFONO');
+      expect(idx).toBeGreaterThan(0);
+      const tag = svg.slice(Math.max(0, idx - 200), idx);
+      const m = tag.match(/font-size="([\d.]+)"/);
+      expect(m).not.toBeNull();
+      const size = parseFloat(m![1]);
+      expect(size).toBeGreaterThanOrEqual(12);
+      expect(size).toBeLessThan(28);
     });
 
     it('v2.10: empty services collapses so socials sit under contacts (no ghost gap)', () => {
