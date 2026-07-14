@@ -569,13 +569,34 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     });
   }, []);
 
+  // v2.9.1: helper that ensures a back-grid element exists when the user adds
+  // content that should render in its own cell (services/socials). Without this,
+  // a card created before v2.5 keeps a backGrid without services/socials cells,
+  // and newly-added services/socials disappear from the SVG export.
+  const ensureBackGridElement = useCallback(
+    (prev: BusinessCard, key: 'services' | 'socials'): BusinessCard['backGrid'] => {
+      const backGrid = prev.backGrid;
+      if (!backGrid) return backGrid;
+      if (backGrid.elements[key]) return backGrid;
+      const preset = gridPresetBackDefault();
+      const presetEl = preset.elements[key];
+      if (!presetEl) return backGrid;
+      return {
+        ...backGrid,
+        elements: { ...backGrid.elements, [key]: presetEl },
+      };
+    },
+    [],
+  );
+
   const addSocial = useCallback(() => {
     setCard((prev) => ({
       ...prev,
       back: { ...prev.back, socials: [...prev.back.socials, { platform: '', url: '' }] },
+      backGrid: ensureBackGridElement(prev, 'socials'),
       updatedAt: new Date().toISOString(),
     }));
-  }, []);
+  }, [ensureBackGridElement]);
 
   const removeSocial = useCallback((idx: number) => {
     setCard((prev) => ({
@@ -592,18 +613,24 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       return {
         ...prev,
         back: { ...prev.back, services: [...current, ''] },
+        backGrid: ensureBackGridElement(prev, 'services'),
         updatedAt: new Date().toISOString(),
       };
     });
-  }, []);
+  }, [ensureBackGridElement]);
 
   const updateService = useCallback((idx: number, value: string) => {
     setCard((prev) => {
       const services = [...(prev.back.services ?? [])];
       services[idx] = value.slice(0, 80);
-      return { ...prev, back: { ...prev.back, services }, updatedAt: new Date().toISOString() };
+      return {
+        ...prev,
+        back: { ...prev.back, services },
+        backGrid: value.trim() ? ensureBackGridElement(prev, 'services') : prev.backGrid,
+        updatedAt: new Date().toISOString(),
+      };
     });
-  }, []);
+  }, [ensureBackGridElement]);
 
   const removeService = useCallback((idx: number) => {
     setCard((prev) => ({

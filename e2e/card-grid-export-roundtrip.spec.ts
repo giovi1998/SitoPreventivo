@@ -92,6 +92,13 @@ function getTextBounds(svg: string, text: string) {
   return { x: parseFloat(m[1]), y: parseFloat(m[2]), fontSize: parseFloat(m[3]) };
 }
 
+async function getSvgBounds(svg: string, viewBoxMatch?: RegExpMatchArray | null) {
+  const viewBox = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+  const width = viewBox ? parseInt(viewBox[1], 10) : 0;
+  const height = viewBox ? parseInt(viewBox[2], 10) : 0;
+  return { width, height };
+}
+
 test.describe('Card grid round-trip: preview -> export', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
@@ -178,6 +185,57 @@ test.describe('Card grid round-trip: preview -> export', () => {
     const svg = await exportAndReadSvg(page, 'back');
     expect(svg).toContain('Sviluppo Web');
     expect(svg).toContain('Consulenza SEO');
+  });
+
+  test('Back grid: socials stay in their own cell in SVG export', async ({ page }) => {
+    await page.locator('[data-testid="card-add-social"]').first().click();
+    await page.waitForTimeout(200);
+    await page.locator('[data-testid="card-add-social"]').first().click();
+    await page.waitForTimeout(200);
+
+    const socialRows = await page.locator('.card-social-row').all();
+    expect(socialRows.length).toBeGreaterThanOrEqual(2);
+
+    await socialRows[0].locator('select').first().selectOption('LinkedIn');
+    await socialRows[0].locator('input').first().fill('https://linkedin.com/in/mario');
+    await socialRows[1].locator('select').first().selectOption('GitHub');
+    await socialRows[1].locator('input').first().fill('https://github.com/mario');
+    await page.waitForTimeout(400);
+
+    const svg = await exportAndReadSvg(page, 'back');
+    expect(svg).toContain('LinkedIn');
+    expect(svg).toContain('GitHub');
+
+    await page.screenshot({ path: 'e2e/__screenshots__/roundtrip-socials-preview.png', fullPage: false });
+  });
+
+  test('Back grid 3x3 alignment for contacts and services reflects in SVG export', async ({ page }) => {
+    await enableGrid(page);
+
+    const sideSelect = page.locator('select[aria-label="Lato griglia"]').first();
+    await sideSelect.selectOption('back');
+    await page.waitForTimeout(300);
+
+    // Add services so the backGrid gets a services cell
+    await page.locator('[data-testid="card-add-service"]').first().click();
+    await page.waitForTimeout(200);
+    const serviceInputs = await page.locator('input[aria-label^="Servizio "]').all();
+    await serviceInputs[0].fill('UX Design');
+    await page.waitForTimeout(400);
+
+    await selectElement(page, 'contacts');
+    await alignElement(page, 'right', 'bottom');
+
+    await selectElement(page, 'services');
+    await alignElement(page, 'center', 'center');
+
+    await page.screenshot({ path: 'e2e/__screenshots__/roundtrip-back-align-preview.png', fullPage: false });
+
+    const svg = await exportAndReadSvg(page, 'back');
+    expect(svg).toContain('UX Design');
+    expect(svg).toContain('TELEFONO');
+
+    await page.screenshot({ path: 'e2e/__screenshots__/roundtrip-back-align-export.png', fullPage: false });
   });
 
   test('Back grid move + services + export PNG/PDF are non-empty', async ({ page }) => {

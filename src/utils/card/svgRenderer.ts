@@ -442,14 +442,14 @@ export function buildBackSvg(
 
     const contactsEl = grid.elements.contacts;
     if (contactsEl) {
-      // If services element is not in grid (filtered out due to empty content),
-      // expand contacts to fill the available body height.
-      const hasServicesEl = !!grid.elements.services;
-      const contactsH = hasServicesEl ? contactsEl.h : grid.rows - contactsEl.y;
+      // v2.9.1: respect the persisted grid exactly, like CardPreview.tsx does.
+      // Do not auto-expand contacts: it overlaps the socials/services cells when
+      // the user has manually added them. If services/socials are missing, the
+      // cells below contacts simply stay empty (matching the preview).
       const cx = contactsEl.x * cellW + pad * 0.5;
       const cy = contactsEl.y * cellH + bodyTop + pad * 0.5;
       const cw = contactsEl.w * cellW - pad;
-      const ch = contactsH * cellH - pad;
+      const ch = contactsEl.h * cellH - pad;
 
       const contactEntries: Array<{ key: string; value: string; color?: string; isAccent?: boolean }> = [];
       if (card.back.phone) contactEntries.push({ key: 'Telefono', value: card.back.phone });
@@ -487,6 +487,8 @@ export function buildBackSvg(
         valSize *= 0.9;
       }
 
+      const contactsAlignH = contactsEl.alignH ?? 'left';
+      const contactsAlignV = contactsEl.alignV ?? 'top';
       const lineGap = lineGapFor(keySize, valSize);
       // v2.9: allinea label e valore sulla stessa baseline alfabetica, come
       // la preview React (.card-back-line { align-items: baseline }). Prima
@@ -496,23 +498,37 @@ export function buildBackSvg(
       // sopra il valore). Ora calcoliamo un'unica baseline condivisa e usiamo
       // dominant-baseline="alphabetic" su entrambi i <text>.
       const valAscent = Math.round(valSize * 0.8);
-      let lineY = cy + valAscent + pad * 0.25;
+      const contentH = contactEntries.length * lineGap + pad * 0.25;
+      let startY = cy + valAscent + pad * 0.25;
+      if (contactsAlignV === 'center') startY = cy + (ch - contentH) / 2 + valAscent + pad * 0.25;
+      else if (contactsAlignV === 'bottom') startY = cy + ch - contentH + valAscent + pad * 0.25;
+      let lineY = startY;
       const colLabelW = colLabelWFor(keySize);
       const valueMaxW = Math.max(10, cw - colLabelW - pad * 0.5);
+      const labelAnchor = contactsAlignH === 'right' ? 'end' : contactsAlignH === 'center' ? 'middle' : 'start';
+      const valueAnchor = contactsAlignH === 'right' ? 'end' : contactsAlignH === 'center' ? 'middle' : 'start';
+      const labelX = contactsAlignH === 'right'
+        ? cx + cw - colLabelW
+        : contactsAlignH === 'center'
+          ? cx + (cw - colLabelW) / 2
+          : cx;
+      const valueXBase = contactsAlignH === 'right'
+        ? cx + cw
+        : contactsAlignH === 'center'
+          ? cx + cw / 2 + colLabelW / 2
+          : cx + colLabelW;
       const renderContact = (entry: { key: string; value: string; color?: string; isAccent?: boolean }) => {
         const wrapped = wrappableKeys.has(entry.key)
           ? wrapTextAtWhitespace(entry.value, valueMaxW, valSize)
           : [entry.value];
-        out += `<text x="${cx}" y="${lineY}" font-family="${fontFamily}" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4" dominant-baseline="alphabetic">${escapeXml(entry.key.toUpperCase())}</text>`;
-        const valueX = cx + colLabelW;
+        out += `<text x="${labelX}" y="${lineY}" font-family="${fontFamily}" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4" text-anchor="${labelAnchor}" dominant-baseline="alphabetic">${escapeXml(entry.key.toUpperCase())}</text>`;
         wrapped.forEach((line) => {
-          out += `<text x="${valueX}" y="${lineY}" font-family="${fontFamily}" font-size="${valSize}" font-weight="500" fill="${entry.isAccent ? accent : (entry.color ?? text)}" dominant-baseline="alphabetic">${escapeXml(line)}</text>`;
+          out += `<text x="${valueXBase}" y="${lineY}" font-family="${fontFamily}" font-size="${valSize}" font-weight="500" fill="${entry.isAccent ? accent : (entry.color ?? text)}" text-anchor="${valueAnchor}" dominant-baseline="alphabetic">${escapeXml(line)}</text>`;
           lineY += lineGap;
         });
       };
       contactEntries.forEach(renderContact);
-      // v2.5: fallback — when the grid has no socials cell (the new
-      // default back grid gives that space to services), render the
+      // v2.5: fallback — when the grid has no socials cell, render the
       // socials as a small italic line at the bottom of the contacts
       // cell, mirroring the CardPreview React fallback.
       if (!grid.elements.socials && socials.length > 0) {
@@ -529,21 +545,30 @@ export function buildBackSvg(
     }
 
     // Services (separate grid element)
-    const servicesEl = grid.elements.services;
-    const services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
-    if (servicesEl && services.length > 0) {
-      const sx = servicesEl.x * cellW + pad * 0.5;
-      const sy = servicesEl.y * cellH + bodyTop + pad * 0.5;
-      const sw = servicesEl.w * cellW - pad;
-      const sh = servicesEl.h * cellH - pad;
+    let services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
+    let servicesEl = grid.elements.services;
+    const socialsEl = grid.elements.socials;
+    // v2.9.1: mirror CardPreview.tsx expansion — when socials are empty, let
+    // services expand into the unused socials row so the left column doesn't
+    // leave an empty gap. We create a temporary merged rect for rendering only.
+    let servicesRenderEl = servicesEl;
+    if (services.length > 0 && !socialsEl && servicesEl) {
+      servicesRenderEl = { ...servicesEl, h: servicesEl.h + 1 };
+    }
+    if (servicesRenderEl && services.length > 0) {
+      const sx = servicesRenderEl.x * cellW + pad * 0.5;
+      const sy = servicesRenderEl.y * cellH + bodyTop + pad * 0.5;
+      const sw = servicesRenderEl.w * cellW - pad;
+      const sh = servicesRenderEl.h * cellH - pad;
+      const servicesAlignH = servicesRenderEl.alignH ?? 'left';
+      const servicesAlignV = servicesRenderEl.alignV ?? 'top';
       let svcY = sy + pad * 0.25;
       const servicesLabelText = (card.back.servicesLabel ?? '').trim();
       let labelSize = 0;
       if (servicesLabelText) {
         // v2.5: bumped from 0.18 — label was getting lost in the cell.
         labelSize = fs(Math.min(sw, sh) * 0.22, fontScale);
-        out += `<text x="${sx}" y="${svcY + labelSize}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="700" fill="${accent}" letter-spacing="1.2" opacity="0.7" dominant-baseline="text-before-edge">${escapeXml(servicesLabelText.toUpperCase())}</text>`;
-        svcY += labelSize * 1.4;
+        svcY += labelSize * 1.1;
       }
       const hasLongService = services.some((s) => s.length >= 40);
       // v2.5: bumped from 0.2 — services were too small to read.
@@ -562,13 +587,58 @@ export function buildBackSvg(
       while (svcSize > 14 && neededH(svcSize) > sh) {
         svcSize *= 0.92;
       }
+      const blockH = (labelSize ? labelSize * 1.3 : 0) + services.length * svcLineH(svcSize) + pad * 0.5;
+      let startY = svcY;
+      if (servicesAlignV === 'center') startY = sy + (sh - blockH) / 2;
+      else if (servicesAlignV === 'bottom') startY = sy + sh - blockH;
+      const textAnchor = servicesAlignH === 'right' ? 'end' : servicesAlignH === 'center' ? 'middle' : 'start';
+      const textX = servicesAlignH === 'right'
+        ? sx + sw - pad * 0.5
+        : servicesAlignH === 'center'
+          ? sx + sw / 2
+          : sx;
+      let labelY = startY;
+      if (servicesLabelText) {
+        out += `<text x="${textX}" y="${labelY}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="700" fill="${accent}" letter-spacing="1.2" opacity="0.7" text-anchor="${textAnchor}" dominant-baseline="text-before-edge">${escapeXml(servicesLabelText.toUpperCase())}</text>`;
+        labelY += labelSize * 1.3;
+      }
       const finalLineH = svcLineH(svcSize);
       services.forEach((svc, idx) => {
-        out += `<text x="${sx}" y="${svcY + (idx + 1) * finalLineH}" font-family="${fontFamily}" font-size="${svcSize}" font-weight="800" fill="${accent}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
+        out += `<text x="${textX}" y="${labelY + idx * finalLineH}" font-family="${fontFamily}" font-size="${svcSize}" font-weight="800" fill="${accent}" text-anchor="${textAnchor}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
       });
     }
 
-    const socialsEl = grid.elements.socials;
+    if (services.length > 0 && !servicesEl && !socialsEl && contactsEl) {
+      // v2.9.1: no services/socials cells at all but services exist (legacy
+      // grid created before services were added). Render them in the contacts
+      // fallback area, below the contacts text.
+      // This branch is reached only when the persisted grid has no services
+      // element and the user has added services; we avoid losing them.
+      // (mirrors CardPreview.tsx fallback {!grid.elements.services && servicesContent}).
+      const fallbackEl = contactsEl;
+      const fx = fallbackEl.x * cellW + pad * 0.5;
+      const fy = fallbackEl.y * cellH + bodyTop + pad * 0.5 + contactsEl.h * cellH;
+      const fw = fallbackEl.w * cellW - pad;
+      const fh = (grid.rows - fallbackEl.y - fallbackEl.h) * cellH - pad;
+      if (fh > 20) {
+        const servicesLabelText = (card.back.servicesLabel ?? '').trim();
+        let labelSize = 0;
+        let svcY = fy;
+        if (servicesLabelText) {
+          labelSize = fs(Math.min(fw, fh) * 0.18, fontScale);
+          out += `<text x="${fx}" y="${svcY + labelSize}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="700" fill="${accent}" letter-spacing="1.2" opacity="0.7" dominant-baseline="text-before-edge">${escapeXml(servicesLabelText.toUpperCase())}</text>`;
+          svcY += labelSize * 1.4;
+        }
+        let svcSize = fs(Math.min(fw, fh) * 0.2, fontScale);
+        const svcLineH = (s: number) => s * 1.2;
+        const neededH = (s: number) => (labelSize ? labelSize * 1.4 : 0) + services.length * svcLineH(s) + pad * 0.5;
+        while (svcSize > 14 && neededH(svcSize) > fh) svcSize *= 0.92;
+        services.forEach((svc, idx) => {
+          out += `<text x="${fx}" y="${svcY + (idx + 1) * svcLineH(svcSize)}" font-family="${fontFamily}" font-size="${svcSize}" font-weight="800" fill="${accent}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
+        });
+      }
+    }
+
     if (socialsEl && socials.length > 0) {
       // Full cell box (same coordinate system as preview CSS grid).
       const cellX = socialsEl.x * cellW;
@@ -608,10 +678,14 @@ export function buildBackSvg(
         : alignH === 'center'
           ? cellX + cellBoxW / 2
           : sx;
+      const clipId = `clipSocials${socialsEl.x}${socialsEl.y}${socialsEl.w}${socialsEl.h}`;
+      out += `<defs><clipPath id="${clipId}"><rect x="${cellX}" y="${cellY}" width="${cellBoxW}" height="${cellBoxH}"/></clipPath></defs>`;
+      out += `<g clip-path="url(#${clipId})">`;
       lines.forEach((line, idx) => {
         const lineY = startY + idx * socialLineH(socialSize);
         out += `<text x="${textX}" y="${lineY}" font-family="${fontFamily}" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" text-anchor="${anchor}" dominant-baseline="text-before-edge">${escapeXml(line)}</text>`;
       });
+      out += '</g>';
     }
 
     const qrEl = grid.elements.qr;
@@ -626,9 +700,15 @@ export function buildBackSvg(
       const qy = qrEl.y * cellH + bodyTop + pad * 0.5;
       const qw = qrEl.w * cellW - pad;
       const qh = qrEl.h * cellH - pad;
+      const qrAlignH = qrEl.alignH ?? 'center';
+      const qrAlignV = qrEl.alignV ?? 'center';
       const qrSize = Math.min(qw, qh, qrMaxPx);
-      const qrX = qx + (qw - qrSize) / 2;
-      const qrY = qy + (qh - qrSize) / 2;
+      let qrX = qx + (qw - qrSize) / 2;
+      let qrY = qy + (qh - qrSize) / 2;
+      if (qrAlignH === 'left') qrX = qx;
+      else if (qrAlignH === 'right') qrX = qx + qw - qrSize;
+      if (qrAlignV === 'top') qrY = qy;
+      else if (qrAlignV === 'bottom') qrY = qy + qh - qrSize;
       const qrObj: any = {
         documentType: 'qrCode',
         id: 'card-back',
