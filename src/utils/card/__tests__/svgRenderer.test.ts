@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { buildCardSvg, buildFrontSvg, buildBackSvg } from '../svgRenderer';
+import { describe, it, expect, vi } from 'vitest';
+import { buildCardSvg, buildFrontSvg, buildBackSvg, buildEmbeddedFontImport } from '../svgRenderer';
 import { createEmptyCard, createGiovanniCardTemplate } from '../../documentSchemas';
 
 describe('svgRenderer', () => {
@@ -89,9 +89,10 @@ describe('svgRenderer', () => {
   describe('buildCardSvg wrapper', () => {
     it('produces valid SVG wrapper for front', () => {
       const svg = buildCardSvg(createEmptyCard(), 'front', 500, 300);
-      expect(svg).toMatch(/^<svg[^>]*>/);
+      expect(svg).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
       expect(svg).toMatch(/<\/svg>$/);
       expect(svg).toContain('viewBox="0 0 500 300"');
+      expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
     });
 
     it('produces valid SVG wrapper for back with website', () => {
@@ -99,6 +100,34 @@ describe('svgRenderer', () => {
       const svg = buildCardSvg(card, 'back', 500, 300);
       expect(svg).toContain('CONTATTI');
       expect(svg).toContain('example.com');
+    });
+
+    it('includes @import font style in SVG when fontFamily is a web font (e.g. Oswald)', () => {
+      const card = { ...createEmptyCard(), style: { ...createEmptyCard().style, fontFamily: 'Oswald' } };
+      const svg = buildCardSvg(card, 'front', 500, 300);
+      expect(svg).toContain('fonts.googleapis.com/css2?family=Oswald');
+      expect(svg).toContain('@import');
+    });
+
+    it('does NOT include @import font style for system fonts (e.g. Georgia)', () => {
+      const card = { ...createEmptyCard(), style: { ...createEmptyCard().style, fontFamily: 'Georgia' } };
+      const svg = buildCardSvg(card, 'front', 500, 300);
+      expect(svg).not.toContain('@import');
+    });
+
+    it('includes @import font style also in rotated SVG (90°)', () => {
+      const card = { ...createEmptyCard(), style: { ...createEmptyCard().style, fontFamily: 'Oswald' } };
+      const svg = buildCardSvg(card, 'front', 500, 300, { rotate: 90 });
+      expect(svg).toContain('fonts.googleapis.com/css2?family=Oswald');
+      expect(svg).toContain('viewBox="0 0 300 500"');
+    });
+
+    it('uses embeddedFontCss when provided instead of @import', () => {
+      const card = { ...createEmptyCard(), style: { ...createEmptyCard().style, fontFamily: 'Oswald' } };
+      const embeddedFontCss = '<style>@font-face{font-family:"Oswald";src:url(data:font/woff2;base64,AA);}</style>';
+      const svg = buildCardSvg(card, 'front', 500, 300, { embeddedFontCss });
+      expect(svg).toContain(embeddedFontCss);
+      expect(svg).not.toContain('@import');
     });
 
     it('renders Giovanni template back SVG with full email text and no truncation', () => {
@@ -111,6 +140,19 @@ describe('svgRenderer', () => {
       // or a single line. The important thing is the full string is present.
       const emailMatches = svg.match(/webdevcaglian@gmail\.com/g);
       expect(emailMatches?.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('contact label and value share the same baseline (alphabetic, v2.9 regression)', () => {
+      const card = createGiovanniCardTemplate();
+      const svg = buildBackSvg(card, 1024, 663);
+      // Extract the TELEFONO label and the phone value <text> elements.
+      // Use ` y="` (space-prefixed) to avoid matching the `y` inside `opacity`.
+      const labelMatch = svg.match(/<text[^>]* y="([^"]+)"[^>]*dominant-baseline="alphabetic"[^>]*>TELEFONO<\/text>/);
+      const valueMatch = svg.match(/<text[^>]* y="([^"]+)"[^>]*dominant-baseline="alphabetic"[^>]*>35180008042<\/text>/);
+      expect(labelMatch).not.toBeNull();
+      expect(valueMatch).not.toBeNull();
+      // Same y => same baseline => label and value aligned (matches preview align-items: baseline).
+      expect(labelMatch![1]).toBe(valueMatch![1]);
     });
 
     it('renders services in a dedicated grid cell when backGrid.services is set', () => {
@@ -139,6 +181,7 @@ describe('svgRenderer', () => {
       const base = createGiovanniCardTemplate();
       const atBottom = {
         ...base,
+        back: { ...base.back, useGrid: true },
         backGrid: {
           cols: 4,
           rows: 4,
@@ -181,6 +224,7 @@ describe('svgRenderer', () => {
       const base = createGiovanniCardTemplate();
       const card = {
         ...base,
+        front: { ...base.front, useGrid: true },
         grid: {
           ...base.grid!,
           elements: {
@@ -296,6 +340,39 @@ describe('svgRenderer', () => {
       // everything to negative x, producing a blank PDF 10-up).
       expect(svg).toContain('VISIBLE');
       expect(svg).toMatch(/translate\(600 0\) rotate\(90\)/);
+    });
+  });
+
+  describe('embedded font import (v2.8.2 regression)', () => {
+    it('inlines Google Font CSS without double url(...) wrapper', async () => {
+      const fontCss = '@font-face{font-family:"Oswald";src:url(https://fonts.gstatic.com/oswald.woff2) format("woff2");}';
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        text: async () => fontCss,
+        headers: new Map([['content-type', 'font/woff2']]),
+      }).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(['fake-font-bytes'], { type: 'font/woff2' }),
+        headers: new Map([['content-type', 'font/woff2']]),
+      });
+
+      const style = await buildEmbeddedFontImport('Oswald');
+      expect(style).toContain('@font-face');
+      expect(style).toContain('data:font/woff2;base64,');
+      // The bug was replacing the inner URL only, leaving an outer `url(` wrapper.
+      expect(style).not.toContain('url(url(');
+      expect(style).toMatch(/src:\s*url\(data:font\/woff2;base64,/);
+    });
+
+    it('returns empty string for unknown font family', async () => {
+      const style = await buildEmbeddedFontImport('TotallyUnknownFont');
+      expect(style).toBe('');
+    });
+
+    it('falls back to empty string when Google Fonts CSS fetch fails', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({ ok: false, status: 500 });
+      const style = await buildEmbeddedFontImport('Inter');
+      expect(style).toBe('');
     });
   });
 
@@ -468,6 +545,7 @@ describe('svgRenderer', () => {
         ...createEmptyCard(),
         back: {
           ...createEmptyCard().back,
+          useGrid: true,
           services: ['Consulenza pedagogica', 'Supporto alla genitorialità'],
           servicesLabel: 'Servizi che offro',
         },
