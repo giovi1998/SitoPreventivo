@@ -29,21 +29,21 @@ describe('backLayout', () => {
     expect(size).toBe(QR_SIZE_PX.medium);
   });
 
-  it('effectiveBackGridForRender collapses empty services under contacts', () => {
+  it('effectiveBackGridForRender drops empty services and expands contacts (v2.12: socials stay put)', () => {
     const card = createGiovanniCardTemplate();
-    // Giovanni has socials, no services content by default
+    // Giovanni: contacts h=2, services h=1, socials h=1 at y=3; no services content
     card.back.services = [];
     const grid = card.backGrid!;
     expect(grid.elements.services).toBeDefined();
     expect(grid.elements.socials).toBeDefined();
+    const socialsBefore = { ...grid.elements.socials! };
     const effective = effectiveBackGridForRender(grid, card);
     expect(effective.elements.services).toBeUndefined();
-    expect(effective.elements.socials).toBeDefined();
-    const contacts = effective.elements.contacts!;
-    const socials = effective.elements.socials!;
-    // Socials start right under contacts and fill remaining rows
-    expect(socials.y).toBe(contacts.y + contacts.h);
-    expect(socials.y + socials.h).toBe(grid.rows);
+    // Socials keep persisted position (must match red SOCIALS debug box + 3×3)
+    expect(effective.elements.socials?.y).toBe(socialsBefore.y);
+    expect(effective.elements.socials?.h).toBe(socialsBefore.h);
+    // Contacts expands into the empty services row when adjacent
+    expect(effective.elements.contacts?.h).toBe(grid.elements.contacts!.h + grid.elements.services!.h);
   });
 
   it('effectiveBackGridForRender keeps services when content exists', () => {

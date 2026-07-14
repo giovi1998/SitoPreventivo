@@ -575,7 +575,7 @@ describe('svgRenderer', () => {
       servicesFontSizes.forEach((size) => expect(size).toBeLessThan(50));
     });
 
-    it('v2.10.1: logo fills cell and uses preserveAspectRatio for 3×3 align', () => {
+    it('v2.12: logo is 72% of cell and 3×3 moves the box (not only preserveAspectRatio)', () => {
       const base = createEmptyCard();
       const make = (alignH: 'left' | 'center' | 'right', alignV: 'top' | 'center' | 'bottom') => ({
         ...base,
@@ -597,19 +597,34 @@ describe('svgRenderer', () => {
       const leftTop = buildFrontSvg(make('left', 'top'), 1024, 663);
       const rightBottom = buildFrontSvg(make('right', 'bottom'), 1024, 663);
       const center = buildFrontSvg(make('center', 'center'), 1024, 663);
-      // Same box size (full cell with inset) — alignment via preserveAspectRatio
       expect(leftTop).toContain('preserveAspectRatio="xMinYMin meet"');
       expect(rightBottom).toContain('preserveAspectRatio="xMaxYMax meet"');
       expect(center).toContain('preserveAspectRatio="xMidYMid meet"');
-      // Logo image width should be ~cell width (not 60% shrink regression)
-      const wOf = (svg: string) => {
+      const attrsOf = (svg: string) => {
+        const m = svg.match(
+          /<image[^>]*href="data:image\/png;base64,LOGO"[^>]*\/?>|<image[^>]*href='data:image\/png;base64,LOGO'[^>]*\/?>/,
+        );
+        // Our builder writes attributes before href; match full image tag around LOGO.
         const idx = svg.indexOf('data:image/png;base64,LOGO');
-        const tag = svg.slice(Math.max(0, idx - 30), idx + 250);
-        const m = tag.match(/width="([\d.]+)"/);
-        return m ? parseFloat(m[1]) : NaN;
+        expect(idx).toBeGreaterThan(0);
+        const open = svg.lastIndexOf('<image', idx);
+        const close = svg.indexOf('/>', idx);
+        const tag = svg.slice(open, close > 0 ? close + 2 : open + 400);
+        const x = Number(tag.match(/\sx="([\d.]+)"/)?.[1]);
+        const y = Number(tag.match(/\sy="([\d.]+)"/)?.[1]);
+        const w = Number(tag.match(/\swidth="([\d.]+)"/)?.[1]);
+        return { x, y, w, tag };
       };
-      // cell w = 512, inset 8% of min(512,331.5)≈26 → width ≈ 512-52 ≈ 460
-      expect(wOf(center)).toBeGreaterThan(400);
+      const c = attrsOf(center);
+      const l = attrsOf(leftTop);
+      const r = attrsOf(rightBottom);
+      // cell w = 512 → 72% = 368.64
+      expect(c.w).toBeCloseTo(512 * 0.72, 0);
+      // 3×3 must move the logo box, not only the aspect-ratio paint
+      expect(l.x).toBeLessThan(c.x);
+      expect(r.x).toBeGreaterThan(c.x);
+      expect(l.y).toBeLessThan(c.y);
+      expect(r.y).toBeGreaterThan(c.y);
     });
 
     it('v2.10.1: contact font sizes stay readable-but-not-huge at export DPI', () => {
@@ -626,7 +641,7 @@ describe('svgRenderer', () => {
       expect(size).toBeLessThan(28);
     });
 
-    it('v2.10: empty services collapses so socials sit under contacts (no ghost gap)', () => {
+    it('v2.12: empty services drops services cell; socials stay at persisted y (3×3 match)', () => {
       const card = createGiovanniCardTemplate();
       card.back.services = [];
       const withGap = {
@@ -642,7 +657,6 @@ describe('svgRenderer', () => {
           },
         },
       };
-      // With services content, socials stay at y=3 (lower).
       const withServices = {
         ...withGap,
         back: { ...withGap.back, services: ['UX Design'] },
@@ -654,12 +668,13 @@ describe('svgRenderer', () => {
         const ym = slice.match(/y="([\d.]+)"/);
         return ym ? parseFloat(ym[1]) : NaN;
       };
-      const yCollapsed = yOf(buildBackSvg(withGap, 1024, 663));
+      const yEmpty = yOf(buildBackSvg(withGap, 1024, 663));
       const yWithServices = yOf(buildBackSvg(withServices, 1024, 663));
-      expect(yCollapsed).not.toBeNaN();
+      expect(yEmpty).not.toBeNaN();
       expect(yWithServices).not.toBeNaN();
-      // Collapse moves socials up under contacts (y smaller than with services gap).
-      expect(yCollapsed).toBeLessThan(yWithServices);
+      // Socials y must match whether services content is empty or not
+      // (persisted grid cell, not a render-time relocate).
+      expect(Math.abs(yEmpty - yWithServices)).toBeLessThan(2);
     });
   });
 });

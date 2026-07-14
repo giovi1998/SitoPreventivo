@@ -35,9 +35,11 @@ let events: CardLayoutEvent[] = [];
 
 function isDevOrTest(): boolean {
   try {
-    const env = (import.meta as ImportMeta & { env?: { DEV?: boolean; MODE?: string } }).env;
-    if (env?.DEV) return true;
+    const env = (import.meta as ImportMeta & { env?: { DEV?: boolean; MODE?: string; PROD?: boolean } }).env;
+    // Vite sets DEV=true in `npm run dev`. Also treat non-PROD browser as debug.
+    if (env?.DEV === true) return true;
     if (env?.MODE === 'development' || env?.MODE === 'test') return true;
+    if (env?.PROD === false) return true;
   } catch {
     // not an ES module environment
   }
@@ -51,6 +53,9 @@ function isDevOrTest(): boolean {
   if (typeof window !== 'undefined') {
     try {
       if (localStorage.getItem('pq_card_layout_debug') === '1') return true;
+      // Host heuristic: local dev servers always log.
+      const host = window.location?.hostname ?? '';
+      if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')) return true;
     } catch {
       // ignore
     }
@@ -61,9 +66,10 @@ function isDevOrTest(): boolean {
 export function pushLayoutEvent(e: Omit<CardLayoutEvent, 'ts'>): void {
   const event: CardLayoutEvent = { ts: new Date().toISOString(), ...e };
   events = [...events.slice(-MAX_EVENTS + 1), event];
+  const debug = isDevOrTest();
 
-  // Always keep window hook fresh when enabled OR in dev/test.
-  if (typeof window !== 'undefined' && ((window as any).__cardLayoutEventsEnabled || isDevOrTest())) {
+  // Always keep window hook fresh when enabled OR in dev/test/localhost.
+  if (typeof window !== 'undefined' && ((window as any).__cardLayoutEventsEnabled || debug)) {
     try {
       (window as any).__cardLayoutEventsEnabled = true;
       (window as any).__cardLayoutEvents = events;
@@ -72,16 +78,17 @@ export function pushLayoutEvent(e: Omit<CardLayoutEvent, 'ts'>): void {
     }
   }
 
-  // Mirror to console in dev/test so humans can tail logs without typing commands.
-  if (typeof console !== 'undefined' && isDevOrTest()) {
-    const label = `%c[card-layout] ${event.type}${event.element ? ' · ' + event.element : ''}${event.reason ? ' · ' + event.reason : ''}`;
-    const style = 'color: #01696F; font-weight: 600;';
+  // Mirror to console so humans can tail logs without typing commands.
+  // Use plain string first arg (no %c) so Chrome "Default levels" never hides it.
+  if (typeof console !== 'undefined' && debug) {
+    const label = `[card-layout] ${event.type}${event.element ? ' · ' + event.element : ''}${event.reason ? ' · ' + event.reason : ''}`;
     if (event.result === 'blocked') {
-      console.warn(label, style, event);
+      console.warn(label, event);
     } else if (event.result === 'error') {
-      console.error(label, style, event);
+      console.error(label, event);
     } else {
-      console.log(label, style, event);
+      // info is always visible under Chrome "Default levels" (Verbose is off by default)
+      console.info(label, event);
     }
   }
 }

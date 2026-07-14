@@ -280,18 +280,24 @@ export function buildFrontSvg(
       const y = logoEl.y * cellH;
       const w = logoEl.w * cellW;
       const h = logoEl.h * cellH;
-      // v2.10.1: logo fills the cell (preview CSS object-fit:contain on 100%
-      // cell). 3×3 alignment is done via SVG preserveAspectRatio, NOT by
-      // shrinking the image box (shrinking to 60% made logos tiny).
+      // v2.12: logo box is 72% of the cell (matches preview CSS max-width/height)
+      // so 3×3 alignment can move it. preserveAspectRatio keeps artwork aspect.
       const alignH = logoEl.alignH ?? 'center';
       const alignV = logoEl.alignV ?? 'center';
       const xAlign = alignH === 'left' ? 'xMin' : alignH === 'right' ? 'xMax' : 'xMid';
       const yAlign = alignV === 'top' ? 'YMin' : alignV === 'bottom' ? 'YMax' : 'YMid';
-      const inset = Math.min(w, h) * 0.08;
+      const logoW = w * 0.72;
+      const logoH = h * 0.72;
+      let logoX = x + (w - logoW) / 2;
+      let logoY = y + (h - logoH) / 2;
+      if (alignH === 'left') logoX = x + w * 0.04;
+      else if (alignH === 'right') logoX = x + w - logoW - w * 0.04;
+      if (alignV === 'top') logoY = y + h * 0.04;
+      else if (alignV === 'bottom') logoY = y + h - logoH - h * 0.04;
       if (card.front.logoBackground === 'card') {
         out += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${escapeXml(bg)}"/>`;
       }
-      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${x + inset}" y="${y + inset}" width="${w - inset * 2}" height="${h - inset * 2}" preserveAspectRatio="${xAlign}${yAlign} meet"/>`;
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${logoX}" y="${logoY}" width="${logoW}" height="${logoH}" preserveAspectRatio="${xAlign}${yAlign} meet"/>`;
     }
 
     const textKeys: Array<keyof CardGrid['elements'] & ('name' | 'title' | 'company')> = ['name', 'title', 'company'];

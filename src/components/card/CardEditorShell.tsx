@@ -102,11 +102,11 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedIdRef = useRef<string | undefined>(initialCard?.id);
 
-  // Test/debug introspection for layout events.
+  // Always attach layout events on the card editor (localhost + prod).
+  // pushLayoutEvent still gates console output; window.__cardLayoutEvents is free.
   useEffect(() => {
-    if (import.meta.env.MODE === 'test' || import.meta.env.DEV || localStorage.getItem('pq_card_layout_debug') === '1') {
-      attachLayoutEventsToWindow();
-    }
+    attachLayoutEventsToWindow();
+    pushLayoutEvent({ type: 'card.edit', result: 'ok', payload: { boot: true } });
   }, []);
 
   // When Collection opens a different card, replace local state.
@@ -285,6 +285,15 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     } else if (info.reason === 'border') {
       addToast('info', `Bloccato: bordo della griglia raggiunto`, 3000);
     }
+  }, [addToast, logGridChange]);
+
+  const handleAfterAlign = useCallback((info: { element: string; alignH: 'left' | 'center' | 'right'; alignV: 'top' | 'center' | 'bottom' }) => {
+    logGridChange('align', {
+      element: info.element,
+      applied: true,
+      payload: { alignH: info.alignH, alignV: info.alignV },
+    });
+    addToast('success', `${info.element}: allineamento ${info.alignH}/${info.alignV}`, 2000);
   }, [addToast, logGridChange]);
 
   const handleToggleShowGrid = useCallback(() => {
@@ -821,8 +830,9 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       onSelect={setSelectedGridElementLogged}
       onAfterMove={handleAfterMove}
       onAfterResize={handleAfterResize}
+      onAfterAlign={handleAfterAlign}
     />
-  ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize, setGridEditorSideLogged, setSelectedGridElementLogged]);
+  ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize, handleAfterAlign, setGridEditorSideLogged, setSelectedGridElementLogged]);
 
   const desktopActions = (
     <div className="card-actions">

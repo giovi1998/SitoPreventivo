@@ -31,6 +31,7 @@ export interface CardGridControlsProps {
   /** Restituisce informazioni sulla mossa applicata (per toast feedback in G). */
   onAfterMove?: (info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
   onAfterResize?: (info: { element: string; dw: number; dh: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
+  onAfterAlign?: (info: { element: string; alignH: 'left' | 'center' | 'right'; alignV: 'top' | 'center' | 'bottom' }) => void;
   /**
    * Modalità presentazione:
    *  - 'inline' (default desktop): mostra frecce + ridimensiona inline
@@ -53,6 +54,7 @@ export function CardGridControls({
   onSelect,
   onAfterMove,
   onAfterResize,
+  onAfterAlign,
   mode = 'inline',
 }: CardGridControlsProps) {
   const activeGrid: CardGrid = useMemo(() => {
@@ -152,6 +154,7 @@ export function CardGridControls({
         [selected]: { ...selectedEl, alignH, alignV },
       },
     });
+    onAfterAlign?.({ element: selected, alignH, alignV });
   };
 
   const elementOptions = allElementOptionsForSide(side);

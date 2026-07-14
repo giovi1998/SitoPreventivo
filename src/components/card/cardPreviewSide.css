@@ -73,25 +73,28 @@
   object-fit: cover;
 }
 
-/* Logo cell: always flex-center the image; image uses contain so the
- * artwork (not empty SVG padding) sits in the middle of the cell. */
+/* Logo cell: img is capped below 100% so flex justify/align from
+ * gridPlacement (3×3) has room to move the logo inside the cell.
+ * If img were 100%×100%, left/center/right would look identical. */
 .card-preview-side.grid-mode .card-grid-cell--logo,
 .card-back-body-grid .card-grid-cell--logo {
   display: flex;
+  /* defaults; overridden by inline gridPlacement for 3×3 */
   align-items: center;
   justify-content: center;
-  padding: 6%;
+  padding: 6px;
   box-sizing: border-box;
 }
 
 .card-preview-side.grid-mode .card-grid-cell--logo img,
 .card-back-body-grid .card-grid-cell--logo img {
-  width: 100%;
-  height: 100%;
-  max-width: 100%;
-  max-height: 100%;
+  width: auto;
+  height: auto;
+  max-width: 72%;
+  max-height: 72%;
   object-fit: contain;
   object-position: center center;
+  flex: 0 0 auto;
 }
 
 /* Back body grid: holds contacts/qr/socials below the header. */
@@ -167,11 +170,19 @@
   white-space: normal;
 }
 
-/* Own-cell socials: no dashed top border (that was for fallback-in-contacts). */
+/* Own-cell socials: no dashed top border (that was for fallback-in-contacts).
+ * Clip + full-size so 3×3 align keeps text inside the SOCIALS cell. */
+.card-preview-side.grid-mode .card-grid-cell--socials {
+  overflow: hidden;
+}
+
 .card-preview-side.grid-mode .card-grid-cell--socials .card-back-socials {
   margin-top: 0;
   padding-top: 0;
   border-top: none;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 /* Reduce spacing between stacked identity fields in grid mode. */

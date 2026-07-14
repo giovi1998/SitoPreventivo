@@ -162,9 +162,15 @@ export function backQrSizePx(
 }
 
 /**
- * Effective back grid for rendering: when services are empty, collapse the
- * services row so socials sit under contacts (hard WYSIWYG with preview
- * density — empty services leave a ghost gap otherwise).
+ * Effective back grid for rendering when services content is empty.
+ *
+ * v2.12: do NOT move/expand socials. Moving socials made the debug overlay
+ * (persisted rect) disagree with the painted content, and 3×3 align acted on
+ * a different cell than the red SOCIALS box. Instead:
+ * - drop the empty services element
+ * - if contacts is adjacent above services in the same columns, expand
+ *   contacts into that row (fills the ghost gap without stealing socials)
+ * - socials stay at their persisted x/y/w/h so grid editor + 3×3 match preview
  *
  * Does not mutate the persisted card; only the render snapshot.
  */
@@ -176,26 +182,24 @@ export function effectiveBackGridForRender(
   if (services.length > 0) return grid;
 
   const servicesEl = grid.elements.services;
-  const socialsEl = grid.elements.socials;
-  const contactsEl = grid.elements.contacts;
-  if (!socialsEl || !contactsEl) return grid;
-
-  // Collapse empty services: socials moves under contacts and expands to
-  // fill remaining left-column rows so we don't leave a dead empty row
-  // (v2.10.1: keep height expansion for density, fonts are now sized vs
-  // card height so expansion no longer makes text giant).
-  const newSocialsY = contactsEl.y + contactsEl.h;
-  const remainingH = Math.max(socialsEl.h, grid.rows - newSocialsY);
+  if (!servicesEl) return grid;
 
   const elements = { ...grid.elements };
   delete elements.services;
-  elements.socials = {
-    ...socialsEl,
-    y: newSocialsY,
-    h: remainingH,
-  };
 
-  void servicesEl;
+  const contactsEl = elements.contacts;
+  if (
+    contactsEl
+    && contactsEl.x === servicesEl.x
+    && contactsEl.w === servicesEl.w
+    && contactsEl.y + contactsEl.h === servicesEl.y
+  ) {
+    elements.contacts = {
+      ...contactsEl,
+      h: contactsEl.h + servicesEl.h,
+    };
+  }
+
   return { ...grid, elements };
 }
 

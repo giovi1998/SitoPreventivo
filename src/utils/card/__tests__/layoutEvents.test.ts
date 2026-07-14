@@ -31,7 +31,7 @@ describe('layoutEvents', () => {
   });
 
   it('logs card.edit events to console in test mode', () => {
-    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
     pushLayoutEvent({ type: 'card.edit', side: 'front', element: 'name', result: 'ok' });
     expect(spy).toHaveBeenCalled();
     const firstArg = String(spy.mock.calls[0]?.[0] ?? '');
