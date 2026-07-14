@@ -608,14 +608,16 @@ export const GIOVANNI_PERSONAL_URL = 'https://giovannicidu.vercel.app';
 // Lo costruiamo qui (non importando logoGenerator per evitare circular dep).
 // Lo sfondo è trasparente: nessun <rect> di background. I moduli del
 // path lucide "terminal" sono presi da lucideIconPaths.ts (import user zod).
-const GIOVANNI_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 160">
-  <rect x="14" y="38" width="84" height="84" rx="14" fill="#01696F"/>
-  <g transform="translate(14 38) scale(3.5)" stroke="#FFFFFF" stroke-width="0.571" stroke-linecap="round" stroke-linejoin="round" fill="none">
+// v2.11: content centered in viewBox so object-fit:contain places the
+// visual logo in the middle of the grid cell (not left-heavy empty right).
+const GIOVANNI_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 140">
+  <rect x="24" y="28" width="84" height="84" rx="14" fill="#01696F"/>
+  <g transform="translate(24 28) scale(3.5)" stroke="#FFFFFF" stroke-width="0.571" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="m4 17 6-6-6-6"/>
     <path d="M12 19h6"/>
   </g>
-  <text x="110" y="78" font-family="Inter, system-ui, sans-serif" font-size="30" font-weight="700" fill="#1a1a2e">WebdevCA</text>
-  <text x="110" y="100" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="400" fill="#01696F" letter-spacing="1">Web Developer</text>
+  <text x="124" y="72" font-family="Inter, system-ui, sans-serif" font-size="30" font-weight="700" fill="#1a1a2e">WebdevCA</text>
+  <text x="124" y="96" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="400" fill="#01696F" letter-spacing="1">Web Developer</text>
 </svg>`;
 
 function giovanniLogoDataUri(): string {

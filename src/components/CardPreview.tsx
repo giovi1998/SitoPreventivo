@@ -284,7 +284,7 @@ const FrontPreview = React.memo(function FrontPreview({
       )}
       {grid!.elements.logo && card.front.logoUrl && (
         <div className="card-grid-cell card-grid-cell--logo" data-testid="grid-el-logo" style={gridPlacement(grid!.elements.logo)}>
-          <img className="card-logo grid" src={card.front.logoUrl} alt="Logo aziendale" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <img className="card-logo grid" src={card.front.logoUrl} alt="Logo aziendale" />
         </div>
       )}
       {grid!.elements.name && card.front.name && (

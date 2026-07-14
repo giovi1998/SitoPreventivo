@@ -150,6 +150,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, [exportMenuOpen]);
 
   const patchFront = useCallback((patch: Partial<BusinessCard['front']>) => {
+    const keys = Object.keys(patch);
+    pushLayoutEvent({
+      type: 'card.edit',
+      side: 'front',
+      element: keys[0],
+      result: 'ok',
+      payload: { fields: keys },
+    });
     setCard((prev) => {
       const next = { ...prev.front, ...patch };
       if (patch.layout && patch.layout !== prev.front.layout) {
@@ -158,13 +166,28 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       }
       return { ...prev, front: next, updatedAt: new Date().toISOString() };
     });
-  }, [addToast]);
+  }, []);
 
   const patchBack = useCallback((patch: Partial<BusinessCard['back']>) => {
+    const keys = Object.keys(patch);
+    pushLayoutEvent({
+      type: 'card.edit',
+      side: 'back',
+      element: keys[0],
+      result: 'ok',
+      payload: { fields: keys },
+    });
     setCard((prev) => ({ ...prev, back: { ...prev.back, ...patch }, updatedAt: new Date().toISOString() }));
   }, []);
 
   const patchStyle = useCallback((patch: Partial<BusinessCard['style']>) => {
+    const keys = Object.keys(patch);
+    pushLayoutEvent({
+      type: 'card.edit',
+      element: keys[0],
+      result: 'ok',
+      payload: { fields: keys, side: 'style' },
+    });
     setCard((prev) => {
       if (patch.sizePreset && patch.sizePreset !== prev.style.sizePreset) {
         return {
@@ -175,7 +198,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       }
       return { ...prev, style: { ...prev.style, ...patch }, updatedAt: new Date().toISOString() };
     });
-  }, [addToast]);
+  }, []);
 
   const [selectedGridElement, setSelectedGridElement] = useState<keyof CardGrid['elements'] | ''>('');
   const [gridEditorSide, setGridEditorSide] = useState<GridSide>('front');
@@ -315,12 +338,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, []);
 
   const applyGiovanniTemplate = useCallback(() => {
+    pushLayoutEvent({ type: 'card.template', result: 'ok', payload: { template: 'giovanni' } });
     setCard(createGiovanniCardTemplate());
     setShowTemplateBanner(false);
     addToast('info', 'Template personale Giovanni caricato');
   }, [addToast]);
 
   const resetCard = useCallback(() => {
+    pushLayoutEvent({ type: 'card.reset', result: 'ok' });
     setCard(createEmptyCard());
     setShowTemplateBanner(true);
     setShowGrid(false);
@@ -344,12 +369,20 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   const handleUpload = useCallback(async (file: File, field: 'photoUrl' | 'logoUrl') => {
     setUploadError(null);
+    pushLayoutEvent({
+      type: 'card.media',
+      element: field,
+      result: 'ok',
+      payload: { mime: file.type, size: file.size },
+    });
     if (!isAllowedLogoMime(file.type)) {
       setUploadError('Formato non supportato. Usa PNG, JPEG o SVG.');
+      pushLayoutEvent({ type: 'card.media', element: field, result: 'error', reason: 'mime' });
       return;
     }
     if (file.size > MAX_RAW_BYTES) {
       setUploadError('File troppo grande (max 5MB)');
+      pushLayoutEvent({ type: 'card.media', element: field, result: 'error', reason: 'size' });
       return;
     }
     try {

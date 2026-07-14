@@ -1,5 +1,6 @@
-// Layout event bus: structured, lightweight observability for card grid and export.
-// Test/debug only by default; production uses existing logger for export errors.
+// Layout event bus: structured, lightweight observability for card grid,
+// form edits, media uploads and export. In DEV/test every event is also
+// printed to the browser console as `[card-layout] …`.
 
 export type CardLayoutEventType =
   | 'grid.toggle'
@@ -12,7 +13,12 @@ export type CardLayoutEventType =
   | 'export.start'
   | 'export.success'
   | 'export.error'
-  | 'layout.audit';
+  | 'layout.audit'
+  | 'card.edit'
+  | 'card.template'
+  | 'card.reset'
+  | 'card.media'
+  | 'card.ai';
 
 export interface CardLayoutEvent {
   ts: string;
@@ -27,36 +33,11 @@ export interface CardLayoutEvent {
 const MAX_EVENTS = 100;
 let events: CardLayoutEvent[] = [];
 
-export function pushLayoutEvent(e: Omit<CardLayoutEvent, 'ts'>): void {
-  const event: CardLayoutEvent = { ts: new Date().toISOString(), ...e };
-  events = [...events.slice(-MAX_EVENTS + 1), event];
-  if (typeof window !== 'undefined' && (window as any).__cardLayoutEventsEnabled) {
-    try {
-      (window as any).__cardLayoutEvents = events;
-    } catch {
-      // ignore if window is frozen/sealed
-    }
-  }
-  // Mirror to console in dev/test so humans can tail logs without typing commands.
-  if (typeof console !== 'undefined' && isDevOrTest()) {
-    const label = `%c[card-layout] ${event.type}`;
-    const style = 'color: #01696F; font-weight: 600;';
-    if (event.result === 'blocked') {
-      console.warn(label, style, event);
-    } else if (event.result === 'error') {
-      console.error(label, style, event);
-    } else {
-      console.log(label, style, event);
-    }
-  }
-}
-
 function isDevOrTest(): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    import.meta.env;
-    const mode = (import.meta as any).env?.MODE;
-    if (mode === 'development' || mode === 'test') return true;
+    const env = (import.meta as ImportMeta & { env?: { DEV?: boolean; MODE?: string } }).env;
+    if (env?.DEV) return true;
+    if (env?.MODE === 'development' || env?.MODE === 'test') return true;
   } catch {
     // not an ES module environment
   }
@@ -67,7 +48,42 @@ function isDevOrTest(): boolean {
   } catch {
     // ignore
   }
+  if (typeof window !== 'undefined') {
+    try {
+      if (localStorage.getItem('pq_card_layout_debug') === '1') return true;
+    } catch {
+      // ignore
+    }
+  }
   return false;
+}
+
+export function pushLayoutEvent(e: Omit<CardLayoutEvent, 'ts'>): void {
+  const event: CardLayoutEvent = { ts: new Date().toISOString(), ...e };
+  events = [...events.slice(-MAX_EVENTS + 1), event];
+
+  // Always keep window hook fresh when enabled OR in dev/test.
+  if (typeof window !== 'undefined' && ((window as any).__cardLayoutEventsEnabled || isDevOrTest())) {
+    try {
+      (window as any).__cardLayoutEventsEnabled = true;
+      (window as any).__cardLayoutEvents = events;
+    } catch {
+      // ignore if window is frozen/sealed
+    }
+  }
+
+  // Mirror to console in dev/test so humans can tail logs without typing commands.
+  if (typeof console !== 'undefined' && isDevOrTest()) {
+    const label = `%c[card-layout] ${event.type}${event.element ? ' · ' + event.element : ''}${event.reason ? ' · ' + event.reason : ''}`;
+    const style = 'color: #01696F; font-weight: 600;';
+    if (event.result === 'blocked') {
+      console.warn(label, style, event);
+    } else if (event.result === 'error') {
+      console.error(label, style, event);
+    } else {
+      console.log(label, style, event);
+    }
+  }
 }
 
 export function getLayoutEvents(): readonly CardLayoutEvent[] {
