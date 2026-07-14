@@ -63,3 +63,20 @@ export {
   CARD_A4_GAP_MM,
   CARD_A4_MARGIN_MM,
 } from '../documentSchemas';
+export {
+  pushLayoutEvent,
+  getLayoutEvents,
+  clearLayoutEvents,
+  attachLayoutEventsToWindow,
+  detachLayoutEventsFromWindow,
+  type CardLayoutEvent,
+  type CardLayoutEventType,
+} from './layoutEvents';
+export {
+  auditExportSvg,
+  filterFindingsBySeverity,
+  hasFindingCode,
+  type AuditResult,
+  type AuditFinding,
+  type AuditFindingCode,
+} from './layoutAudit';

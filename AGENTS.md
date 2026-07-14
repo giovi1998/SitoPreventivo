@@ -565,6 +565,22 @@ item di scope minore:
   `qrPayload` è vuoto. Fix: mock `qrcode` o `qrGenerator.generateQrSvg`
   per test deterministici.
 
+### Card layout/event harness (new, 2026-07)
+
+- **Harness unificato**: tutti gli e2e card usano `e2e/helpers/cardHarness.ts`
+  per login, fill, grid, export, parse SVG (non duplicare più helper).
+- **Event logging**: `src/utils/card/layoutEvents.ts` + shell wiring;
+  in test mode / `localStorage['pq_card_layout_debug']='1'` è disponibile
+  `window.__cardLayoutEvents`. Usato dai test e2e per verificare move ok,
+  collision blocked, export start/success.
+- **Layout audit**: `src/utils/card/layoutAudit.ts` controlla ratio font
+  contatti/socials, overlap label/valore, posizione QR, logo troppo piccolo
+  e testi mancanti. Usata in unit test e e2e.
+- **WYSIWYG test command**: `npx playwright test e2e/card-export-inspection.spec.ts
+  e2e/card-wysiwyg-visual.spec.ts e2e/card-grid-export-roundtrip.spec.ts
+  e2e/card-grid-behavior.spec.ts e2e/card-layout-audit.spec.ts
+  e2e/card-grid-behavior-audit.spec.ts`.
+
 Card module: ~140+ test across `__tests__/` (grid collision, master
 switch, fontScale, AI parity).
 

@@ -51,6 +51,10 @@ import {
 } from '../../utils/promptLibrary';
 import { buildCardPhotoBrief } from '../../utils/card/photoBrief';
 import { pruneCardGrids } from '../../utils/card/gridElements';
+import {
+  pushLayoutEvent,
+  attachLayoutEventsToWindow,
+} from '../../utils/card/layoutEvents';
 
 const MAX_RAW_BYTES = 5_000_000;
 const AUTO_SAVE_DELAY_MS = 30_000;
@@ -97,6 +101,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const [isCoverGenerating, setIsCoverGenerating] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedIdRef = useRef<string | undefined>(initialCard?.id);
+
+  // Test/debug introspection for layout events.
+  useEffect(() => {
+    if (import.meta.env.MODE === 'test' || import.meta.env.DEV || localStorage.getItem('pq_card_layout_debug') === '1') {
+      attachLayoutEventsToWindow();
+    }
+  }, []);
 
   // When Collection opens a different card, replace local state.
   useEffect(() => {
@@ -169,6 +180,16 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const [selectedGridElement, setSelectedGridElement] = useState<keyof CardGrid['elements'] | ''>('');
   const [gridEditorSide, setGridEditorSide] = useState<GridSide>('front');
 
+  const setGridEditorSideLogged = useCallback((s: GridSide) => {
+    setGridEditorSide(s);
+    pushLayoutEvent({ type: 'grid.side', side: s, result: 'ok' });
+  }, []);
+
+  const setSelectedGridElementLogged = useCallback((k: keyof CardGrid['elements'] | '') => {
+    setSelectedGridElement(k);
+    pushLayoutEvent({ type: 'grid.select', side: gridEditorSide, element: k || undefined, result: 'ok' });
+  }, [gridEditorSide]);
+
   const patchGrid = useCallback((grid: CardGrid) => {
     setCard((prev) => {
       if (gridEditorSide === 'back') {
@@ -186,7 +207,19 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     });
   }, [gridEditorSide]);
 
+  const logGridChange = useCallback((type: 'move' | 'resize' | 'align', info: { element: string; applied: boolean; reason?: 'collision' | 'border'; payload?: Record<string, unknown> }) => {
+    pushLayoutEvent({
+      type: type === 'move' ? 'grid.move' : type === 'resize' ? 'grid.resize' : 'grid.align',
+      side: gridEditorSide,
+      element: info.element,
+      result: info.applied ? 'ok' : info.reason === 'collision' || info.reason === 'border' ? 'blocked' : 'error',
+      reason: info.reason,
+      payload: info.payload,
+    });
+  }, [gridEditorSide]);
+
   const applyGridPreset = useCallback((preset: BusinessCardLayout) => {
+    pushLayoutEvent({ type: 'grid.preset', side: gridEditorSide, result: 'ok', payload: { preset } });
     if (gridEditorSide === 'back') {
       setCard((prev) => ({
         ...prev,
@@ -204,6 +237,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, [gridEditorSide, card]);
 
   const handleAfterMove = useCallback((info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => {
+    logGridChange('move', { element: info.element, applied: info.applied, reason: info.reason, payload: { dx: info.dx, dy: info.dy } });
     if (info.applied) {
       const dir = (() => {
         if (info.dx > 0) return 'a destra';
@@ -217,9 +251,10 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     } else if (info.reason === 'border') {
       addToast('info', `Bloccato: bordo della griglia raggiunto`, 3000);
     }
-  }, [addToast]);
+  }, [addToast, logGridChange]);
 
   const handleAfterResize = useCallback((info: { element: string; dw: number; dh: number; applied: boolean; reason?: 'collision' | 'border' }) => {
+    logGridChange('resize', { element: info.element, applied: info.applied, reason: info.reason, payload: { dw: info.dw, dh: info.dh } });
     if (info.applied) {
       addToast('success', `${info.element} ridimensionato`, 2500);
     } else if (info.reason === 'collision') {
@@ -227,10 +262,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     } else if (info.reason === 'border') {
       addToast('info', `Bloccato: bordo della griglia raggiunto`, 3000);
     }
-  }, [addToast]);
+  }, [addToast, logGridChange]);
 
   const handleToggleShowGrid = useCallback(() => {
-    setShowGrid((prev) => !prev);
+    setShowGrid((prev) => {
+      const next = !prev;
+      pushLayoutEvent({ type: 'grid.toggle', side: gridEditorSide, result: 'ok', payload: { showGrid: next } });
+      return next;
+    });
     setCard((c) => {
       const next = !showGrid;
       if (!next) {
@@ -343,6 +382,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   const handleExportAction = useCallback((action: string) => {
     setExportMenuOpen(false);
+    pushLayoutEvent({ type: 'export.start', result: 'ok', payload: { action } });
     switch (action) {
       case 'pdf':
         void exportPdf({ cropMarks: true });
@@ -366,6 +406,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         exportJson();
         break;
     }
+    pushLayoutEvent({ type: 'export.success', result: 'ok', payload: { action } });
   }, [exportPdf, exportPng, exportSvg, exportJson]);
 
   const openSaveDialog = useCallback(() => {
@@ -738,17 +779,17 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       side={gridEditorSide}
       gridEnabled={showGrid}
       onSideChange={(s) => {
-        setGridEditorSide(s);
-        setSelectedGridElement('');
+        setGridEditorSideLogged(s);
+        setSelectedGridElementLogged('');
       }}
       onChangeGrid={patchGrid}
       onApplyPreset={applyGridPreset}
       selected={selectedGridElement}
-      onSelect={setSelectedGridElement}
+      onSelect={setSelectedGridElementLogged}
       onAfterMove={handleAfterMove}
       onAfterResize={handleAfterResize}
     />
-  ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize]);
+  ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize, setGridEditorSideLogged, setSelectedGridElementLogged]);
 
   const desktopActions = (
     <div className="card-actions">
@@ -803,8 +844,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
                     side={gridEditorSide}
                     gridEnabled={showGrid}
                     selected={selectedGridElement}
-                    onSelect={setSelectedGridElement}
-                    onChangeSide={(s) => { setGridEditorSide(s); setSelectedGridElement(''); }}
+                    onSelect={setSelectedGridElementLogged}
+                    onChangeSide={(s) => { setGridEditorSideLogged(s); setSelectedGridElementLogged(''); }}
                     onChangeGrid={patchGrid}
                     onAfterMove={handleAfterMove}
                   />

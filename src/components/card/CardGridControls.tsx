@@ -349,68 +349,76 @@ export function CardGridControls({
             <button
               type="button"
               onClick={() => handleMove(-1, 0)}
-              disabled={!gridEnabled || !canMoveLeft}
+              disabled={!gridEnabled}
               aria-label="Sposta a sinistra"
               title={!canMoveLeft ? (selectedEl?.x === 0 ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta a sinistra'}
               data-testid="grid-move-left"
+              className={!canMoveLeft ? 'blocked' : ''}
             ><span aria-hidden="true">←</span></button>
             <button
               type="button"
               onClick={() => handleMove(0, -1)}
-              disabled={!gridEnabled || !canMoveUp}
+              disabled={!gridEnabled}
               aria-label="Sposta su"
               title={!canMoveUp ? (selectedEl?.y === 0 ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta su'}
               data-testid="grid-move-up"
+              className={!canMoveUp ? 'blocked' : ''}
             ><span aria-hidden="true">↑</span></button>
             <button
               type="button"
               onClick={() => handleMove(0, 1)}
-              disabled={!gridEnabled || !canMoveDown}
+              disabled={!gridEnabled}
               aria-label="Sposta giù"
               title={!canMoveDown ? ((selectedEl?.y ?? 0) + (selectedEl?.h ?? 0) >= activeGrid.rows ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta giù'}
               data-testid="grid-move-down"
+              className={!canMoveDown ? 'blocked' : ''}
             ><span aria-hidden="true">↓</span></button>
             <button
               type="button"
               onClick={() => handleMove(1, 0)}
-              disabled={!gridEnabled || !canMoveRight}
+              disabled={!gridEnabled}
               aria-label="Sposta a destra"
               title={!canMoveRight ? ((selectedEl?.x ?? 0) + (selectedEl?.w ?? 0) >= activeGrid.cols ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta a destra'}
               data-testid="grid-move-right"
+              className={!canMoveRight ? 'blocked' : ''}
             ><span aria-hidden="true">→</span></button>
           </div>
           <div className="card-grid-resize" role="group" aria-label="Ridimensiona elemento">
             <button
               type="button"
               onClick={() => handleResize(-1, 0)}
-              disabled={!gridEnabled || !canShrinkW}
+              disabled={!gridEnabled}
               aria-label="Riduci larghezza"
               title={!canShrinkW ? 'Larghezza minima 1' : disabledTitle || 'Riduci larghezza'}
               data-testid="grid-resize-w-minus"
+              className={!canShrinkW ? 'blocked' : ''}
             ><span aria-hidden="true">−↔</span></button>
             <button
               type="button"
               onClick={() => handleResize(1, 0)}
-              disabled={!gridEnabled || !canGrowW}
+              disabled={!gridEnabled}
               aria-label="Aumenta larghezza"
               title={!canGrowW ? (selectedEl && selectedEl.x + selectedEl.w >= activeGrid.cols ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Aumenta larghezza'}
               data-testid="grid-resize-w-plus"
+              className={!canGrowW ? 'blocked' : ''}
             ><span aria-hidden="true">+↔</span></button>
             <button
               type="button"
               onClick={() => handleResize(0, -1)}
-              disabled={!gridEnabled || !canShrinkH}
+              disabled={!gridEnabled}
               aria-label="Riduci altezza"
               title={!canShrinkH ? 'Altezza minima 1' : disabledTitle || 'Riduci altezza'}
               data-testid="grid-resize-h-minus"
+              className={!canShrinkH ? 'blocked' : ''}
             ><span aria-hidden="true">−↕</span></button>
             <button
               type="button"
               onClick={() => handleResize(0, 1)}
-              disabled={!gridEnabled || !canGrowH}
+              disabled={!gridEnabled}
               aria-label="Aumenta altezza"
               title={!canGrowH ? (selectedEl && selectedEl.y + selectedEl.h >= activeGrid.rows ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Aumenta altezza'}
               data-testid="grid-resize-h-plus"
+              className={!canGrowH ? 'blocked' : ''}
             ><span aria-hidden="true">+↕</span></button>
           </div>
         </>
