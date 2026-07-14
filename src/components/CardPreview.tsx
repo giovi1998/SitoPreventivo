@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { deriveGridFromLayout } from '../utils/documentSchemas';
 import type { BusinessCard, CardGrid } from '../utils/documentSchemas';
 import type { Tier } from '../utils/watermark';
 import { resolveCardQrPayload } from '../utils/cardGenerator';
@@ -7,6 +8,7 @@ import {
   SIZE_CLASS,
   clampFontScale,
   gridPlacement,
+  isGridModeFor,
   qrSizePxFor,
   sideGrid,
 } from '../utils/card/previewHelpers';
@@ -177,7 +179,11 @@ const FrontPreview = React.memo(function FrontPreview({
   const borderClass = `border-${card.style.borderStyle}`;
   const hasPhoto = !!card.front.photoUrl;
   const hasLogo = !!card.front.logoUrl;
-  const grid = card.grid;
+  // v2.8: when front.useGrid is false, derive fresh from layout so
+  // stale grids (missing photo element, wrong positions) don't hide
+  // content. Same fix applied to BackPreview.
+  const rawGrid = isGridModeFor('front', card) ? card.grid : undefined;
+  const grid = rawGrid ?? deriveGridFromLayout(card, 'front');
 
   const baseStyle: React.CSSProperties = {
     backgroundColor: card.style.bgColor,
@@ -326,7 +332,31 @@ const BackPreview = React.memo(function BackPreview({
     card.back.address?.trim() ||
     card.back.vatNumber?.trim()
   );
-  const grid = card.backGrid ?? card.grid;
+  // v2.7.1: Always derive a back grid with contacts/services/socials/qr
+  // if the persisted backGrid is missing or doesn't contain a contacts
+  // element. This prevents the preview from going blank when the card is
+  // opened in flexbox mode (backGrid undefined) or when the grid was
+  // filtered down to zero back elements.
+  // v2.8: when back.useGrid is false (flexbox mode), ignore the persisted
+  // backGrid entirely — it may be stale from an older version with
+  // contacts h:1 / alignV bottom that hides contacts. Derive fresh from
+  // the default preset so the preview always shows contacts correctly.
+  const rawGrid = isGridModeFor('back', card) ? (card.backGrid ?? card.grid) : null;
+  const needsBackGrid =
+    !rawGrid ||
+    !rawGrid.elements.contacts ||
+    !Object.keys(rawGrid.elements).some((k) =>
+      ['contacts', 'services', 'socials', 'qr'].includes(k),
+    );
+  const grid = needsBackGrid
+    ? deriveGridFromLayout(
+        {
+          ...card,
+          backGrid: rawGrid as CardGrid,
+        },
+        'back',
+      )
+    : rawGrid;
 
   const qrSizePx = qrSizePxFor(card);
 

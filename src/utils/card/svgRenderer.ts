@@ -1,5 +1,5 @@
 import type { BusinessCard, CardGrid } from '../documentSchemas';
-import { FONT_SCALE_MIN, FONT_SCALE_MAX, QR_SIZE_PX } from '../documentSchemas';
+import { FONT_SCALE_MIN, FONT_SCALE_MAX, QR_SIZE_PX, deriveGridFromLayout, hasGridElements } from '../documentSchemas';
 import { generateQrSvg } from '../qrGenerator';
 import { resolveCardQrPayload, getEffectiveQrPayload } from './qrPayload';
 import { deriveHostname, deriveHandle } from './textDerivation';
@@ -32,6 +32,111 @@ export function svgFontFamily(card: BusinessCard): string {
   return `${quoted}, ${generic}`;
 }
 
+// v2.7: quando l'SVG viene caricato come Image (canvas pipeline per PNG/PDF)
+// o aperto come file standalone, il font-family non è disponibile perché
+// l'SVG è isolato dalla pagina. Il `<style>@import url(...)</style>` dentro
+// l'SVG fa sì che il browser carichi il font insieme al resto del SVG,
+// garantendo che canvas e viewer mostrino il font corretto.
+export const GOOGLE_FONTS_BASE = 'https://fonts.googleapis.com/css2?family=';
+export const FONT_TO_GOOGLE_URL: Record<string, string> = {
+  Inter: 'Inter:wght@400;500;600;700;800&display=swap',
+  Roboto: 'Roboto:wght@400;500;700&display=swap',
+  'Open Sans': 'Open+Sans:wght@400;500;600;700;800&display=swap',
+  Lato: 'Lato:wght@400;700;900&display=swap',
+  Montserrat: 'Montserrat:wght@400;500;600;700;800&display=swap',
+  Poppins: 'Poppins:wght@400;500;600;700;800&display=swap',
+  'Source Sans 3': 'Source+Sans+3:wght@400;600;700&display=swap',
+  'DM Sans': 'DM+Sans:wght@400;500;600;700&display=swap',
+  Figtree: 'Figtree:wght@400;500;600;700;800&display=swap',
+  'Plus Jakarta Sans': 'Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap',
+  Oswald: 'Oswald:wght@400;500;600;700&display=swap',
+  Raleway: 'Raleway:wght@400;500;600;700;800&display=swap',
+  'Playfair Display': 'Playfair+Display:wght@400;500;600;700;800&display=swap',
+  Merriweather: 'Merriweather:wght@400;700;900&display=swap',
+};
+
+const FONT_DATA_CACHE = new Map<string, Promise<string | undefined>>();
+
+function cleanFontFamily(fontFamily: string): string {
+  return fontFamily.trim().split(',')[0].replace(/['"]/g, '');
+}
+
+export function buildSvgFontImport(fontFamily: string): string {
+  const clean = cleanFontFamily(fontFamily);
+  const suffix = FONT_TO_GOOGLE_URL[clean];
+  if (!suffix) return '';
+  const url = `${GOOGLE_FONTS_BASE}${suffix}`.replace(/&/g, '&amp;');
+  return `<style>@import url('${url}');</style>`;
+}
+
+/**
+ * v2.7.1: build a self-contained `<style>` tag with the requested Google Font
+ * embedded as base64 data URIs. This is the only reliable way to make fonts
+ * render synchronously when the SVG is loaded into a canvas or into an `<img>`
+ * element, because `@import` fonts are loaded asynchronously and drawImage()
+ * runs before they are available.
+ *
+ * The result is cached per font family.
+ */
+export async function buildEmbeddedFontImport(fontFamily: string): Promise<string> {
+  const clean = cleanFontFamily(fontFamily);
+  const suffix = FONT_TO_GOOGLE_URL[clean];
+  if (!suffix) return '';
+
+  if (FONT_DATA_CACHE.has(clean)) {
+    return (await FONT_DATA_CACHE.get(clean)) ?? '';
+  }
+
+  const loadPromise = (async () => {
+    const cssUrl = `${GOOGLE_FONTS_BASE}${suffix}`;
+    try {
+      const response = await fetch(cssUrl, { mode: 'cors' });
+      if (!response.ok) return undefined;
+      let cssText = await response.text();
+
+      // v2.8.2: the regex must capture the value inside url(...) without the
+      // surrounding `url(` and `)`, otherwise the replacement becomes
+      // `url(url(data:...))` and the browser rejects the @font-face src.
+      const urlMatches = Array.from(cssText.matchAll(/url\((https:\/\/[^)]+)\)/g));
+      const replacements = await Promise.all(
+        urlMatches.map(async (match) => {
+          const rawUrl = match[1];
+          try {
+            const fontResponse = await fetch(rawUrl, { mode: 'cors' });
+            if (!fontResponse.ok) return null;
+            const blob = await fontResponse.blob();
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const result = reader.result as string;
+                const comma = result.indexOf(',');
+                resolve(comma >= 0 ? result.slice(comma + 1) : '');
+              };
+              reader.onerror = () => reject(reader.error || new Error('FileReader error'));
+              reader.readAsDataURL(blob);
+            });
+            const mime = fontResponse.headers.get('content-type') ?? 'font/woff2';
+            return { fullMatch: match[0], dataUrl: `url(data:${mime};base64,${base64})` };
+          } catch {
+            return null;
+          }
+        }),
+      );
+
+      replacements.forEach((r) => {
+        if (r) cssText = cssText.split(r.fullMatch).join(r.dataUrl);
+      });
+
+      return `<style>${cssText}</style>`;
+    } catch {
+      return undefined;
+    }
+  })();
+
+  FONT_DATA_CACHE.set(clean, loadPromise);
+  return (await loadPromise) ?? '';
+}
+
 export function escapeXml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -45,6 +150,8 @@ export interface BuildSvgOptions {
   withBleed?: boolean;
   includeDebugBoxes?: boolean;
   rotate?: 0 | 90 | 180 | 270;
+  /** v2.7.1: optional self-contained font CSS (base64 embedded) for canvas/PNG/PDF export */
+  embeddedFontCss?: string;
 }
 
 // Simple luminance check to decide if a hex color is light.
@@ -132,7 +239,10 @@ export function buildFrontSvg(
   out += `<rect x="${Math.round(pxW * 0.6)}" y="0" width="${Math.round(pxW * 0.4)}" height="${Math.round(pxH * 0.35)}" fill="url(#diag)"/>`;
 
   // 6. Render front from card.grid (single source of truth)
-  const grid = card.grid;
+  // v2.8: when front.useGrid is false OR the grid has no elements, derive
+  // fresh from layout so stale grids don't hide content (same fix as back).
+  const rawFrontGrid = card.front.useGrid && hasGridElements('front', card) ? card.grid : undefined;
+  const grid = rawFrontGrid ?? deriveGridFromLayout(card, 'front');
   if (grid && grid.cols > 0 && grid.rows > 0) {
     const cellW = pxW / grid.cols;
     const cellH = pxH / grid.rows;
@@ -301,12 +411,17 @@ export function buildBackSvg(
     const eyebrowSize = fs(pxH * 0.055, fontScale);
     const wordmarkSize = fs(pxH * 0.052, fontScale);
     const headerTextH = Math.max(eyebrowSize, wordmarkSize);
-    out += `<text x="${pad + stripW}" y="${pad + eyebrowSize}" font-family="${fontFamily}" font-size="${eyebrowSize}" font-weight="700" fill="${accent}" letter-spacing="2.5">CONTATTI</text>`;
+    // Align eyebrow with contacts grid cell content (pad * 0.5 from left edge).
+    // When accent-strip-left is active, stripW > 0; otherwise stripW = 0.
+    // The contacts cell starts at x = 0 * cellW + pad * 0.5 = pad * 0.5.
+    // So we use pad * 0.5 consistently for both header and contacts content.
+    const headerX = pad * 0.5;
+    out += `<text x="${headerX}" y="${pad + eyebrowSize}" font-family="${fontFamily}" font-size="${eyebrowSize}" font-weight="700" fill="${accent}" letter-spacing="2.5">CONTATTI</text>`;
     if (headerWord) {
       out += `<text x="${pxW - pad}" y="${pad + eyebrowSize}" font-family="${fontFamily}" font-size="${wordmarkSize}" font-weight="600" fill="${accent}" text-anchor="end">${escapeXml(headerWord)}</text>`;
     }
     const divY = pad + headerTextH + Math.round(pxH * 0.02);
-    out += `<line x1="${pad + stripW}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.4" stroke-dasharray="3,2" opacity="0.18"/>`;
+    out += `<line x1="${headerX}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.4" stroke-dasharray="3,2" opacity="0.18"/>`;
     // Reserve the same vertical space the preview uses for the header + divider + margin.
     headerH = divY + Math.round(pxH * 0.025);
   }
@@ -314,17 +429,27 @@ export function buildBackSvg(
   const bodyH = pxH - bodyTop;
 
   // Render back from card.backGrid (single source of truth)
-  const grid = card.backGrid ?? card.grid;
+  // v2.8: when back.useGrid is false OR the persisted backGrid has no
+  // usable elements, derive fresh from the default preset so the export
+  // never goes blank.
+  const useBackGrid = card.back.useGrid && hasGridElements('back', card);
+  const persistedBackGrid = useBackGrid ? card.backGrid : undefined;
+  const rawBackGrid = persistedBackGrid ?? (useBackGrid ? card.grid : undefined);
+  const grid = rawBackGrid ?? deriveGridFromLayout(card, 'back');
   if (grid && grid.cols > 0 && grid.rows > 0) {
     const cellW = pxW / grid.cols;
     const cellH = bodyH / grid.rows;
 
     const contactsEl = grid.elements.contacts;
     if (contactsEl) {
+      // If services element is not in grid (filtered out due to empty content),
+      // expand contacts to fill the available body height.
+      const hasServicesEl = !!grid.elements.services;
+      const contactsH = hasServicesEl ? contactsEl.h : grid.rows - contactsEl.y;
       const cx = contactsEl.x * cellW + pad * 0.5;
       const cy = contactsEl.y * cellH + bodyTop + pad * 0.5;
       const cw = contactsEl.w * cellW - pad;
-      const ch = contactsEl.h * cellH - pad;
+      const ch = contactsH * cellH - pad;
 
       const contactEntries: Array<{ key: string; value: string; color?: string; isAccent?: boolean }> = [];
       if (card.back.phone) contactEntries.push({ key: 'Telefono', value: card.back.phone });
@@ -363,17 +488,25 @@ export function buildBackSvg(
       }
 
       const lineGap = lineGapFor(keySize, valSize);
-      let lineY = cy + keySize + pad * 0.25;
+      // v2.9: allinea label e valore sulla stessa baseline alfabetica, come
+      // la preview React (.card-back-line { align-items: baseline }). Prima
+      // usavamo text-before-edge su entrambi: label e valore venivano
+      // top-aligned ma, essendo il valore più grande, la sua baseline era
+      // più bassa e i due testi apparivano "sminchiati" (label galleggiante
+      // sopra il valore). Ora calcoliamo un'unica baseline condivisa e usiamo
+      // dominant-baseline="alphabetic" su entrambi i <text>.
+      const valAscent = Math.round(valSize * 0.8);
+      let lineY = cy + valAscent + pad * 0.25;
       const colLabelW = colLabelWFor(keySize);
       const valueMaxW = Math.max(10, cw - colLabelW - pad * 0.5);
       const renderContact = (entry: { key: string; value: string; color?: string; isAccent?: boolean }) => {
         const wrapped = wrappableKeys.has(entry.key)
           ? wrapTextAtWhitespace(entry.value, valueMaxW, valSize)
           : [entry.value];
-        out += `<text x="${cx}" y="${lineY}" font-family="${fontFamily}" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4" dominant-baseline="text-before-edge">${escapeXml(entry.key.toUpperCase())}</text>`;
+        out += `<text x="${cx}" y="${lineY}" font-family="${fontFamily}" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4" dominant-baseline="alphabetic">${escapeXml(entry.key.toUpperCase())}</text>`;
         const valueX = cx + colLabelW;
         wrapped.forEach((line) => {
-          out += `<text x="${valueX}" y="${lineY}" font-family="${fontFamily}" font-size="${valSize}" font-weight="500" fill="${entry.isAccent ? accent : (entry.color ?? text)}" dominant-baseline="text-before-edge">${escapeXml(line)}</text>`;
+          out += `<text x="${valueX}" y="${lineY}" font-family="${fontFamily}" font-size="${valSize}" font-weight="500" fill="${entry.isAccent ? accent : (entry.color ?? text)}" dominant-baseline="alphabetic">${escapeXml(line)}</text>`;
           lineY += lineGap;
         });
       };
@@ -653,19 +786,18 @@ export function buildCardSvg(
   opts: BuildSvgOptions = {},
 ): string {
   const rotate = opts.rotate ?? 0;
+  const fontImport = opts.embeddedFontCss || buildSvgFontImport(card.style.fontFamily || 'Inter');
   const inner = side === 'front' ? buildFrontSvg(card, pxW, pxH, opts) : buildBackSvg(card, pxW, pxH, opts);
+  const head = fontImport ? `${fontImport}${inner}` : inner;
   if (rotate === 0) {
-    return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${pxW} ${pxH}" width="${pxW}" height="${pxH}">${inner}</svg>`;
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${pxW} ${pxH}" width="${pxW}" height="${pxH}">${head}</svg>`;
   }
   const outW = rotate === 90 || rotate === 270 ? pxH : pxW;
   const outH = rotate === 90 || rotate === 270 ? pxW : pxH;
-  // Rotate around origin then translate so the content lands inside the
-  // swapped viewBox. rotate(angle) in SVG (y-down, clockwise): 90° -> (x,y)->(-y,x),
-  // so we translate by (+pxH, 0); 270° -> (x,y)->(y,-x), translate by (0, +pxW);
-  // 180° -> (x,y)->(-x,-y), translate by (+pxW, +pxH).
   const tx = rotate === 90 ? pxH : rotate === 180 ? pxW : 0;
   const ty = rotate === 180 ? pxH : rotate === 270 ? pxW : 0;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${outW} ${outH}" width="${outW}" height="${outH}"><g transform="translate(${tx} ${ty}) rotate(${rotate})">${inner}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${outW} ${outH}" width="${outW}" height="${outH}">${fontImport}<g transform="translate(${tx} ${ty}) rotate(${rotate})">${inner}</g></svg>`;
 }
 
 export function extractQrInner(qrSvg: string): string {

@@ -466,6 +466,17 @@ function filterGridElementsByContent(
       els[key] = rect;
     }
   }
+  // v2.8: back-side fallback — quando non ci sono contatti veri (phone/
+  // email/etc vuoti) ma ci sono socials, mantieni comunque la cella
+  // `contacts` dal preset così i socials hanno un container nel grid
+  // (il fallback {!grid.elements.socials && socialsContent} in
+  // BackPreview renderizza i socials dentro contacts).
+  if (side === 'back' && !els.contacts && grid.elements.contacts) {
+    const hasSocials = card.back.socials.some((s) => s.platform && s.url);
+    if (hasSocials) {
+      els.contacts = grid.elements.contacts;
+    }
+  }
   return { cols: grid.cols, rows: grid.rows, elements: els as CardGrid['elements'] };
 }
 
@@ -629,6 +640,10 @@ export function createGiovanniCardTemplate(): BusinessCard {
       logoUrl: giovanniLogoDataUri(),
       coverImageUrl: null,
       layout: 'split',
+      // v2.8.1: the template includes custom front/back grids, so grid-mode
+      // must be active from the start. Otherwise preview and export derive
+      // from the flexbox layout and ignore the custom grids.
+      useGrid: true,
     },
     back: {
       ...createEmptyCard().back,
@@ -640,6 +655,8 @@ export function createGiovanniCardTemplate(): BusinessCard {
       servicesLabel: 'Servizi che offro',
       qrSize: 'medium',
       coverImageUrl: null,
+      // v2.8.1: grid-mode attivo per usare il backGrid custom del template.
+      useGrid: true,
       socials: [
         { platform: 'LinkedIn', url: linkedInUrl },
         { platform: 'GitHub', url: 'https://github.com/GiovanniCidu' },

@@ -243,6 +243,31 @@ describe('CardPreview', () => {
       expect(screen.queryByTestId('card-back-header')).toBeNull();
     });
 
+    it('shows "Contatti" eyebrow in back header when contacts have data but no website/company', () => {
+      const card = {
+        ...createEmptyCard(),
+        back: { ...createEmptyCard().back, phone: '+39 333 1234567' },
+        front: { ...createEmptyCard().front, company: '' },
+      };
+      render(<CardPreview side="back" card={card} />);
+      expect(screen.getByTestId('card-back-header')).toBeInTheDocument();
+      expect(screen.getByTestId('card-back-header').textContent).toMatch(/contatti/i);
+      expect(screen.queryByTestId('card-back-wordmark')).toBeNull();
+    });
+
+    it('renders back contacts even when backGrid is undefined (fallback grid)', () => {
+      const base = createEmptyCard();
+      const card: BusinessCard = {
+        ...base,
+        back: { ...base.back, phone: '+39 333 1234567', email: 'test@example.com' },
+        backGrid: undefined,
+      };
+      render(<CardPreview side="back" card={card} />);
+      expect(screen.getByTestId('grid-el-contacts')).toBeInTheDocument();
+      expect(screen.getByText('+39 333 1234567')).toBeInTheDocument();
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    });
+
     it('renders back wordmark inside header (grid refactor)', () => {
       const card = { ...createEmptyCard(), back: { ...createEmptyCard().back, website: 'https://example.com' } };
       const { container } = render(<CardPreview side="back" card={card} />);
@@ -611,7 +636,7 @@ describe('CardPreview', () => {
     it('front: alignment inline styles control text position', () => {
       const card: BusinessCard = {
         ...createGiovanniCardTemplate(),
-        front: { ...createGiovanniCardTemplate().front, name: 'ALICE', title: '', company: '' },
+        front: { ...createGiovanniCardTemplate().front, name: 'ALICE', title: '', company: '', useGrid: true },
         grid: {
           cols: 4,
           rows: 4,

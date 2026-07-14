@@ -949,7 +949,8 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
       },
     };
     const svg = buildCardSvg(card, 'back', 1024, 663);
-    expect(svg).toContain('+39 333'); // phone may wrap across lines in grid-mode
+    expect(svg).toContain('+39'); // phone may wrap across lines in grid-mode
+    expect(svg).toContain('333');
     expect(svg).toContain('1234567');
     expect(svg).toContain('mario@acme.com');
     // Nota: la riga WEB è omessa perché il QR codifica già l'URL
@@ -1054,7 +1055,9 @@ describe('cardGenerator - buildCardSvg (PNG rendering)', () => {
     };
     const svg = buildCardSvg(card, 'back', 1024, 663);
     // Telefono + email devono essere presenti (WEB no perché website vuoto)
-    expect(svg).toContain('+39 333');
+    // Il telefono può essere wrappato su più righe da wrapTextAtWhitespace.
+    expect(svg).toContain('+39');
+    expect(svg).toContain('333');
     expect(svg).toContain('a@b.com');
   });
 
