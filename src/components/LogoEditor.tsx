@@ -5,7 +5,7 @@ import { builderToSvg, sanitizeSvg, svgToPng } from '../utils/logoGenerator';
 import dataService from '../utils/dataService';
 import SaveDialog from './SaveDialog';
 import BuilderPanel from './BuilderPanel';
-import LogoAiPanel from './LogoAiPanel';
+import LogoAiPanel, { type LogoAiState } from './LogoAiPanel';
 import { useToast } from '../hooks/useToast';
 import { logger } from '../utils/logger';
 import './LogoEditor.css';
@@ -46,7 +46,11 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
     autoSaveTimerRef.current = setTimeout(() => {
       if (!logoHasContent(logo)) return;
       const sanitized: Logo = { ...logo, userEmail, updatedAt: new Date().toISOString() };
-      dataService.saveDocument(userEmail, sanitized).catch((err) => {
+      dataService.saveDocument(userEmail, sanitized).then((result) => {
+        if (result?.error) {
+          logger.error('Logo auto-save failed', { err: result.error });
+        }
+      }).catch((err) => {
         logger.error('Logo auto-save failed', { err: (err as Error).message });
       });
     }, 30000);
@@ -130,6 +134,11 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
         }
         setLogo(toSave);
         addToast('success', `«${title}» salvato`);
+        setShowSaveDialog(false);
+      })
+      .catch((err) => {
+        logger.error('Logo save failed', { err: (err as Error)?.message });
+        addToast('error', (err as Error)?.message || 'Errore salvataggio');
       });
   }, [logo, userEmail, addToast, saveDocumentGuarded]);
 
@@ -143,6 +152,21 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
 
   const [aiPanelResetKey, setAiPanelResetKey] = useState(0);
 
+  // Stato del pannello AI (chat, concept, immagini generate) sollevato
+  // qui in un useRef: `LogoAiPanel` viene smontato/rimontato ogni
+  // volta che l'utente cambia tab (Builder <-> AI, vedi il rendering
+  // condizionale sotto), perdendo il proprio stato interno React. Un
+  // useRef in questo componente (che non si smonta mai cambiando tab)
+  // sopravvive al ciclo di smontaggio/rimontaggio, quindi le immagini
+  // AI generate (costose, chiamata Gemini a pagamento) non vengono più
+  // perse. Non serve useState: non deve triggerare un re-render di
+  // LogoEditor, solo fornire il valore più recente al momento in cui
+  // LogoAiPanel rimonta.
+  const aiStateRef = useRef<LogoAiState | undefined>(undefined);
+  const handleAiStateChange = useCallback((s: LogoAiState) => {
+    aiStateRef.current = s;
+  }, []);
+
   const handleNew = useCallback(() => {
     if (logoHasContent(logo)) {
       const ok = window.confirm('Creare un nuovo logo? Le modifiche non salvate andranno perse.');
@@ -151,6 +175,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
     setLogo(createEmptyLogo());
     setTab('builder');
     localStorage.removeItem('logoAiChat:v1');
+    aiStateRef.current = undefined;
     setAiPanelResetKey((k) => k + 1);
     addToast('info', 'Nuovo logo creato.');
   }, [logo, addToast]);
@@ -234,7 +259,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
           className={`logo-tab${tab === 'ai' ? ' active' : ''}`}
           onClick={() => setTab('ai')}
         >
-          AI Generation
+          AI Assist
           {logo.builder.backgroundImage && (
             <span className="logo-tab-ai-badge" aria-label="Background AI attivo" title="Background AI attivo" />
           )}
@@ -243,7 +268,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
 
       <div id="logo-tab-panel" role="tabpanel" aria-labelledby={tab === 'builder' ? 'tab-builder' : 'tab-ai'}>
         {tab === 'builder' ? (
-          <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} />
+          <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} userEmail={userEmail} />
         ) : (
           <LogoAiPanel
             key={aiPanelResetKey}
@@ -253,6 +278,8 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
             }}
             tier={tier}
             userEmail={userEmail}
+            initialState={aiStateRef.current}
+            onStateChange={handleAiStateChange}
           />
         )}
       </div>

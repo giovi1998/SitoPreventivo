@@ -23,6 +23,8 @@ vi.mock('../../../hooks/useToast', () => ({
   }),
 }));
 
+const mockGenerateCover = vi.fn().mockImplementation((_: any, side: 'front' | 'back') => Promise.resolve(`data:image/png;base64,${side.toUpperCase()}`));
+
 vi.mock('../../../hooks/useAICard', () => ({
   useAICard: () => ({
     processCardPrompt: vi.fn().mockResolvedValue({
@@ -30,6 +32,7 @@ vi.mock('../../../hooks/useAICard', () => ({
       changes: [],
       rawResponse: '{}',
     }),
+    generateCover: mockGenerateCover,
     resetCardChat: vi.fn(),
     cardAiLogs: [],
     isCardProcessing: false,
@@ -102,13 +105,20 @@ describe('CardEditorShell', () => {
     expect(screen.getByTestId('card-preview-front').className).toContain('grid-mode');
   });
 
-  it('calls save via desktop save action', async () => {
-    render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
+  it('calls save via desktop save action (dialog → confirm name)', async () => {
+    const filled = {
+      ...createEmptyCard(),
+      front: { ...createEmptyCard().front, name: 'Mario Rossi' },
+    };
+    render(<CardAIFloatingProvider><CardEditorShell {...baseProps} initialCard={filled} /></CardAIFloatingProvider>);
     fireEvent.click(screen.getByRole('button', { name: /^Salva$/i }));
+    expect(await screen.findByRole('heading', { name: /Salva bigliettino/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Conferma salvataggio/i }));
     await waitFor(() => expect(mockSave).toHaveBeenCalled());
     const last = mockSave.mock.calls[mockSave.mock.calls.length - 1];
     expect(last[0]).toBe('user@test.com');
     expect(last[1].documentType).toBe('businessCard');
+    expect(last[1].title).toMatch(/Mario|Bigliettino/i);
   });
 
   it('exports PDF through the export menu', async () => {
@@ -120,7 +130,7 @@ describe('CardEditorShell', () => {
       render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
       const exportBtn = screen.getByRole('button', { name: /Esporta ▾/i });
       fireEvent.click(exportBtn);
-      fireEvent.click(screen.getByRole('menuitem', { name: /PDF 10-up/i }));
+      fireEvent.click(screen.getByRole('menuitem', { name: /PDF 10-up \(tipografia/i }));
       await waitFor(() => expect(mockGenPDF).toHaveBeenCalled());
       expect(createObjectURL).toHaveBeenCalled();
     } finally {
@@ -147,5 +157,30 @@ describe('CardEditorShell', () => {
     expect(screen.getByLabelText(/Modello AI/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Prompt AI personalizzato/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Applica prompt$/i })).toBeInTheDocument();
+  });
+
+  it('serializes front/back cover generation when both is requested', async () => {
+    let frontResolved = false;
+    mockGenerateCover.mockImplementation(async (_card: any, side: 'front' | 'back') => {
+      if (side === 'front') {
+        await Promise.resolve();
+        frontResolved = true;
+        return 'data:image/png;base64,FRONT';
+      }
+      expect(frontResolved).toBe(true);
+      return 'data:image/png;base64,BACK';
+    });
+
+    const { container } = render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
+    const bothBtn = container.querySelector('.card-ai-both-btn') as HTMLButtonElement;
+    expect(bothBtn).not.toBeNull();
+    fireEvent.click(bothBtn);
+
+    await waitFor(() => expect(mockGenerateCover).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    expect(mockGenerateCover).toHaveBeenNthCalledWith(1, expect.anything(), 'front');
+    expect(mockGenerateCover).toHaveBeenNthCalledWith(2, expect.anything(), 'back');
+
+    await waitFor(() => expect(container.querySelector('img[alt="Cover fronte"]')).toBeInTheDocument(), { timeout: 3000 });
+    expect(container.querySelector('img[alt="Cover retro"]')).toBeInTheDocument();
   });
 });

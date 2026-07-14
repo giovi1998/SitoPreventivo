@@ -16,7 +16,6 @@ import {
   ERROR_CORRECTION_LEVELS,
   DOT_STYLES,
 } from '../utils/qrGenerator';
-import dataService from '../utils/dataService';
 import SaveDialog from './SaveDialog';
 import { useToast } from '../hooks/useToast';
 import { logger } from '../utils/logger';
@@ -222,8 +221,12 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier 
   const handleSave = useCallback((customName: string) => {
     const title = customName || qr.title || 'QR Code';
     const toSave: QRCodeType = sanitizeForSave({ ...qr, title }, userEmail);
-    dataService.saveDocument(userEmail, toSave)
+    saveDocumentGuarded(userEmail, toSave)
       .then((result) => {
+        if (result.blocked) {
+          addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
+          return;
+        }
         if (result.error) {
           addToast('error', result.error);
           return;
@@ -232,7 +235,7 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier 
         addToast('success', `«${title}» salvato`);
       })
       .catch((err) => addToast('error', (err as Error).message || 'Errore salvataggio'));
-  }, [qr, userEmail, addToast]);
+  }, [qr, userEmail, addToast, saveDocumentGuarded]);
 
   const openSaveDialog = useCallback(() => {
     if (!qr.data.payload) {

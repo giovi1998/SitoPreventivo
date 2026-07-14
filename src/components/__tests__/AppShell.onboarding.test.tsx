@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { TestRouter } from '../../test/TestRouter';
 import React from 'react';
 import { AuthContext, AppContext } from '../../contexts';
 import dataService from '../../utils/dataService';
@@ -47,9 +47,9 @@ describe('AppShell onboarding integration (regression: modal must close after su
 
     render(
       <AuthContext.Provider value={authValue() as any}>
-        <MemoryRouter initialEntries={['/app/qr']}>
+        <TestRouter initialEntries={['/app/qr']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
 
@@ -79,9 +79,9 @@ describe('AppShell onboarding integration (regression: modal must close after su
 
     render(
       <AuthContext.Provider value={authValue() as any}>
-        <MemoryRouter initialEntries={['/app/qr']}>
+        <TestRouter initialEntries={['/app/qr']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
 
@@ -145,9 +145,9 @@ describe('AppShell onboarding integration (regression: modal must close after su
 
     render(
       <AuthContext.Provider value={authValue() as any}>
-        <MemoryRouter initialEntries={['/app/qr']}>
+        <TestRouter initialEntries={['/app/qr']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
 
@@ -205,9 +205,9 @@ describe('AppShell onboarding integration (regression: modal must close after su
 
     render(
       <AuthContext.Provider value={authValue() as any}>
-        <MemoryRouter initialEntries={['/app/qr']}>
+        <TestRouter initialEntries={['/app/qr']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
 

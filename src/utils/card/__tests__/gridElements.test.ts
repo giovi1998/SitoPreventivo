@@ -3,6 +3,8 @@ import {
   hasElementContent,
   getAvailableGridElements,
   elementKeysForSide,
+  gridForCollisions,
+  pruneCardGrids,
   FRONT_ELEMENT_KEYS,
   BACK_ELEMENT_KEYS,
 } from '../gridElements';
@@ -130,6 +132,74 @@ describe('gridElements', () => {
       };
       const opts = getAvailableGridElements('back', card);
       expect(opts.map((o) => o.value)).not.toContain('socials');
+    });
+  });
+
+  describe('gridForCollisions', () => {
+    it('drops empty services so socials can move into that row', () => {
+      const card = createGiovanniCardTemplate();
+      const filtered = gridForCollisions(card.backGrid!, card, 'back', 'socials');
+      expect(filtered.elements.socials).toBeDefined();
+      expect(filtered.elements.contacts).toBeDefined();
+      expect(filtered.elements.qr).toBeDefined();
+      expect(filtered.elements.services).toBeUndefined();
+    });
+
+    it('keeps services when they have content', () => {
+      const base = createGiovanniCardTemplate();
+      const card = {
+        ...base,
+        back: { ...base.back, services: ['SEO'] },
+      };
+      const filtered = gridForCollisions(card.backGrid!, card, 'back', 'socials');
+      expect(filtered.elements.services).toBeDefined();
+    });
+
+    it('always keeps the selected key even if empty', () => {
+      const empty = createEmptyCard();
+      const grid = {
+        cols: 4,
+        rows: 4,
+        elements: {
+          services: { x: 0, y: 0, w: 2, h: 1 },
+          socials: { x: 0, y: 1, w: 2, h: 1 },
+        },
+      };
+      const filtered = gridForCollisions(grid as never, empty, 'back', 'services');
+      expect(filtered.elements.services).toBeDefined();
+      expect(filtered.elements.socials).toBeUndefined();
+    });
+  });
+
+  describe('pruneEmptyGridElements / pruneCardGrids', () => {
+    it('removes grid elements with no content (e.g. Giovanni template ghost services)', () => {
+      // createGiovanniCardTemplate() ships a `services` cell in backGrid
+      // even though back.services is empty by default — a real-world
+      // "ghost" entry that should not survive a save/export.
+      const card = createGiovanniCardTemplate();
+      expect(card.back.services).toEqual([]);
+      expect(card.backGrid?.elements.services).toBeDefined();
+      const pruned = pruneCardGrids(card);
+      expect(pruned.backGrid?.elements.services).toBeUndefined();
+      // Populated elements are untouched.
+      expect(pruned.backGrid?.elements.contacts).toBeDefined();
+      expect(pruned.backGrid?.elements.socials).toBeDefined();
+      expect(pruned.backGrid?.elements.qr).toBeDefined();
+    });
+
+    it('keeps services once they have real content', () => {
+      const base = createGiovanniCardTemplate();
+      const card = { ...base, back: { ...base.back, services: ['Siti web'] } };
+      const pruned = pruneCardGrids(card);
+      expect(pruned.backGrid?.elements.services).toBeDefined();
+    });
+
+    it('does not mutate grids that already have no empty entries', () => {
+      const base = createGiovanniCardTemplate();
+      const card = { ...base, back: { ...base.back, services: ['Siti web'] } };
+      const pruned = pruneCardGrids(card);
+      expect(pruned.grid?.elements).toEqual(card.grid?.elements);
+      expect(pruned.backGrid?.elements).toEqual(card.backGrid?.elements);
     });
   });
 });

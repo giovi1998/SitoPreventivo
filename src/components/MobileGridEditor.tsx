@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CardGrid } from '../utils/documentSchemas';
 import { CardGridControls, type GridSide } from './card/CardGridControls';
-import { getAvailableGridElements } from '../utils/card/gridElements';
+import { getAvailableGridElements, gridForCollisions } from '../utils/card/gridElements';
 import { clampMove, wouldCollideOnMove } from '../utils/gridUtils';
 
 interface MobileGridEditorProps {
@@ -37,32 +37,33 @@ export default function MobileGridEditor({
     : (card.grid ?? { cols: 4, rows: 4, elements: {} });
   const available = getAvailableGridElements(side, card);
   const selectedEl = selected ? activeGrid.elements[selected] : null;
+  const collisionGrid = gridForCollisions(activeGrid, card, side, selected || undefined);
 
   // canMove helpers (riuso clampMove/wouldCollideOnMove per il popup mobile).
   const canUp = !!selectedEl && (() => {
-    const r = clampMove(activeGrid, selected, 0, -1);
+    const r = clampMove(collisionGrid, selected, 0, -1);
     return r.y !== selectedEl.y;
   })();
   const canDown = !!selectedEl && (() => {
-    const r = clampMove(activeGrid, selected, 0, 1);
+    const r = clampMove(collisionGrid, selected, 0, 1);
     return r.y !== selectedEl.y;
   })();
   const canLeft = !!selectedEl && (() => {
-    const r = clampMove(activeGrid, selected, -1, 0);
+    const r = clampMove(collisionGrid, selected, -1, 0);
     return r.x !== selectedEl.x;
   })();
   const canRight = !!selectedEl && (() => {
-    const r = clampMove(activeGrid, selected, 1, 0);
+    const r = clampMove(collisionGrid, selected, 1, 0);
     return r.x !== selectedEl.x;
   })();
-  const upCollide = selected && selectedEl ? wouldCollideOnMove(activeGrid, selected, 0, -1) : false;
-  const downCollide = selected && selectedEl ? wouldCollideOnMove(activeGrid, selected, 0, 1) : false;
-  const leftCollide = selected && selectedEl ? wouldCollideOnMove(activeGrid, selected, -1, 0) : false;
-  const rightCollide = selected && selectedEl ? wouldCollideOnMove(activeGrid, selected, 1, 0) : false;
+  const upCollide = selected && selectedEl ? wouldCollideOnMove(collisionGrid, selected, 0, -1) : false;
+  const downCollide = selected && selectedEl ? wouldCollideOnMove(collisionGrid, selected, 0, 1) : false;
+  const leftCollide = selected && selectedEl ? wouldCollideOnMove(collisionGrid, selected, -1, 0) : false;
+  const rightCollide = selected && selectedEl ? wouldCollideOnMove(collisionGrid, selected, 1, 0) : false;
 
   const move = (dx: number, dy: number) => {
     if (!selected || !selectedEl) return;
-    const r = clampMove(activeGrid, selected, dx, dy);
+    const r = clampMove(collisionGrid, selected, dx, dy);
     if (r.x === selectedEl.x && r.y === selectedEl.y) {
       onAfterMove?.({ element: selected, dx, dy, applied: false, reason: dx === 0 ? (dy < 0 ? 'border' : 'border') : 'border' });
       return;

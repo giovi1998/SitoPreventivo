@@ -11,6 +11,7 @@ export { generateCardPng, renderCardSideDataUrl, buildMinimalPng, resolveToBase6
 export { compressImage, loadImage, type CompressImageOptions } from './imageCompress';
 export { resolveCardQrPayload, getEffectiveQrPayload } from './qrPayload';
 export { buildCardCoverBrief, type CardCoverBrief } from './coverBrief';
+export { renderCardCoverScreenshot, resolveCardCoverLogo, buildCardCoverPayload, type CardCoverImages } from './coverImage';
 export {
   computePageCardEntries,
   getCardDimensionsMm,
@@ -21,6 +22,9 @@ export {
   hasElementContent,
   getAvailableGridElements,
   hasGridElements,
+  gridForCollisions,
+  pruneEmptyGridElements,
+  pruneCardGrids,
   elementKeysForSide,
   FRONT_ELEMENT_KEYS,
   BACK_ELEMENT_KEYS,
@@ -41,6 +45,15 @@ export {
   qrSizePxFor,
   sideGrid,
 } from './previewHelpers';
+export {
+  backPad,
+  backHeaderMetrics,
+  backQrSizePx,
+  effectiveBackGridForRender,
+  alignBoxInCell,
+  gridCellRect,
+  PREVIEW_REF_H,
+} from './backLayout';
 export { mm2pt, MM_TO_PT } from './units';
 export {
   SIZE_PRESETS_MM,
@@ -50,3 +63,20 @@ export {
   CARD_A4_GAP_MM,
   CARD_A4_MARGIN_MM,
 } from '../documentSchemas';
+export {
+  pushLayoutEvent,
+  getLayoutEvents,
+  clearLayoutEvents,
+  attachLayoutEventsToWindow,
+  detachLayoutEventsFromWindow,
+  type CardLayoutEvent,
+  type CardLayoutEventType,
+} from './layoutEvents';
+export {
+  auditExportSvg,
+  filterFindingsBySeverity,
+  hasFindingCode,
+  type AuditResult,
+  type AuditFinding,
+  type AuditFindingCode,
+} from './layoutAudit';

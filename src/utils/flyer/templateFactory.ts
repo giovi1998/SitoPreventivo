@@ -2,25 +2,31 @@ import type { Flyer, FlyerSector, FlyerLayout } from '../documentSchemas';
 import { createEmptyFlyer, getFlyerDimensions, FLYER_SECTOR_DEFAULT_LAYOUT, FLYER_SECTORS } from '../documentSchemas';
 import { FLYER_TEMPLATES_BY_SECTOR_LAYOUT, heroBoxMmForLayout } from './templateCatalog';
 
-export { FLYER_TEMPLATES_BY_SECTOR_LAYOUT, heroBoxMmForLayout };
+export { FLYER_TEMPLATES_BY_SECTOR_LAYOUT, heroBoxMmForLayout, getFlyerDimensions };
+
+export function getDefaultHeroImage(sector: FlyerSector, layout: FlyerLayout, size: Flyer['size'], orientation: Flyer['orientation']): string | null {
+  const useLayout = layout ?? FLYER_SECTOR_DEFAULT_LAYOUT[sector];
+  const tpl = FLYER_TEMPLATES_BY_SECTOR_LAYOUT[sector][useLayout];
+  if (!tpl.imageSeed) return null;
+  const box = heroBoxMmForLayout(useLayout, getFlyerDimensions({ ...createEmptyFlyer(), size, orientation }));
+  let pxW = Math.round(box.w * 4);
+  let pxH = Math.round(box.h * 4);
+  const smaller = Math.min(pxW, pxH);
+  if (smaller < 200) {
+    const k = 200 / smaller;
+    pxW = Math.round(pxW * k);
+    pxH = Math.round(pxH * k);
+  }
+  return `https://picsum.photos/seed/${tpl.imageSeed}/${pxW}/${pxH}`;
+}
 
 export function createFlyerTemplate(sector: FlyerSector, layout?: FlyerLayout): Flyer {
   const now = new Date().toISOString();
   const useLayout = layout ?? FLYER_SECTOR_DEFAULT_LAYOUT[sector];
   const tpl = FLYER_TEMPLATES_BY_SECTOR_LAYOUT[sector][useLayout];
-  let heroImage: string | null = null;
-  if (tpl.imageSeed) {
-    const box = heroBoxMmForLayout(useLayout, getFlyerDimensions({ ...createEmptyFlyer(), size: tpl.size, orientation: tpl.orientation }));
-    let pxW = Math.round(box.w * 4);
-    let pxH = Math.round(box.h * 4);
-    const smaller = Math.min(pxW, pxH);
-    if (smaller < 200) {
-      const k = 200 / smaller;
-      pxW = Math.round(pxW * k);
-      pxH = Math.round(pxH * k);
-    }
-    heroImage = `https://picsum.photos/seed/${tpl.imageSeed}/${pxW}/${pxH}`;
-  }
+  const heroImage = tpl.imageSeed
+    ? getDefaultHeroImage(sector, useLayout, tpl.size, tpl.orientation)
+    : null;
   return {
     documentType: 'flyer',
     id: `flyer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { deriveGridFromLayout } from '../utils/documentSchemas';
 import type { BusinessCard, CardGrid } from '../utils/documentSchemas';
 import type { Tier } from '../utils/watermark';
 import { resolveCardQrPayload } from '../utils/cardGenerator';
@@ -7,9 +8,11 @@ import {
   SIZE_CLASS,
   clampFontScale,
   gridPlacement,
+  isGridModeFor,
   qrSizePxFor,
   sideGrid,
 } from '../utils/card/previewHelpers';
+import { effectiveBackGridForRender } from '../utils/card/backLayout';
 import { deriveHandle, deriveHostname } from '../utils/card/textDerivation';
 import PreviewWatermark from './PreviewWatermark';
 
@@ -177,7 +180,11 @@ const FrontPreview = React.memo(function FrontPreview({
   const borderClass = `border-${card.style.borderStyle}`;
   const hasPhoto = !!card.front.photoUrl;
   const hasLogo = !!card.front.logoUrl;
-  const grid = card.grid;
+  // v2.8: when front.useGrid is false, derive fresh from layout so
+  // stale grids (missing photo element, wrong positions) don't hide
+  // content. Same fix applied to BackPreview.
+  const rawGrid = isGridModeFor('front', card) ? card.grid : undefined;
+  const grid = rawGrid ?? deriveGridFromLayout(card, 'front');
 
   const baseStyle: React.CSSProperties = {
     backgroundColor: card.style.bgColor,
@@ -277,7 +284,7 @@ const FrontPreview = React.memo(function FrontPreview({
       )}
       {grid!.elements.logo && card.front.logoUrl && (
         <div className="card-grid-cell card-grid-cell--logo" data-testid="grid-el-logo" style={gridPlacement(grid!.elements.logo)}>
-          <img className="card-logo grid" src={card.front.logoUrl} alt="Logo aziendale" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <img className="card-logo grid" src={card.front.logoUrl} alt="Logo aziendale" />
         </div>
       )}
       {grid!.elements.name && card.front.name && (
@@ -326,7 +333,34 @@ const BackPreview = React.memo(function BackPreview({
     card.back.address?.trim() ||
     card.back.vatNumber?.trim()
   );
-  const grid = card.backGrid ?? card.grid;
+  // v2.7.1: Always derive a back grid with contacts/services/socials/qr
+  // if the persisted backGrid is missing or doesn't contain a contacts
+  // element. This prevents the preview from going blank when the card is
+  // opened in flexbox mode (backGrid undefined) or when the grid was
+  // filtered down to zero back elements.
+  // v2.8: when back.useGrid is false (flexbox mode), ignore the persisted
+  // backGrid entirely — it may be stale from an older version with
+  // contacts h:1 / alignV bottom that hides contacts. Derive fresh from
+  // the default preset so the preview always shows contacts correctly.
+  const rawGrid = isGridModeFor('back', card) ? (card.backGrid ?? card.grid) : null;
+  const needsBackGrid =
+    !rawGrid ||
+    !rawGrid.elements.contacts ||
+    !Object.keys(rawGrid.elements).some((k) =>
+      ['contacts', 'services', 'socials', 'qr'].includes(k),
+    );
+  const baseGrid = needsBackGrid
+    ? deriveGridFromLayout(
+        {
+          ...card,
+          backGrid: rawGrid as CardGrid,
+        },
+        'back',
+      )
+    : rawGrid;
+  // v2.10: same collapse as SVG export — empty services row is removed so
+  // socials sit under contacts (hard WYSIWYG).
+  const grid = baseGrid ? effectiveBackGridForRender(baseGrid, card) : baseGrid;
 
   const qrSizePx = qrSizePxFor(card);
 
@@ -396,9 +430,9 @@ const BackPreview = React.memo(function BackPreview({
         .map((s) => {
           const handle = deriveHandle(s.url);
           const value = handle || s.url;
-          return `${s.platform} · ${value}`;
+          return `${s.platform} ${value}`;
         })
-        .join(' · ')}
+        .join('   ')}
     </div>
   ) : null;
 

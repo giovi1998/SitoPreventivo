@@ -48,6 +48,7 @@ describe('CardAIControls', () => {
 
   it('disables cover buttons while isProcessing is true', () => {
     render(<CardAIControls {...baseProps} isProcessing tier="unlocked" />);
-    expect(screen.getByRole('button', { name: /generazione…/i })).toBeDisabled();
+    const genBtns = screen.getAllByRole('button', { name: /generazione…/i });
+    genBtns.forEach((btn) => expect(btn).toBeDisabled());
   });
 });

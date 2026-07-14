@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
 import type { BusinessCard } from '../utils/documentSchemas';
 import { SIZE_PRESETS_MM } from '../utils/documentSchemas';
-import { generateCardPDF, generateCardPng, buildCardSvg } from '../utils/cardGenerator';
+import { generateCardPDF, generateCardPng, buildCardSvg, buildEmbeddedFontImport, resolveToBase64DataUrl } from '../utils/cardGenerator';
+import { pruneCardGrids } from '../utils/card/gridElements';
 import type { Tier } from '../utils/watermark';
 
-export type ExportingState = 'pdf' | 'png-front' | 'png-back' | null;
+export type ExportingState = 'pdf' | 'pdf-clean' | 'png-front' | 'png-back' | null;
 
 // Phase 2.2 refactor: estratti gli handler di export da CardEditor.tsx in
 // un hook dedicato. Tutto resta client-side (PDF/PNG/SVG/JSON) come da
@@ -31,16 +32,24 @@ export function useCardExport(
     window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   };
 
-  const exportPdf = useCallback(async () => {
-    setExporting('pdf');
-    console.info('[CardExport] PDF export start', { cardId: card.id, tier });
+  const exportPdf = useCallback(async (opts?: { cropMarks?: boolean }) => {
+    const cropMarks = opts?.cropMarks !== false;
+    const state: ExportingState = cropMarks ? 'pdf' : 'pdf-clean';
+    setExporting(state);
+    console.info('[CardExport] PDF export start', { cardId: card.id, tier, cropMarks });
     try {
-      const bytes = await generateCardPDF(card, { tier });
+      const bytes = await generateCardPDF(card, { tier, cropMarks });
       console.info('[CardExport] PDF generated', { bytes: bytes.length });
       const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-      downloadBlob(new Blob([arrayBuffer], { type: 'application/pdf' }), `card_${card.id}.pdf`);
+      const suffix = cropMarks ? '' : '_clean';
+      downloadBlob(new Blob([arrayBuffer], { type: 'application/pdf' }), `card_${card.id}${suffix}.pdf`);
       console.info('[CardExport] PDF download triggered');
-      addToast('success', 'PDF 10-up scaricato (pronto per la tipografia)');
+      addToast(
+        'success',
+        cropMarks
+          ? 'PDF 10-up scaricato (con segni di taglio)'
+          : 'PDF 10-up scaricato (senza bordi / segni di taglio)',
+      );
     } catch (err) {
       console.error('[CardExport] PDF export failed', err);
       addToast('error', err instanceof Error ? err.message : 'Errore export PDF');
@@ -63,12 +72,24 @@ export function useCardExport(
     }
   }, [card, tier, addToast]);
 
-  const exportSvg = useCallback((side: 'front' | 'back') => {
+  const exportSvg = useCallback(async (side: 'front' | 'back') => {
     try {
       const dims = SIZE_PRESETS_MM[card.style.sizePreset];
       const pxW = Math.round(dims.w * 20);
       const pxH = Math.round(dims.h * 20);
-      const svg = buildCardSvg(card, side, pxW, pxH);
+      const embeddedFontCss = await buildEmbeddedFontImport(card.style.fontFamily || 'Inter');
+      // v2.8.1: keep exported SVG self-contained: resolve photo/logo URLs to
+      // base64 so the SVG shows images correctly in viewers/editors and not
+      // just in the in-app preview.
+      const [resolvedPhotoUrl, resolvedLogoUrl] = await Promise.all([
+        card.front.photoUrl ? resolveToBase64DataUrl(card.front.photoUrl) : Promise.resolve(null),
+        card.front.logoUrl ? resolveToBase64DataUrl(card.front.logoUrl) : Promise.resolve(null),
+      ]);
+      const cardForSvg: BusinessCard = {
+        ...card,
+        front: { ...card.front, photoUrl: resolvedPhotoUrl, logoUrl: resolvedLogoUrl },
+      };
+      const svg = buildCardSvg(cardForSvg, side, pxW, pxH, { embeddedFontCss });
       downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `card_${card.id}_${side}.svg`);
       addToast('success', `SVG ${side} scaricato (vettoriale, editabile)`);
     } catch (err) {
@@ -78,7 +99,7 @@ export function useCardExport(
 
   const exportJson = useCallback(() => {
     try {
-      const json = JSON.stringify(card, null, 2);
+      const json = JSON.stringify(pruneCardGrids(card), null, 2);
       downloadBlob(new Blob([json], { type: 'application/json' }), `card_${card.id}.json`);
       addToast('success', 'JSON scaricato (backup card data)');
     } catch (err) {

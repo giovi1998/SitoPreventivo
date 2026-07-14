@@ -3,14 +3,15 @@ import React from 'react';
 export interface CardExportMenuProps {
   variant: 'desktop' | 'mobile';
   open: boolean;
-  exporting: 'pdf' | 'png-front' | 'png-back' | null;
+  exporting: 'pdf' | 'pdf-clean' | 'png-front' | 'png-back' | null;
   onToggle: () => void;
   onAction: (action: string) => void;
   menuRef?: React.RefObject<HTMLDivElement>;
 }
 
 const ACTIONS = [
-  { action: 'pdf', label: 'PDF 10-up (A4, pronto tipografia)', busyLabel: 'Esportando…' },
+  { action: 'pdf', label: 'PDF 10-up (tipografia, con segni di taglio)', busyLabel: 'Esportando…' },
+  { action: 'pdf-clean', label: 'PDF 10-up (pulito, senza bordi/segni)', busyLabel: 'Esportando…' },
   { action: 'png-front', label: 'PNG fronte (300 DPI)', busyLabel: 'Esportando…' },
   { action: 'png-back', label: 'PNG retro (300 DPI)', busyLabel: 'Esportando…' },
   { action: 'svg-front', label: 'SVG fronte (vettoriale, editabile)', busyLabel: null },

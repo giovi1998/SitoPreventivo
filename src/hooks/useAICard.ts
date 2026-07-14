@@ -12,8 +12,15 @@ import {
 } from '../ai/eventLog';
 import dataService from '../utils/dataService';
 import { buildCardCoverBrief } from '../utils/card/coverBrief';
+import {
+  buildCardCoverPayload,
+  renderCardCoverScreenshot,
+  resolveCardCoverLogo,
+} from '../utils/card/coverImage';
 import { logger } from '../utils/logger';
 import { isLocalhost } from '../utils/env';
+import { mapAiError } from '../utils/ai/mapAiError';
+import { buildCardPhotoBrief } from '../utils/card/photoBrief';
 
 const MAX_LOG_ENTRIES = 40;
 
@@ -37,6 +44,11 @@ interface UseAICardReturn {
     side?: 'front' | 'back',
     prompt?: string,
     options?: { onProgress?: (msg: string) => void }
+  ) => Promise<string>;
+  /** Profession-style illustration that replaces the portrait photo. */
+  generatePhoto: (
+    card: BusinessCard,
+    options?: { promptOverride?: string; onProgress?: (msg: string) => void }
   ) => Promise<string>;
   resetCardChat: () => void;
   cardAiLogs: AILogEntry[];
@@ -193,20 +205,15 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         };
       } catch (err: any) {
         const msg = err.message || 'Errore AI';
-        const hint =
-          msg.includes('402') ? 'Credito DeepSeek esaurito.'
-          : msg.includes('401') ? 'Chiave API DeepSeek non valida.'
-          : msg.includes('429') ? 'Troppe richieste. Attendi e riprova.'
-          : msg.includes('fetch') || msg.includes('NetworkError') ? 'Connessione fallita.'
-          : null;
+        const hint = mapAiError(err);
 
         const streamId = streamEntryIdRef.current;
         if (streamId) {
           updateLog(streamId, { status: 'error', msg: '❌ Generazione fallita', detail: msg });
         }
         logger.error('Card AI processPrompt failed', { route: 'useAICard', err: msg });
-        addLog(createErrorEntry(hint || msg));
-        throw new Error(hint || msg);
+        addLog(createErrorEntry(hint));
+        throw new Error(hint);
       } finally {
         setIsCardProcessing(false);
         streamEntryIdRef.current = null;
@@ -236,24 +243,88 @@ export function useAICard(userEmail?: string): UseAICardReturn {
       const { prompt: coverPrompt, context: coverContext } =
         promptOverride ? { prompt: promptOverride, context: '' } : buildCardCoverBrief(card, side);
 
-      addLog(createEntry('info', '🎨 Generazione cover AI in corso...', { detail: coverPrompt }));
-      options?.onProgress?.('🎨 Generazione cover AI in corso...');
+      addLog(createEntry('info', `🎨 Generazione cover AI in corso (${side})...`, { detail: coverPrompt }));
+      options?.onProgress?.(`🎨 Generazione cover AI in corso (${side})...`);
 
-      const apiBase = import.meta.env?.VITE_API_BASE || '';
-      const res = await fetch(`${apiBase}/api/ai/card-cover`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: coverPrompt, context: coverContext, userEmail }),
-      });
+      try {
+        const [cardImage, logoImage] = await Promise.all([
+          renderCardCoverScreenshot(card, side),
+          side === 'front' ? resolveCardCoverLogo(card) : Promise.resolve(undefined),
+        ]);
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Errore generazione cover' }));
-        throw new Error(err.error || `Cover AI ${res.status}`);
+        const payload = buildCardCoverPayload(coverPrompt, coverContext, { cardImage, logoImage }, side, userEmail);
+
+        const apiBase = import.meta.env?.VITE_API_BASE || '';
+        const res = await fetch(`${apiBase}/api/ai/card-cover`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Errore generazione cover' }));
+          throw new Error(err.error || `Cover AI ${res.status}`);
+        }
+
+        const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
+        addLog(createSuccessEntry(`Cover AI (${side}) generata`, `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`));
+        return `data:${data.mimeType};base64,${data.imageBase64}`;
+      } catch (err: any) {
+        const hint = mapAiError(err);
+        logger.error('Card AI generateCover failed', { route: 'useAICard.generateCover', err: err?.message });
+        addLog(createErrorEntry(`❌ ${hint}`));
+        throw new Error(hint);
+      }
+    },
+    [userEmail, addLog]
+  );
+
+  const generatePhoto = useCallback(
+    async (card: BusinessCard, options?: { promptOverride?: string; onProgress?: (msg: string) => void }) => {
+      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
+        const profile = await dataService.getUserProfile(userEmail);
+        if (profile.error) throw new Error(profile.error);
+        if (profile.tokensUsed >= profile.tokenLimit) {
+          throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
+        }
       }
 
-      const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
-      addLog(createSuccessEntry('Cover AI generata', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`));
-      return `data:${data.mimeType};base64,${data.imageBase64}`;
+      const brief = buildCardPhotoBrief(card);
+      const override = options?.promptOverride?.trim();
+      const prompt = override && override.length > 0 ? override.slice(0, 1000) : brief.prompt;
+      const context = override && override.length > 0 ? '' : brief.context;
+      addLog(createEntry('info', '🖼️ Generazione foto AI in corso...', { detail: prompt }));
+      options?.onProgress?.('🖼️ Generazione foto AI in corso...');
+
+      try {
+        const apiBase = import.meta.env?.VITE_API_BASE || '';
+        const res = await fetch(`${apiBase}/api/ai/card-photo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt,
+            context: context || undefined,
+            userEmail: userEmail || undefined,
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: `Errore generazione foto (${res.status})` }));
+          throw new Error(err.error || `Photo AI ${res.status}`);
+        }
+
+        const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
+        addLog(createSuccessEntry(
+          'Foto AI generata',
+          `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`,
+        ));
+        return `data:${data.mimeType};base64,${data.imageBase64}`;
+      } catch (err: any) {
+        const hint = mapAiError(err);
+        logger.error('Card AI generatePhoto failed', { route: 'useAICard.generatePhoto', err: err?.message });
+        addLog(createErrorEntry(`❌ ${hint}`));
+        throw new Error(hint);
+      }
     },
     [userEmail, addLog]
   );
@@ -261,6 +332,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
   return {
     processCardPrompt,
     generateCover,
+    generatePhoto,
     resetCardChat,
     cardAiLogs,
     isCardProcessing,

@@ -43,6 +43,7 @@ export function useDocumentSave(): UseDocumentSaveReturn {
   const documentLimit: number | null = ctx?.documentLimit ?? null;
   const checkDocumentLimit: () => boolean = ctx?.checkDocumentLimit ?? (() => true);
   const refreshTier = ctx?.refreshTier;
+  const refreshDocuments = ctx?.refreshDocuments;
 
   const save = useCallback(async (email: string, document: any): Promise<SaveResult> => {
     // Phase 5: gate the save with the free-tier limit check.
@@ -64,13 +65,15 @@ export function useDocumentSave(): UseDocumentSaveReturn {
       // saveDocument backend already increments the DB / localStorage
       // count, so we just refresh the local view to stay in sync.
       if (refreshTier) await refreshTier();
+      // Notify CollectionView to re-fetch so the saved doc appears immediately.
+      if (typeof refreshDocuments === 'function') refreshDocuments();
       return { success: true, data: result.data || result };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Errore salvataggio' };
     } finally {
       setIsSaving(false);
     }
-  }, [checkDocumentLimit, refreshTier]);
+  }, [checkDocumentLimit, refreshTier, refreshDocuments]);
 
   const closeTierModal = useCallback(() => {
     setShowTierModal(false);

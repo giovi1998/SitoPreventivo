@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, cleanup, within, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { TestRouter } from '../../test/TestRouter';
 import React from 'react';
 import { AuthContext, AppContext } from '../../contexts';
 import { seedDocumentsLocalStorage, makeDocument, buildContextValue, AUTH_VALUE } from './collectionTestUtils';
@@ -27,9 +27,9 @@ async function renderCollection(opts: { role?: 'user' | 'admin' } = {}) {
   render(
     <AuthContext.Provider value={authValue as any}>
       <AppContext.Provider value={ctx as any}>
-        <MemoryRouter>
+        <TestRouter>
           <CollectionViewForTest />
-        </MemoryRouter>
+        </TestRouter>
       </AppContext.Provider>
     </AuthContext.Provider>,
   );

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup, within, fireEvent, waitFor, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { TestRouter } from '../../test/TestRouter';
 import React from 'react';
 import { AuthContext, AppContext } from '../../contexts';
 import dataService from '../../utils/dataService';
@@ -29,9 +29,9 @@ async function renderCollection(ctxOverrides: Record<string, any> = {}, opts: { 
   render(
     <AuthContext.Provider value={authValue as any}>
       <AppContext.Provider value={ctx as any}>
-        <MemoryRouter>
+        <TestRouter>
           <CollectionViewForTest />
-        </MemoryRouter>
+        </TestRouter>
       </AppContext.Provider>
     </AuthContext.Provider>,
   );

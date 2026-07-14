@@ -420,6 +420,114 @@ sé. Leggere prima di rimettere mano a questa parte.
     card reali (grid + snapshot JSON superavano 1000). Fix: entrambi
     a 2000. Verificare SEMPRE che i due limiti coincidano dopo
     modifiche a `buildCoverContext`.
+12. **`LogoAiPanel`: il background AI generato per i concept in preview
+    si perdeva cambiando tab AI → Builder → AI (bug già presente in
+    prod prima di essere scoperto/fixato, non una regressione di uno
+    sviluppo recente)**. Costoso da riprodurre: ogni rigenerazione
+    consuma una chiamata Gemini a pagamento. Tre cause distinte, tutte
+    in `LogoAiPanel.tsx` (due delle quali sullo stesso effect di
+    persistenza, scoperte in due passate successive):
+    - **`bgImages` mancante dal dependency array dell'effect di
+      persistenza** (`useEffect(..., [answers, step, concepts,
+      selected])`). Il primo persist scatta quando `concepts` cambia
+      (subito dopo la generazione DeepSeek), catturando
+      `bgImages = [null, null, null]`. Gli aggiornamenti successivi di
+      `bgImages` (quando arrivano le immagini Gemini, con
+      `Promise.allSettled` su 3 chiamate parallele) **non ritriggerano
+      il persist** perché `bgImages` non è nelle dipendenze. Al
+      remount (cambio tab: `LogoEditor` smonta `LogoAiPanel` quando
+      `tab !== 'ai'`), il componente ricarica lo snapshot vecchio senza
+      immagini. Fix: aggiungere `bgImages` alle dipendenze.
+    - **Race condition sul debounce di persistenza (500ms), causa
+      residua dopo il fix precedente**. Anche con `bgImages` nelle
+      dipendenze, la cleanup dell'effect faceva solo `clearTimeout`. Se
+      l'utente cambiava tab ENTRO i 500ms dall'arrivo dell'immagine
+      (scenario comune con test rapidi in locale, meno probabile in
+      produzione dove la latenza naturale di rete/interazione supera
+      spesso i 500ms — questo spiegava la percezione "in prod
+      funziona, in locale no"), lo unmount cancellava il timer
+      **prima** che scrivesse in localStorage, perdendo comunque
+      l'immagine. Fix: `latestStateRef` (un `useRef`) tiene sempre
+      l'ultimo stato via un effect senza dipendenze (rieseguito ad
+      ogni render); un secondo effect con `useEffect(() => () => {...},
+      [])` flusha `latestStateRef.current` in localStorage nella
+      cleanup, che scatta SOLO alla vera unmount — garantendo lo
+      salvataggio indipendentemente dal timer di debounce.
+    - **Spinner condiviso su tutti i 3 concept durante rigenerazione
+      singola**. `bgLoading` nella `ConceptCard` usava solo
+      `isGeneratingBg` (bool unico dell'hook `useAILogo`, true per
+      QUALSIASI chiamata `generateBackground` in corso, sia la
+      generazione iniziale parallela sia la rigenerazione di un solo
+      concept via "Prompt avanzato" → "Rigenera immagine"). Risultato:
+      rigenerando il concept 1, anche i concept 2 e 3 (senza bg pronto)
+      mostravano lo spinner. Fix: `bgLoading = regeneratingIdx === i ||
+      (isGeneratingBg && regeneratingIdx === null && !bgImages[i] &&
+      !bgErrors[i])` — lo spinner globale (generazione iniziale, tutti
+      e 3 in parallelo) resta quando `regeneratingIdx` è `null`; la
+      rigenerazione di un solo concept mostra lo spinner SOLO su quella
+      card tramite `regeneratingIdx === i`.
+    - **`SaveDialog` non si chiudeva dopo un salvataggio riuscito** in
+      `LogoEditor.tsx`: `handleSave` faceva `addToast('success', ...)`
+      ma non chiamava mai `setShowSaveDialog(false)`. Fix: chiudere il
+      dialog subito dopo il toast di successo.
+    - **Causa radice definitiva: `localStorage` non è il posto giusto
+      per immagini base64, il fix "aggiungi `bgImages` alle
+      dipendenze" sopra era solo un cerotto**. Con `bgImages` nelle
+      dipendenze, OGNI generazione/rigenerazione scrive su
+      `localStorage` un payload con fino a 3 immagini base64 (centinaia
+      di KB l'una). `localStorage` ha una quota di 5-10MB/origin
+      condivisa con `precisionQuote_documents:v1` (altri documenti
+      salvati, anch'essi con immagini). Risultato reale osservato in
+      produzione: `Failed to execute 'setItem' on 'Storage': Setting
+      the value of 'logoAiChat:v1' exceeded the quota` **non
+      catturato**, che crasha l'intera app (schermata "Qualcosa è
+      andato storto"). La cleanup di `useEffect(() => () => {...},
+      [])` (flush-on-unmount) gira SINCRONAMENTE dentro il commit React
+      quando l'utente cambia tab: un errore lì propaga fino
+      all'`ErrorBoundary` più vicino, mentre lo stesso errore dentro il
+      `setTimeout` del debounce (asincrono, fuori dal ciclo di vita
+      React) sarebbe finito solo in console senza crashare la UI — per
+      questo il crash reale si manifestava proprio AL CAMBIO TAB, non
+      durante l'attesa del debounce.
+      **Fix definitivo (due parti)**:
+      (a) **Stato sollevato al genitore**: `LogoAiPanel` accetta ora
+      `initialState`/`onStateChange` (tipo esportato `LogoAiState`).
+      `LogoEditor` tiene `aiStateRef = useRef<LogoAiState|undefined>()`
+      e passa `initialState={aiStateRef.current}` +
+      `onStateChange={(s) => { aiStateRef.current = s; }}`. Un
+      `useRef` nel genitore (che NON si smonta mai cambiando tab, a
+      differenza di `LogoAiPanel`) sopravvive al ciclo
+      smontaggio/rimontaggio senza passare da `localStorage`: le
+      immagini restano semplici riferimenti in memoria, nessun limite
+      di quota, nessuna serializzazione. Questo è ora il meccanismo
+      PRIMARIO anti-perdita-immagine al cambio tab.
+      (b) **`localStorage` resta solo backup "best effort" per il
+      refresh pagina (F5)**, ma va sempre protetto da try/catch:
+      `safeLocalStorageSet()` non propaga mai un'eccezione; se il
+      payload completo fallisce per quota, si ritenta SENZA `bgImages`
+      (`payload.bgImages.map(() => null)`) così almeno testo/risposte/
+      concept sopravvivono a un refresh — le immagini si perdono solo
+      in quel caso limite (refresh completo, non cambio tab), mai per
+      un errore non gestito.
+      **Regola generale**: qualunque dato che può contenere immagini
+      base64 (screenshot, background AI, cover, hero) non deve MAI
+      essere l'unica fonte di persistenza in-sessione tramite
+      `localStorage` — usare stato sollevato al componente genitore
+      stabile (`useRef` o `useState` con lazy init) come fonte
+      primaria, e trattare `localStorage` come cache opzionale sempre
+      avvolta in try/catch.
+    Regression test: `LogoAiPanel.test.tsx` → describe "persistenza
+    bgImages su cambio tab" (simula unmount/remount e unmount immediato
+    prima dei 500ms di debounce) e "spinner durante generazione
+    background" → "shows spinner ONLY on the concept being
+    regenerated". `LogoEditor.test.tsx` → "keeps a generated
+    (not-yet-applied) concept preview background across AI -> Builder
+    -> AI tab switches" (verifica lo stato sollevato via `aiStateRef`)
+    e "does not throw when switching tabs while localStorage.setItem
+    throws QuotaExceededError" (verifica che il cambio tab, che
+    scatena la cleanup sincrona, non propaghi mai l'eccezione di
+    quota). Tutti verificati manualmente disattivando i rispettivi fix:
+    senza di essi i test falliscono (non falsi positivi).
 
 ### ⚠️ Cover AI Card gotchas (leggi prima di toccare `coverBrief.ts` o `/ai/card-cover`)
 
@@ -457,8 +565,68 @@ item di scope minore:
   `qrPayload` è vuoto. Fix: mock `qrcode` o `qrGenerator.generateQrSvg`
   per test deterministici.
 
+### Card layout/event harness (new, 2026-07)
+
+- **Harness unificato**: tutti gli e2e card usano `e2e/helpers/cardHarness.ts`
+  per login, fill, grid, export, parse SVG (non duplicare più helper).
+- **Event logging**: `src/utils/card/layoutEvents.ts` + shell wiring;
+  in test mode / `localStorage['pq_card_layout_debug']='1'` è disponibile
+  `window.__cardLayoutEvents`. Usato dai test e2e per verificare move ok,
+  collision blocked, export start/success.
+- **Layout audit**: `src/utils/card/layoutAudit.ts` controlla ratio font
+  contatti/socials, overlap label/valore, posizione QR, logo troppo piccolo
+  e testi mancanti. Usata in unit test e e2e.
+- **WYSIWYG test command**: `npx playwright test e2e/card-export-inspection.spec.ts
+  e2e/card-wysiwyg-visual.spec.ts e2e/card-grid-export-roundtrip.spec.ts
+  e2e/card-grid-behavior.spec.ts e2e/card-layout-audit.spec.ts
+  e2e/card-grid-behavior-audit.spec.ts`.
+
 Card module: ~140+ test across `__tests__/` (grid collision, master
 switch, fontScale, AI parity).
+
+### ⚠️ Card export SVG gotchas (leggi prima di toccare `svgRenderer.ts` `buildBackSvg`)
+
+Bug di rendering del retro card nell'export PDF/PNG/SVG vs preview
+React. L'utente vedeva telefono/email "sminchiati" (label e valore non
+allineati, testo galleggiante). Tre cause distinte:
+
+1. **`dominant-baseline` per contatti deve essere `alphabetic`, non
+   `text-before-edge`**. La preview React usa `.card-back-line {
+   align-items: baseline }` (flexbox): label e valore di font-size
+   diverso si allineano sulla stessa baseline alfabetica. Se l'SVG usa
+   `text-before-edge` su entrambi, il valore più grande ha la baseline
+   più bassa e i due testi si "sminchiano" verticalmente (label
+   galleggiante sopra il valore). Fix: `dominant-baseline="alphabetic"`
+   su label e valore, con `y` = baseline condivisa calcolata come
+   `cy + valAscent + pad*0.25` (`valAscent ≈ valSize * 0.8`). Gli altri
+   `<text>` del retro (header eyebrow, services, socials, QR label)
+   restano `text-before-edge`: sono righe singole, non coppie
+   label/valore, e il top-alignment va bene. **Non** cambiare tutto il
+   file a `alphabetic`: romperesti services/socials.
+2. **`wrapTextAtWhitespace` non spezza email/URL senza spazi**. La
+   funzione splitta solo su whitespace/slash. Email come
+   `webdevcaglian@gmail.com` e phone come `35180008042` sono token
+   unici senza separatori: restano su una riga e, se più larghi di
+   `valueMaxW`, escono dalla cella (clip visivo nel PNG/PDF). La
+   preview React usa `overflow-wrap: break-word` e spezza anche dentro
+   la parola. Mitigazione attuale: il calcolo `colLabelWFor` e lo
+   shrink-to-fit del font riducono la probabilità di overflow nella
+   maggior parte dei casi reali. Se servisse wrapping within-word,
+   aggiungere una funzione `breakLongToken(text, maxW, fontSize)` che
+   splitta per chunk di `Math.floor(maxW / (fontSize*0.52))` char.
+3. **`colLabelWFor` può rubare spazio al valore**. La formula
+   `Math.max(cw*0.22, ks*6, pad*1.5)` per la larghezza colonna-label:
+   con `keySize` 40px, `ks*6 = 240px` (troppo largo su cella 512px).
+   La preview CSS dà alla label `flex: 0 0 auto` (larghezza content,
+   ~50px per "TELEFONO" a 9px). Se il valore risulta troppo stretto
+   (es. email troncata), ridurre `ks*6` a `ks*4` o calcolare la
+   larghezza reale del testo label con `key.length * keySize * 0.6`.
+
+Regression test: `svgRenderer.test.ts` → "contact label and value
+share the same baseline (alphabetic, v2.9 regression)" verifica che
+label `TELEFONO` e valore `35180008042` abbiano lo stesso attributo `y`
+(baseline condivisa). Verificato manualmente disattivando il fix: senza
+`alphabetic` le `y` divergono e il test fallisce.
 
 ## Responsive Patterns
 
@@ -602,7 +770,7 @@ Chiavi attuali:
 - Framework: Vitest + React Testing Library + jsdom
 - Run single test: `npx vitest run path/to/file.test.ts`
 - No test database needed, local tests use localStorage path
-- Coverage attuale: ~1864 test su 152 file. Target: 60%.
+- Coverage attuale: ~2034 test su 170 file. Target: 60%.
 
 ## Logging
 
@@ -636,6 +804,23 @@ Always run `git status` before any git operation. See `.agents/guardrails/git-gu
    ```
     The `/api/*` path is served directly by the single `api/index.ts` function. Do **not** add per-route `/api/*` rewrites, they break the monolithic function and cause `ERR_MODULE_NOT_FOUND` on shared imports.
 3. **Before pushing features that require Vercel env vars** (DEEPSEEK_API_KEY, DATABASE_URL, ADMIN_PASSWORD, ALLOWED_ORIGIN), confirm the variables are set in the Vercel dashboard. Missing env vars cause 503/500 errors in production. `REPLICATE_API_TOKEN` is **optional** in v1 (logo AI tab mostra docs page).
+
+### Gotchas Dev / Localhost per AI
+
+1. **Flyer copy AI in localhost richiede `VITE_DEEPSEEK_API_KEY` in `.env` (o `deepseekApiKey` in localStorage).**
+   `src/hooks/useAIFlyer.ts` esegue un token-check per gli utenti normali. In precedenza il check non escludeva `localhost`, quindi un utente non-admin in dev veniva bloccato da `dataService.getUserProfile` (utente non trovato in `registeredUsers`). Fix: aggiungere `!isLocalhost()` al token-check, come già fatto per `useAICard`.
+
+2. **Generazione cover card "entrambi i lati" NON deve essere parallela.**
+   `CardEditorShell.handleGenerateCover('both')` chiamava `Promise.all([generateCover('front'), generateCover('back')])`. Due chiamate simultanee a Gemini tramite il dev proxy possono sovraccaricare l'upstream o il proxy stesso e restituire `502 Bad Gateway`. Fix: serializzare fronte → retro.
+
+3. **Background AI del logo non deve essere sovrascritto a null quando si applica un concept senza immagine pronta.**
+   I concept generati da DeepSeek in `logoOrchestrator.ts` hanno `backgroundImage: null` di default. `LogoAiPanel.applyConcept` li spreadava direttamente, sovrascrivendo il background pagato (Gemini) già applicato. Fix: escludere `backgroundImage` dal patch di default, e impostarlo solo se `bgImages[idx]` è effettivamente disponibile.
+
+4. **`vite.config.js` deve ricaricarsi dopo modifiche.**
+   Se vedi `404` o `502` su `/api/ai/card-cover`, `/api/ai/flyer-hero`, ecc. dopo aver modificato il dev proxy, riavvia il dev server (`npm run dev`). Vite non ricarica i middleware custom su hot-reload.
+
+5. **`/api/ai/card-cover` in dev: il proxy truncava il `context` a 1000 char mentre `coverBrief.ts` e il server accettano 2000.**
+   Disallineamento che poteva troncare silenziosamente il contesto con card complesse. Mantenere il limite del dev proxy allineato a quello del server (2000).
 
 ## Active Skills
 

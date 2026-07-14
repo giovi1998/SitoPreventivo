@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { TestRouter } from '../../test/TestRouter';
 import { AuthContext } from '../../contexts';
 import LoginPage from '../LoginPage';
 
@@ -17,11 +17,11 @@ function renderLogin() {
     logout: vi.fn(),
   };
   return render(
-    <MemoryRouter>
+    <TestRouter>
       <AuthContext.Provider value={auth as any}>
         <LoginPage />
       </AuthContext.Provider>
-    </MemoryRouter>
+    </TestRouter>
   );
 }
 

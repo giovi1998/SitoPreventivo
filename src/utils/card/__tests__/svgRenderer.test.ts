@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { buildCardSvg, buildFrontSvg, buildBackSvg } from '../svgRenderer';
-import { createEmptyCard, createGiovanniCardTemplate } from '../../documentSchemas';
+import { describe, it, expect, vi } from 'vitest';
+import { buildCardSvg, buildFrontSvg, buildBackSvg, buildEmbeddedFontImport } from '../svgRenderer';
+import { createEmptyCard, createGiovanniCardTemplate, gridPresetBackDefault } from '../../documentSchemas';
 
 describe('svgRenderer', () => {
   describe('font-size attributes', () => {
@@ -89,9 +89,10 @@ describe('svgRenderer', () => {
   describe('buildCardSvg wrapper', () => {
     it('produces valid SVG wrapper for front', () => {
       const svg = buildCardSvg(createEmptyCard(), 'front', 500, 300);
-      expect(svg).toMatch(/^<svg[^>]*>/);
+      expect(svg).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
       expect(svg).toMatch(/<\/svg>$/);
       expect(svg).toContain('viewBox="0 0 500 300"');
+      expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
     });
 
     it('produces valid SVG wrapper for back with website', () => {
@@ -99,6 +100,34 @@ describe('svgRenderer', () => {
       const svg = buildCardSvg(card, 'back', 500, 300);
       expect(svg).toContain('CONTATTI');
       expect(svg).toContain('example.com');
+    });
+
+    it('includes @import font style in SVG when fontFamily is a web font (e.g. Oswald)', () => {
+      const card = { ...createEmptyCard(), style: { ...createEmptyCard().style, fontFamily: 'Oswald' } };
+      const svg = buildCardSvg(card, 'front', 500, 300);
+      expect(svg).toContain('fonts.googleapis.com/css2?family=Oswald');
+      expect(svg).toContain('@import');
+    });
+
+    it('does NOT include @import font style for system fonts (e.g. Georgia)', () => {
+      const card = { ...createEmptyCard(), style: { ...createEmptyCard().style, fontFamily: 'Georgia' } };
+      const svg = buildCardSvg(card, 'front', 500, 300);
+      expect(svg).not.toContain('@import');
+    });
+
+    it('includes @import font style also in rotated SVG (90°)', () => {
+      const card = { ...createEmptyCard(), style: { ...createEmptyCard().style, fontFamily: 'Oswald' } };
+      const svg = buildCardSvg(card, 'front', 500, 300, { rotate: 90 });
+      expect(svg).toContain('fonts.googleapis.com/css2?family=Oswald');
+      expect(svg).toContain('viewBox="0 0 300 500"');
+    });
+
+    it('uses embeddedFontCss when provided instead of @import', () => {
+      const card = { ...createEmptyCard(), style: { ...createEmptyCard().style, fontFamily: 'Oswald' } };
+      const embeddedFontCss = '<style>@font-face{font-family:"Oswald";src:url(data:font/woff2;base64,AA);}</style>';
+      const svg = buildCardSvg(card, 'front', 500, 300, { embeddedFontCss });
+      expect(svg).toContain(embeddedFontCss);
+      expect(svg).not.toContain('@import');
     });
 
     it('renders Giovanni template back SVG with full email text and no truncation', () => {
@@ -111,6 +140,19 @@ describe('svgRenderer', () => {
       // or a single line. The important thing is the full string is present.
       const emailMatches = svg.match(/webdevcaglian@gmail\.com/g);
       expect(emailMatches?.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('contact label and value share the same baseline (alphabetic, v2.9 regression)', () => {
+      const card = createGiovanniCardTemplate();
+      const svg = buildBackSvg(card, 1024, 663);
+      // Extract the TELEFONO label and the phone value <text> elements.
+      // Use ` y="` (space-prefixed) to avoid matching the `y` inside `opacity`.
+      const labelMatch = svg.match(/<text[^>]* y="([^"]+)"[^>]*dominant-baseline="alphabetic"[^>]*>TELEFONO<\/text>/);
+      const valueMatch = svg.match(/<text[^>]* y="([^"]+)"[^>]*dominant-baseline="alphabetic"[^>]*>35180008042<\/text>/);
+      expect(labelMatch).not.toBeNull();
+      expect(valueMatch).not.toBeNull();
+      // Same y => same baseline => label and value aligned (matches preview align-items: baseline).
+      expect(labelMatch![1]).toBe(valueMatch![1]);
     });
 
     it('renders services in a dedicated grid cell when backGrid.services is set', () => {
@@ -135,6 +177,153 @@ describe('svgRenderer', () => {
       expect(svg).toContain('Supporto');
     });
 
+    it('export socials y follows backGrid.elements.socials.y (preview/export parity)', () => {
+      // With services content present, collapse does not run — socials.y is
+      // respected as-is (y:3 lower than y:2).
+      const base = createGiovanniCardTemplate();
+      const atBottom = {
+        ...base,
+        back: { ...base.back, useGrid: true, services: ['UX Design'] },
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 2, h: 2 },
+            services: { x: 0, y: 2, w: 2, h: 1 },
+            socials: { x: 0, y: 3, w: 2, h: 1 },
+            qr: { x: 2, y: 0, w: 2, h: 4 },
+          },
+        },
+      };
+      const movedUp = {
+        ...atBottom,
+        backGrid: {
+          ...atBottom.backGrid,
+          elements: {
+            ...atBottom.backGrid.elements,
+            // Move socials into services row (services still present but
+            // socials y is what we measure).
+            socials: { x: 0, y: 2, w: 2, h: 1 },
+            services: { x: 0, y: 3, w: 2, h: 1 },
+          },
+        },
+      };
+      const svgBottom = buildBackSvg(atBottom, 1024, 663);
+      const svgUp = buildBackSvg(movedUp, 1024, 663);
+      const yOf = (svg: string) => {
+        const idx = svg.indexOf('LinkedIn');
+        const slice = svg.slice(Math.max(0, idx - 200), idx + 50);
+        const ym = slice.match(/y="([\d.]+)"/);
+        return ym ? parseFloat(ym[1]) : NaN;
+      };
+      const yBottom = yOf(svgBottom);
+      const yUp = yOf(svgUp);
+      expect(yBottom).not.toBeNaN();
+      expect(yUp).not.toBeNaN();
+      expect(yUp).toBeLessThan(yBottom);
+    });
+
+    it('export name respects alignH center (not stuck on right)', () => {
+      const base = createGiovanniCardTemplate();
+      const card = {
+        ...base,
+        front: { ...base.front, useGrid: true },
+        grid: {
+          ...base.grid!,
+          elements: {
+            ...base.grid!.elements,
+            name: { x: 2, y: 0, w: 2, h: 1, alignH: 'center' as const, alignV: 'center' as const },
+          },
+        },
+      };
+      const svg = buildFrontSvg(card, 1024, 663);
+      // name cell: x=2/4*1024=512, w=512 → center textX = 512+256 = 768
+      expect(svg).toMatch(/text-anchor="middle"/);
+      const nameIdx = svg.indexOf('GIOVANNI CIDU');
+      const slice = svg.slice(Math.max(0, nameIdx - 250), nameIdx);
+      expect(slice).toContain('text-anchor="middle"');
+      const xMatch = slice.match(/x="([\d.]+)"[^>]*font-weight="800"|font-weight="800"[^>]*x="([\d.]+)"/);
+      // Fallback: last x= before the name text
+      const xs = [...slice.matchAll(/x="([\d.]+)"/g)].map((m) => parseFloat(m[1]));
+      const textX = xs[xs.length - 1];
+      expect(textX).toBeGreaterThan(700);
+      expect(textX).toBeLessThan(850);
+    });
+
+    it('contacts font is decent (comparable to socials) even in a short (h:1) cell', () => {
+      // Regression: contacts used a fixed 0.09/0.12 factor of min(cw,ch)
+      // with no shrink-to-fit, so a resized h:1 contacts cell rendered
+      // "microscopic" text next to socials/services (~0.22-0.25 factor).
+      const base = createGiovanniCardTemplate();
+      const card = {
+        ...base,
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 2, h: 1 },
+            socials: { x: 0, y: 1, w: 2, h: 1 },
+            qr: { x: 2, y: 0, w: 2, h: 4 },
+          },
+        },
+      };
+      const svg = buildBackSvg(card, 1024, 663);
+      const keySizeMatch = svg.match(/font-size="([\d.]+)"[^>]*font-weight="700"[^>]*opacity="0\.55"/);
+      const valSizeMatch = svg.match(/font-size="([\d.]+)"[^>]*font-weight="500"[^>]*fill="#1a1a2e"[^>]*dominant-baseline/);
+      expect(keySizeMatch).not.toBeNull();
+      const keySize = parseFloat(keySizeMatch![1]);
+      // Old behaviour produced ~7-9px key size on a 663/4≈166px-tall cell.
+      // New behaviour should be clearly larger (double digits).
+      expect(keySize).toBeGreaterThanOrEqual(10);
+      if (valSizeMatch) {
+        expect(parseFloat(valSizeMatch[1])).toBeGreaterThanOrEqual(10);
+      }
+    });
+
+    it('export honours card.style.fontFamily instead of hardcoded Inter (preview/export parity)', () => {
+      // Regression: every <text> in the SVG export hardcoded
+      // font-family="Inter, system-ui, sans-serif" regardless of the
+      // font the user picked in the style panel (e.g. "Oswald"), while
+      // CardPreview.tsx applies card.style.fontFamily via CSS. Preview
+      // and export showed different fonts as a result.
+      const base = createGiovanniCardTemplate();
+      const card = { ...base, style: { ...base.style, fontFamily: 'Oswald' } };
+      const frontSvg = buildFrontSvg(card, 1024, 663);
+      const backSvg = buildBackSvg(card, 1024, 663);
+      expect(frontSvg).not.toContain('font-family="Inter, system-ui, sans-serif"');
+      expect(backSvg).not.toContain('font-family="Inter, system-ui, sans-serif"');
+      expect(frontSvg).toContain('font-family="Oswald, sans-serif"');
+      expect(backSvg).toContain('font-family="Oswald, sans-serif"');
+    });
+
+    it('quotes multi-word font families and applies a serif fallback for serif fonts', () => {
+      const base = createGiovanniCardTemplate();
+      const serifCard = { ...base, style: { ...base.style, fontFamily: 'Playfair Display' } };
+      const svg = buildFrontSvg(serifCard, 1024, 663);
+      expect(svg).toContain("font-family=\"'Playfair Display', serif\"");
+    });
+
+    it('socials in preview/export never render an isolated "·" separator (regression)', () => {
+      // Regression: joining "Platform · handle" entries with ' · ' and
+      // then wrapping the flat string at whitespace could leave a lone
+      // "·" as the first token of a wrapped line (e.g. "· GitHub ...").
+      const base = createGiovanniCardTemplate();
+      const card = {
+        ...base,
+        back: {
+          ...base.back,
+          socials: [
+            { platform: 'LinkedIn', url: 'https://linkedin.com/in/giovanni-cidu-16162b212' },
+            { platform: 'GitHub', url: 'https://github.com/GiovanniCidu' },
+          ],
+        },
+      };
+      const svg = buildBackSvg(card, 1024, 663);
+      expect(svg).not.toContain('·');
+      expect(svg).toContain('LinkedIn');
+      expect(svg).toContain('GitHub');
+    });
+
     it('buildCardSvg rotate=90 swaps dimensions and wraps content in rotated group', () => {
       const svg = buildCardSvg(createEmptyCard(), 'front', 1000, 600, { rotate: 90 });
       expect(svg).toMatch(/viewBox="0 0 600 1000"/);
@@ -154,6 +343,39 @@ describe('svgRenderer', () => {
       // everything to negative x, producing a blank PDF 10-up).
       expect(svg).toContain('VISIBLE');
       expect(svg).toMatch(/translate\(600 0\) rotate\(90\)/);
+    });
+  });
+
+  describe('embedded font import (v2.8.2 regression)', () => {
+    it('inlines Google Font CSS without double url(...) wrapper', async () => {
+      const fontCss = '@font-face{font-family:"Oswald";src:url(https://fonts.gstatic.com/oswald.woff2) format("woff2");}';
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        text: async () => fontCss,
+        headers: new Map([['content-type', 'font/woff2']]),
+      }).mockResolvedValueOnce({
+        ok: true,
+        blob: async () => new Blob(['fake-font-bytes'], { type: 'font/woff2' }),
+        headers: new Map([['content-type', 'font/woff2']]),
+      });
+
+      const style = await buildEmbeddedFontImport('Oswald');
+      expect(style).toContain('@font-face');
+      expect(style).toContain('data:font/woff2;base64,');
+      // The bug was replacing the inner URL only, leaving an outer `url(` wrapper.
+      expect(style).not.toContain('url(url(');
+      expect(style).toMatch(/src:\s*url\(data:font\/woff2;base64,/);
+    });
+
+    it('returns empty string for unknown font family', async () => {
+      const style = await buildEmbeddedFontImport('TotallyUnknownFont');
+      expect(style).toBe('');
+    });
+
+    it('falls back to empty string when Google Fonts CSS fetch fails', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({ ok: false, status: 500 });
+      const style = await buildEmbeddedFontImport('Inter');
+      expect(style).toBe('');
     });
   });
 
@@ -326,6 +548,7 @@ describe('svgRenderer', () => {
         ...createEmptyCard(),
         back: {
           ...createEmptyCard().back,
+          useGrid: true,
           services: ['Consulenza pedagogica', 'Supporto alla genitorialità'],
           servicesLabel: 'Servizi che offro',
         },
@@ -350,6 +573,129 @@ describe('svgRenderer', () => {
       // collapses to invisible.
       servicesFontSizes.forEach((size) => expect(size).toBeGreaterThanOrEqual(14));
       servicesFontSizes.forEach((size) => expect(size).toBeLessThan(50));
+    });
+
+    it('v2.12: logo is 72% of cell and 3×3 moves the box (not only preserveAspectRatio)', () => {
+      const base = createEmptyCard();
+      const make = (alignH: 'left' | 'center' | 'right', alignV: 'top' | 'center' | 'bottom') => ({
+        ...base,
+        front: {
+          ...base.front,
+          useGrid: true,
+          logoUrl: 'data:image/png;base64,LOGO',
+          name: 'MARIO',
+        },
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            logo: { x: 0, y: 0, w: 2, h: 2, alignH, alignV },
+            name: { x: 2, y: 0, w: 2, h: 1 },
+          },
+        },
+      });
+      const leftTop = buildFrontSvg(make('left', 'top'), 1024, 663);
+      const rightBottom = buildFrontSvg(make('right', 'bottom'), 1024, 663);
+      const center = buildFrontSvg(make('center', 'center'), 1024, 663);
+      expect(leftTop).toContain('preserveAspectRatio="xMinYMin meet"');
+      expect(rightBottom).toContain('preserveAspectRatio="xMaxYMax meet"');
+      expect(center).toContain('preserveAspectRatio="xMidYMid meet"');
+      const attrsOf = (svg: string) => {
+        const m = svg.match(
+          /<image[^>]*href="data:image\/png;base64,LOGO"[^>]*\/?>|<image[^>]*href='data:image\/png;base64,LOGO'[^>]*\/?>/,
+        );
+        // Our builder writes attributes before href; match full image tag around LOGO.
+        const idx = svg.indexOf('data:image/png;base64,LOGO');
+        expect(idx).toBeGreaterThan(0);
+        const open = svg.lastIndexOf('<image', idx);
+        const close = svg.indexOf('/>', idx);
+        const tag = svg.slice(open, close > 0 ? close + 2 : open + 400);
+        const x = Number(tag.match(/\sx="([\d.]+)"/)?.[1]);
+        const y = Number(tag.match(/\sy="([\d.]+)"/)?.[1]);
+        const w = Number(tag.match(/\swidth="([\d.]+)"/)?.[1]);
+        return { x, y, w, tag };
+      };
+      const c = attrsOf(center);
+      const l = attrsOf(leftTop);
+      const r = attrsOf(rightBottom);
+      // cell w = 512 → 72% = 368.64
+      expect(c.w).toBeCloseTo(512 * 0.72, 0);
+      // 3×3 must move the logo box, not only the aspect-ratio paint
+      expect(l.x).toBeLessThan(c.x);
+      expect(r.x).toBeGreaterThan(c.x);
+      expect(l.y).toBeLessThan(c.y);
+      expect(r.y).toBeGreaterThan(c.y);
+    });
+
+    it('v2.10.1: contact font sizes stay readable-but-not-huge at export DPI', () => {
+      const card = createGiovanniCardTemplate();
+      const svg = buildBackSvg(card, 1024, 663);
+      // TELEFONO key: should be ~18px (9.3/340*663), not 50+
+      const idx = svg.indexOf('TELEFONO');
+      expect(idx).toBeGreaterThan(0);
+      const tag = svg.slice(Math.max(0, idx - 200), idx);
+      const m = tag.match(/font-size="([\d.]+)"/);
+      expect(m).not.toBeNull();
+      const size = parseFloat(m![1]);
+      expect(size).toBeGreaterThanOrEqual(12);
+      expect(size).toBeLessThan(28);
+    });
+
+    it('v2.13: default back preset keeps socials inside contacts half (clip, no full-card spill)', () => {
+      // Regression: preset without socials cell put socials as one long <text>
+      // that spilled across the whole export (user screenshot 2026-07-14).
+      const card = createGiovanniCardTemplate();
+      card.back.services = [];
+      card.backGrid = gridPresetBackDefault();
+      const svg = buildBackSvg(card, 1024, 663);
+      expect(svg).toContain('LinkedIn');
+      // Must use a clipPath for the socials (or contacts fallback) cell.
+      expect(svg).toMatch(/clipPath id="clip(Socials|Contacts)/);
+      // Collect LinkedIn text x positions — all must be in left half (x < 520).
+      const re = /<text[^>]*x="([\d.]+)"[^>]*>[^<]*LinkedIn/g;
+      let m: RegExpExecArray | null;
+      let found = 0;
+      while ((m = re.exec(svg)) !== null) {
+        found += 1;
+        expect(parseFloat(m[1])).toBeLessThan(520);
+      }
+      expect(found).toBeGreaterThan(0);
+    });
+
+    it('v2.12: empty services drops services cell; socials stay at persisted y (3×3 match)', () => {
+      const card = createGiovanniCardTemplate();
+      card.back.services = [];
+      const withGap = {
+        ...card,
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 2, h: 2 },
+            services: { x: 0, y: 2, w: 2, h: 1 },
+            socials: { x: 0, y: 3, w: 2, h: 1 },
+            qr: { x: 2, y: 0, w: 2, h: 4 },
+          },
+        },
+      };
+      const withServices = {
+        ...withGap,
+        back: { ...withGap.back, services: ['UX Design'] },
+      };
+      const yOf = (svg: string) => {
+        const idx = svg.indexOf('LinkedIn');
+        expect(idx).toBeGreaterThan(0);
+        const slice = svg.slice(Math.max(0, idx - 200), idx + 20);
+        const ym = slice.match(/y="([\d.]+)"/);
+        return ym ? parseFloat(ym[1]) : NaN;
+      };
+      const yEmpty = yOf(buildBackSvg(withGap, 1024, 663));
+      const yWithServices = yOf(buildBackSvg(withServices, 1024, 663));
+      expect(yEmpty).not.toBeNaN();
+      expect(yWithServices).not.toBeNaN();
+      // Socials y must match whether services content is empty or not
+      // (persisted grid cell, not a render-time relocate).
+      expect(Math.abs(yEmpty - yWithServices)).toBeLessThan(2);
     });
   });
 });

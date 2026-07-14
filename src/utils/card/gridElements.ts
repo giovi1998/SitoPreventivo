@@ -105,3 +105,57 @@ export function hasGridElements(side: GridSide, card: BusinessCard): boolean {
   }
   return false;
 }
+
+/**
+ * Grid usata per collisioni/move/resize: ignora celle senza contenuto
+ * (es. `services` vuoto non deve bloccare lo spostamento di `socials`).
+ * L'elemento selezionato resta sempre, così i check self non si rompono.
+ */
+export function gridForCollisions(
+  grid: CardGrid,
+  card: BusinessCard,
+  side: GridSide,
+  keepKey?: string,
+): CardGrid {
+  const elements: CardGrid['elements'] = {};
+  for (const [key, rect] of Object.entries(grid.elements ?? {})) {
+    if (!rect || typeof rect.w !== 'number') continue;
+    if (key === keepKey || hasElementContent(key as GridElementKey, card, side)) {
+      (elements as Record<string, typeof rect>)[key] = rect;
+    }
+  }
+  return { cols: grid.cols, rows: grid.rows, elements };
+}
+
+/**
+ * Rimuove dalla griglia gli elementi senza contenuto reale (es. `services`
+ * con lista vuota, `socials` senza voci valide). Usata prima di salvare o
+ * esportare (JSON/Collection) così i documenti persistiti non trascinano
+ * posizioni "fantasma" mai mostrate in preview né in export SVG/PDF/PNG.
+ * Non viene chiamata durante l'editing interattivo (patchGrid) per non
+ * far scomparire una cella appena posizionata mentre l'utente sta ancora
+ * digitando il contenuto corrispondente.
+ */
+export function pruneEmptyGridElements(
+  grid: CardGrid | undefined,
+  card: BusinessCard,
+  side: GridSide,
+): CardGrid | undefined {
+  if (!grid) return grid;
+  const elements: CardGrid['elements'] = {};
+  for (const [key, rect] of Object.entries(grid.elements ?? {})) {
+    if (rect && hasElementContent(key as GridElementKey, card, side)) {
+      (elements as Record<string, typeof rect>)[key] = rect;
+    }
+  }
+  return { cols: grid.cols, rows: grid.rows, elements };
+}
+
+/** Applica `pruneEmptyGridElements` a entrambi i lati (fronte + retro). */
+export function pruneCardGrids(card: BusinessCard): BusinessCard {
+  return {
+    ...card,
+    grid: pruneEmptyGridElements(card.grid, card, 'front'),
+    backGrid: pruneEmptyGridElements(card.backGrid, card, 'back'),
+  };
+}

@@ -18,10 +18,17 @@ export { PageCardEntry, PageLayout, computePageCardEntries, getCardDimensionsMm 
 
 const BLEED_HALF_MM = BLEED_MM / 2;
 
+export type GenerateCardPdfOpts = {
+  tier: Tier;
+  /** Crop marks + sheet outlines for print shops. Default true. */
+  cropMarks?: boolean;
+};
+
 export async function generateCardPDF(
   card: BusinessCard,
-  opts: { tier: Tier },
+  opts: GenerateCardPdfOpts,
 ): Promise<Uint8Array> {
+  const cropMarks = opts.cropMarks !== false;
   const dims = getCardDimensionsMm(card);
   const { entries, pageOrientation } = computePageCardEntries(dims.w, dims.h);
   const pxW = Math.round((dims.w / 25.4) * 300);
@@ -30,8 +37,8 @@ export async function generateCardPDF(
   const frontImage = await renderCardSideDataUrl(card, 'front', pxW, pxH, { rotate });
   const backImage = await renderCardSideDataUrl(card, 'back', pxW, pxH, { rotate });
 
-  const frontContent = buildPageContentFromImage(card, entries, frontImage, true);
-  const backContent = buildPageContentFromImage(card, entries, backImage, false);
+  const frontContent = buildPageContentFromImage(card, entries, frontImage, true, cropMarks);
+  const backContent = buildPageContentFromImage(card, entries, backImage, false, cropMarks);
 
   const baseDoc: TDocumentDefinitions = {
     pageSize: pageOrientation === 'landscape'
@@ -110,26 +117,27 @@ function buildPageContentFromImage(
   entries: PageCardEntry[],
   imageDataUrl: string,
   isFirst: boolean,
+  cropMarks = true,
 ): Content[] {
   const out: Content[] = [];
-  const accent = card.style.accentColor;
   const bg = card.style.bgColor;
   const borderColor = card.style.accentColor;
+  // Sheet-level thin border only when crop marks mode AND user chose thin border.
+  // Accent strips are already in the rasterized card image — do not double-draw.
+  const sheetBorderW = cropMarks && card.style.borderStyle === 'thin' ? 0.4 : 0;
 
   entries.forEach((entry) => {
-    out.push(cardRect(entry, bg, { color: borderColor, width: card.style.borderStyle === 'thin' ? 0.4 : 0 }));
-    if (card.style.borderStyle === 'accent-strip-left') {
-      out.push(accentStripLeft(entry, accent));
-    } else if (card.style.borderStyle === 'accent-strip-bottom') {
-      out.push(accentStripBottom(entry, accent));
-    }
+    // Bleed fill under the card (print shops need ink past the cut line).
+    out.push(cardRect(entry, bg, sheetBorderW > 0 ? { color: borderColor, width: sheetBorderW } : undefined));
     out.push({
       image: imageDataUrl,
       absolutePosition: { x: mm2pt(entry.x), y: mm2pt(entry.y) },
       width: mm2pt(entry.w),
       height: mm2pt(entry.h),
     });
-    out.push(cropMarkLines(entry));
+    if (cropMarks) {
+      out.push(cropMarkLines(entry));
+    }
   });
 
   if (isFirst) out.unshift({ text: '', margin: [0, 0, 0, 0] });
@@ -336,22 +344,4 @@ function cardRect(entry: PageCardEntry, fill: string, border?: { color: string; 
   return { canvas: out, absolutePosition: { x: 0, y: 0 } };
 }
 
-function accentStripLeft(entry: PageCardEntry, color: string): Content {
-  const b = mm2pt(BLEED_HALF_MM);
-  return {
-    canvas: [
-      { type: 'rect', x: mm2pt(entry.x) - b, y: mm2pt(entry.y), w: mm2pt(1.5 + BLEED_MM), h: mm2pt(entry.h), color },
-    ],
-    absolutePosition: { x: 0, y: 0 },
-  };
-}
 
-function accentStripBottom(entry: PageCardEntry, color: string): Content {
-  const b = mm2pt(BLEED_HALF_MM);
-  return {
-    canvas: [
-      { type: 'rect', x: mm2pt(entry.x + entry.w) - mm2pt(1.5), y: mm2pt(entry.y) - b, w: mm2pt(1.5), h: mm2pt(entry.h) + b * 2, color },
-    ],
-    absolutePosition: { x: 0, y: 0 },
-  };
-}

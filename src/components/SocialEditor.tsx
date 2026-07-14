@@ -4,6 +4,7 @@ import { useAISocial } from '../hooks/useAISocial';
 import type { SocialSource, SocialTone } from '../ai/prompts/socialSystem';
 import { useToast } from '../hooks/useToast';
 import AILogPanel from './AILogPanel';
+import { AiSelect, AiGenerateButton } from './ai-ui';
 
 interface Props {
   userEmail: string;
@@ -92,34 +93,39 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
 
       {(cardDocuments.length > 0 || flyerDocuments.length > 0) && (
         <div className="social-editor-form">
-        <label>
-          Tipo sorgente
-          <select value={sourceType} onChange={(e) => { setSourceType(e.target.value as 'card' | 'flyer'); setSourceId(''); }}>
-            <option value="card">Bigliettino</option>
-            <option value="flyer">Volantino</option>
-          </select>
-        </label>
-        <label>
-          Documento sorgente
-          <select value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
-            <option value="">— Seleziona —</option>
-            {availableSources.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Tono
-          <select value={tone} onChange={(e) => setTone(e.target.value as SocialTone)}>
-            {TONES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </label>
+        <AiSelect
+          label="Tipo sorgente"
+          value={sourceType}
+          onChange={(e) => { setSourceType(e.target.value as 'card' | 'flyer'); setSourceId(''); }}
+          options={[
+            { value: 'card', label: 'Bigliettino' },
+            { value: 'flyer', label: 'Volantino' },
+          ]}
+        />
+        <AiSelect
+          label="Documento sorgente"
+          value={sourceId}
+          onChange={(e) => setSourceId(e.target.value)}
+          options={[
+            { value: '', label: '— Seleziona —' },
+            ...availableSources.map((s) => ({ value: s.id, label: s.label })),
+          ]}
+        />
+        <AiSelect
+          label="Tono"
+          value={tone}
+          onChange={(e) => setTone(e.target.value as SocialTone)}
+          options={TONES.map((t) => ({ value: t, label: t }))}
+        />
         <div className="social-editor-actions">
-          <button type="button" onClick={handleGenerate} disabled={isProcessing || !sourceId}>
-            {isProcessing ? 'Generando…' : 'Genera 3 post'}
-          </button>
+          <AiGenerateButton
+            isProcessing={isProcessing}
+            loadingText="Generando…"
+            onClick={handleGenerate}
+            disabled={!sourceId}
+          >
+            Genera 3 post
+          </AiGenerateButton>
           <button type="button" onClick={reset} disabled={isProcessing}>
             Reset
           </button>

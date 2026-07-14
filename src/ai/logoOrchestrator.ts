@@ -126,11 +126,21 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
     if (typeof window !== 'undefined' && window.location?.origin) {
       apiBase = `${window.location.origin}/api`;
     }
+
+    const { renderLogoScreenshot, compressPreviousBackground, buildLogoBackgroundPayload } = await import(
+      '../utils/logo/backgroundImage'
+    );
+    const [logoImage, previousBackground] = await Promise.all([
+      renderLogoScreenshot(logo),
+      compressPreviousBackground(logo),
+    ]);
+    const payload = buildLogoBackgroundPayload(prompt, { logoImage, previousBackground }, options.userEmail);
+
     try {
       const res = await fetch(`${apiBase}/ai/logo-background`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, userEmail: options.userEmail }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({ error: 'unknown' }));
@@ -206,6 +216,7 @@ function convertAIOutputToBuilder(parsed: LogoAIOutput): LogoBuilder {
     textScale: 1,
     taglineOffsetX: 0,
     taglineOffsetY: 0,
+    textPosition: 'overlay',
   };
 }
 
@@ -297,8 +308,10 @@ function chatStoreAddMessage(
  * background decorativo). L'immagine include elementi visivi coerenti
  * col settore + composizione logo. 1024x340 px 3:1 per adattarsi al
  * viewBox del logo. NO testo leggibile (il testo SVG resta editabile).
+ *
+ * Exported for unit testing; not part of the public API.
  */
-function buildBackgroundPrompt(
+export function buildBackgroundPrompt(
   ctx: { activity: string; mood: string; target: string },
   primaryColor: string,
   secondaryColor: string,
@@ -313,13 +326,14 @@ function buildBackgroundPrompt(
     real_estate: 'abstract skyline silhouette, structural grid, architectural layers, trustworthy solidity',
     generic: 'abstract geometric shapes, high contrast, subtle texture, modern minimal composition',
   };
-  return `Professional artistic LOGO image (no text, no letters, no readable typography). The image should look like a decorative logo crest/emblem/background for a brand.
+  return `Professional artistic LOGO image. The image should look like a decorative logo crest/emblem/background for a brand.
 Activity/business: ${ctx.activity || 'generic business'}
 Mood: ${ctx.mood || 'minimal'}
 Target audience: ${ctx.target || 'general audience'}
 Brand colors: ${primaryColor}, ${secondaryColor}
 Style direction: ${styleHints[sectorHint]}.
-Visual qualities: decorative emblem suitable as logo background, NOT photographic; high contrast with brand colors; rich texture (not flat); should suggest motion or activity; panoramic 3:1 aspect ratio; 1024x340 px resolution. Make it look like a polished brand visual, not a plain abstract wallpaper.`;
+Visual qualities: decorative emblem suitable as logo background, NOT photographic; high contrast with brand colors; rich texture (not flat); should suggest motion or activity; panoramic 3:1 aspect ratio; 1024x340 px resolution. Make it look like a polished brand visual, not a plain abstract wallpaper.
+Absolute constraints: NO text, NO letters, NO words, NO readable typography, NO numbers, NO QR codes, NO barcodes, NO logos, NO symbols, NO faces, NO people, NO silhouettes, NO real-world objects, NO UI elements, NO recognizable brand icons, NO watermarks. The output must be a pure decorative emblem/background without any legible symbols or photographic content.`;
 }
 
 function inferSectorFromActivity(activity: string): string {

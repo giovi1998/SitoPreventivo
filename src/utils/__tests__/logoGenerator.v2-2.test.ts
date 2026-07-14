@@ -25,6 +25,7 @@ const baseBuilder: LogoBuilder = {
   textScale: 1,
   taglineOffsetX: 0,
   taglineOffsetY: 0,
+  textPosition: 'overlay',
 };
 
 describe('logoGenerator v2.2', () => {
@@ -227,20 +228,36 @@ describe('logoGenerator v2.3 (text readability + position controls)', () => {
       expect(svg).toContain('<line');
     });
 
-    it('suppresses the icon shape when backgroundImage is set', () => {
+    it('hides the icon shape when backgroundImage is set in overlay mode', () => {
       const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC' });
       expect(svg).not.toContain('<circle');
     });
 
-    it('suppresses decorativeElements when backgroundImage is set', () => {
+    it('hides decorativeElements when backgroundImage is set in overlay mode', () => {
       const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC' });
       expect(svg).not.toContain('<line');
     });
 
-    it('still renders backgroundImage + text when icon/decorations are suppressed', () => {
+    it('renders backgroundImage + text (but NOT icon) when all are set in overlay mode', () => {
       const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC' });
       expect(svg).toContain('<image');
       expect(svg).toContain('Acme');
+      expect(svg).not.toContain('<circle');
+    });
+
+    it('renders icon when backgroundImage is set in above mode', () => {
+      const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC', textPosition: 'above' });
+      expect(svg).toContain('<circle');
+    });
+
+    it('renders icon when backgroundImage is set in below mode', () => {
+      const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC', textPosition: 'below' });
+      expect(svg).toContain('<circle');
+    });
+
+    it('renders decorativeElements when backgroundImage is set in above mode', () => {
+      const svg = builderToSvg({ ...withIcon, backgroundImage: 'data:image/png;base64,ABC', textPosition: 'above' });
+      expect(svg).toContain('<line');
     });
   });
 
@@ -310,9 +327,9 @@ describe('logoGenerator v2.3 (text readability + position controls)', () => {
       expect(svg).toContain('fill="#FFFFFF"');
     });
 
-    it('auto-enables a dark pill backdrop when backgroundImage is set and textBackdrop=none (AC-002)', () => {
+    it('respects textBackdrop=none even with backgroundImage (user override wins, AC-002)', () => {
       const svg = builderToSvg(withBg);
-      expect(svg).toContain('fill="rgba(15,23,42,0.55)"');
+      expect(svg).not.toContain('fill="rgba(15,23,42,0.55)"');
     });
 
     it('respects manual textColorMode=dark override (AC-003)', () => {
@@ -326,9 +343,9 @@ describe('logoGenerator v2.3 (text readability + position controls)', () => {
       expect(svg).toMatch(/<rect x="0" y="[\d.]+" width="\d+"[^>]*fill="rgba\(/);
     });
 
-    it('keeps dark pill even when user explicitly keeps textBackdrop=none (auto overrides for AI bg)', () => {
+    it('respects user choice: textBackdrop=none blocks any backdrop (no auto-override)', () => {
       const svg = builderToSvg(withBg);
-      expect(svg).toContain('fill="rgba(15,23,42,0.55)"');
+      expect(svg).not.toContain('fill="rgba(15,23,42,0.55)"');
     });
   });
 });

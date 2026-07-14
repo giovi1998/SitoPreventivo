@@ -12,10 +12,15 @@ vi.mock('../../utils/dataService', () => ({
   },
 }));
 
+const { generateMock, generateBackgroundMock } = vi.hoisted(() => ({
+  generateMock: vi.fn(),
+  generateBackgroundMock: vi.fn(),
+}));
+
 vi.mock('../../hooks/useAILogo', () => ({
   useAILogo: () => ({
-    generate: vi.fn(),
-    generateBackground: vi.fn(),
+    generate: generateMock,
+    generateBackground: generateBackgroundMock,
     isProcessing: false,
     isGeneratingBg: false,
     logs: [],
@@ -33,6 +38,9 @@ const mockSave = dataService.saveDocument as unknown as ReturnType<typeof vi.fn>
 describe('LogoEditor', () => {
   beforeEach(() => {
     mockSave.mockClear();
+    generateMock.mockClear();
+    generateBackgroundMock.mockClear();
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -45,26 +53,26 @@ describe('LogoEditor', () => {
     const tablist = screen.getByRole('tablist');
     expect(tablist).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: /AI Generation/i })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'false');
   });
 
-  it('shows the AI Generation tab as enabled (button not disabled, message inside panel)', () => {
+  it('shows the AI Assist tab as enabled (button not disabled, message inside panel)', () => {
     render(<LogoEditor userEmail="user@test.com" />);
-    const aiTab = screen.getByRole('tab', { name: /AI Generation/i });
+    const aiTab = screen.getByRole('tab', { name: /AI Assist/i });
     expect(aiTab).not.toBeDisabled();
   });
 
-  it('switching to AI tab shows the AI Generation panel (AC-010 v2)', () => {
+  it('switching to AI tab shows the AI Assist panel (AC-010 v2)', () => {
     render(<LogoEditor userEmail="user@test.com" />);
-    fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
-    expect(screen.getByRole('tab', { name: /AI Generation/i })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
+    expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'true');
     // v2: tab now shows the namelix-like chat form
     expect(screen.getByText(/Cosa fa la tua attività/i)).toBeInTheDocument();
   });
 
   it('switching to AI tab with tier=free shows the locked message', () => {
     render(<LogoEditor userEmail="user@test.com" tier="free" />);
-    fireEvent.click(screen.getByRole('tab', { name: /AI Generation/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
     expect(screen.getByText(/Riscatta un codice/i)).toBeInTheDocument();
   });
 
@@ -174,6 +182,172 @@ describe('LogoEditor', () => {
     const saveBtn = screen.getByRole('button', { name: /^Salva$/i });
     fireEvent.click(saveBtn);
     expect(screen.queryByRole('heading', { name: /Salva logo/i })).not.toBeInTheDocument();
+  });
+
+  it('saves logo with backgroundImage intact when SaveDialog is confirmed (AC-012 v2.4 regression)', async () => {
+    const bg = 'data:image/png;base64,BGIMAGE';
+    const initial: Logo = {
+      ...createEmptyLogo(),
+      builder: { ...createEmptyLogo().builder, primaryText: 'Acme', backgroundImage: bg },
+    };
+    render(<LogoEditor userEmail="user@test.com" initialLogo={initial} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Salva$/i, hidden: true }));
+    const input = screen.getByPlaceholderText(/Es\. Logo/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Acme Logo' } });
+    fireEvent.click(screen.getByRole('button', { name: /Conferma salvataggio/i }));
+    await waitFor(() => expect(mockSave).toHaveBeenCalled());
+    const saved = mockSave.mock.calls[0][1] as Logo;
+    expect(saved.documentType).toBe('logo');
+    expect(saved.builder.backgroundImage).toBe(bg);
+    expect(saved.title).toBe('Acme Logo');
+    expect(saved.userEmail).toBe('user@test.com');
+  });
+
+  it('keeps backgroundImage when switching from AI tab back to Builder tab (regression AC-013)', () => {
+    const bg = 'data:image/png;base64,BGIMAGE';
+    const initial: Logo = {
+      ...createEmptyLogo(),
+      builder: { ...createEmptyLogo().builder, primaryText: 'Acme', backgroundImage: bg },
+    };
+    render(<LogoEditor userEmail="user@test.com" initialLogo={initial} />);
+    fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
+    expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: /Builder/i }));
+    expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
+    // Builder should still show the AI background badge and controls
+    expect(screen.getByText(/Background AI attivo/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Rimuovi background AI/i })).toBeInTheDocument();
+  });
+
+  /**
+   * Regressione: il background AI generato per un concept IN PREVIEW
+   * (non ancora applicato al logo) si perdeva cambiando tab AI ->
+   * Builder -> AI, perché viveva solo nello state interno di
+   * `LogoAiPanel`, smontato/rimontato ad ogni cambio tab. Fix: lo
+   * stato è ora sollevato in un `useRef` in `LogoEditor` (vedi
+   * `aiStateRef` / `initialState` / `onStateChange`), che sopravvive
+   * al cambio tab indipendentemente da localStorage/quota.
+   */
+  it('keeps a generated (not-yet-applied) concept preview background across AI -> Builder -> AI tab switches (regression: immagine persa cambio tab)', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ enabled: true, provider: 'gemini' }),
+    } as Response);
+    generateMock.mockResolvedValue({
+      applied: true,
+      concepts: [{
+        primaryText: 'Acme', tagline: '', iconType: 'none', iconGlyph: '', iconShape: 'circle',
+        primaryColor: '#000000', secondaryColor: '#111111', fontFamily: 'Inter', layout: 'horizontal',
+        icons: [], backgroundImage: null, backgroundColor: null, gradientFill: false, decorativeElements: [],
+        imagePrompt: 'a background', textBackdrop: 'none', textColorMode: 'auto',
+        textOffsetX: 0, textOffsetY: 0, textScale: 1,
+      }],
+    });
+    generateBackgroundMock.mockResolvedValue({
+      applied: true,
+      logo: { builder: { backgroundImage: 'data:image/png;base64,LIFTED_STATE' } },
+    });
+    try {
+      render(<LogoEditor userEmail="user@test.com" />);
+      fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
+      await waitFor(() => expect(screen.getByText(/Cosa fa la tua attività/i)).toBeInTheDocument());
+      fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: 'Attività di prova lunga' } });
+      fireEvent.change(screen.getByPlaceholderText(/giovani 25-35/i), { target: { value: 'Target di prova' } });
+      fireEvent.click(screen.getByText('Genera 3 concept'));
+      await waitFor(() => expect(generateBackgroundMock).toHaveBeenCalled());
+      await waitFor(() => {
+        const html = document.querySelector('.logo-ai-concept-preview-inner')?.innerHTML ?? '';
+        expect(html).toContain('LIFTED_STATE');
+      });
+      // Cambio tab: AI -> Builder -> AI. LogoAiPanel viene smontato e
+      // rimontato; senza il fix lo stato interno (concepts/bgImages) si
+      // azzera e il preview torna vuoto o "nudo" (senza background).
+      fireEvent.click(screen.getByRole('tab', { name: /Builder/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
+      const htmlAfter = document.querySelector('.logo-ai-concept-preview-inner')?.innerHTML ?? '';
+      expect(htmlAfter).toContain('LIFTED_STATE');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  /**
+   * Regressione: `localStorage.setItem` non protetto da try/catch
+   * lanciava un `QuotaExceededError` non catturato quando il payload
+   * (immagini AI base64) superava la quota disponibile. Il punto
+   * critico è la cleanup dell'`useEffect` di flush-on-unmount: gira
+   * SINCRONAMENTE dentro il commit di React quando l'utente cambia
+   * tab (smontaggio di `LogoAiPanel`), quindi un errore lì propaga
+   * fino all'ErrorBoundary più vicino e fa crashare l'intera app
+   * (schermata "Qualcosa è andato storto"). Il fix deve degradare
+   * silenziosamente (log di warning) senza propagare l'errore, quindi
+   * il cambio tab (che scatena la cleanup) non deve mai lanciare.
+   */
+  it('does not throw when switching tabs while localStorage.setItem throws QuotaExceededError (regression)', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ enabled: true, provider: 'gemini' }),
+    } as Response);
+    generateMock.mockResolvedValue({
+      applied: true,
+      concepts: [{
+        primaryText: 'Acme', tagline: '', iconType: 'none', iconGlyph: '', iconShape: 'circle',
+        primaryColor: '#000000', secondaryColor: '#111111', fontFamily: 'Inter', layout: 'horizontal',
+        icons: [], backgroundImage: null, backgroundColor: null, gradientFill: false, decorativeElements: [],
+        imagePrompt: 'a background', textBackdrop: 'none', textColorMode: 'auto',
+        textOffsetX: 0, textOffsetY: 0, textScale: 1,
+      }],
+    });
+    generateBackgroundMock.mockResolvedValue({
+      applied: true,
+      logo: { builder: { backgroundImage: 'data:image/png;base64,HUGE_IMAGE' } },
+    });
+    const quotaError = new DOMException('Setting the value exceeded the quota', 'QuotaExceededError');
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw quotaError;
+    });
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(<LogoEditor userEmail="user@test.com" />);
+      fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
+      await waitFor(() => expect(screen.getByText(/Cosa fa la tua attività/i)).toBeInTheDocument());
+      fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: 'Attività di prova lunga' } });
+      fireEvent.change(screen.getByPlaceholderText(/giovani 25-35/i), { target: { value: 'Target di prova' } });
+      fireEvent.click(screen.getByText('Genera 3 concept'));
+      await waitFor(() => expect(generateBackgroundMock).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByText(/AI bg ✓/i)).toBeInTheDocument());
+      // Cambio tab: smonta LogoAiPanel, scattando SINCRONAMENTE la
+      // cleanup di flush-on-unmount che chiama localStorage.setItem
+      // (mockato per lanciare QuotaExceededError). Senza il fix questo
+      // fireEvent.click lancerebbe l'eccezione fuori dal render React
+      // e propagherebbe fino all'ErrorBoundary più vicino.
+      expect(() => {
+        fireEvent.click(screen.getByRole('tab', { name: /Builder/i }));
+      }).not.toThrow();
+      // L'app deve essere ancora viva, sul tab Builder, NON sulla
+      // schermata di errore "Qualcosa è andato storto".
+      expect(screen.queryByText(/Qualcosa è andato storto/i)).not.toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
+    } finally {
+      setItemSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('passes the structured error through when saveDocument returns an error (regression AC-014)', async () => {
+    mockSave.mockResolvedValueOnce({ success: false, error: 'Spazio locale esaurito (immagine troppo grande)' });
+    const initial: Logo = {
+      ...createEmptyLogo(),
+      builder: { ...createEmptyLogo().builder, primaryText: 'Acme', backgroundImage: 'data:image/png;base64,HUGE' },
+    };
+    render(<LogoEditor userEmail="user@test.com" initialLogo={initial} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Salva$/i, hidden: true }));
+    fireEvent.click(screen.getByRole('button', { name: /Conferma salvataggio/i }));
+    await waitFor(() => expect(mockSave).toHaveBeenCalled());
+    const result = await mockSave.mock.results[mockSave.mock.results.length - 1].value;
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Spazio locale esaurito/i);
   });
 
   it('sector template click loads that template into the editor', () => {

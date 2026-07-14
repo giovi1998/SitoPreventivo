@@ -4,6 +4,7 @@ import { deriveGridFromLayout } from '../../utils/documentSchemas';
 import {
   allElementOptionsForSide,
   getAvailableGridElements,
+  gridForCollisions,
   type GridSide,
 } from '../../utils/card/gridElements';
 import {
@@ -30,6 +31,7 @@ export interface CardGridControlsProps {
   /** Restituisce informazioni sulla mossa applicata (per toast feedback in G). */
   onAfterMove?: (info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
   onAfterResize?: (info: { element: string; dw: number; dh: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
+  onAfterAlign?: (info: { element: string; alignH: 'left' | 'center' | 'right'; alignV: 'top' | 'center' | 'bottom' }) => void;
   /**
    * Modalità presentazione:
    *  - 'inline' (default desktop): mostra frecce + ridimensiona inline
@@ -52,6 +54,7 @@ export function CardGridControls({
   onSelect,
   onAfterMove,
   onAfterResize,
+  onAfterAlign,
   mode = 'inline',
 }: CardGridControlsProps) {
   const activeGrid: CardGrid = useMemo(() => {
@@ -63,6 +66,11 @@ export function CardGridControls({
 
   const availableElements = useMemo(() => getAvailableGridElements(side, card), [side, card]);
   const selectedEl = selected ? activeGrid.elements[selected] : undefined;
+  // Collisioni solo vs elementi con contenuto (services vuoto non blocca socials).
+  const collisionGrid = useMemo(
+    () => gridForCollisions(activeGrid, card, side, selected || undefined),
+    [activeGrid, card, side, selected],
+  );
 
   // Fix: il preset selezionato deve restare visibile nel dropdown (prima
   // si resettava subito a ", seleziona preset:"). Stato locale persistente,
@@ -71,19 +79,19 @@ export function CardGridControls({
   useEffect(() => { setPresetChoice(''); }, [side]);
 
   const canMoveLeft  = !!selectedEl && selectedEl.x > 0
-    && !wouldCollideOnMove(activeGrid, selected, -1, 0);
+    && !wouldCollideOnMove(collisionGrid, selected, -1, 0);
   const canMoveUp    = !!selectedEl && selectedEl.y > 0
-    && !wouldCollideOnMove(activeGrid, selected, 0, -1);
+    && !wouldCollideOnMove(collisionGrid, selected, 0, -1);
   const canMoveRight = !!selectedEl && selectedEl.x + selectedEl.w < activeGrid.cols
-    && !wouldCollideOnMove(activeGrid, selected, 1, 0);
+    && !wouldCollideOnMove(collisionGrid, selected, 1, 0);
   const canMoveDown  = !!selectedEl && selectedEl.y + selectedEl.h < activeGrid.rows
-    && !wouldCollideOnMove(activeGrid, selected, 0, 1);
+    && !wouldCollideOnMove(collisionGrid, selected, 0, 1);
   const canShrinkW = !!selectedEl && selectedEl.w > 1;
   const canGrowW   = !!selectedEl && selectedEl.x + selectedEl.w < activeGrid.cols
-    && !wouldCollideOnResize(activeGrid, selected, 1, 0);
+    && !wouldCollideOnResize(collisionGrid, selected, 1, 0);
   const canShrinkH = !!selectedEl && selectedEl.h > 1;
   const canGrowH   = !!selectedEl && selectedEl.y + selectedEl.h < activeGrid.rows
-    && !wouldCollideOnResize(activeGrid, selected, 0, 1);
+    && !wouldCollideOnResize(collisionGrid, selected, 0, 1);
 
   const isSideDisabled = !gridEnabled;
   const disabledTitle = gridEnabled ? '' : 'Griglia OFF, attivala per spostare elementi';
@@ -97,7 +105,7 @@ export function CardGridControls({
       onAfterMove?.({ element: selected, dx, dy, applied: false, reason: 'border' });
       return;
     }
-    if (wouldCollideOnMove(activeGrid, selected, dx, dy)) {
+    if (wouldCollideOnMove(collisionGrid, selected, dx, dy)) {
       onAfterMove?.({ element: selected, dx, dy, applied: false, reason: 'collision' });
       return;
     }
@@ -116,7 +124,7 @@ export function CardGridControls({
       onAfterResize?.({ element: selected, dw, dh, applied: false, reason: 'border' });
       return;
     }
-    if (wouldCollideOnResize(activeGrid, selected, dw, dh)) {
+    if (wouldCollideOnResize(collisionGrid, selected, dw, dh)) {
       onAfterResize?.({ element: selected, dw, dh, applied: false, reason: 'collision' });
       return;
     }
@@ -131,20 +139,22 @@ export function CardGridControls({
     onChangeGrid({ ...activeGrid, cols, rows });
   };
 
-  const handleAlignH = (alignH: 'left' | 'center' | 'right') => {
+  // Atomic: un solo onChangeGrid. Due chiamate separate (alignH poi alignV)
+  // si basavano sullo stesso selectedEl e la seconda sovrascriveva la prima
+  // → es. click "Centro" applicava solo alignV e il nome restava a destra.
+  const handleAlign = (
+    alignH: 'left' | 'center' | 'right',
+    alignV: 'top' | 'center' | 'bottom',
+  ) => {
     if (!selected || !selectedEl) return;
     onChangeGrid({
       ...activeGrid,
-      elements: { ...activeGrid.elements, [selected]: { ...selectedEl, alignH } },
+      elements: {
+        ...activeGrid.elements,
+        [selected]: { ...selectedEl, alignH, alignV },
+      },
     });
-  };
-
-  const handleAlignV = (alignV: 'top' | 'center' | 'bottom') => {
-    if (!selected || !selectedEl) return;
-    onChangeGrid({
-      ...activeGrid,
-      elements: { ...activeGrid.elements, [selected]: { ...selectedEl, alignV } },
-    });
+    onAfterAlign?.({ element: selected, alignH, alignV });
   };
 
   const elementOptions = allElementOptionsForSide(side);
@@ -206,8 +216,18 @@ export function CardGridControls({
               'photo-circle': { cols: 4, rows: 4, elements: { photo: { x: 1, y: 0, w: 2, h: 2 }, name: { x: 0, y: 2, w: 4, h: 1 }, title: { x: 0, y: 3, w: 3, h: 1 }, company: { x: 3, y: 3, w: 1, h: 1 }, logo: { x: 3, y: 3, w: 1, h: 1 } } },
               compact: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 1, h: 2 }, logo: { x: 0, y: 2, w: 1, h: 2 }, name: { x: 1, y: 0, w: 3, h: 1 }, title: { x: 1, y: 1, w: 3, h: 1 }, company: { x: 1, y: 2, w: 3, h: 1 } } },
             };
+            // Must match gridPresetBackDefault() (contacts + services + socials + qr).
             const grid = side === 'back'
-              ? { cols: 4, rows: 4, elements: { contacts: { x: 0, y: 0, w: 2, h: 3 }, socials: { x: 0, y: 3, w: 2, h: 1 }, qr: { x: 2, y: 0, w: 2, h: 4 } } }
+              ? {
+                cols: 4,
+                rows: 4,
+                elements: {
+                  contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left' as const, alignV: 'top' as const },
+                  services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left' as const, alignV: 'top' as const },
+                  socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left' as const, alignV: 'top' as const },
+                  qr: { x: 2, y: 0, w: 2, h: 4, alignH: 'center' as const, alignV: 'center' as const },
+                },
+              }
               : FRONT_PRESETS[v as BusinessCardLayout] ?? FRONT_PRESETS.left;
             onChangeGrid(grid);
           }}
@@ -322,8 +342,10 @@ export function CardGridControls({
                   aria-label={pos.title}
                   title={pos.title}
                   onClick={() => {
-                    handleAlignH(pos.alignH as 'left' | 'center' | 'right');
-                    handleAlignV(pos.alignV as 'top' | 'center' | 'bottom');
+                    handleAlign(
+                      pos.alignH as 'left' | 'center' | 'right',
+                      pos.alignV as 'top' | 'center' | 'bottom',
+                    );
                   }}
                   data-testid={`grid-align-${pos.alignH}-${pos.alignV}`}
                 >
@@ -340,68 +362,76 @@ export function CardGridControls({
             <button
               type="button"
               onClick={() => handleMove(-1, 0)}
-              disabled={!gridEnabled || !canMoveLeft}
+              disabled={!gridEnabled}
               aria-label="Sposta a sinistra"
               title={!canMoveLeft ? (selectedEl?.x === 0 ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta a sinistra'}
               data-testid="grid-move-left"
+              className={!canMoveLeft ? 'blocked' : ''}
             ><span aria-hidden="true">←</span></button>
             <button
               type="button"
               onClick={() => handleMove(0, -1)}
-              disabled={!gridEnabled || !canMoveUp}
+              disabled={!gridEnabled}
               aria-label="Sposta su"
               title={!canMoveUp ? (selectedEl?.y === 0 ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta su'}
               data-testid="grid-move-up"
+              className={!canMoveUp ? 'blocked' : ''}
             ><span aria-hidden="true">↑</span></button>
             <button
               type="button"
               onClick={() => handleMove(0, 1)}
-              disabled={!gridEnabled || !canMoveDown}
+              disabled={!gridEnabled}
               aria-label="Sposta giù"
               title={!canMoveDown ? ((selectedEl?.y ?? 0) + (selectedEl?.h ?? 0) >= activeGrid.rows ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta giù'}
               data-testid="grid-move-down"
+              className={!canMoveDown ? 'blocked' : ''}
             ><span aria-hidden="true">↓</span></button>
             <button
               type="button"
               onClick={() => handleMove(1, 0)}
-              disabled={!gridEnabled || !canMoveRight}
+              disabled={!gridEnabled}
               aria-label="Sposta a destra"
               title={!canMoveRight ? ((selectedEl?.x ?? 0) + (selectedEl?.w ?? 0) >= activeGrid.cols ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta a destra'}
               data-testid="grid-move-right"
+              className={!canMoveRight ? 'blocked' : ''}
             ><span aria-hidden="true">→</span></button>
           </div>
           <div className="card-grid-resize" role="group" aria-label="Ridimensiona elemento">
             <button
               type="button"
               onClick={() => handleResize(-1, 0)}
-              disabled={!gridEnabled || !canShrinkW}
+              disabled={!gridEnabled}
               aria-label="Riduci larghezza"
               title={!canShrinkW ? 'Larghezza minima 1' : disabledTitle || 'Riduci larghezza'}
               data-testid="grid-resize-w-minus"
+              className={!canShrinkW ? 'blocked' : ''}
             ><span aria-hidden="true">−↔</span></button>
             <button
               type="button"
               onClick={() => handleResize(1, 0)}
-              disabled={!gridEnabled || !canGrowW}
+              disabled={!gridEnabled}
               aria-label="Aumenta larghezza"
               title={!canGrowW ? (selectedEl && selectedEl.x + selectedEl.w >= activeGrid.cols ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Aumenta larghezza'}
               data-testid="grid-resize-w-plus"
+              className={!canGrowW ? 'blocked' : ''}
             ><span aria-hidden="true">+↔</span></button>
             <button
               type="button"
               onClick={() => handleResize(0, -1)}
-              disabled={!gridEnabled || !canShrinkH}
+              disabled={!gridEnabled}
               aria-label="Riduci altezza"
               title={!canShrinkH ? 'Altezza minima 1' : disabledTitle || 'Riduci altezza'}
               data-testid="grid-resize-h-minus"
+              className={!canShrinkH ? 'blocked' : ''}
             ><span aria-hidden="true">−↕</span></button>
             <button
               type="button"
               onClick={() => handleResize(0, 1)}
-              disabled={!gridEnabled || !canGrowH}
+              disabled={!gridEnabled}
               aria-label="Aumenta altezza"
               title={!canGrowH ? (selectedEl && selectedEl.y + selectedEl.h >= activeGrid.rows ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Aumenta altezza'}
               data-testid="grid-resize-h-plus"
+              className={!canGrowH ? 'blocked' : ''}
             ><span aria-hidden="true">+↕</span></button>
           </div>
         </>

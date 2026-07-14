@@ -1,17 +1,6 @@
 import React from 'react';
 import type { Flyer } from '../../utils/documentSchemas';
-
-const FLYER_FONTS = [
-  { value: 'Inter, sans-serif', label: 'Inter (sans-serif, moderno)' },
-  { value: 'Roboto, sans-serif', label: 'Roboto (sans-serif, Android)' },
-  { value: 'Open Sans, sans-serif', label: 'Open Sans (sans-serif, leggibile)' },
-  { value: 'Lato, sans-serif', label: 'Lato (sans-serif, elegante)' },
-  { value: 'Montserrat, sans-serif', label: 'Montserrat (sans-serif, geometrico)' },
-  { value: 'Poppins, sans-serif', label: 'Poppins (sans-serif, arrotondato)' },
-  { value: 'Georgia, serif', label: 'Georgia (serif, classico)' },
-  { value: 'Times New Roman, serif', label: 'Times New Roman (serif, tradizionale)' },
-  { value: 'Courier New, monospace', label: 'Courier New (monospace)' },
-];
+import { AiFontPicker } from '../ai-ui';
 
 interface FlyerStyleFieldsProps {
   flyer: Flyer;
@@ -20,8 +9,7 @@ interface FlyerStyleFieldsProps {
   onUpdateStyle: <K extends keyof Flyer['style']>(key: K, value: Flyer['style'][K]) => void;
 }
 
-export function FlyerStyleFields({ flyer, showCustomFont, setShowCustomFont, onUpdateStyle }: FlyerStyleFieldsProps): React.ReactElement {
-  const isSelected = FLYER_FONTS.some((f) => f.value === flyer.style.fontFamily);
+export function FlyerStyleFields({ flyer, onUpdateStyle }: FlyerStyleFieldsProps): React.ReactElement {
   const currentScale = flyer.style.fontScale ?? 1;
   return (
     <div className="stack flyer-style-fields">
@@ -41,17 +29,12 @@ export function FlyerStyleFields({ flyer, showCustomFont, setShowCustomFont, onU
         <label>Testo<input type="color" value={flyer.style.textColor} onChange={(e) => onUpdateStyle('textColor', e.target.value)} /></label>
         <label>Accento<input type="color" value={flyer.style.accentColor} onChange={(e) => onUpdateStyle('accentColor', e.target.value)} /></label>
       </div>
-      <label className="flyer-font-label">
-        <span className="flyer-field-label">Font</span>
-        <select
-          value={isSelected ? flyer.style.fontFamily : '__custom__'}
-          onChange={(e) => { const v = e.target.value; if (v === '__custom__') { setShowCustomFont(true); } else { setShowCustomFont(false); onUpdateStyle('fontFamily', v); } }}
-        >
-          {FLYER_FONTS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-          <option value="__custom__">Personalizzato…</option>
-        </select>
-      </label>
-      {showCustomFont && <label className="flyer-font-custom">Nome font<input value={flyer.style.fontFamily} onChange={(e) => onUpdateStyle('fontFamily', e.target.value)} placeholder="Es. Playfair Display, sans-serif" /></label>}
+      <AiFontPicker
+        label="Font"
+        value={flyer.style.fontFamily.split(',')[0]?.trim() || flyer.style.fontFamily}
+        onChange={(font) => onUpdateStyle('fontFamily', font)}
+        aria-label="Font volantino"
+      />
       <div className="flyer-scale-row">
         <label className="flyer-scale-label" htmlFor="flyer-font-scale">Dimensione font</label>
         <div className="flyer-scale-control">

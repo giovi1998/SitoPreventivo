@@ -12,7 +12,127 @@ function lsGet(key) {
 }
 
 function lsSet(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+  try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) {
+    return { error: e?.name === 'QuotaExceededError' ? 'Spazio locale esaurito (immagine troppo grande)' : 'Errore scrittura locale' };
+  }
+}
+
+// Metadata columns stored beside jsonb `data` on the server.
+const DOC_META_KEYS = new Set([
+  'id', 'documentType', 'title', 'userEmail', 'createdAt', 'updatedAt',
+  'isTemplate', 'data',
+]);
+
+/**
+ * Client editors send a FLAT document (builder/front/content at top level).
+ * The API stores payload in jsonb `data`. Convert flat → API envelope so
+ * production never persists `data: null`.
+ */
+function toApiDocument(document) {
+  if (!document || typeof document !== 'object') return document;
+  const {
+    id,
+    documentType,
+    title = '',
+    createdAt,
+    updatedAt,
+    data,
+    style,
+    ...rest
+  } = document;
+
+  if (documentType === 'qrCode') {
+    // QR keeps payload in `data` and style as sibling (API schema).
+    return {
+      id,
+      documentType,
+      title,
+      data: data ?? { type: 'url', payload: '' },
+      style,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  // Strip meta from rest; whatever remains is domain payload.
+  const domain = { ...rest };
+  delete domain.userEmail;
+  delete domain.isTemplate;
+
+  // Already wrapped (tests / older clients): only `data`, no flat fields.
+  if (data != null && Object.keys(domain).length === 0) {
+    return { id, documentType, title, data, createdAt, updatedAt };
+  }
+
+  // Flat client shape (logo/card/flyer): nest domain under `data`.
+  // If both exist, prefer flat fields and merge optional `data`.
+  const payload = data && typeof data === 'object' && !Array.isArray(data)
+    ? { ...data, ...domain }
+    : domain;
+
+  return { id, documentType, title, data: payload, createdAt, updatedAt };
+}
+
+/**
+ * Rehydrate a DB row (or already-flat local doc) into the flat shape
+ * editors and CollectionView expect.
+ */
+function hydrateDocument(row) {
+  if (!row || typeof row !== 'object') return row;
+  const {
+    id,
+    userEmail,
+    documentType,
+    title,
+    data,
+    createdAt,
+    updatedAt,
+    ...rest
+  } = row;
+
+  // Already flat (localStorage path): domain fields live on the row.
+  const hasFlatDomain = Object.keys(rest).some((k) => !DOC_META_KEYS.has(k));
+  if (hasFlatDomain && (rest.builder || rest.front || rest.content || rest.data?.payload !== undefined || rest.style)) {
+    return {
+      id,
+      userEmail,
+      documentType,
+      title: title ?? '',
+      ...rest,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  if (documentType === 'qrCode') {
+    // Stored as { type, payload } or { type, payload, style } or nested data.
+    const payload = data && typeof data === 'object' ? data : {};
+    const qrData = payload.type != null || payload.payload != null
+      ? { type: payload.type ?? 'url', payload: payload.payload ?? '' }
+      : (payload.data ?? { type: 'url', payload: '' });
+    return {
+      documentType: 'qrCode',
+      id,
+      userEmail,
+      title: title ?? '',
+      data: qrData,
+      style: payload.style ?? rest.style,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  // logo / businessCard / flyer / quote: spread jsonb data onto top level
+  const body = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+  return {
+    documentType,
+    id,
+    userEmail,
+    title: title ?? '',
+    ...body,
+    createdAt: createdAt ?? body.createdAt,
+    updatedAt: updatedAt ?? body.updatedAt,
+  };
 }
 
 // ─── API CALL ─────────────────────────────────────────
@@ -128,7 +248,8 @@ const dataService = {
   async getQuotes(email, page = 1, limit = 50) {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_quotes') || [];
-      const filtered = all.filter(q => q.owner === email);
+      // Match by owner OR userEmail (owner used to be issuer display name).
+      const filtered = all.filter(q => q.owner === email || q.userEmail === email);
       const start = (page - 1) * limit;
       return { quotes: filtered.slice(start, start + limit), total: filtered.length, page, limit };
     }
@@ -139,20 +260,23 @@ const dataService = {
 
   // ─── SAVE QUOTE ─────────────────────────────────
   async saveQuote(email, quote) {
+    // Always stamp owner/userEmail as the account email so local
+    // getQuotes filter works (toLegacyFormat used issuer.name as owner).
+    const owned = { ...quote, owner: email, userEmail: email };
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_quotes') || [];
-      const existing = all.findIndex(q => q.id === quote.id);
+      const existing = all.findIndex(q => q.id === owned.id);
       if (existing >= 0) {
-        all[existing] = { ...all[existing], ...quote };
+        all[existing] = { ...all[existing], ...owned };
       } else {
-        all.push(quote);
+        all.push(owned);
       }
       lsSet('precisionQuote_quotes', all);
-      return { success: true, ...quote };
+      return { success: true, ...owned };
     }
-    const result = await api('POST', '/quotes', { email, quote });
+    const result = await api('POST', '/quotes', { email, quote: owned });
     if (result.error) return { success: false, error: result.error };
-    return { success: true, ...quote };
+    return { success: true, ...owned };
   },
 
   // ─── DELETE QUOTE ───────────────────────────────
@@ -172,20 +296,29 @@ const dataService = {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_documents:v1') || [];
       const ownerEmail = email || document.userEmail;
-      const isNew = !all.some(d => d.id === document.id);
+      // Always stamp userEmail so Collection filter works even if caller forgot.
+      const toStore = { ...document, userEmail: ownerEmail };
+      const isNew = !all.some(d => d.id === toStore.id);
       const owned = all.filter(d => d.userEmail === ownerEmail);
       const others = all.filter(d => d.userEmail !== ownerEmail);
-      const updated = [document, ...owned.filter(d => d.id !== document.id), ...others];
-      lsSet('precisionQuote_documents:v1', updated);
+      const updated = [toStore, ...owned.filter(d => d.id !== toStore.id), ...others];
+      const write = lsSet('precisionQuote_documents:v1', updated);
+      if (write && write.error) {
+        return { success: false, error: write.error };
+      }
       if (isNew) {
         // fire-and-forget; failure here is non-fatal (best-effort counting)
         dataService.incrementDocumentCount(ownerEmail).catch(() => {});
       }
-      return { success: true, data: document };
+      return { success: true, data: toStore };
     }
-    const result = await api('POST', '/documents', { email, document });
+    // Production: wrap flat editor payload → { id, documentType, title, data }
+    // so API never stores null for logo/card/flyer content.
+    const apiDoc = toApiDocument({ ...document, userEmail: email || document.userEmail });
+    const result = await api('POST', '/documents', { email, document: apiDoc });
     if (result.error) return { success: false, error: result.error };
-    return { success: true, data: result.data || result };
+    const row = result.data || result;
+    return { success: true, data: hydrateDocument(row) };
   },
 
   async getDocuments(email, documentType) {
@@ -201,7 +334,9 @@ const dataService = {
     if (documentType) qs.set('type', documentType);
     const result = await api('GET', `/documents?${qs.toString()}`);
     if (result.error) return { documents: [] };
-    return { documents: Array.isArray(result) ? result : (result.data || []) };
+    const rows = Array.isArray(result) ? result : (result.data || []);
+    // Rehydrate DB rows (data jsonb) → flat editor shape.
+    return { documents: rows.map(hydrateDocument) };
   },
 
   // ─── MIGRATION (phase 6) ───────────────────────

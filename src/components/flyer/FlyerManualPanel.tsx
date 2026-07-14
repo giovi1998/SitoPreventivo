@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Flyer, FlyerSize, FlyerOrientation, FlyerLayout, FlyerContent } from '../../utils/documentSchemas';
+import type { Flyer, FlyerSize, FlyerOrientation, FlyerLayout, FlyerContent, FlyerTone } from '../../utils/documentSchemas';
 import {
   FLYER_SIZES, FLYER_LAYOUTS, FLYER_SECTORS, FLYER_HEADLINE_MAX, FLYER_SUBHEADLINE_MAX,
   FLYER_BODY_MAX, FLYER_CTA_LABEL_MAX, FLYER_HERO_MAX_RAW_BYTES,
@@ -8,6 +8,7 @@ import type { FlyerCopyBudget } from '../../utils/flyer/budgets';
 import { isHttpUrl } from '../../utils/qrGenerator';
 import { getSizeLabel, getLayoutLabel, getSectorLabel } from '../../utils/flyer';
 import FlyerStyleFields from './FlyerStyleFields';
+import { AiSelect, AiPromptTextarea, AiGenerateButton } from '../ai-ui';
 
 interface SectionProps {
   title: string;
@@ -46,6 +47,7 @@ interface FlyerManualPanelProps {
   setShowCustomFont: (v: boolean) => void;
   limitReached: boolean;
   exporting: 'pdf' | 'png' | null;
+  tier?: 'free' | 'unlocked';
   onCollapse: () => void;
   onTitleChange: (title: string) => void;
   onUpdateContent: (patch: Partial<FlyerContent>) => void;
@@ -58,6 +60,17 @@ interface FlyerManualPanelProps {
   onCloseTemplateBanner: () => void;
   onHeroUpload: (file: File) => void;
   onRemoveHero: () => void;
+  onGenerateHero: () => void;
+  onResetHero: () => void;
+  isGeneratingHero?: boolean;
+  heroPrompt: string;
+  setHeroPrompt: (v: string) => void;
+  heroSector: typeof FLYER_SECTORS[number];
+  setHeroSector: (v: typeof FLYER_SECTORS[number]) => void;
+  heroTone: FlyerTone;
+  setHeroTone: (v: FlyerTone) => void;
+  showHeroPromptEditor: boolean;
+  setShowHeroPromptEditor: (v: boolean) => void;
   onReset: () => void;
   onSave: () => void;
   onExportPdf: () => void;
@@ -69,10 +82,12 @@ interface FlyerManualPanelProps {
 
 export function FlyerManualPanel({
   flyer, showTemplateBanner, activeSector, heroError, showCustomFont, setShowCustomFont,
-  limitReached, exporting, onCollapse, onTitleChange, onUpdateContent, onUpdateStyle,
+  limitReached, exporting, tier = 'unlocked', onCollapse, onTitleChange, onUpdateContent, onUpdateStyle,
   onUpdateSize, onUpdateOrientation, onUpdateLayout, onApplySector, onApplySectorLayout,
-  onCloseTemplateBanner, onHeroUpload, onRemoveHero, onReset, onSave, onExportPdf, onExportPng,
-  flyerHasContent, budgetWarning, copyBudget,
+  onCloseTemplateBanner, onHeroUpload, onRemoveHero, onGenerateHero, onResetHero, isGeneratingHero,
+  heroPrompt, setHeroPrompt, heroSector, setHeroSector, heroTone, setHeroTone,
+  showHeroPromptEditor, setShowHeroPromptEditor,
+  onReset, onSave, onExportPdf, onExportPng, flyerHasContent, budgetWarning, copyBudget,
 }: FlyerManualPanelProps): React.ReactElement {
   const ctaUrlValid = !flyer.content.cta.url || isHttpUrl(flyer.content.cta.url);
   const headlineMax = Math.min(FLYER_HEADLINE_MAX, copyBudget?.headlineMaxChars ?? FLYER_HEADLINE_MAX);
@@ -173,6 +188,67 @@ export function FlyerManualPanel({
       <Section title="Immagine hero" defaultOpen={false} badge={flyer.content.heroImage ? '1' : undefined}>
         <div className="stack">
           <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { const f = e.target.files?.[0]; if (f) onHeroUpload(f); }} />
+          <p style={{ fontSize: '.78rem', color: 'var(--muted)', margin: 0 }}>
+            Carica un&apos;immagine manuale, oppure genera l&apos;hero da AI Assist.
+          </p>
+          {flyer.style.layout !== 'centered' && (
+            <div className="flyer-hero-prompt-editor">
+              <div className="mini-row">
+                <AiSelect
+                  label="Settore hero AI"
+                  value={heroSector}
+                  onChange={(e) => setHeroSector(e.target.value as typeof FLYER_SECTORS[number])}
+                  options={FLYER_SECTORS.map((s) => ({ value: s, label: getSectorLabel(s) }))}
+                />
+                <AiSelect
+                  label="Tono hero AI"
+                  value={heroTone}
+                  onChange={(e) => setHeroTone(e.target.value as FlyerTone)}
+                  options={[
+                    { value: 'formale', label: 'Formale' },
+                    { value: 'giovanile', label: 'Giovanile' },
+                    { value: 'tecnico', label: 'Tecnico' },
+                  ]}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowHeroPromptEditor(!showHeroPromptEditor)}
+                disabled={isGeneratingHero}
+              >
+                {showHeroPromptEditor ? 'Nascondi prompt' : 'Modifica prompt'}
+              </button>
+              {showHeroPromptEditor && (
+                <AiPromptTextarea
+                  label="Prompt hero AI"
+                  value={heroPrompt}
+                  onChange={(e) => setHeroPrompt(e.target.value.slice(0, 1500))}
+                  rows={3}
+                  maxLength={1500}
+                  placeholder="Vuoto = prompt automatico da settore/tono"
+                />
+              )}
+              {tier === 'free' ? (
+                <button type="button" className="ai-generate-btn" disabled>
+                  Genera hero AI (Pro)
+                </button>
+              ) : (
+                <AiGenerateButton
+                  isProcessing={isGeneratingHero ?? false}
+                  loadingText="Generazione…"
+                  onClick={onGenerateHero}
+                >
+                  ✨ Genera hero AI
+                </AiGenerateButton>
+              )}
+              {flyer.content.heroImage?.startsWith('data:') && onResetHero && (
+                <button type="button" className="btn-remove" onClick={onResetHero}>
+                  Ripristina immagine default
+                </button>
+              )}
+            </div>
+          )}
           {flyer.content.heroImage && <button type="button" className="btn-remove" onClick={onRemoveHero}>Rimuovi immagine</button>}
           {heroError && <p style={{ color: 'var(--red)', fontSize: '.78rem' }} role="alert">{heroError}</p>}
         </div>

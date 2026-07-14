@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
-import type { Flyer, FlyerTone } from '../utils/documentSchemas';
+import type { Flyer, FlyerSector, FlyerTone } from '../utils/documentSchemas';
 import type { AIStreamChunk, AILogEntry } from '../ai/types';
 import { FlyerAIOrchestrator, type FlyerRefineAction } from '../ai/flyerOrchestrator';
+import { buildFlyerHeroPayload, getDefaultHeroSector, getDefaultHeroTone, renderFlyerScreenshot } from '../utils/flyer/heroImage';
 import {
   StreamBuffer,
   createEntry,
@@ -11,7 +12,9 @@ import {
   createInfoEntry,
 } from '../ai/eventLog';
 import dataService from '../utils/dataService';
+import { isLocalhost } from '../utils/env';
 import { logger } from '../utils/logger';
+import { mapAiError } from '../utils/ai/mapAiError';
 
 const MAX_LOG_ENTRIES = 40;
 
@@ -27,6 +30,10 @@ interface UseAIFlyerReturn {
     action: FlyerRefineAction,
     options?: { modelId?: string }
   ) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean }>;
+  generateHero: (
+    flyer: Flyer,
+    options?: { sector?: FlyerSector; tone?: FlyerTone; promptOverride?: string }
+  ) => Promise<{ flyer: Flyer; applied: boolean; error?: string }>;
   reset: () => void;
   logs: AILogEntry[];
   isProcessing: boolean;
@@ -80,7 +87,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       streamEntryIdRef.current = null;
       lastCharCountRef.current = 0;
 
-      if (userEmail && userEmail !== 'admin@gmail.com') {
+      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
         try {
           const profile = await dataService.getUserProfile(userEmail);
           if (profile.error) throw new Error(profile.error);
@@ -165,19 +172,14 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         return result;
       } catch (err: any) {
         const msg = err?.message || 'Errore AI';
-        const hint =
-          msg.includes('402') ? 'Credito DeepSeek esaurito.'
-          : msg.includes('401') ? 'Chiave API DeepSeek non valida.'
-          : msg.includes('429') ? 'Troppe richieste. Attendi e riprova.'
-          : msg.includes('fetch') || msg.includes('NetworkError') ? 'Connessione fallita.'
-          : null;
+        const hint = mapAiError(err);
         const streamId = streamEntryIdRef.current;
         if (streamId) {
           updateLog(streamId, { status: 'error', msg: '❌ Generazione fallita', detail: msg });
         }
         logger.error('Flyer AI failed', { route: 'useAIFlyer', err: msg });
-        addLog(createErrorEntry(hint || msg));
-        throw new Error(hint || msg);
+        addLog(createErrorEntry(hint));
+        throw new Error(hint);
       } finally {
         setIsProcessing(false);
         streamEntryIdRef.current = null;
@@ -226,6 +228,48 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
     [getOrchestrator, runWith]
   );
 
+  const generateHero = useCallback(
+    async (flyer: Flyer, options?: { sector?: FlyerSector; tone?: FlyerTone; promptOverride?: string }) => {
+      const sector = options?.sector || getDefaultHeroSector(flyer);
+      const tone = options?.tone || getDefaultHeroTone(flyer);
+      const promptPreview = options?.promptOverride
+        ? `prompt override (${options.promptOverride.length} char)`
+        : `sector="${sector}" tone="${tone}"`;
+      addLog(createEntry('info', `🖼️ Generazione hero AI: ${promptPreview}`));
+      try {
+        const flyerImage = await renderFlyerScreenshot(flyer);
+        const payload = buildFlyerHeroPayload(flyer, sector, tone, { flyerImage }, userEmail, options?.promptOverride);
+        const apiBase = import.meta.env?.VITE_API_BASE || '';
+        const res = await fetch(`${apiBase}/api/ai/flyer-hero`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Errore generazione hero' }));
+          const hint = mapAiError(err.error || `Hero AI ${res.status}`);
+          addLog(createErrorEntry(hint));
+          return { flyer, applied: false, error: hint };
+        }
+        const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
+        const heroImage = `data:${data.mimeType};base64,${data.imageBase64}`;
+        const updated: Flyer = {
+          ...flyer,
+          content: { ...flyer.content, heroImage },
+          updatedAt: new Date().toISOString(),
+        };
+        addLog(createSuccessEntry('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`));
+        return { flyer: updated, applied: true };
+      } catch (err) {
+        const hint = mapAiError(err);
+        logger.error('Flyer AI generateHero failed', { route: 'useAIFlyer.generateHero', err: hint });
+        addLog(createErrorEntry(hint));
+        return { flyer, applied: false, error: hint };
+      }
+    },
+    [addLog, userEmail],
+  );
+
   const reset = useCallback(() => {
     const orch = getOrchestrator();
     orch.resetSession();
@@ -237,6 +281,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
   return {
     generate,
     refine,
+    generateHero,
     reset,
     logs,
     isProcessing,

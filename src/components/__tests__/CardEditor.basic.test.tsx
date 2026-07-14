@@ -134,7 +134,7 @@ describe('CardEditor', () => {
       renderEditor();
       const exportBtn = screen.getByRole('button', { name: /Esporta ▾|Esporta/i });
       fireEvent.click(exportBtn);
-      const pdfItem = await screen.findByRole('menuitem', { name: /PDF 10-up/i });
+      const pdfItem = await screen.findByRole('menuitem', { name: /PDF 10-up \(tipografia/i });
       fireEvent.click(pdfItem);
       await waitFor(() => expect(mockGenPDF).toHaveBeenCalled());
       expect(createObjectURL).toHaveBeenCalled();
@@ -282,7 +282,8 @@ describe('CardEditor', () => {
     renderEditor();
     const exportBtn = screen.getByRole('button', { name: /Esporta ▾|Esporta/i });
     fireEvent.click(exportBtn);
-    expect(screen.getByRole('menuitem', { name: /PDF 10-up/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /PDF 10-up \(tipografia/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /PDF 10-up \(pulito/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /PNG fronte/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /PNG retro/i })).toBeInTheDocument();
   });
@@ -312,9 +313,15 @@ describe('CardEditor', () => {
 
   it('saves to collection with documentType businessCard (AC-012)', async () => {
     renderEditor();
+    // Need content before save dialog opens
+    fireEvent.change(screen.getByLabelText(/Nome \(fronte\)/i), { target: { value: 'Mario' } });
     const saveBtn = screen.getByRole('button', { name: /^Salva$/i });
     await act(async () => {
       fireEvent.click(saveBtn);
+    });
+    expect(await screen.findByRole('heading', { name: /Salva bigliettino/i })).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Conferma salvataggio/i }));
     });
     await waitFor(() => expect(mockSave).toHaveBeenCalled());
     const calls = mockSave.mock.calls;
@@ -357,7 +364,7 @@ describe('CardEditor', () => {
 
   it('renders AI panel with redesigned quick action chips', () => {
     renderEditor();
-    expect(screen.getByText(/AI Design Mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI Assist/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Premium$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Pulisci$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Suggerisci$/i })).toBeInTheDocument();

@@ -1,36 +1,21 @@
 import React from 'react';
 import AILogPanel from '../AILogPanel';
 import type { Flyer, FlyerTone } from '../../utils/documentSchemas';
-import { FLYER_BRIEF_MAX } from '../../utils/documentSchemas';
+import { FLYER_BRIEF_MAX, FLYER_SECTORS } from '../../utils/documentSchemas';
 import type { useAIFlyer } from '../../hooks/useAIFlyer';
-
-interface SectionProps {
-  title: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-  extra?: React.ReactNode;
-  badge?: string | number;
-  className?: string;
-}
-
-function Section({ title, defaultOpen = true, children, extra, badge, className }: SectionProps) {
-  const [open, setOpen] = React.useState(defaultOpen);
-  return (
-    <div className={`collapsible ${open ? 'open' : ''} ${className || ''}`}>
-      <div className="collapsible-head" onClick={() => setOpen(!open)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); } }}>
-        <span className="collapsible-title">
-          {title}
-          {badge !== undefined && <span className="collapsible-badge">{badge}</span>}
-        </span>
-        <div className="collapsible-head-right">
-          {extra && <span onClick={(e) => e.stopPropagation()}>{extra}</span>}
-          <svg className="collapsible-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
-        </div>
-      </div>
-      {open && <div className="collapsible-body">{children}</div>}
-    </div>
-  );
-}
+import { getSectorLabel } from '../../utils/flyer';
+import {
+  AiSection,
+  AiPromptTextarea,
+  AiSelect,
+  AiGenerateButton,
+  AiActionChip,
+  AiQuickActionCard,
+  AiActionGrid,
+  AiTierGuard,
+  AiPromptLibrary,
+} from '../ai-ui';
+import type { PromptLibraryEntry } from '../../utils/promptLibrary';
 
 const SUGGESTED_PROMPTS: string[] = [
   'Sagra del paese, 15-17 agosto, ingresso gratis, musica dal vivo, cucina tipica',
@@ -62,63 +47,212 @@ interface FlyerAiPanelProps {
   onRefine: (action: 'simplify' | 'formal' | 'young' | 'urgent') => void;
   onReset: () => void;
   onCollapse: () => void;
+  tier?: 'free' | 'unlocked';
+  onGenerateHero?: () => void;
+  onRemoveHero?: () => void;
+  onResetHero?: () => void;
+  isGeneratingHero?: boolean;
+  heroPrompt?: string;
+  setHeroPrompt?: (v: string) => void;
+  heroSector?: typeof FLYER_SECTORS[number];
+  setHeroSector?: (v: typeof FLYER_SECTORS[number]) => void;
+  heroTone?: FlyerTone;
+  setHeroTone?: (v: FlyerTone) => void;
+  showHeroPromptEditor?: boolean;
+  setShowHeroPromptEditor?: (v: boolean) => void;
+  heroLibrary?: PromptLibraryEntry[];
+  onSaveHeroPrompt?: () => void;
+  onApplyHeroPrompt?: (entry: PromptLibraryEntry) => void;
+  onDeleteHeroPrompt?: (id: string) => void;
 }
 
 export function FlyerAiPanel({
   aiPrompt, setAiPrompt, aiModel, setAiModel, aiTone, setAiTone, ai,
-  onGenerate, onRefine, onReset, hasCopy, onCollapse,
+  flyer, onGenerate, onRefine, onReset, hasCopy, onCollapse,
+  tier = 'free',
+  onGenerateHero, onRemoveHero, onResetHero, isGeneratingHero = false,
+  heroPrompt = '', setHeroPrompt, heroSector, setHeroSector,
+  heroTone = 'formale', setHeroTone,
+  showHeroPromptEditor = false, setShowHeroPromptEditor,
+  heroLibrary = [], onSaveHeroPrompt, onApplyHeroPrompt, onDeleteHeroPrompt,
 }: FlyerAiPanelProps): React.ReactElement {
+  const modelOptions = ai.availableModels.length > 0 
+    ? ai.availableModels.map(m => ({ value: m.id, label: m.name }))
+    : [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }];
+
+  const toneOptions = [
+    { value: 'formale', label: 'Formale' },
+    { value: 'giovanile', label: 'Giovanile' },
+    { value: 'tecnico', label: 'Tecnico' },
+  ];
+
   return (
-    <section className="panel ai-panel" aria-label="AI copy del volantino">
+    <section className="panel ai-panel" aria-label="AI Assist del volantino">
       <div className="panel-kicker">
-        <span>✨ AI copy</span>
+        <span>AI Assist</span>
         <button className="panel-toggle" onClick={onCollapse} title="Collassa" aria-label="Collassa AI">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
         </button>
       </div>
-      <Section title="Genera copy" defaultOpen={true}>
+
+      {onGenerateHero && flyer.style.layout !== 'centered' && (
+        <AiSection title="Hero Image" collapsible defaultOpen={false} hint="Immagine hero del volantino generata da AI.">
+          <AiTierGuard tier={tier} featureName="Hero AI">
+            <div className="stack">
+              {flyer.content.heroImage && (
+                <img
+                  src={flyer.content.heroImage}
+                  alt="Hero attuale"
+                  style={{ maxWidth: '100%', maxHeight: 120, objectFit: 'cover', borderRadius: 6 }}
+                />
+              )}
+              <div className="mini-row">
+                {heroSector && setHeroSector && (
+                  <AiSelect
+                    label="Settore"
+                    value={heroSector}
+                    onChange={(e) => setHeroSector(e.target.value as typeof FLYER_SECTORS[number])}
+                    options={FLYER_SECTORS.map((s) => ({ value: s, label: getSectorLabel(s) }))}
+                  />
+                )}
+                {setHeroTone && (
+                  <AiSelect
+                    label="Tono"
+                    value={heroTone}
+                    onChange={(e) => setHeroTone(e.target.value as FlyerTone)}
+                    options={[
+                      { value: 'formale', label: 'Formale' },
+                      { value: 'giovanile', label: 'Giovanile' },
+                      { value: 'tecnico', label: 'Tecnico' },
+                    ]}
+                  />
+                )}
+              </div>
+              {setShowHeroPromptEditor && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowHeroPromptEditor(!showHeroPromptEditor)}
+                  disabled={isGeneratingHero}
+                >
+                  {showHeroPromptEditor ? 'Nascondi prompt' : 'Modifica prompt'}
+                </button>
+              )}
+              {showHeroPromptEditor && setHeroPrompt && (
+                <>
+                  <AiPromptTextarea
+                    label="Prompt hero"
+                    value={heroPrompt}
+                    onChange={(e) => setHeroPrompt(e.target.value.slice(0, 1500))}
+                    rows={3}
+                    maxLength={1500}
+                    placeholder="Vuoto = prompt automatico da settore/tono"
+                  />
+                  {onSaveHeroPrompt && onApplyHeroPrompt && onDeleteHeroPrompt && (
+                    <AiPromptLibrary
+                      items={heroLibrary}
+                      onSave={onSaveHeroPrompt}
+                      onApply={onApplyHeroPrompt}
+                      onDelete={onDeleteHeroPrompt}
+                      saveDisabled={!heroPrompt.trim()}
+                      title="I miei prompt hero"
+                    />
+                  )}
+                </>
+              )}
+              <AiGenerateButton
+                isProcessing={isGeneratingHero}
+                loadingText="Generazione…"
+                onClick={onGenerateHero}
+              >
+                Genera hero AI
+              </AiGenerateButton>
+              {flyer.content.heroImage?.startsWith('data:') && onResetHero && (
+                <button type="button" className="btn-remove" onClick={onResetHero}>
+                  Ripristina immagine default
+                </button>
+              )}
+              {flyer.content.heroImage && onRemoveHero && (
+                <button type="button" className="btn-remove" onClick={onRemoveHero}>
+                  Rimuovi immagine
+                </button>
+              )}
+            </div>
+          </AiTierGuard>
+        </AiSection>
+      )}
+
+      <AiSection title="Genera copy" collapsible defaultOpen>
         <div className="stack">
-          <label>Modello
-            <select value={aiModel} onChange={(e) => setAiModel(e.target.value)}>
-              {ai.availableModels.length > 0 ? ai.availableModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>) : <option value="deepseek-chat">DeepSeek Chat</option>}
-            </select>
-          </label>
-          <label>Tono
-            <select value={aiTone} onChange={(e) => setAiTone(e.target.value as FlyerTone)}>
-              <option value="formale">Formale</option>
-              <option value="giovanile">Giovanile</option>
-              <option value="tecnico">Tecnico</option>
-            </select>
-          </label>
-          <label>Brief ({FLYER_BRIEF_MAX - aiPrompt.length} caratteri)
-            <textarea className="card-ai-textarea" value={aiPrompt} maxLength={FLYER_BRIEF_MAX} onChange={(e) => setAiPrompt(e.target.value)} placeholder="Es. Sagra del paese, 15-17 agosto, ingresso gratis, musica dal vivo" rows={3} aria-label="Brief AI" />
-          </label>
-          <button type="button" className="card-action-primary" onClick={onGenerate} disabled={ai.isProcessing || !aiPrompt.trim()}>
-            {ai.isProcessing ? 'Generazione…' : '✨ Genera copy'}
-          </button>
+          <AiSelect 
+            label="Modello" 
+            value={aiModel} 
+            onChange={(e) => setAiModel(e.target.value)} 
+            options={modelOptions} 
+          />
+          <AiSelect 
+            label="Tono" 
+            value={aiTone} 
+            onChange={(e) => setAiTone(e.target.value as FlyerTone)} 
+            options={toneOptions} 
+          />
+          <AiPromptTextarea 
+            label="Brief"
+            value={aiPrompt}
+            maxLength={FLYER_BRIEF_MAX}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder="Es. Sagra del paese, 15-17 agosto, ingresso gratis, musica dal vivo"
+            rows={3}
+            aria-label="Brief AI"
+          />
+          <AiGenerateButton 
+            isProcessing={ai.isProcessing} 
+            loadingText="Generazione…" 
+            onClick={onGenerate} 
+            disabled={!aiPrompt.trim()}
+          >
+            ✨ Genera copy
+          </AiGenerateButton>
         </div>
-      </Section>
-      <Section title="Suggerimenti" defaultOpen={true}>
-        <div className="stack" style={{ gap: 4 }}>
+      </AiSection>
+
+      <AiSection title="Suggerimenti" collapsible defaultOpen>
+        <AiActionGrid>
           {SUGGESTED_PROMPTS.map((p) => (
-            <button key={p} type="button" className="flyer-ai-chip" onClick={() => setAiPrompt(p)} disabled={ai.isProcessing}>{p}</button>
+            <AiActionChip 
+              key={p} 
+              label={p} 
+              onClick={() => setAiPrompt(p)} 
+              disabled={ai.isProcessing} 
+            />
           ))}
-        </div>
-      </Section>
-      <Section title="Raffina copy" defaultOpen={true}>
-        <div className="flyer-ai-quick-grid-inner">
+        </AiActionGrid>
+      </AiSection>
+
+      <AiSection title="Raffina copy" collapsible defaultOpen>
+        <AiActionGrid>
           {QUICK_REFINE.map((q) => (
-            <button key={q.action} type="button" className="flyer-ai-quick-card" onClick={() => onRefine(q.action)} disabled={ai.isProcessing || !hasCopy} aria-label={`${q.label}: ${q.description}`} title={q.description}>
-              <span className="flyer-ai-quick-icon" aria-hidden="true">{q.icon}</span>
-              <span className="flyer-ai-quick-label">{q.label}</span>
-            </button>
+            <AiQuickActionCard 
+              key={q.action} 
+              icon={q.icon}
+              label={q.label}
+              description={q.description}
+              onClick={() => onRefine(q.action)} 
+              disabled={ai.isProcessing || !hasCopy} 
+            />
           ))}
-        </div>
+        </AiActionGrid>
         {!hasCopy && <p style={{ fontSize: '.78rem', color: 'var(--muted)', margin: '6px 0 0' }}>ℹ️ Genera prima il copy o compila manualmente i campi.</p>}
-      </Section>
-      <Section title="Log AI" defaultOpen={true} extra={<button type="button" className="card-ai-reset" onClick={onReset} disabled={ai.isProcessing}>↻ Nuova sessione</button>}>
+      </AiSection>
+
+      <AiSection 
+        title="Log AI" 
+        collapsible 
+        defaultOpen 
+        extra={<button type="button" className="card-ai-reset" onClick={onReset} disabled={ai.isProcessing}>↻ Nuova sessione</button>}
+      >
         <AILogPanel logs={ai.logs} isProcessing={ai.isProcessing} />
-      </Section>
+      </AiSection>
     </section>
   );
 }

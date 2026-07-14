@@ -16,6 +16,7 @@ import {
 import { formatToolCall, formatToolResult } from '../ai/toolLabels';
 import dataService from '../utils/dataService';
 import { logger } from '../utils/logger';
+import { mapAiError } from '../utils/ai/mapAiError';
 
 interface UseAIReturn {
   processPrompt: (
@@ -261,24 +262,15 @@ export function useAI(userEmail?: string): UseAIReturn {
         return result;
       } catch (err: any) {
         const msg = err.message || 'Errore AI';
-        const hint =
-          msg.includes('402')
-            ? 'Credito DeepSeek esaurito.'
-            : msg.includes('401')
-            ? 'Chiave API DeepSeek non valida.'
-            : msg.includes('429')
-            ? 'Troppe richieste. Attendi e riprova.'
-            : msg.includes('fetch') || msg.includes('NetworkError')
-            ? 'Connessione fallita.'
-            : null;
+        const hint = mapAiError(err);
 
         const streamId = streamEntryIdRef.current;
         if (streamId) {
           updateLog(streamId, { status: 'error', msg: '❌ Generazione fallita', detail: msg });
         }
         logger.error('AI processPrompt failed', { route: 'useAI', err: msg });
-        addLog(createErrorEntry(hint || msg));
-        throw new Error(hint || msg);
+        addLog(createErrorEntry(hint));
+        throw new Error(hint);
       } finally {
         setIsProcessing(false);
         streamEntryIdRef.current = null;

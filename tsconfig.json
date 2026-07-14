@@ -20,6 +20,6 @@
     "allowJs": true,
     "checkJs": false
   },
-  "include": ["src", "vite-env.d.ts", "api"],
+  "include": ["src", "e2e", "vite-env.d.ts", "api"],
   "exclude": ["node_modules", "dist"]
 }

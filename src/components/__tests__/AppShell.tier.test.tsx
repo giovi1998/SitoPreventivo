@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, cleanup, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { TestRouter } from '../../test/TestRouter';
 import React from 'react';
 import AppShell from '../AppShell';
 import { AuthContext, AppContext } from '../../contexts';
@@ -62,9 +62,9 @@ describe('AppShell, tier integration (Phase 5)', () => {
     vi.spyOn(dataService, 'getUserTier').mockResolvedValue({ tier: 'free', documentCount: 1, documentLimit: 3 } as any);
     render(
       <AuthContext.Provider value={authValue() as any}>
-        <MemoryRouter initialEntries={['/']}>
+        <TestRouter initialEntries={['/']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
     await act(async () => {
@@ -80,9 +80,9 @@ describe('AppShell, tier integration (Phase 5)', () => {
     const tierSpy = vi.spyOn(dataService, 'getUserTier');
     render(
       <AuthContext.Provider value={authValue({ email: 'admin@gmail.com', username: 'admin', role: 'admin' }) as any}>
-        <MemoryRouter initialEntries={['/']}>
+        <TestRouter initialEntries={['/']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
     await act(async () => {
@@ -98,9 +98,9 @@ describe('AppShell, tier integration (Phase 5)', () => {
     vi.spyOn(dataService, 'getUserTier').mockResolvedValue({ tier: 'unlocked', documentCount: 5, documentLimit: null } as any);
     render(
       <AuthContext.Provider value={authValue({ email: 'pro@t.com', username: 'pro', role: 'user' }) as any}>
-        <MemoryRouter initialEntries={['/']}>
+        <TestRouter initialEntries={['/']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
     await act(async () => {
@@ -114,9 +114,9 @@ describe('AppShell, tier integration (Phase 5)', () => {
     vi.spyOn(dataService, 'getUserTier').mockResolvedValue({ tier: 'free', documentCount: 1, documentLimit: 3 } as any);
     render(
       <AuthContext.Provider value={authValue() as any}>
-        <MemoryRouter initialEntries={['/']}>
+        <TestRouter initialEntries={['/']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
     await act(async () => {
@@ -130,9 +130,9 @@ describe('AppShell, tier integration (Phase 5)', () => {
     vi.spyOn(dataService, 'getUserTier').mockResolvedValue({ tier: 'free', documentCount: 10, documentLimit: 10 } as any);
     render(
       <AuthContext.Provider value={authValue() as any}>
-        <MemoryRouter initialEntries={['/']}>
+        <TestRouter initialEntries={['/']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
     await act(async () => {
@@ -149,9 +149,9 @@ describe('AppShell, tier integration (Phase 5)', () => {
     vi.spyOn(dataService, 'getUserTier').mockResolvedValue({ tier: 'unlocked', documentCount: 100, documentLimit: null } as any);
     render(
       <AuthContext.Provider value={authValue({ email: 'pro@t.com', username: 'pro', role: 'user' }) as any}>
-        <MemoryRouter initialEntries={['/']}>
+        <TestRouter initialEntries={['/']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
     await act(async () => {
@@ -168,9 +168,9 @@ describe('AppShell, tier integration (Phase 5)', () => {
     vi.spyOn(dataService, 'getUserSettings').mockResolvedValue({ userEmail: 'u@t.com' } as any);
     render(
       <AuthContext.Provider value={authValue() as any}>
-        <MemoryRouter initialEntries={['/']}>
+        <TestRouter initialEntries={['/']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
     await act(async () => {
@@ -194,9 +194,9 @@ describe('AppShell, tier integration (Phase 5)', () => {
     const tierSpy = vi.spyOn(dataService, 'getUserTier');
     render(
       <AuthContext.Provider value={authValue() as any}>
-        <MemoryRouter initialEntries={['/']}>
+        <TestRouter initialEntries={['/']}>
           <AppShell />
-        </MemoryRouter>
+        </TestRouter>
       </AuthContext.Provider>,
     );
     await act(async () => {

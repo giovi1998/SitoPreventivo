@@ -4,7 +4,13 @@ import CardEditor from '../CardEditor';
 import dataService from '../../utils/dataService';
 import { createEmptyCard } from '../../utils/documentSchemas';
 import type { BusinessCard } from '../../utils/documentSchemas';
-import { compressImage, generateCardPDF, generateCardPng } from '../../utils/cardGenerator';
+import {
+  compressImage,
+  generateCardPDF,
+  generateCardPng,
+  buildEmbeddedFontImport,
+  resolveToBase64DataUrl,
+} from '../../utils/cardGenerator';
 import { useToast } from '../../hooks/useToast';
 
 vi.mock('../../utils/dataService', () => ({
@@ -52,6 +58,8 @@ vi.mock('../../utils/cardGenerator', async () => {
     }),
     generateCardPDF: vi.fn(async () => new Uint8Array([0x25, 0x50, 0x44, 0x46, 1, 2, 3])),
     generateCardPng: vi.fn(async () => new Uint8Array([0x89, 0x50, 0x4e, 0x47, 4, 5, 6])),
+    buildEmbeddedFontImport: vi.fn(async () => ''),
+    resolveToBase64DataUrl: vi.fn(async (url: string) => url),
   };
 });
 
@@ -59,6 +67,8 @@ export const mockSave = dataService.saveDocument as unknown as ReturnType<typeof
 export const mockCompress = compressImage as unknown as ReturnType<typeof vi.fn>;
 export const mockGenPDF = generateCardPDF as unknown as ReturnType<typeof vi.fn>;
 export const mockGenPng = generateCardPng as unknown as ReturnType<typeof vi.fn>;
+export const mockBuildEmbeddedFontImport = buildEmbeddedFontImport as unknown as ReturnType<typeof vi.fn>;
+export const mockResolveToBase64DataUrl = resolveToBase64DataUrl as unknown as ReturnType<typeof vi.fn>;
 export const { addToast: mockAddToast } = useToast();
 
 export const baseProps = {

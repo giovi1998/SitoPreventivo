@@ -87,6 +87,25 @@ describe('dataService local storage flows', () => {
       expect(quotes.some((q: any) => q.id === 'q-1')).toBe(true);
     });
 
+    it('stamps owner as account email even when quote.owner was a display name', async () => {
+      // Regression: toLegacyFormat set owner = issuer.name, so local
+      // getQuotes(email) never found the saved preventivo.
+      const withDisplayOwner = {
+        id: 'q-display',
+        title: 'Preventivo',
+        client: 'X',
+        owner: 'Giovanni Cidu',
+        options: [],
+        clauses: [],
+      } as any;
+      await dataService.saveQuote('user@test.com', withDisplayOwner);
+      const { quotes } = await dataService.getQuotes('user@test.com');
+      expect(quotes.some((q: any) => q.id === 'q-display')).toBe(true);
+      const saved = quotes.find((q: any) => q.id === 'q-display');
+      expect(saved.owner).toBe('user@test.com');
+      expect(saved.userEmail).toBe('user@test.com');
+    });
+
     it('filters quotes by owner', async () => {
       await dataService.saveQuote('user@test.com', sampleQuote);
       const { quotes } = await dataService.getQuotes('other@test.com');

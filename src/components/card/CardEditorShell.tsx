@@ -26,7 +26,6 @@ import {
 import { compressImage } from '../../utils/cardGenerator';
 import { useCardExport } from '../../hooks/useCardExport';
 import { isAllowedLogoMime, isHttpUrl } from '../../utils/qrGenerator';
-import dataService from '../../utils/dataService';
 import { useToast } from '../../hooks/useToast';
 import { useAICard } from '../../hooks/useAICard';
 import { findCardQuickAction } from '../../ai/prompts/cardQuickActions';
@@ -42,9 +41,43 @@ import CardEditorTabs from './CardEditorTabs';
 import MobileGridEditor from '../MobileGridEditor';
 import CardAIFab from '../CardAIFab';
 import CardAIBottomSheet from '../CardAIBottomSheet';
+import SaveDialog from '../SaveDialog';
+import {
+  loadPromptLibrary,
+  addPromptEntry,
+  removePromptEntry,
+  PROMPT_LIBRARY_KEYS,
+  type PromptLibraryEntry,
+} from '../../utils/promptLibrary';
+import { buildCardPhotoBrief } from '../../utils/card/photoBrief';
+import { pruneCardGrids } from '../../utils/card/gridElements';
+import {
+  pushLayoutEvent,
+  attachLayoutEventsToWindow,
+} from '../../utils/card/layoutEvents';
 
 const MAX_RAW_BYTES = 5_000_000;
 const AUTO_SAVE_DELAY_MS = 30_000;
+
+function cardHasContent(c: BusinessCard): boolean {
+  return !!(
+    c.title?.trim()
+    || c.front.name?.trim()
+    || c.front.title?.trim()
+    || c.front.company?.trim()
+    || c.front.photoUrl
+    || c.front.logoUrl
+    || c.back.phone?.trim()
+    || c.back.email?.trim()
+    || c.back.website?.trim()
+  );
+}
+
+function defaultCardTitle(c: BusinessCard): string {
+  if (c.title?.trim()) return c.title.trim();
+  if (c.front.name?.trim()) return `Bigliettino ${c.front.name.trim()}`;
+  return 'Bigliettino';
+}
 
 export interface CardEditorShellProps {
   userEmail: string;
@@ -57,6 +90,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const { save: saveDocumentGuarded } = useDocumentSave();
   const [card, setCard] = useState<BusinessCard>(() => mergeCardWithDefaults(initialCard));
   const [showTemplateBanner, setShowTemplateBanner] = useState<boolean>(() => !initialCard);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -66,12 +100,33 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const [showGrid, setShowGrid] = useState(false);
   const [isCoverGenerating, setIsCoverGenerating] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedIdRef = useRef<string | undefined>(initialCard?.id);
+
+  // Always attach layout events on the card editor (localhost + prod).
+  // pushLayoutEvent still gates console output; window.__cardLayoutEvents is free.
+  useEffect(() => {
+    attachLayoutEventsToWindow();
+    pushLayoutEvent({ type: 'card.edit', result: 'ok', payload: { boot: true } });
+  }, []);
+
+  // When Collection opens a different card, replace local state.
+  useEffect(() => {
+    if (!initialCard?.id) return;
+    if (initialCard.id === loadedIdRef.current) return;
+    loadedIdRef.current = initialCard.id;
+    setCard(mergeCardWithDefaults(initialCard));
+    setShowTemplateBanner(false);
+  }, [initialCard]);
   const isMobile = useMediaQuery('(max-width: 900px)');
   const aiFloating = useCardAIFloating();
   const previewZoom = useCardPreviewZoom(1);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
-  const { processCardPrompt, generateCover, resetCardChat, cardAiLogs, isCardProcessing, availableModels } = useAICard(userEmail);
+  const { processCardPrompt, generateCover, generatePhoto, resetCardChat, cardAiLogs, isCardProcessing, availableModels } = useAICard(userEmail);
+  const [isPhotoGenerating, setIsPhotoGenerating] = useState(false);
+  const [photoPrompt, setPhotoPrompt] = useState('');
+  const [showPhotoPromptEditor, setShowPhotoPromptEditor] = useState(false);
+  const [photoLibrary, setPhotoLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardPhoto));
 
   useEffect(() => {
     const defaultZoom = isMobile ? 0.7 : 1;
@@ -95,6 +150,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, [exportMenuOpen]);
 
   const patchFront = useCallback((patch: Partial<BusinessCard['front']>) => {
+    const keys = Object.keys(patch);
+    pushLayoutEvent({
+      type: 'card.edit',
+      side: 'front',
+      element: keys[0],
+      result: 'ok',
+      payload: { fields: keys },
+    });
     setCard((prev) => {
       const next = { ...prev.front, ...patch };
       if (patch.layout && patch.layout !== prev.front.layout) {
@@ -103,13 +166,28 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       }
       return { ...prev, front: next, updatedAt: new Date().toISOString() };
     });
-  }, [addToast]);
+  }, []);
 
   const patchBack = useCallback((patch: Partial<BusinessCard['back']>) => {
+    const keys = Object.keys(patch);
+    pushLayoutEvent({
+      type: 'card.edit',
+      side: 'back',
+      element: keys[0],
+      result: 'ok',
+      payload: { fields: keys },
+    });
     setCard((prev) => ({ ...prev, back: { ...prev.back, ...patch }, updatedAt: new Date().toISOString() }));
   }, []);
 
   const patchStyle = useCallback((patch: Partial<BusinessCard['style']>) => {
+    const keys = Object.keys(patch);
+    pushLayoutEvent({
+      type: 'card.edit',
+      element: keys[0],
+      result: 'ok',
+      payload: { fields: keys, side: 'style' },
+    });
     setCard((prev) => {
       if (patch.sizePreset && patch.sizePreset !== prev.style.sizePreset) {
         return {
@@ -120,10 +198,20 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       }
       return { ...prev, style: { ...prev.style, ...patch }, updatedAt: new Date().toISOString() };
     });
-  }, [addToast]);
+  }, []);
 
   const [selectedGridElement, setSelectedGridElement] = useState<keyof CardGrid['elements'] | ''>('');
   const [gridEditorSide, setGridEditorSide] = useState<GridSide>('front');
+
+  const setGridEditorSideLogged = useCallback((s: GridSide) => {
+    setGridEditorSide(s);
+    pushLayoutEvent({ type: 'grid.side', side: s, result: 'ok' });
+  }, []);
+
+  const setSelectedGridElementLogged = useCallback((k: keyof CardGrid['elements'] | '') => {
+    setSelectedGridElement(k);
+    pushLayoutEvent({ type: 'grid.select', side: gridEditorSide, element: k || undefined, result: 'ok' });
+  }, [gridEditorSide]);
 
   const patchGrid = useCallback((grid: CardGrid) => {
     setCard((prev) => {
@@ -142,7 +230,19 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     });
   }, [gridEditorSide]);
 
+  const logGridChange = useCallback((type: 'move' | 'resize' | 'align', info: { element: string; applied: boolean; reason?: 'collision' | 'border'; payload?: Record<string, unknown> }) => {
+    pushLayoutEvent({
+      type: type === 'move' ? 'grid.move' : type === 'resize' ? 'grid.resize' : 'grid.align',
+      side: gridEditorSide,
+      element: info.element,
+      result: info.applied ? 'ok' : info.reason === 'collision' || info.reason === 'border' ? 'blocked' : 'error',
+      reason: info.reason,
+      payload: info.payload,
+    });
+  }, [gridEditorSide]);
+
   const applyGridPreset = useCallback((preset: BusinessCardLayout) => {
+    pushLayoutEvent({ type: 'grid.preset', side: gridEditorSide, result: 'ok', payload: { preset } });
     if (gridEditorSide === 'back') {
       setCard((prev) => ({
         ...prev,
@@ -160,6 +260,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, [gridEditorSide, card]);
 
   const handleAfterMove = useCallback((info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => {
+    logGridChange('move', { element: info.element, applied: info.applied, reason: info.reason, payload: { dx: info.dx, dy: info.dy } });
     if (info.applied) {
       const dir = (() => {
         if (info.dx > 0) return 'a destra';
@@ -173,9 +274,10 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     } else if (info.reason === 'border') {
       addToast('info', `Bloccato: bordo della griglia raggiunto`, 3000);
     }
-  }, [addToast]);
+  }, [addToast, logGridChange]);
 
   const handleAfterResize = useCallback((info: { element: string; dw: number; dh: number; applied: boolean; reason?: 'collision' | 'border' }) => {
+    logGridChange('resize', { element: info.element, applied: info.applied, reason: info.reason, payload: { dw: info.dw, dh: info.dh } });
     if (info.applied) {
       addToast('success', `${info.element} ridimensionato`, 2500);
     } else if (info.reason === 'collision') {
@@ -183,15 +285,31 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     } else if (info.reason === 'border') {
       addToast('info', `Bloccato: bordo della griglia raggiunto`, 3000);
     }
-  }, [addToast]);
+  }, [addToast, logGridChange]);
+
+  const handleAfterAlign = useCallback((info: { element: string; alignH: 'left' | 'center' | 'right'; alignV: 'top' | 'center' | 'bottom' }) => {
+    logGridChange('align', {
+      element: info.element,
+      applied: true,
+      payload: { alignH: info.alignH, alignV: info.alignV },
+    });
+    addToast('success', `${info.element}: allineamento ${info.alignH}/${info.alignV}`, 2000);
+  }, [addToast, logGridChange]);
 
   const handleToggleShowGrid = useCallback(() => {
-    setShowGrid((prev) => !prev);
+    setShowGrid((prev) => {
+      const next = !prev;
+      pushLayoutEvent({ type: 'grid.toggle', side: gridEditorSide, result: 'ok', payload: { showGrid: next } });
+      return next;
+    });
     setCard((c) => {
       const next = !showGrid;
       if (!next) {
         addToast('info', 'Griglia disattivata', 2500);
-        return c;
+        // v2.8.1: turning the grid OFF only hides the overlay/controls;
+        // we keep useGrid=true so the persisted grid layout is still used
+        // by both preview and export (REQ-E01: OFF hides overlay, not layout).
+        return { ...c, updatedAt: new Date().toISOString() };
       }
       let mutated = false;
       let nextCard: BusinessCard = c;
@@ -212,6 +330,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       } else {
         addToast('info', 'Griglia attiva', 2500);
       }
+      // v2.8.1: when the user turns grid ON, persist useGrid=true so the
+      // persisted grids become the single source of truth for preview AND
+      // export. Otherwise the export would keep deriving from flexbox layout.
+      nextCard = {
+        ...nextCard,
+        front: { ...nextCard.front, useGrid: true },
+        back: { ...nextCard.back, useGrid: true },
+      };
       return { ...nextCard, updatedAt: new Date().toISOString() };
     });
   }, [addToast, showGrid]);
@@ -221,12 +347,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, []);
 
   const applyGiovanniTemplate = useCallback(() => {
+    pushLayoutEvent({ type: 'card.template', result: 'ok', payload: { template: 'giovanni' } });
     setCard(createGiovanniCardTemplate());
     setShowTemplateBanner(false);
     addToast('info', 'Template personale Giovanni caricato');
   }, [addToast]);
 
   const resetCard = useCallback(() => {
+    pushLayoutEvent({ type: 'card.reset', result: 'ok' });
     setCard(createEmptyCard());
     setShowTemplateBanner(true);
     setShowGrid(false);
@@ -250,12 +378,20 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   const handleUpload = useCallback(async (file: File, field: 'photoUrl' | 'logoUrl') => {
     setUploadError(null);
+    pushLayoutEvent({
+      type: 'card.media',
+      element: field,
+      result: 'ok',
+      payload: { mime: file.type, size: file.size },
+    });
     if (!isAllowedLogoMime(file.type)) {
       setUploadError('Formato non supportato. Usa PNG, JPEG o SVG.');
+      pushLayoutEvent({ type: 'card.media', element: field, result: 'error', reason: 'mime' });
       return;
     }
     if (file.size > MAX_RAW_BYTES) {
       setUploadError('File troppo grande (max 5MB)');
+      pushLayoutEvent({ type: 'card.media', element: field, result: 'error', reason: 'size' });
       return;
     }
     try {
@@ -288,9 +424,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   const handleExportAction = useCallback((action: string) => {
     setExportMenuOpen(false);
+    pushLayoutEvent({ type: 'export.start', result: 'ok', payload: { action } });
     switch (action) {
       case 'pdf':
-        void exportPdf();
+        void exportPdf({ cropMarks: true });
+        break;
+      case 'pdf-clean':
+        void exportPdf({ cropMarks: false });
         break;
       case 'png-front':
         void exportPng('front');
@@ -299,19 +439,42 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         void exportPng('back');
         break;
       case 'svg-front':
-        exportSvg('front');
+        void exportSvg('front');
         break;
       case 'svg-back':
-        exportSvg('back');
+        void exportSvg('back');
         break;
       case 'json':
         exportJson();
         break;
     }
+    pushLayoutEvent({ type: 'export.success', result: 'ok', payload: { action } });
   }, [exportPdf, exportPng, exportSvg, exportJson]);
 
-  const handleSave = useCallback(async () => {
-    const sanitized: BusinessCard = { ...card, userEmail, updatedAt: new Date().toISOString() };
+  const openSaveDialog = useCallback(() => {
+    if (!userEmail) {
+      addToast('error', 'Devi essere loggato per salvare.');
+      return;
+    }
+    if (!cardHasContent(card)) {
+      addToast('info', 'Compila almeno nome o contatti prima di salvare.');
+      return;
+    }
+    setShowSaveDialog(true);
+  }, [card, userEmail, addToast]);
+
+  const handleSave = useCallback(async (customName?: string) => {
+    if (!userEmail) {
+      addToast('error', 'Devi essere loggato per salvare.');
+      return;
+    }
+    const title = (customName?.trim() || defaultCardTitle(card));
+    const sanitized: BusinessCard = {
+      ...pruneCardGrids(card),
+      title,
+      userEmail,
+      updatedAt: new Date().toISOString(),
+    };
     const result = await saveDocumentGuarded(userEmail, sanitized);
     if (result.blocked) {
       addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
@@ -321,8 +484,11 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       addToast('error', result.error);
       return;
     }
-    addToast('success', 'Bigliettino salvato in locale. Visibile in Collection dalla prossima release.');
-  }, [card, userEmail, addToast]);
+    setCard(sanitized);
+    loadedIdRef.current = sanitized.id;
+    setShowSaveDialog(false);
+    addToast('success', `«${title}» salvato. Visibile in Collection.`);
+  }, [card, userEmail, addToast, saveDocumentGuarded]);
 
   const runCardAI = useCallback(async (mode: string = 'custom') => {
     const quick = findCardQuickAction(mode);
@@ -364,10 +530,10 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     setIsCoverGenerating(true);
     try {
       if (side === 'both') {
-        const [frontCover, backCover] = await Promise.all([
-          generateCover(card, 'front'),
-          generateCover(card, 'back'),
-        ]);
+        // Serializziamo fronte e retro: due chiamate Gemini in parallelo
+        // possono sovraccaricare il dev proxy / l'upstream e ritornare 502.
+        const frontCover = await generateCover(card, 'front');
+        const backCover = await generateCover(card, 'back');
         patchFront({ coverImageUrl: frontCover });
         patchBack({ coverImageUrl: backCover });
         addToast('success', 'Cover AI generate per fronte e retro.', 4000);
@@ -387,6 +553,57 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
   }, [card, tier, generateCover, patchFront, patchBack, addToast]);
 
+  const handleGeneratePhoto = useCallback(async () => {
+    if (tier !== 'unlocked') {
+      addToast('info', 'Sblocca il piano per generare la foto AI.', 4000);
+      return;
+    }
+    setIsPhotoGenerating(true);
+    try {
+      const photoUrl = await generatePhoto(card, {
+        promptOverride: photoPrompt.trim() || undefined,
+      });
+      patchFront({ photoUrl });
+      addToast('success', 'Foto AI generata e applicata al bigliettino.', 4000);
+    } catch (err: any) {
+      addToast('error', err.message || 'Errore generazione foto AI', 5000);
+    } finally {
+      setIsPhotoGenerating(false);
+    }
+  }, [card, tier, generatePhoto, patchFront, addToast, photoPrompt]);
+
+  const handleFillAutoPhotoPrompt = useCallback(() => {
+    setPhotoPrompt(buildCardPhotoBrief(card).prompt);
+    setShowPhotoPromptEditor(true);
+  }, [card]);
+
+  const handleSavePhotoPrompt = useCallback(() => {
+    const text = photoPrompt.trim();
+    if (!text) {
+      addToast('info', 'Scrivi un prompt prima di salvarlo.');
+      return;
+    }
+    const label = window.prompt('Nome del prompt', text.slice(0, 40)) || text.slice(0, 40);
+    setPhotoLibrary(addPromptEntry(PROMPT_LIBRARY_KEYS.cardPhoto, {
+      label: label.trim() || 'Prompt foto',
+      prompt: text,
+      module: 'card-photo',
+    }));
+    addToast('success', 'Prompt salvato nella libreria.');
+  }, [photoPrompt, addToast]);
+
+  const handleApplyPhotoPrompt = useCallback((entry: PromptLibraryEntry) => {
+    if (entry.prompt) {
+      setPhotoPrompt(entry.prompt);
+      setShowPhotoPromptEditor(true);
+      addToast('info', `Prompt «${entry.label}» applicato.`);
+    }
+  }, [addToast]);
+
+  const handleDeletePhotoPrompt = useCallback((id: string) => {
+    setPhotoLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.cardPhoto, id));
+  }, []);
+
   const handleRemoveCover = useCallback(
     (side: 'front' | 'back') => {
       if (side === 'front') {
@@ -402,20 +619,30 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   useEffect(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    if (!userEmail || !cardHasContent(card)) return;
     autoSaveTimerRef.current = setTimeout(() => {
-      const sanitized: BusinessCard = { ...card, userEmail, updatedAt: new Date().toISOString() };
+      const title = defaultCardTitle(card);
+      const sanitized: BusinessCard = {
+        ...pruneCardGrids(card),
+        title,
+        userEmail,
+        updatedAt: new Date().toISOString(),
+      };
       saveDocumentGuarded(userEmail, sanitized).then((result) => {
         if (result.blocked) {
           addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
         } else if (result.error) {
           logger.error('Card auto-save failed', { err: result.error });
+        } else {
+          // Keep title in sync if auto-derived (no toast noise).
+          if (card.title !== title) setCard((prev) => (prev.title === title ? prev : { ...prev, title }));
         }
       });
     }, AUTO_SAVE_DELAY_MS);
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [card, userEmail]);
+  }, [card, userEmail, saveDocumentGuarded, addToast]);
 
   const updateSocial = useCallback((idx: number, key: 'platform' | 'url', value: string) => {
     setCard((prev) => {
@@ -425,13 +652,34 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     });
   }, []);
 
+  // v2.9.1: helper that ensures a back-grid element exists when the user adds
+  // content that should render in its own cell (services/socials). Without this,
+  // a card created before v2.5 keeps a backGrid without services/socials cells,
+  // and newly-added services/socials disappear from the SVG export.
+  const ensureBackGridElement = useCallback(
+    (prev: BusinessCard, key: 'services' | 'socials'): BusinessCard['backGrid'] => {
+      const backGrid = prev.backGrid;
+      if (!backGrid) return backGrid;
+      if (backGrid.elements[key]) return backGrid;
+      const preset = gridPresetBackDefault();
+      const presetEl = preset.elements[key];
+      if (!presetEl) return backGrid;
+      return {
+        ...backGrid,
+        elements: { ...backGrid.elements, [key]: presetEl },
+      };
+    },
+    [],
+  );
+
   const addSocial = useCallback(() => {
     setCard((prev) => ({
       ...prev,
       back: { ...prev.back, socials: [...prev.back.socials, { platform: '', url: '' }] },
+      backGrid: ensureBackGridElement(prev, 'socials'),
       updatedAt: new Date().toISOString(),
     }));
-  }, []);
+  }, [ensureBackGridElement]);
 
   const removeSocial = useCallback((idx: number) => {
     setCard((prev) => ({
@@ -448,18 +696,24 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       return {
         ...prev,
         back: { ...prev.back, services: [...current, ''] },
+        backGrid: ensureBackGridElement(prev, 'services'),
         updatedAt: new Date().toISOString(),
       };
     });
-  }, []);
+  }, [ensureBackGridElement]);
 
   const updateService = useCallback((idx: number, value: string) => {
     setCard((prev) => {
       const services = [...(prev.back.services ?? [])];
       services[idx] = value.slice(0, 80);
-      return { ...prev, back: { ...prev.back, services }, updatedAt: new Date().toISOString() };
+      return {
+        ...prev,
+        back: { ...prev.back, services },
+        backGrid: value.trim() ? ensureBackGridElement(prev, 'services') : prev.backGrid,
+        updatedAt: new Date().toISOString(),
+      };
     });
-  }, []);
+  }, [ensureBackGridElement]);
 
   const removeService = useCallback((idx: number) => {
     setCard((prev) => ({
@@ -485,6 +739,18 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         onRemoveCover={removeCoverImage}
         onRemoveBackCover={removeBackCoverImage}
         uploadError={uploadError}
+        tier={tier}
+        onGeneratePhoto={handleGeneratePhoto}
+        isGeneratingPhoto={isPhotoGenerating}
+        photoPrompt={photoPrompt}
+        setPhotoPrompt={setPhotoPrompt}
+        showPhotoPromptEditor={showPhotoPromptEditor}
+        setShowPhotoPromptEditor={setShowPhotoPromptEditor}
+        photoLibrary={photoLibrary}
+        onSavePhotoPrompt={handleSavePhotoPrompt}
+        onApplyPhotoPrompt={handleApplyPhotoPrompt}
+        onDeletePhotoPrompt={handleDeletePhotoPrompt}
+        onFillAutoPhotoPrompt={handleFillAutoPhotoPrompt}
       />
       <CardBackFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
       <fieldset className="card-fieldset">
@@ -517,7 +783,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       <CardQrAdvanced card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
       <CardStyleFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
     </>
-  ), [card, patchFront, patchBack, patchStyle, handleUpload, removePhoto, removeLogo, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial]);
+  ), [card, patchFront, patchBack, patchStyle, handleUpload, removePhoto, removeLogo, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial, tier, handleGeneratePhoto, isPhotoGenerating, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt]);
 
   const aiPanel = useMemo(() => (
     <CardAIControls
@@ -555,21 +821,22 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       side={gridEditorSide}
       gridEnabled={showGrid}
       onSideChange={(s) => {
-        setGridEditorSide(s);
-        setSelectedGridElement('');
+        setGridEditorSideLogged(s);
+        setSelectedGridElementLogged('');
       }}
       onChangeGrid={patchGrid}
       onApplyPreset={applyGridPreset}
       selected={selectedGridElement}
-      onSelect={setSelectedGridElement}
+      onSelect={setSelectedGridElementLogged}
       onAfterMove={handleAfterMove}
       onAfterResize={handleAfterResize}
+      onAfterAlign={handleAfterAlign}
     />
-  ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize]);
+  ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize, handleAfterAlign, setGridEditorSideLogged, setSelectedGridElementLogged]);
 
   const desktopActions = (
     <div className="card-actions">
-      <CardSaveAction variant="desktop" onClick={handleSave} />
+      <CardSaveAction variant="desktop" onClick={openSaveDialog} />
       <CardExportMenu
         variant="desktop"
         open={exportMenuOpen}
@@ -620,8 +887,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
                     side={gridEditorSide}
                     gridEnabled={showGrid}
                     selected={selectedGridElement}
-                    onSelect={setSelectedGridElement}
-                    onChangeSide={(s) => { setGridEditorSide(s); setSelectedGridElement(''); }}
+                    onSelect={setSelectedGridElementLogged}
+                    onChangeSide={(s) => { setGridEditorSideLogged(s); setSelectedGridElementLogged(''); }}
                     onChangeGrid={patchGrid}
                     onAfterMove={handleAfterMove}
                   />
@@ -656,7 +923,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
             {formContent}
             {desktopActions}
             <p className="card-export-hint">
-              Esporta subito PDF/PNG/SVG. Le card salvate appariranno in <em>Collection</em> dalla prossima release.
+              Esporta PDF/PNG/SVG. I bigliettini salvati compaiono in <em>Collection</em>.
+              In Stile → «Stile bordo» scegli <em>Nessuno</em> per rimuovere strisce/bordi sul bigliettino.
             </p>
           </section>
 
@@ -668,7 +936,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
           {showAi ? (
             <section className="card-editor-ai" aria-label="AI che modifica il bigliettino">
               <div className="panel-kicker">
-                <span>AI Design Mode</span>
+                <span>AI Assist</span>
                 <button
                   className="panel-toggle"
                   onClick={() => setShowAi(false)}
@@ -701,7 +969,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       {isMobile && (
         <>
           <div className="card-mobile-toolbar" data-testid="mobile-toolbar">
-            <CardSaveAction variant="mobile" onClick={handleSave} />
+            <CardSaveAction variant="mobile" onClick={openSaveDialog} />
             <CardExportMenu
               variant="mobile"
               open={exportMenuOpen}
@@ -722,7 +990,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
           >
             <div className="card-ai-mobile-content">
               <div className="panel-kicker">
-                <span>AI Design Mode</span>
+                <span>AI Assist</span>
                 <button
                   type="button"
                   onClick={aiFloating.close}
@@ -735,6 +1003,15 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
           </CardAIBottomSheet>
         </>
       )}
+
+      <SaveDialog
+        open={showSaveDialog}
+        defaultName={defaultCardTitle(card)}
+        documentLabel="bigliettino"
+        placeholder="Es. Bigliettino Mario Rossi"
+        onSave={(name) => { void handleSave(name); }}
+        onCancel={() => setShowSaveDialog(false)}
+      />
     </div>
   );
 }

@@ -156,7 +156,8 @@ describe('Responsive (mobile <900px) + AI always-accessible', () => {
     renderEditor();
     const exportBtn = screen.getByTestId('mobile-export-btn');
     fireEvent.click(exportBtn);
-    expect(await screen.findByRole('menuitem', { name: /PDF 10-up/i })).toBeInTheDocument();
+    expect(await screen.findByRole('menuitem', { name: /PDF 10-up \(tipografia/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /PDF 10-up \(pulito/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /PNG fronte/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /SVG fronte/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /JSON/i })).toBeInTheDocument();
@@ -164,10 +165,16 @@ describe('Responsive (mobile <900px) + AI always-accessible', () => {
 
   it('on mobile: clicking Salva calls dataService.saveDocument', async () => {
     setMobile();
-    renderEditor();
+    const filled = createEmptyCard();
+    filled.front.name = 'Mario';
+    renderEditor({ initialCard: filled });
     const saveBtn = screen.getByTestId('mobile-save-btn');
     await act(async () => {
       fireEvent.click(saveBtn);
+    });
+    expect(await screen.findByRole('heading', { name: /Salva bigliettino/i })).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Conferma salvataggio/i }));
     });
     await waitFor(() => expect(mockSave).toHaveBeenCalled());
   });

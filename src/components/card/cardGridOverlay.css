@@ -231,7 +231,9 @@
 }
 
 .card-grid-arrows button:disabled,
-.card-grid-resize button:disabled {
+.card-grid-resize button:disabled,
+.card-grid-arrows button.blocked,
+.card-grid-resize button.blocked {
   opacity: 0.4;
   cursor: not-allowed;
 }

@@ -42,7 +42,7 @@ export default defineConfig(({ mode }) => {
           // proxy chiamava un modello/endpoint diverso da gemini.ts).
           server.middlewares.use(async (req, res, next) => {
             const url = (req.url || '').split('?')[0];
-            if (url !== '/api/ai/logo-config' && url !== '/api/ai/logo-background' && url !== '/api/ai/card-cover') {
+             if (url !== '/api/ai/logo-config' && url !== '/api/ai/logo-background' && url !== '/api/ai/card-cover' && url !== '/api/ai/flyer-hero' && url !== '/api/ai/card-photo') {
               return next();
             }
             if (req.method !== 'GET' && req.method !== 'POST') return next();
@@ -105,12 +105,20 @@ export default defineConfig(({ mode }) => {
                 if (!prompt || prompt.length > 1000) {
                   return json(400, { error: 'prompt mancante o troppo lungo' });
                 }
-                const context = typeof body.context === 'string' ? body.context.slice(0, 1000) : '';
+                const context = typeof body.context === 'string' ? body.context.slice(0, 2000) : '';
+                const grounding =
+                  'The attached image(s) show the business card layout I am designing a background for. Use them as reference for text placement, colour harmony, and profession. Do NOT reproduce any text, QR code, logo, face, or UI element visible in the reference — generate only the abstract background. If a background is already visible in the reference image, treat it as the previous iteration to improve upon, not as a constraint to copy.';
+                const hasImages = !!(body.cardImage || body.logoImage);
+                const finalPrompt = hasImages
+                  ? `${grounding}\n\n${prompt}${context ? '\n\nCARD CONTEXT:\n' + context : ''}`
+                  : `${prompt}${context ? '\n\nCARD CONTEXT:\n' + context : ''}`;
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
                 const provider = new mod.GeminiImageProvider(apiKey);
                 try {
-                  const finalPrompt = context ? `${prompt}\n\nCARD CONTEXT:\n${context}` : prompt;
-                  const result = await provider.generateCardCover(finalPrompt, 30_000);
+                  const images = [];
+                  if (body.cardImage) images.push({ data: String(body.cardImage), mimeType: 'image/jpeg' });
+                  if (body.logoImage) images.push({ data: String(body.logoImage), mimeType: 'image/png' });
+                  const result = await provider.generateCardCover(finalPrompt, 30_000, images);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
                   if (sizeBytes > 500_000) {
                     return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
@@ -121,6 +129,81 @@ export default defineConfig(({ mode }) => {
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(504, { error: 'Gemini non ha risposto entro 30s.' });
+                  return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+                }
+              }
+
+              if (url === '/api/ai/flyer-hero' && req.method === 'POST') {
+                if (!apiKey) {
+                  return json(503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                }
+                const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+                if (!prompt || prompt.length > 1500) {
+                  return json(400, { error: 'prompt mancante o troppo lungo' });
+                }
+                const context = typeof body.context === 'string' ? body.context.slice(0, 1500) : '';
+                const grounding =
+                  'The attached image shows the flyer layout I am designing a hero image for. Use it as reference for the hero box position, the copy placement, and the overall visual style. Generate only the hero image that fits the hero box area; do NOT reproduce any text, QR code, logo, or UI element visible in the reference.';
+                const hasImages = !!body.flyerImage;
+                const finalPrompt = hasImages
+                  ? `${grounding}\n\n${prompt}${context ? '\n\nFLYER CONTEXT:\n' + context : ''}`
+                  : `${prompt}${context ? '\n\nFLYER CONTEXT:\n' + context : ''}`;
+                const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
+                const provider = new mod.GeminiImageProvider(apiKey);
+                try {
+                  const images = body.flyerImage ? [{ data: String(body.flyerImage), mimeType: 'image/jpeg' }] : [];
+                  const imageConfig = { image_size: '512', aspect_ratio: body.aspectRatio || '3:2' };
+                  const result = await provider.generateImage(finalPrompt, imageConfig, 30_000, images);
+                  const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
+                  if (sizeBytes > 500_000) {
+                    return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                  }
+                  return json(200, { data: result });
+                } catch (err) {
+                  const msg = err?.message || 'unknown';
+                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(401, { error: 'Chiave Gemini non valida' });
+                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(504, { error: 'Gemini non ha risposto entro 30s.' });
+                  return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+                }
+              }
+
+              // Profession photo for business card (replaces photoUrl).
+              // Same path as client/prod: /api/ai/card-photo
+              if (url === '/api/ai/card-photo' && req.method === 'POST') {
+                if (!apiKey) {
+                  return json(503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                }
+                const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+                if (!prompt || prompt.length > 1000) {
+                  return json(400, { error: 'prompt mancante o troppo lungo' });
+                }
+                const context = typeof body.context === 'string' ? body.context.slice(0, 1500) : '';
+                const finalPrompt = context
+                  ? `${prompt}\n\nCARD PHOTO CONTEXT:\n${context}`
+                  : prompt;
+                const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
+                const provider = new mod.GeminiImageProvider(apiKey);
+                try {
+                  const result = await provider.generateImage(
+                    finalPrompt,
+                    { image_size: '512', aspect_ratio: '1:1' },
+                    30_000,
+                    [],
+                  );
+                  const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
+                  if (sizeBytes > 500_000) {
+                    return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                  }
+                  return json(200, { data: result });
+                } catch (err) {
+                  const msg = err?.message || 'unknown';
+                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(401, { error: 'Chiave Gemini non valida' });
+                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(504, { error: 'Gemini non ha risposto entro 30s.' });
+                  if (String(msg).toLowerCase().includes('copyright') || String(msg).toLowerCase().includes('recitation')) {
+                    return json(400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' });
+                  }
                   return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
                 }
               }

@@ -247,6 +247,73 @@ describe('documents API', () => {
     expect(res.body.id).toBe('logo-new-1');
   });
 
+  it('POST /documents with FLAT logo (no data wrapper) still stores builder payload', async () => {
+    // Regression: client editors send flat shape { builder, source, ... }
+    // without nesting under `data`. Old handler stored data:null → empty
+    // logo on reopen in production.
+    mockDbState.nextReturning = [{
+      id: 'logo-flat-1',
+      userEmail: 'user@test.com',
+      documentType: 'logo',
+      title: 'Logo Flat',
+      data: {
+        builder: { primaryText: 'Acme', iconName: 'stethoscope' },
+        source: 'builder',
+      },
+    }];
+    const res = await callHandler({
+      method: 'POST',
+      url: '/api/documents',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        document: {
+          documentType: 'logo',
+          id: 'logo-flat-1',
+          title: 'Logo Flat',
+          source: 'builder',
+          builder: { primaryText: 'Acme', iconName: 'stethoscope' },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.data).toBeTruthy();
+    expect(res.body.data.builder.primaryText).toBe('Acme');
+  });
+
+  it('POST /documents with FLAT flyer (no data wrapper) still stores content', async () => {
+    mockDbState.nextReturning = [{
+      id: 'fl-flat-1',
+      userEmail: 'user@test.com',
+      documentType: 'flyer',
+      title: 'Flyer Flat',
+      data: {
+        content: { headline: 'Sagra' },
+        style: { layout: 'classic' },
+      },
+    }];
+    const res = await callHandler({
+      method: 'POST',
+      url: '/api/documents',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        document: {
+          documentType: 'flyer',
+          id: 'fl-flat-1',
+          title: 'Flyer Flat',
+          content: { headline: 'Sagra' },
+          style: { layout: 'classic' },
+        },
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.data).toBeTruthy();
+    expect(res.body.data.content.headline).toBe('Sagra');
+  });
+
   it('POST /documents with flyer returns 201 (phase 3)', async () => {
     // Phase 3: flyer is now a first-class document type. Same opaque
     // jsonb storage path as businessCard / logo. Regression guard: the

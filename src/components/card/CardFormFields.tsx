@@ -10,8 +10,6 @@ import {
   FONT_SCALE_MIN,
   FONT_SCALE_MAX,
   FONT_SCALE_STEP,
-  SAFE_FONT_FAMILIES,
-  isSafeFontFamily,
 } from '../../utils/documentSchemas';
 import {
   LAYOUT_LABELS,
@@ -20,6 +18,7 @@ import {
   QR_SIZE_LABELS,
   SOCIAL_PLATFORMS,
 } from './labels';
+import { AiFontPicker, AiPromptTextarea, AiPromptLibrary } from '../ai-ui';
 
 export { LAYOUT_LABELS, SIZE_PRESET_LABELS, BORDER_LABELS, QR_SIZE_LABELS, SOCIAL_PLATFORMS };
 
@@ -43,6 +42,18 @@ export interface CardMediaFieldsProps extends CardSectionProps {
   onRemoveCover?: () => void;
   onRemoveBackCover?: () => void;
   uploadError: string | null;
+  tier?: 'free' | 'unlocked';
+  onGeneratePhoto?: () => void;
+  isGeneratingPhoto?: boolean;
+  photoPrompt?: string;
+  setPhotoPrompt?: (v: string) => void;
+  showPhotoPromptEditor?: boolean;
+  setShowPhotoPromptEditor?: (v: boolean) => void;
+  photoLibrary?: import('../../utils/promptLibrary').PromptLibraryEntry[];
+  onSavePhotoPrompt?: () => void;
+  onApplyPhotoPrompt?: (entry: import('../../utils/promptLibrary').PromptLibraryEntry) => void;
+  onDeletePhotoPrompt?: (id: string) => void;
+  onFillAutoPhotoPrompt?: () => void;
 }
 
 export interface CardSocialsState {
@@ -133,11 +144,24 @@ export function CardMediaFields({
   onRemoveCover,
   onRemoveBackCover,
   uploadError,
+  tier = 'free',
+  onGeneratePhoto,
+  isGeneratingPhoto = false,
+  photoPrompt = '',
+  setPhotoPrompt,
+  showPhotoPromptEditor = false,
+  setShowPhotoPromptEditor,
+  photoLibrary = [],
+  onSavePhotoPrompt,
+  onApplyPhotoPrompt,
+  onDeletePhotoPrompt,
+  onFillAutoPhotoPrompt,
 }: CardMediaFieldsProps) {
+  const photoLocked = tier !== 'unlocked';
   return (
     <fieldset className="card-fieldset">
       <legend>Foto e logo</legend>
-      <div className="card-field">
+      <div className="card-field card-photo-ai-block">
         <span>Foto (fronte)</span>
         <input
           type="file"
@@ -148,6 +172,59 @@ export function CardMediaFields({
           }}
           aria-label="Carica foto (fronte)"
         />
+        {onGeneratePhoto && (
+          <div className="card-photo-ai-actions">
+            {setShowPhotoPromptEditor && !photoLocked && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowPhotoPromptEditor(!showPhotoPromptEditor)}
+                disabled={isGeneratingPhoto}
+                aria-expanded={showPhotoPromptEditor}
+              >
+                {showPhotoPromptEditor ? 'Nascondi prompt' : 'Modifica prompt'}
+              </button>
+            )}
+            {showPhotoPromptEditor && setPhotoPrompt && !photoLocked && (
+              <div className="card-photo-prompt-editor" data-testid="card-photo-prompt-editor">
+                <AiPromptTextarea
+                  label="Prompt foto AI"
+                  value={photoPrompt}
+                  onChange={(e) => setPhotoPrompt(e.target.value.slice(0, 1000))}
+                  rows={4}
+                  maxLength={1000}
+                  placeholder="Vuoto = prompt automatico da ruolo/servizi. Es. cane stilizzato per dogsitter, verdure per nutrizionista…"
+                  aria-label="Prompt foto AI"
+                />
+                {onFillAutoPhotoPrompt && (
+                  <button type="button" className="btn-secondary" onClick={onFillAutoPhotoPrompt} disabled={isGeneratingPhoto}>
+                    Usa prompt automatico
+                  </button>
+                )}
+                {onSavePhotoPrompt && onApplyPhotoPrompt && onDeletePhotoPrompt && (
+                  <AiPromptLibrary
+                    items={photoLibrary}
+                    onSave={onSavePhotoPrompt}
+                    onApply={onApplyPhotoPrompt}
+                    onDelete={onDeletePhotoPrompt}
+                    saveDisabled={!photoPrompt.trim()}
+                    title="I miei prompt foto"
+                  />
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              className="card-action-primary"
+              onClick={onGeneratePhoto}
+              disabled={isGeneratingPhoto || photoLocked}
+              title={photoLocked ? 'Disponibile nella versione Pro' : 'Genera illustrazione professionale basata su ruolo e servizi'}
+              data-testid="card-generate-photo-ai"
+            >
+              {isGeneratingPhoto ? 'Generazione…' : photoLocked ? '🔒 Genera foto AI (Pro)' : '✨ Genera foto AI'}
+            </button>
+          </div>
+        )}
         {card.front.photoUrl && (
           <button type="button" className="card-remove-image" onClick={onRemovePhoto}>
             Rimuovi foto
@@ -388,7 +465,7 @@ export function CardSocialsFields({
           </div>
         );
       })}
-      <button type="button" onClick={addSocial} className="card-add-social">+ Aggiungi social</button>
+      <button type="button" onClick={addSocial} className="card-add-social" data-testid="card-add-social">+ Aggiungi social</button>
     </div>
   );
 }
@@ -442,9 +519,6 @@ export function CardQrAdvanced({
 
 // ─── CardStyleFields (formato + bordo + colori + font + fontScale) ──
 export function CardStyleFields({ card, patchStyle }: CardSectionProps) {
-  // Phase 2.2 REQ-D01: se il font corrente è fuori set, mostra
-  // "Personalizzato" senza sovrascriverlo.
-  const currentFontIsSafe = isSafeFontFamily(card.style.fontFamily);
   const fontScale = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, card.style.fontScale ?? 1));
   return (
     <fieldset className="card-fieldset">
@@ -513,25 +587,13 @@ export function CardStyleFields({ card, patchStyle }: CardSectionProps) {
           </div>
         </label>
       </div>
-      <label className="card-field">
-        <span>Font del bigliettino</span>
-        <select
-          value={currentFontIsSafe ? card.style.fontFamily : '__custom__'}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v !== '__custom__') patchStyle({ fontFamily: v });
-          }}
-          aria-label="Font del bigliettino"
-          data-testid="card-font-family"
-        >
-          {SAFE_FONT_FAMILIES.map((f) => (
-            <option key={f} value={f}>{f}</option>
-          ))}
-          {!currentFontIsSafe && (
-            <option value="__custom__">Personalizzato ({card.style.fontFamily})</option>
-          )}
-        </select>
-      </label>
+      <AiFontPicker
+        label="Font del bigliettino"
+        value={card.style.fontFamily}
+        onChange={(font) => patchStyle({ fontFamily: font })}
+        aria-label="Font del bigliettino"
+        data-testid="card-font-family"
+      />
       <div className="card-field" data-testid="card-font-scale">
         <span>Dimensione testo ({Math.round(fontScale * 100)}%)</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
