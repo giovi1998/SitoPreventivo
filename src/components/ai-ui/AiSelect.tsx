@@ -12,13 +12,13 @@ export interface AiSelectProps extends React.SelectHTMLAttributes<HTMLSelectElem
 
 export function AiSelect({ label, options, className = '', ...props }: AiSelectProps) {
   const selectElement = (
-    <select className={`ai-select ${className}`} {...props}>
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
+      <select className={`ai-select ${className}`} {...props} aria-label={label ? `${label}` : undefined}>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
   );
 
   if (!label) {

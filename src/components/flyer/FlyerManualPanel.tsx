@@ -8,6 +8,7 @@ import type { FlyerCopyBudget } from '../../utils/flyer/budgets';
 import { isHttpUrl } from '../../utils/qrGenerator';
 import { getSizeLabel, getLayoutLabel, getSectorLabel } from '../../utils/flyer';
 import FlyerStyleFields from './FlyerStyleFields';
+import { AiSelect, AiPromptTextarea, AiGenerateButton } from '../ai-ui';
 
 interface SectionProps {
   title: string;
@@ -190,6 +191,64 @@ export function FlyerManualPanel({
           <p style={{ fontSize: '.78rem', color: 'var(--muted)', margin: 0 }}>
             Carica un&apos;immagine manuale, oppure genera l&apos;hero da AI Assist.
           </p>
+          {flyer.style.layout !== 'centered' && (
+            <div className="flyer-hero-prompt-editor">
+              <div className="mini-row">
+                <AiSelect
+                  label="Settore hero AI"
+                  value={heroSector}
+                  onChange={(e) => setHeroSector(e.target.value as typeof FLYER_SECTORS[number])}
+                  options={FLYER_SECTORS.map((s) => ({ value: s, label: getSectorLabel(s) }))}
+                />
+                <AiSelect
+                  label="Tono hero AI"
+                  value={heroTone}
+                  onChange={(e) => setHeroTone(e.target.value as FlyerTone)}
+                  options={[
+                    { value: 'formale', label: 'Formale' },
+                    { value: 'giovanile', label: 'Giovanile' },
+                    { value: 'tecnico', label: 'Tecnico' },
+                  ]}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowHeroPromptEditor(!showHeroPromptEditor)}
+                disabled={isGeneratingHero}
+              >
+                {showHeroPromptEditor ? 'Nascondi prompt' : 'Modifica prompt'}
+              </button>
+              {showHeroPromptEditor && (
+                <AiPromptTextarea
+                  label="Prompt hero AI"
+                  value={heroPrompt}
+                  onChange={(e) => setHeroPrompt(e.target.value.slice(0, 1500))}
+                  rows={3}
+                  maxLength={1500}
+                  placeholder="Vuoto = prompt automatico da settore/tono"
+                />
+              )}
+              {tier === 'free' ? (
+                <button type="button" className="ai-generate-btn" disabled>
+                  Genera hero AI (Pro)
+                </button>
+              ) : (
+                <AiGenerateButton
+                  isProcessing={isGeneratingHero ?? false}
+                  loadingText="Generazione…"
+                  onClick={onGenerateHero}
+                >
+                  ✨ Genera hero AI
+                </AiGenerateButton>
+              )}
+              {flyer.content.heroImage?.startsWith('data:') && onResetHero && (
+                <button type="button" className="btn-remove" onClick={onResetHero}>
+                  Ripristina immagine default
+                </button>
+              )}
+            </div>
+          )}
           {flyer.content.heroImage && <button type="button" className="btn-remove" onClick={onRemoveHero}>Rimuovi immagine</button>}
           {heroError && <p style={{ color: 'var(--red)', fontSize: '.78rem' }} role="alert">{heroError}</p>}
         </div>
