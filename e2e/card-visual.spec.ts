@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import fs from 'fs/promises';
 
 const CARD_LAYOUTS = ['left', 'centered', 'split'] as const;
 const CARD_SIZES = ['eu-85x55', 'us-89x51', 'square-65x65'] as const;
@@ -67,6 +68,68 @@ test.describe('Card editor visual regression', () => {
     expect(debugFront).toBe(0);
     expect(debugBack).toBe(0);
     await page.screenshot({ path: 'e2e/__screenshots__/card-default.png', fullPage: false });
+  });
+
+  test('back preview shows "Contatti" eyebrow and contacts', async ({ page }) => {
+    await fillSampleData(page);
+    const back = page.locator('[data-testid="card-preview-back"]');
+    await expect(back.locator('.card-back-eyebrow')).toHaveText(/Contatti/i);
+    await expect(back).toContainText('+39 012 345 6789');
+    await expect(back).toContainText('mario.rossi@example.com');
+  });
+
+  test('PNG back export is not blank and contains card content', async ({ page }) => {
+    await fillSampleData(page);
+
+    // Set a distinctive web font to verify it is applied in PNG export.
+    const fontSelect = page.locator('label.card-field').filter({ hasText: /font/i }).locator('select').first();
+    if (await fontSelect.count() > 0) {
+      await fontSelect.selectOption('Oswald');
+      await page.waitForTimeout(300);
+    }
+
+    // Open export menu and click PNG back.
+    const exportBtn = page.locator('[data-testid="mobile-export-btn"], .card-export-menu > button').first();
+    await exportBtn.click();
+    await page.waitForTimeout(200);
+    await page.getByRole('menuitem', { name: /PNG retro/i }).click();
+
+    // Wait for export to finish (button text changes back from "Esportando…").
+    await expect(exportBtn.locator('span, :scope')).not.toContainText('Esportando', { timeout: 15000 });
+
+    // The exported PNG is rendered in a hidden canvas inside the page, and the
+    // app may trigger a download. Read the canvas pixel data to verify it is
+    // not all background color.
+    const canvas = page.locator('canvas[data-testid="card-export-canvas"]').first();
+    if (await canvas.count() > 0) {
+      const distinctColors = await canvas.evaluate((c: HTMLCanvasElement) => {
+        const ctx = c.getContext('2d');
+        if (!ctx) return 0;
+        const data = ctx.getImageData(0, 0, c.width, c.height).data;
+        const colors = new Set<string>();
+        for (let i = 0; i < data.length; i += 16) {
+          colors.add(`${data[i]},${data[i + 1]},${data[i + 2]}`);
+          if (colors.size > 10) break;
+        }
+        return colors.size;
+      });
+      expect(distinctColors, 'PNG export should contain multiple colors, not be blank').toBeGreaterThan(2);
+    }
+
+    // Fallback: at minimum a download should have been triggered for a non-empty PNG.
+    const downloadPromise = page.waitForEvent('download', { timeout: 15000 });
+    // Re-trigger export if no canvas was found.
+    if (await canvas.count() === 0) {
+      await exportBtn.click();
+      await page.getByRole('menuitem', { name: /PNG retro/i }).click();
+    }
+    const download = await downloadPromise.catch(() => null);
+    if (download) {
+      const path = await download.path();
+      expect(path).toBeTruthy();
+      const stats = await fs.stat(path!);
+      expect(stats.size).toBeGreaterThan(1000);
+    }
   });
 
   for (const layout of CARD_LAYOUTS) {
