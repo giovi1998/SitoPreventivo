@@ -123,7 +123,7 @@ test.describe('Card grid behavior regression suite', () => {
     await page.screenshot({ path: 'e2e/__screenshots__/card-grid-resize-company-height.png', fullPage: false });
   });
 
-  test('Back grid: moving QR left updates its grid-column', async ({ page }) => {
+  test('Back grid: moving QR left is blocked by contacts collision', async ({ page }) => {
     const gridToggle = page.locator('.card-grid-toggle').first();
     await gridToggle.click();
     await page.waitForTimeout(600);
@@ -134,17 +134,14 @@ test.describe('Card grid behavior regression suite', () => {
     await page.waitForTimeout(300);
 
     await selectGridElement(page, 'qr');
-    const initialCol = await page.locator('[data-testid="grid-el-qr"]').first().evaluate((el) => window.getComputedStyle(el as HTMLElement).gridColumn);
+    const leftBtn = page.locator('[data-testid="grid-move-left"]').first();
+    await expect(leftBtn).toBeDisabled();
+    await expect(leftBtn).toHaveClass(/blocked/);
 
-    await moveGrid(page, 'left');
-
-    const afterCol = await page.locator('[data-testid="grid-el-qr"]').first().evaluate((el) => window.getComputedStyle(el as HTMLElement).gridColumn);
-    expect(afterCol).not.toBe(initialCol);
-
-    await page.screenshot({ path: 'e2e/__screenshots__/card-grid-back-qr-move.png', fullPage: false });
+    await page.screenshot({ path: 'e2e/__screenshots__/card-grid-back-qr-move-blocked.png', fullPage: false });
   });
 
-  test('Back grid: resizing contacts width shrinks QR available space', async ({ page }) => {
+  test('Back grid: resizing contacts width is blocked by QR collision', async ({ page }) => {
     const gridToggle = page.locator('.card-grid-toggle').first();
     await gridToggle.click();
     await page.waitForTimeout(600);
@@ -154,14 +151,11 @@ test.describe('Card grid behavior regression suite', () => {
     await page.waitForTimeout(300);
 
     await selectGridElement(page, 'contacts');
-    const before = await page.locator('[data-testid="grid-el-contacts"]').first().boundingBox();
+    const growW = page.locator('[data-testid="grid-resize-w-plus"]').first();
+    await expect(growW).toBeDisabled();
+    await expect(growW).toHaveClass(/blocked/);
 
-    await resizeGrid(page, 'w+');
-
-    const after = await page.locator('[data-testid="grid-el-contacts"]').first().boundingBox();
-    expect(after!.width).toBeGreaterThanOrEqual(before!.width);
-
-    await page.screenshot({ path: 'e2e/__screenshots__/card-grid-back-contacts-resize.png', fullPage: false });
+    await page.screenshot({ path: 'e2e/__screenshots__/card-grid-back-contacts-resize-blocked.png', fullPage: false });
   });
 
   for (const size of SIZES) {

@@ -2,11 +2,17 @@ import { z } from 'zod';
 import type { Flyer, FlyerTone, FlyerLayout, FlyerSize } from '../utils/documentSchemas';
 import { FLYER_HEADLINE_MAX, FLYER_SUBHEADLINE_MAX, FLYER_BODY_MAX, FLYER_CTA_LABEL_MAX } from '../utils/documentSchemas';
 import { getFlyerCopyBudget } from '../utils/flyer';
-import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk } from './types';
+import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall } from './types';
 import { providerRegistry } from './providers/registry';
 import { chatStore } from './chat/store';
 import { buildFlyerSystemPrompt, buildFlyerCopyPrompt, type FlyerCopyContext } from './prompts/flyerSystem';
-import { BaseOrchestrator } from './BaseOrchestrator';
+import { ToolAwareOrchestrator } from './BaseOrchestrator';
+import {
+  executeFlyerShortenBody,
+  executeFlyerAddUrgency,
+} from './tools/cardFlyerExecutors';
+import type { ToolRegistry } from './tools/registry';
+import { needsFlyerTools } from './promptUtils';
 
 /**
  * Zod schema for the AI response shape. Used to validate the LLM JSON
@@ -67,7 +73,17 @@ function bodyCharBudgetFor(size: FlyerSize): number {
   return 500;
 }
 
-export class FlyerAIOrchestrator extends BaseOrchestrator {
+const FLYER_TOOLS = ['flyer_shorten_body', 'flyer_add_urgency'];
+
+export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
+  protected applicableTools(): string[] {
+    return FLYER_TOOLS;
+  }
+
+  protected registerExecutors(registry: ToolRegistry<Flyer>): void {
+    registry.register('flyer_shorten_body', executeFlyerShortenBody);
+    registry.register('flyer_add_urgency', executeFlyerAddUrgency);
+  }
 
   async generateCopy(
     flyer: Flyer,
@@ -144,19 +160,26 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
     }
     chatStore.addMessage(this.activeSessionId, { role: 'user', content: prompt });
 
+    const wantsTools = provider.supportsTools && needsFlyerTools(prompt);
+    const toolsDefs = wantsTools ? this.toolRegistry.getDefinitions() : undefined;
+
     let aiResponse: AIResponse;
     let streamedContent = '';
+    let streamedToolCalls = new Map<string, AIToolCall>();
     let streamedUsage: AIResponse['usage'] | undefined;
     const canStream = !!options?.onStream && provider.supportsStreaming;
 
     if (canStream) {
       for await (const chunk of provider.stream(session.messages, {
         temperature: 0.7,
-        responseFormat: { type: 'json_object' },
+        tools: toolsDefs,
+        responseFormat: wantsTools ? undefined : { type: 'json_object' },
       })) {
         options.onStream!(chunk);
         if (chunk.type === 'content') {
           streamedContent += chunk.content || '';
+        } else if (chunk.type === 'tool_call' && chunk.toolCall) {
+          streamedToolCalls.set(chunk.toolCall.id, chunk.toolCall);
         } else if (chunk.type === 'done' && chunk.usage) {
           streamedUsage = chunk.usage;
         } else if (chunk.type === 'error') {
@@ -165,22 +188,120 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
       }
       aiResponse = {
         content: streamedContent || null,
+        toolCalls: streamedToolCalls.size > 0 ? [...streamedToolCalls.values()] : undefined,
         usage: streamedUsage,
       };
     } else {
       aiResponse = await provider.chat(session.messages, {
         temperature: 0.7,
-        responseFormat: { type: 'json_object' },
+        tools: toolsDefs,
+        responseFormat: wantsTools ? undefined : { type: 'json_object' },
       });
+    }
+
+    let currentFlyer: Flyer = { ...flyer };
+    let applied = false;
+
+    // ─── TOOL MODE ─────────────────────────────────────
+    if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
+      chatStore.addMessage(this.activeSessionId!, {
+        role: 'assistant',
+        content: aiResponse.content || '',
+        toolCalls: aiResponse.toolCalls,
+      });
+
+      for (const toolCall of aiResponse.toolCalls) {
+        const result = this.executeTool(toolCall, currentFlyer);
+        chatStore.addMessage(this.activeSessionId!, {
+          role: 'tool',
+          content: result.changes,
+          name: toolCall.function.name,
+          toolCallId: toolCall.id,
+        });
+        if (result.changes && !result.changes.startsWith('error:')) {
+          changes.push(`tool:${toolCall.function.name}`);
+        }
+        currentFlyer = result.payload as Flyer;
+      }
+
+      // Multi-turn: ask AI to produce final JSON after tools executed.
+      try {
+        const currentJson = JSON.stringify({
+          headline: currentFlyer.content.headline,
+          subheadline: currentFlyer.content.subheadline,
+          body: currentFlyer.content.body,
+          cta: { label: currentFlyer.content.cta.label },
+        }, null, 2);
+        chatStore.addMessage(this.activeSessionId!, {
+          role: 'user',
+          content: `Copy AGGIORNATO dopo i tool (usa QUESTO stato come base):\n${currentJson}\n\nRestituisci SOLO il JSON aggiornato con la stessa struttura.`,
+        });
+
+        const followUp = await provider.chat(session.messages, {
+          temperature: 0.4,
+          responseFormat: { type: 'json_object' },
+        });
+
+        if (followUp.usage && aiResponse.usage) {
+          aiResponse.usage = {
+            promptTokens: aiResponse.usage.promptTokens + followUp.usage.promptTokens,
+            completionTokens: aiResponse.usage.completionTokens + followUp.usage.completionTokens,
+            totalTokens: aiResponse.usage.totalTokens + followUp.usage.totalTokens,
+          };
+        }
+
+        if (followUp.content) {
+          chatStore.addMessage(this.activeSessionId!, {
+            role: 'assistant',
+            content: followUp.content,
+          });
+          const clean = this.sanitizeAIResponse(followUp.content);
+          try {
+            const parsed = JSON.parse(clean);
+            const validation = flyerAIOutputSchema.safeParse(parsed);
+            if (!validation.success) {
+              changes.push(`error:invalid_flyer_followup:${validation.error.issues.length}`);
+            } else {
+              const out = validation.data;
+              currentFlyer = {
+                ...currentFlyer,
+                content: {
+                  ...currentFlyer.content,
+                  headline: out.headline,
+                  subheadline: out.subheadline,
+                  body: out.body,
+                  cta: {
+                    ...currentFlyer.content.cta,
+                    label: out.cta.label,
+                  },
+                },
+                updatedAt: new Date().toISOString(),
+              };
+              applied = true;
+              changes.push(changeLabel || 'copy_generated');
+            }
+          } catch {
+            changes.push('error:followup_not_json');
+          }
+        }
+      } catch (err) {
+        changes.push(`error:followup_failed:${(err as Error).message?.slice(0, 100) || 'unknown'}`);
+      }
+
+      return {
+        flyer: currentFlyer,
+        response: aiResponse,
+        sessionId: this.activeSessionId!,
+        changes,
+        rawResponse: aiResponse.content || undefined,
+        applied,
+      };
     }
 
     chatStore.addMessage(this.activeSessionId!, {
       role: 'assistant',
       content: aiResponse.content || '',
     });
-
-    let currentFlyer: Flyer = { ...flyer };
-    let applied = false;
 
     if (aiResponse.content) {
       const clean = this.sanitizeAIResponse(aiResponse.content);

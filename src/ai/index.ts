@@ -11,7 +11,7 @@ import { buildSystemPrompt } from './prompts/system';
 import { buildAIContext } from './prompts/context';
 import { mergeAIResponse } from './merge';
 import { needsAnalysis } from './promptUtils';
-import { BaseOrchestrator } from './BaseOrchestrator';
+import { ToolAwareOrchestrator } from './BaseOrchestrator';
 
 import {
   applyDiscount,
@@ -118,75 +118,89 @@ function validateToolArgs(name: string, rawArgs: string): { ok: true; args: Reco
   return { ok: true, args };
 }
 
-export class AIOrchestrator extends BaseOrchestrator {
-  constructor() {
-    super();
-    this.registerTools();
+const QUOTE_TOOLS = [
+  'apply_discount',
+  'adjust_margin',
+  'duplicate_option',
+  'split_quote',
+  'merge_options',
+  'recalculate_totals',
+  'reorder_options',
+  'remove_empty_items',
+  'merge_duplicate_items',
+  'round_prices',
+  'calculate_annual_cost',
+  'check_consistency',
+];
+
+export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
+  protected applicableTools(): string[] {
+    return QUOTE_TOOLS;
   }
 
-  private registerTools(): void {
-    const registry = new ToolRegistry();
-
+  protected registerExecutors(registry: import('./tools/registry').ToolRegistry<PremiumQuote>): void {
     registry.register('apply_discount', (args, quote) => {
       const { type, value, scope, targetId } = args as any;
-      return applyDiscount(quote, { type, value, scope, targetId });
+      const r = applyDiscount(quote, { type, value, scope, targetId });
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('adjust_margin', (args, quote) => {
-      return adjustMargin(quote, args.targetMarginPercent as number);
+      const r = adjustMargin(quote, args.targetMarginPercent as number);
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('duplicate_option', (args, quote) => {
-      return duplicateOption(quote, args.optionId as string);
+      const r = duplicateOption(quote, args.optionId as string);
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('split_quote', (args, quote) => {
-      return splitQuoteByOption(quote, args.optionIds as string[]);
+      const r = splitQuoteByOption(quote, args.optionIds as string[]);
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('merge_options', (args, quote) => {
-      return mergeOptions(quote, args.optionIds as string[]);
+      const r = mergeOptions(quote, args.optionIds as string[]);
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('recalculate_totals', (_args, quote) => {
-      return recalculateTotals(quote);
+      const r = recalculateTotals(quote);
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('reorder_options', (args, quote) => {
-      return reorderOptions(quote, (args.sortBy as any) || 'price_asc');
+      const r = reorderOptions(quote, (args.sortBy as any) || 'price_asc');
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('remove_empty_items', (_args, quote) => {
-      return removeEmptyItems(quote);
+      const r = removeEmptyItems(quote);
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('merge_duplicate_items', (_args, quote) => {
-      return mergeDuplicateItems(quote);
+      const r = mergeDuplicateItems(quote);
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('round_prices', (args, quote) => {
-      return roundPrices(quote, (args.nearest as number) || 5);
+      const r = roundPrices(quote, (args.nearest as number) || 5);
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('calculate_annual_cost', (_args, quote) => {
-      return calculateAnnualCost(quote);
+      const r = calculateAnnualCost(quote);
+      return { payload: r.quote, changes: r.changes };
     });
 
     registry.register('check_consistency', (_args, quote) => {
-      return checkConsistency(quote);
+      const r = checkConsistency(quote);
+      return { payload: r.quote, changes: r.changes };
     });
 
     // validate_quote deliberately excluded: it never modifies the quote and misleads the AI
-
-    (this as any)._toolRegistry = registry;
-  }
-
-  get toolRegistry(): ToolRegistry {
-    return (this as any)._toolRegistry;
-  }
-
-  set toolRegistry(r: ToolRegistry) {
-    (this as any)._toolRegistry = r;
   }
 
   async processPrompt(
@@ -314,7 +328,7 @@ export class AIOrchestrator extends BaseOrchestrator {
           continue;
         }
 
-        const result: ToolResult = this.toolRegistry.execute(
+        const result = this.toolRegistry.execute(
           toolCall.function.name,
           validated.args,
           currentQuote
@@ -332,7 +346,7 @@ export class AIOrchestrator extends BaseOrchestrator {
         if (result.changes) {
           changes.push(`tool:${toolCall.function.name}`);
         }
-        currentQuote = result.quote as PremiumQuote;
+        currentQuote = result.payload as PremiumQuote;
       }
 
       // ─── MULTI-TURN OBBLIGATORIO ───────────────────
