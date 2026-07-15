@@ -33,3 +33,28 @@ export function needsAnalysis(prompt: string): boolean {
   const lower = prompt.toLowerCase();
   return ANALYSIS_KEYWORDS.some((kw) => lower.includes(kw));
 }
+
+const CARD_TOOL_KEYWORDS = [
+  'palette', 'colori', 'colore', 'tema', 'temi',
+  'layout', 'disposizione', 'posizione',
+  'servizio', 'servizi', 'aggiungi servizio', 'add service',
+  'social', 'socials', 'rimuovi social', 'remove social', 'vuoti',
+];
+
+export function needsCardTools(prompt: string): boolean {
+  if (!prompt || !prompt.trim()) return false;
+  const lower = prompt.toLowerCase();
+  return CARD_TOOL_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+const FLYER_TOOL_KEYWORDS = [
+  'accorcia', 'corta', 'riduci', 'shorten', 'più corto',
+  'tono', 'formale', 'giovanile', 'tecnico', 'cambia tono', 'change tone',
+  'urgenza', 'urgente', 'solo oggi', 'ultimi posti', 'scadenza',
+];
+
+export function needsFlyerTools(prompt: string): boolean {
+  if (!prompt || !prompt.trim()) return false;
+  const lower = prompt.toLowerCase();
+  return FLYER_TOOL_KEYWORDS.some((kw) => lower.includes(kw));
+}

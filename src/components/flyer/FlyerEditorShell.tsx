@@ -397,8 +397,8 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
   const manualPanel = (
     <FlyerManualPanel
       flyer={flyer} showTemplateBanner={showTemplateBanner} activeSector={activeSector}
-      heroError={heroError} showCustomFont={showCustomFont} setShowCustomFont={setShowCustomFont}
-      limitReached={limitReached} exporting={exporting} tier={tier}
+      showCustomFont={showCustomFont} setShowCustomFont={setShowCustomFont}
+      limitReached={limitReached} exporting={exporting}
       onCollapse={() => setShowManual(false)}
       onTitleChange={updateTitle} onUpdateContent={updateContent} onUpdateStyle={updateStyle}
       onUpdateSize={updateSize} onUpdateOrientation={updateOrientation} onUpdateLayout={updateLayout}
@@ -406,11 +406,6 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
       onApplySectorLayout={applySectorLayout}
       onCloseTemplateBanner={() => setShowTemplateBanner(false)}
       onHeroUpload={handleHeroUpload} onRemoveHero={removeHero}
-      onGenerateHero={handleGenerateHero} onResetHero={handleResetHero} isGeneratingHero={isGeneratingHero}
-      heroPrompt={heroPrompt} setHeroPrompt={setHeroPrompt}
-      heroSector={heroSector} setHeroSector={setHeroSector}
-      heroTone={heroTone} setHeroTone={setHeroTone}
-      showHeroPromptEditor={showHeroPromptEditor} setShowHeroPromptEditor={setShowHeroPromptEditor}
       onReset={resetFlyer} onSave={openSaveDialog}
       onExportPdf={() => setExporting('pdf')} onExportPng={() => setExporting('png')}
       flyerHasContent={flyerHasContent}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { needsAnalysis } from '../promptUtils';
+import { needsAnalysis, needsCardTools, needsFlyerTools } from '../promptUtils';
 
 describe('needsAnalysis', () => {
   it('returns true for analysis-style prompts (Italian)', () => {
@@ -44,5 +44,32 @@ describe('needsAnalysis', () => {
   it('detects analysis intent at any position in the prompt', () => {
     expect(needsAnalysis('Per questo preventivo, cosa suggerisci?')).toBe(true);
     expect(needsAnalysis('Spiegami il problema')).toBe(true);
+  });
+});
+
+describe('needsCardTools', () => {
+  it('returns true for palette / layout / service / social tool intents', () => {
+    expect(needsCardTools('applica palette premium')).toBe(true);
+    expect(needsCardTools('cambia layout a split')).toBe(true);
+    expect(needsCardTools('aggiungi servizio Hosting')).toBe(true);
+    expect(needsCardTools('rimuovi social vuoti')).toBe(true);
+  });
+
+  it('returns false for generic text edits', () => {
+    expect(needsCardTools('Rendi il nome più grande')).toBe(false);
+    expect(needsCardTools('Cambia il testo')).toBe(false);
+  });
+});
+
+describe('needsFlyerTools', () => {
+  it('returns true for shorten / tone / urgency tool intents', () => {
+    expect(needsFlyerTools('accorcia il body')).toBe(true);
+    expect(needsFlyerTools('cambia tono a giovanile')).toBe(true);
+    expect(needsFlyerTools('aggiungi urgenza solo oggi')).toBe(true);
+  });
+
+  it('returns false for generic copy edits', () => {
+    expect(needsFlyerTools('riscrivi headline')).toBe(false);
+    expect(needsFlyerTools('genera copy')).toBe(false);
   });
 });

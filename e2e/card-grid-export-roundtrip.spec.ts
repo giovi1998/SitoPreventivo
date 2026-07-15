@@ -158,9 +158,8 @@ test.describe('Card grid round-trip: preview -> export', () => {
     await serviceInputs[1].fill('Brand Identity');
     await page.waitForTimeout(400);
 
-    await selectGridElement(page, 'qr');
-    await moveGrid(page, 'left');
-
+    // In the default back grid QR occupies the full right half, so move is blocked.
+    // The regression this test guards is: adding services still allows export.
     await page.screenshot({ path: 'e2e/__screenshots__/roundtrip-back-move-services-preview.png', fullPage: false });
 
     const { buffer: pngBuffer } = await exportCard(page, 'png-back');

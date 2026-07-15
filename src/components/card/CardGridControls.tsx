@@ -362,7 +362,7 @@ export function CardGridControls({
             <button
               type="button"
               onClick={() => handleMove(-1, 0)}
-              disabled={!gridEnabled}
+              disabled={!canMoveLeft}
               aria-label="Sposta a sinistra"
               title={!canMoveLeft ? (selectedEl?.x === 0 ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta a sinistra'}
               data-testid="grid-move-left"
@@ -371,7 +371,7 @@ export function CardGridControls({
             <button
               type="button"
               onClick={() => handleMove(0, -1)}
-              disabled={!gridEnabled}
+              disabled={!canMoveUp}
               aria-label="Sposta su"
               title={!canMoveUp ? (selectedEl?.y === 0 ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta su'}
               data-testid="grid-move-up"
@@ -380,7 +380,7 @@ export function CardGridControls({
             <button
               type="button"
               onClick={() => handleMove(0, 1)}
-              disabled={!gridEnabled}
+              disabled={!canMoveDown}
               aria-label="Sposta giù"
               title={!canMoveDown ? ((selectedEl?.y ?? 0) + (selectedEl?.h ?? 0) >= activeGrid.rows ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta giù'}
               data-testid="grid-move-down"
@@ -389,7 +389,7 @@ export function CardGridControls({
             <button
               type="button"
               onClick={() => handleMove(1, 0)}
-              disabled={!gridEnabled}
+              disabled={!canMoveRight}
               aria-label="Sposta a destra"
               title={!canMoveRight ? ((selectedEl?.x ?? 0) + (selectedEl?.w ?? 0) >= activeGrid.cols ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Sposta a destra'}
               data-testid="grid-move-right"
@@ -400,7 +400,7 @@ export function CardGridControls({
             <button
               type="button"
               onClick={() => handleResize(-1, 0)}
-              disabled={!gridEnabled}
+              disabled={!canShrinkW}
               aria-label="Riduci larghezza"
               title={!canShrinkW ? 'Larghezza minima 1' : disabledTitle || 'Riduci larghezza'}
               data-testid="grid-resize-w-minus"
@@ -409,7 +409,7 @@ export function CardGridControls({
             <button
               type="button"
               onClick={() => handleResize(1, 0)}
-              disabled={!gridEnabled}
+              disabled={!canGrowW}
               aria-label="Aumenta larghezza"
               title={!canGrowW ? (selectedEl && selectedEl.x + selectedEl.w >= activeGrid.cols ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Aumenta larghezza'}
               data-testid="grid-resize-w-plus"
@@ -418,7 +418,7 @@ export function CardGridControls({
             <button
               type="button"
               onClick={() => handleResize(0, -1)}
-              disabled={!gridEnabled}
+              disabled={!canShrinkH}
               aria-label="Riduci altezza"
               title={!canShrinkH ? 'Altezza minima 1' : disabledTitle || 'Riduci altezza'}
               data-testid="grid-resize-h-minus"
@@ -427,7 +427,7 @@ export function CardGridControls({
             <button
               type="button"
               onClick={() => handleResize(0, 1)}
-              disabled={!gridEnabled}
+              disabled={!canGrowH}
               aria-label="Aumenta altezza"
               title={!canGrowH ? (selectedEl && selectedEl.y + selectedEl.h >= activeGrid.rows ? 'Limite (bordo)' : 'Bloccato (collisione)') : disabledTitle || 'Aumenta altezza'}
               data-testid="grid-resize-h-plus"

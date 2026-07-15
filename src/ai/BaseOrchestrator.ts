@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { chatStore } from './chat/store';
 import { providerRegistry } from './providers/registry';
-import type { ChatMessage, AIResponse, AIStreamChunk, AIProvider, AIToolCall } from './types';
+import { ToolRegistry } from './tools/registry';
+import type { ChatMessage, AIResponse, AIStreamChunk, AIProvider, AIToolCall, ToolExecutor, ToolResult } from './types';
 
 type AIUsage = NonNullable<AIResponse['usage']>;
 
@@ -200,6 +201,46 @@ export abstract class BaseOrchestrator {
 
   getProviderList(): { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[] {
     return providerRegistry.listProviders();
+  }
+}
+
+/**
+ * Shared orchestrator subclass that adds tool support. Subclasses provide:
+ * - `applicableTools()`: which tool names this orchestrator exposes
+ * - `registerExecutors(registry)`: which executors handle those tools
+ *
+ * This replaces the per-orchestrator inline registerTools in AIOrchestrator
+ * and extends tool calling to CardAIOrchestrator and FlyerAIOrchestrator.
+ */
+export abstract class ToolAwareOrchestrator<T = unknown> extends BaseOrchestrator {
+  private _toolRegistry: ToolRegistry<T>;
+
+  constructor() {
+    super();
+    this._toolRegistry = new ToolRegistry<T>();
+    this._toolRegistry.filterDefinitions(this.applicableTools());
+    this.registerExecutors(this._toolRegistry);
+  }
+
+  protected abstract applicableTools(): string[];
+  protected abstract registerExecutors(registry: ToolRegistry<T>): void;
+
+  get toolRegistry(): ToolRegistry<T> {
+    return this._toolRegistry;
+  }
+
+  set toolRegistry(registry: ToolRegistry<T>) {
+    this._toolRegistry = registry;
+  }
+
+  protected executeTool(toolCall: AIToolCall, payload: T): ToolResult<T> {
+    let args: Record<string, unknown>;
+    try {
+      args = JSON.parse(toolCall.function.arguments);
+    } catch {
+      return { payload, changes: `error:invalid_args:${toolCall.function.name}:args non JSON` };
+    }
+    return this.toolRegistry.execute(toolCall.function.name, args, payload);
   }
 }
 

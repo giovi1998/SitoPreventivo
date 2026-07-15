@@ -36,6 +36,13 @@ export interface ToolDefinition {
   };
 }
 
+export interface ToolResult<T = unknown> {
+  payload: T;
+  changes: string;
+}
+
+export type ToolExecutor<T = unknown> = (args: Record<string, unknown>, payload: T) => ToolResult<T>;
+
 export interface ChatOptions {
   tools?: ToolDefinition[];
   temperature?: number;
