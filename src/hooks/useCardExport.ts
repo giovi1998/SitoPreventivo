@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { BusinessCard } from '../utils/documentSchemas';
 import { SIZE_PRESETS_MM } from '../utils/documentSchemas';
-import { generateCardPDF, generateCardPng, buildCardSvg } from '../utils/cardGenerator';
+import { generateCardPDF, generateCardPng, buildCardSvg, buildEmbeddedFontImport, resolveToBase64DataUrl } from '../utils/cardGenerator';
 import { pruneCardGrids } from '../utils/card/gridElements';
 import type { Tier } from '../utils/watermark';
 
@@ -72,12 +72,24 @@ export function useCardExport(
     }
   }, [card, tier, addToast]);
 
-  const exportSvg = useCallback((side: 'front' | 'back') => {
+  const exportSvg = useCallback(async (side: 'front' | 'back') => {
     try {
       const dims = SIZE_PRESETS_MM[card.style.sizePreset];
       const pxW = Math.round(dims.w * 20);
       const pxH = Math.round(dims.h * 20);
-      const svg = buildCardSvg(card, side, pxW, pxH);
+      const embeddedFontCss = await buildEmbeddedFontImport(card.style.fontFamily || 'Inter');
+      // v2.8.1: keep exported SVG self-contained: resolve photo/logo URLs to
+      // base64 so the SVG shows images correctly in viewers/editors and not
+      // just in the in-app preview.
+      const [resolvedPhotoUrl, resolvedLogoUrl] = await Promise.all([
+        card.front.photoUrl ? resolveToBase64DataUrl(card.front.photoUrl) : Promise.resolve(null),
+        card.front.logoUrl ? resolveToBase64DataUrl(card.front.logoUrl) : Promise.resolve(null),
+      ]);
+      const cardForSvg: BusinessCard = {
+        ...card,
+        front: { ...card.front, photoUrl: resolvedPhotoUrl, logoUrl: resolvedLogoUrl },
+      };
+      const svg = buildCardSvg(cardForSvg, side, pxW, pxH, { embeddedFontCss });
       downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `card_${card.id}_${side}.svg`);
       addToast('success', `SVG ${side} scaricato (vettoriale, editabile)`);
     } catch (err) {

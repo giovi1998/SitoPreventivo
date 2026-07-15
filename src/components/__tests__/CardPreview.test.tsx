@@ -243,6 +243,31 @@ describe('CardPreview', () => {
       expect(screen.queryByTestId('card-back-header')).toBeNull();
     });
 
+    it('shows "Contatti" eyebrow in back header when contacts have data but no website/company', () => {
+      const card = {
+        ...createEmptyCard(),
+        back: { ...createEmptyCard().back, phone: '+39 333 1234567' },
+        front: { ...createEmptyCard().front, company: '' },
+      };
+      render(<CardPreview side="back" card={card} />);
+      expect(screen.getByTestId('card-back-header')).toBeInTheDocument();
+      expect(screen.getByTestId('card-back-header').textContent).toMatch(/contatti/i);
+      expect(screen.queryByTestId('card-back-wordmark')).toBeNull();
+    });
+
+    it('renders back contacts even when backGrid is undefined (fallback grid)', () => {
+      const base = createEmptyCard();
+      const card: BusinessCard = {
+        ...base,
+        back: { ...base.back, phone: '+39 333 1234567', email: 'test@example.com' },
+        backGrid: undefined,
+      };
+      render(<CardPreview side="back" card={card} />);
+      expect(screen.getByTestId('grid-el-contacts')).toBeInTheDocument();
+      expect(screen.getByText('+39 333 1234567')).toBeInTheDocument();
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    });
+
     it('renders back wordmark inside header (grid refactor)', () => {
       const card = { ...createEmptyCard(), back: { ...createEmptyCard().back, website: 'https://example.com' } };
       const { container } = render(<CardPreview side="back" card={card} />);
@@ -326,10 +351,15 @@ describe('CardPreview', () => {
     });
 
     it('renders socials INSIDE the contacts grid cell when no socials cell exists (grid-only refactor)', () => {
+      // Explicit backGrid WITHOUT socials cell → fallback into contacts.
+      // Need phone so hasGridElements('back') is true and this backGrid is used
+      // (empty contacts would force deriveGridFromLayout → default with socials cell).
       const card = {
         ...createEmptyCard(),
         back: {
           ...createEmptyCard().back,
+          useGrid: true,
+          phone: '123',
           socials: [
             { platform: 'LinkedIn', url: 'XXXX' },
           ],
@@ -441,13 +471,15 @@ describe('CardPreview', () => {
       const bodyGrid = back.querySelector('.card-back-body-grid') as HTMLElement;
       expect(bodyGrid).not.toBeNull();
       expect(window.getComputedStyle(bodyGrid).display).toBe('grid');
-      // gridPresetBackDefault: contacts at x=0 (w=2), qr at x=3 (w=1)
+      // gridPresetBackDefault v2.13: contacts x=0 w=2, qr x=2 w=2
       const qrEl = document.querySelector('[data-testid="grid-el-qr"]') as HTMLElement;
       expect(qrEl).not.toBeNull();
-      expect(window.getComputedStyle(qrEl).gridColumn).toBe('4 / span 1');
+      expect(window.getComputedStyle(qrEl).gridColumn).toBe('3 / span 2');
       const contactsEl = document.querySelector('[data-testid="grid-el-contacts"]') as HTMLElement;
       expect(contactsEl).not.toBeNull();
       expect(window.getComputedStyle(contactsEl).gridColumn).toBe('1 / span 2');
+      // Socials have their own cell (not fallback into contacts)
+      expect(document.querySelector('[data-testid="grid-el-socials"]')).not.toBeNull();
     });
 
     it('back: socials renderizzati UNA sola volta in grid-mode (regression: no doppioni)', () => {
@@ -611,7 +643,7 @@ describe('CardPreview', () => {
     it('front: alignment inline styles control text position', () => {
       const card: BusinessCard = {
         ...createGiovanniCardTemplate(),
-        front: { ...createGiovanniCardTemplate().front, name: 'ALICE', title: '', company: '' },
+        front: { ...createGiovanniCardTemplate().front, name: 'ALICE', title: '', company: '', useGrid: true },
         grid: {
           cols: 4,
           rows: 4,

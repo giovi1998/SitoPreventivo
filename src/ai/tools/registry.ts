@@ -1,12 +1,8 @@
-import type { PremiumQuote } from '../../utils/quoteSchema';
-import type { ToolResult } from '../../utils/quoteTools';
-import type { ToolDefinition } from '../types';
+import type { ToolDefinition, ToolExecutor, ToolResult } from '../types';
 import { TOOL_DEFINITIONS } from './definitions';
 
-export type ToolExecutor = (args: Record<string, unknown>, quote: PremiumQuote) => ToolResult;
-
-export class ToolRegistry {
-  private executors: Map<string, ToolExecutor> = new Map();
+export class ToolRegistry<T = unknown> {
+  private executors: Map<string, ToolExecutor<T>> = new Map();
   private definitions: Map<string, ToolDefinition> = new Map();
 
   constructor() {
@@ -15,16 +11,30 @@ export class ToolRegistry {
     }
   }
 
-  register(name: string, executor: ToolExecutor): void {
+  register(name: string, executor: ToolExecutor<T>): void {
     this.executors.set(name, executor);
   }
 
-  execute(name: string, args: Record<string, unknown>, quote: PremiumQuote): ToolResult {
+  /**
+   * Keep only the definitions whose names are in `names`. Used by
+   * ToolAwareOrchestrator subclasses to expose only module-specific
+   * tools to the AI.
+   */
+  filterDefinitions(names: string[]): void {
+    const next = new Map<string, ToolDefinition>();
+    for (const name of names) {
+      const def = this.definitions.get(name);
+      if (def) next.set(name, def);
+    }
+    this.definitions = next;
+  }
+
+  execute(name: string, args: Record<string, unknown>, payload: T): ToolResult<T> {
     const executor = this.executors.get(name);
     if (!executor) {
-      return { quote, changes: `Tool sconosciuto: ${name}. Nessuna modifica effettuata.` };
+      return { payload, changes: `Tool sconosciuto: ${name}. Nessuna modifica effettuata.` };
     }
-    return executor(args, quote);
+    return executor(args, payload);
   }
 
   getDefinitions(): ToolDefinition[] {

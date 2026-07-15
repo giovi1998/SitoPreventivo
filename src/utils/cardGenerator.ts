@@ -6,6 +6,8 @@ export {
   buildCardSvg,
   buildFrontSvg,
   buildBackSvg,
+  buildEmbeddedFontImport,
+  buildSvgFontImport,
   fs,
   escapeXml,
   extractQrInner,

@@ -204,7 +204,7 @@ describe('App runAI toast feedback', () => {
     await waitFor(() => expect(mocks.addToast).toHaveBeenCalledTimes(1));
     expect(mocks.addToast).toHaveBeenCalledWith(
       'error',
-      'Errore AI. Riprova, o modifica manualmente dalla colonna di sinistra.',
+      'Errore AI. Riprova, o modifica manualmente.',
       5000
     );
   });

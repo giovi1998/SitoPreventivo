@@ -465,7 +465,7 @@ export function CardSocialsFields({
           </div>
         );
       })}
-      <button type="button" onClick={addSocial} className="card-add-social">+ Aggiungi social</button>
+      <button type="button" onClick={addSocial} className="card-add-social" data-testid="card-add-social">+ Aggiungi social</button>
     </div>
   );
 }

@@ -14,14 +14,8 @@ describe('previewHelpers', () => {
   describe('isGridModeFor', () => {
     it('returns true only when useGrid and grid elements exist for side', () => {
       const base = createGiovanniCardTemplate();
-      expect(isGridModeFor('front', base)).toBe(false); // useGrid false
-
-      const frontGrid: BusinessCard = {
-        ...base,
-        front: { ...base.front, useGrid: true },
-        grid: gridPresetLeft(),
-      };
-      expect(isGridModeFor('front', frontGrid)).toBe(true);
+      // v2.8.1: Giovanni template now enables grid-mode by default.
+      expect(isGridModeFor('front', base)).toBe(true);
 
       const noGrid: BusinessCard = {
         ...base,
@@ -29,6 +23,12 @@ describe('previewHelpers', () => {
         grid: { cols: 4, rows: 4, elements: {} },
       };
       expect(isGridModeFor('front', noGrid)).toBe(false);
+
+      const gridOff: BusinessCard = {
+        ...base,
+        front: { ...base.front, useGrid: false },
+      };
+      expect(isGridModeFor('front', gridOff)).toBe(false);
     });
 
     it('respects per-side useGrid independently', () => {

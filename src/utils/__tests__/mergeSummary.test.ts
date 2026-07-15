@@ -42,7 +42,7 @@ describe('summarizeMergeChanges', () => {
 describe('buildErrorSuggestion', () => {
   it('returns fallback for unknown errors (Test 19)', () => {
     const suggestion = buildErrorSuggestion('unknown error');
-    expect(suggestion).toBe('Errore AI. Riprova, o modifica manualmente dalla colonna di sinistra.');
+    expect(suggestion).toBe('Errore AI. Riprova, o modifica manualmente.');
   });
 
   it('suggests recharge for 402 Payment Required (AC-014)', () => {
@@ -60,9 +60,9 @@ describe('buildErrorSuggestion', () => {
     expect(suggestion).toBe('Connessione assente o lenta. Verifica la rete e riprova.');
   });
 
-  it('suggests network check for timeout', () => {
+  it('suggests timeout retry for Request timeout', () => {
     const suggestion = buildErrorSuggestion('Request timeout');
-    expect(suggestion).toBe('Connessione assente o lenta. Verifica la rete e riprova.');
+    expect(suggestion).toBe('Timeout AI. Riprova tra poco.');
   });
 
   it('suggests more specific prompt for JSON parse error (AC-015b)', () => {
@@ -82,6 +82,6 @@ describe('buildErrorSuggestion', () => {
 
   it('returns fallback for empty message', () => {
     const suggestion = buildErrorSuggestion('');
-    expect(suggestion).toBe('Errore AI. Riprova, o modifica manualmente dalla colonna di sinistra.');
+    expect(suggestion).toBe('Errore AI. Riprova, o modifica manualmente.');
   });
 });

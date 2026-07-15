@@ -1,7 +1,7 @@
 import type { BusinessCard } from '../documentSchemas';
 import type { Tier } from '../watermark';
 import { applyWatermarkToCanvas } from '../watermark';
-import { buildCardSvg } from './svgRenderer';
+import { buildCardSvg, buildEmbeddedFontImport } from './svgRenderer';
 import { getCardDimensionsMm } from './pdfLayout';
 
 export interface PngExportOptions {
@@ -20,7 +20,30 @@ export async function generateCardPng(
   const pxW = Math.round((dims.w / 25.4) * dpi);
   const pxH = Math.round((dims.h / 25.4) * dpi);
 
-  const svg = buildCardSvg(card, side, pxW, pxH);
+  // v2.7.1: embed fonts as base64 so the SVG rendered into canvas uses the
+  // correct typeface synchronously. @import fonts are async and drawImage()
+  // runs before they are available, producing fallback/system fonts.
+  const embeddedFontCss = await buildEmbeddedFontImport(card.style.fontFamily || 'Inter');
+
+  // v2.8.1: resolve relative/blob image URLs to base64 data URLs before
+  // building the SVG. When the SVG is loaded into an <img> or canvas for
+  // PNG export, relative URLs resolve against the data/blob URI of the SVG
+  // and fail (or are blocked by CORS), so photos/logos disappear. PDF export
+  // already uses renderCardSideDataUrl which does this; we mirror it here.
+  const [resolvedPhotoUrl, resolvedLogoUrl] = await Promise.all([
+    card.front.photoUrl ? resolveToBase64DataUrl(card.front.photoUrl) : Promise.resolve(null),
+    card.front.logoUrl ? resolveToBase64DataUrl(card.front.logoUrl) : Promise.resolve(null),
+  ]);
+  const cardForSvg: BusinessCard = {
+    ...card,
+    front: {
+      ...card.front,
+      photoUrl: resolvedPhotoUrl,
+      logoUrl: resolvedLogoUrl,
+    },
+  };
+
+  const svg = buildCardSvg(cardForSvg, side, pxW, pxH, { embeddedFontCss });
   const svgUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 
   try {
@@ -36,7 +59,8 @@ export async function generateCardPng(
     applyWatermarkToCanvas(ctx, opts.tier, pxW, pxH);
     const dataUrl = canvas.toDataURL('image/png');
     return dataUrlToUint8Array(dataUrl);
-  } catch {
+  } catch (e) {
+    console.error('[cardGenerator] generateCardPng failed:', e);
     return buildMinimalPng(pxW, pxH, card.style.bgColor);
   }
 }
@@ -53,6 +77,8 @@ export async function renderCardSideDataUrl(
     const png = buildMinimalPng(pxW, pxH, card.style.bgColor);
     return 'data:image/png;base64,' + uint8ArrayToBase64(png);
   }
+  const embeddedFontCss = await buildEmbeddedFontImport(card.style.fontFamily || 'Inter');
+
   const [resolvedPhotoUrl, resolvedLogoUrl] = await Promise.all([
     card.front.photoUrl ? resolveToBase64DataUrl(card.front.photoUrl) : Promise.resolve(null),
     card.front.logoUrl ? resolveToBase64DataUrl(card.front.logoUrl) : Promise.resolve(null),
@@ -65,7 +91,7 @@ export async function renderCardSideDataUrl(
       logoUrl: resolvedLogoUrl,
     },
   };
-  const svg = buildCardSvg(cardForSvg, side, pxW, pxH, { rotate });
+  const svg = buildCardSvg(cardForSvg, side, pxW, pxH, { rotate, embeddedFontCss });
   const outW = rotate === 90 || rotate === 270 ? pxH : pxW;
   const outH = rotate === 90 || rotate === 270 ? pxW : pxH;
   const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });

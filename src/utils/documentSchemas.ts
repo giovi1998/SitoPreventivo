@@ -409,19 +409,18 @@ export function gridPresetCompact(): CardGrid {
 }
 
 export function gridPresetBackDefault(): CardGrid {
+  // Label UI: "Default retro (contatti + QR + social)".
+  // v2.13: socials MUST have their own cell — fallback into contacts
+  // caused export overflow (no clip) and 3×3/debug mismatch.
+  // QR takes right half (w:2), matching Giovanni template density.
   return {
     cols: 4,
     rows: 4,
     elements: {
       contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left', alignV: 'top' },
-      // v2.5: services doubled from h:1 to h:2 so the list is readable
-      // (1 row on a 4-row grid was too tight even with font shrink).
-      // socials removed from the grid: they fall back into the
-      // contacts cell via the {!grid.elements.socials && socialsContent}
-      // branch in BackPreview, keeping them visible without eating
-      // a row that services now needs.
-      services: { x: 0, y: 2, w: 2, h: 2, alignH: 'left', alignV: 'top' },
-      qr: { x: 3, y: 0, w: 1, h: 4, alignH: 'center', alignV: 'center' },
+      services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+      socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+      qr: { x: 2, y: 0, w: 2, h: 4, alignH: 'center', alignV: 'center' },
     },
   };
 }
@@ -464,6 +463,17 @@ function filterGridElementsByContent(
   for (const [key, rect] of Object.entries(grid.elements)) {
     if (rect && hasElementContent(key as GridElementKey, card, side)) {
       els[key] = rect;
+    }
+  }
+  // v2.8: back-side fallback — quando non ci sono contatti veri (phone/
+  // email/etc vuoti) ma ci sono socials, mantieni comunque la cella
+  // `contacts` dal preset così i socials hanno un container nel grid
+  // (il fallback {!grid.elements.socials && socialsContent} in
+  // BackPreview renderizza i socials dentro contacts).
+  if (side === 'back' && !els.contacts && grid.elements.contacts) {
+    const hasSocials = card.back.socials.some((s) => s.platform && s.url);
+    if (hasSocials) {
+      els.contacts = grid.elements.contacts;
     }
   }
   return { cols: grid.cols, rows: grid.rows, elements: els as CardGrid['elements'] };
@@ -597,14 +607,16 @@ export const GIOVANNI_PERSONAL_URL = 'https://giovannicidu.vercel.app';
 // Lo costruiamo qui (non importando logoGenerator per evitare circular dep).
 // Lo sfondo è trasparente: nessun <rect> di background. I moduli del
 // path lucide "terminal" sono presi da lucideIconPaths.ts (import user zod).
-const GIOVANNI_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 160">
-  <rect x="14" y="38" width="84" height="84" rx="14" fill="#01696F"/>
-  <g transform="translate(14 38) scale(3.5)" stroke="#FFFFFF" stroke-width="0.571" stroke-linecap="round" stroke-linejoin="round" fill="none">
+// v2.11: content centered in viewBox so object-fit:contain places the
+// visual logo in the middle of the grid cell (not left-heavy empty right).
+const GIOVANNI_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 140">
+  <rect x="24" y="28" width="84" height="84" rx="14" fill="#01696F"/>
+  <g transform="translate(24 28) scale(3.5)" stroke="#FFFFFF" stroke-width="0.571" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="m4 17 6-6-6-6"/>
     <path d="M12 19h6"/>
   </g>
-  <text x="110" y="78" font-family="Inter, system-ui, sans-serif" font-size="30" font-weight="700" fill="#1a1a2e">WebdevCA</text>
-  <text x="110" y="100" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="400" fill="#01696F" letter-spacing="1">Web Developer</text>
+  <text x="124" y="72" font-family="Inter, system-ui, sans-serif" font-size="30" font-weight="700" fill="#1a1a2e">WebdevCA</text>
+  <text x="124" y="96" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="400" fill="#01696F" letter-spacing="1">Web Developer</text>
 </svg>`;
 
 function giovanniLogoDataUri(): string {
@@ -629,6 +641,10 @@ export function createGiovanniCardTemplate(): BusinessCard {
       logoUrl: giovanniLogoDataUri(),
       coverImageUrl: null,
       layout: 'split',
+      // v2.8.1: the template includes custom front/back grids, so grid-mode
+      // must be active from the start. Otherwise preview and export derive
+      // from the flexbox layout and ignore the custom grids.
+      useGrid: true,
     },
     back: {
       ...createEmptyCard().back,
@@ -640,6 +656,8 @@ export function createGiovanniCardTemplate(): BusinessCard {
       servicesLabel: 'Servizi che offro',
       qrSize: 'medium',
       coverImageUrl: null,
+      // v2.8.1: grid-mode attivo per usare il backGrid custom del template.
+      useGrid: true,
       socials: [
         { platform: 'LinkedIn', url: linkedInUrl },
         { platform: 'GitHub', url: 'https://github.com/GiovanniCidu' },

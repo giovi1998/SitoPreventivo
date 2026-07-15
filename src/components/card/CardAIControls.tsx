@@ -109,11 +109,11 @@ export default function CardAIControls({
     : [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }];
 
   const modelSelect = (
-    <AiSelect 
-      value={aiModel} 
-      onChange={(e) => onModelChange(e.target.value)} 
+    <AiSelect
+      label="Modello AI"
+      value={aiModel}
+      onChange={(e) => onModelChange(e.target.value)}
       options={modelOptions}
-      aria-label="Modello AI"
       className="card-ai-model-select"
     />
   );
@@ -204,9 +204,9 @@ export default function CardAIControls({
       hint='Descrivi cosa vuoi cambiare. Es. "titolo in inglese, accent bordeaux".'
     >
       <AiPromptTextarea
+        label="Prompt AI personalizzato"
         value={aiText}
         onChange={(e) => onTextChange(e.target.value)}
-        aria-label="Prompt AI personalizzato"
         placeholder='Es. "titolo in inglese, accent bordeaux, niente social"'
         rows={isDesktop ? 2 : 4}
       />

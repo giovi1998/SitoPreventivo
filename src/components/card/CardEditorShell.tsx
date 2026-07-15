@@ -51,6 +51,10 @@ import {
 } from '../../utils/promptLibrary';
 import { buildCardPhotoBrief } from '../../utils/card/photoBrief';
 import { pruneCardGrids } from '../../utils/card/gridElements';
+import {
+  pushLayoutEvent,
+  attachLayoutEventsToWindow,
+} from '../../utils/card/layoutEvents';
 
 const MAX_RAW_BYTES = 5_000_000;
 const AUTO_SAVE_DELAY_MS = 30_000;
@@ -98,6 +102,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedIdRef = useRef<string | undefined>(initialCard?.id);
 
+  // Always attach layout events on the card editor (localhost + prod).
+  // pushLayoutEvent still gates console output; window.__cardLayoutEvents is free.
+  useEffect(() => {
+    attachLayoutEventsToWindow();
+    pushLayoutEvent({ type: 'card.edit', result: 'ok', payload: { boot: true } });
+  }, []);
+
   // When Collection opens a different card, replace local state.
   useEffect(() => {
     if (!initialCard?.id) return;
@@ -139,6 +150,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, [exportMenuOpen]);
 
   const patchFront = useCallback((patch: Partial<BusinessCard['front']>) => {
+    const keys = Object.keys(patch);
+    pushLayoutEvent({
+      type: 'card.edit',
+      side: 'front',
+      element: keys[0],
+      result: 'ok',
+      payload: { fields: keys },
+    });
     setCard((prev) => {
       const next = { ...prev.front, ...patch };
       if (patch.layout && patch.layout !== prev.front.layout) {
@@ -147,13 +166,28 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       }
       return { ...prev, front: next, updatedAt: new Date().toISOString() };
     });
-  }, [addToast]);
+  }, []);
 
   const patchBack = useCallback((patch: Partial<BusinessCard['back']>) => {
+    const keys = Object.keys(patch);
+    pushLayoutEvent({
+      type: 'card.edit',
+      side: 'back',
+      element: keys[0],
+      result: 'ok',
+      payload: { fields: keys },
+    });
     setCard((prev) => ({ ...prev, back: { ...prev.back, ...patch }, updatedAt: new Date().toISOString() }));
   }, []);
 
   const patchStyle = useCallback((patch: Partial<BusinessCard['style']>) => {
+    const keys = Object.keys(patch);
+    pushLayoutEvent({
+      type: 'card.edit',
+      element: keys[0],
+      result: 'ok',
+      payload: { fields: keys, side: 'style' },
+    });
     setCard((prev) => {
       if (patch.sizePreset && patch.sizePreset !== prev.style.sizePreset) {
         return {
@@ -164,10 +198,20 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       }
       return { ...prev, style: { ...prev.style, ...patch }, updatedAt: new Date().toISOString() };
     });
-  }, [addToast]);
+  }, []);
 
   const [selectedGridElement, setSelectedGridElement] = useState<keyof CardGrid['elements'] | ''>('');
   const [gridEditorSide, setGridEditorSide] = useState<GridSide>('front');
+
+  const setGridEditorSideLogged = useCallback((s: GridSide) => {
+    setGridEditorSide(s);
+    pushLayoutEvent({ type: 'grid.side', side: s, result: 'ok' });
+  }, []);
+
+  const setSelectedGridElementLogged = useCallback((k: keyof CardGrid['elements'] | '') => {
+    setSelectedGridElement(k);
+    pushLayoutEvent({ type: 'grid.select', side: gridEditorSide, element: k || undefined, result: 'ok' });
+  }, [gridEditorSide]);
 
   const patchGrid = useCallback((grid: CardGrid) => {
     setCard((prev) => {
@@ -186,7 +230,19 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     });
   }, [gridEditorSide]);
 
+  const logGridChange = useCallback((type: 'move' | 'resize' | 'align', info: { element: string; applied: boolean; reason?: 'collision' | 'border'; payload?: Record<string, unknown> }) => {
+    pushLayoutEvent({
+      type: type === 'move' ? 'grid.move' : type === 'resize' ? 'grid.resize' : 'grid.align',
+      side: gridEditorSide,
+      element: info.element,
+      result: info.applied ? 'ok' : info.reason === 'collision' || info.reason === 'border' ? 'blocked' : 'error',
+      reason: info.reason,
+      payload: info.payload,
+    });
+  }, [gridEditorSide]);
+
   const applyGridPreset = useCallback((preset: BusinessCardLayout) => {
+    pushLayoutEvent({ type: 'grid.preset', side: gridEditorSide, result: 'ok', payload: { preset } });
     if (gridEditorSide === 'back') {
       setCard((prev) => ({
         ...prev,
@@ -204,6 +260,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, [gridEditorSide, card]);
 
   const handleAfterMove = useCallback((info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => {
+    logGridChange('move', { element: info.element, applied: info.applied, reason: info.reason, payload: { dx: info.dx, dy: info.dy } });
     if (info.applied) {
       const dir = (() => {
         if (info.dx > 0) return 'a destra';
@@ -217,9 +274,10 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     } else if (info.reason === 'border') {
       addToast('info', `Bloccato: bordo della griglia raggiunto`, 3000);
     }
-  }, [addToast]);
+  }, [addToast, logGridChange]);
 
   const handleAfterResize = useCallback((info: { element: string; dw: number; dh: number; applied: boolean; reason?: 'collision' | 'border' }) => {
+    logGridChange('resize', { element: info.element, applied: info.applied, reason: info.reason, payload: { dw: info.dw, dh: info.dh } });
     if (info.applied) {
       addToast('success', `${info.element} ridimensionato`, 2500);
     } else if (info.reason === 'collision') {
@@ -227,15 +285,31 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     } else if (info.reason === 'border') {
       addToast('info', `Bloccato: bordo della griglia raggiunto`, 3000);
     }
-  }, [addToast]);
+  }, [addToast, logGridChange]);
+
+  const handleAfterAlign = useCallback((info: { element: string; alignH: 'left' | 'center' | 'right'; alignV: 'top' | 'center' | 'bottom' }) => {
+    logGridChange('align', {
+      element: info.element,
+      applied: true,
+      payload: { alignH: info.alignH, alignV: info.alignV },
+    });
+    addToast('success', `${info.element}: allineamento ${info.alignH}/${info.alignV}`, 2000);
+  }, [addToast, logGridChange]);
 
   const handleToggleShowGrid = useCallback(() => {
-    setShowGrid((prev) => !prev);
+    setShowGrid((prev) => {
+      const next = !prev;
+      pushLayoutEvent({ type: 'grid.toggle', side: gridEditorSide, result: 'ok', payload: { showGrid: next } });
+      return next;
+    });
     setCard((c) => {
       const next = !showGrid;
       if (!next) {
         addToast('info', 'Griglia disattivata', 2500);
-        return c;
+        // v2.8.1: turning the grid OFF only hides the overlay/controls;
+        // we keep useGrid=true so the persisted grid layout is still used
+        // by both preview and export (REQ-E01: OFF hides overlay, not layout).
+        return { ...c, updatedAt: new Date().toISOString() };
       }
       let mutated = false;
       let nextCard: BusinessCard = c;
@@ -256,6 +330,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       } else {
         addToast('info', 'Griglia attiva', 2500);
       }
+      // v2.8.1: when the user turns grid ON, persist useGrid=true so the
+      // persisted grids become the single source of truth for preview AND
+      // export. Otherwise the export would keep deriving from flexbox layout.
+      nextCard = {
+        ...nextCard,
+        front: { ...nextCard.front, useGrid: true },
+        back: { ...nextCard.back, useGrid: true },
+      };
       return { ...nextCard, updatedAt: new Date().toISOString() };
     });
   }, [addToast, showGrid]);
@@ -265,12 +347,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, []);
 
   const applyGiovanniTemplate = useCallback(() => {
+    pushLayoutEvent({ type: 'card.template', result: 'ok', payload: { template: 'giovanni' } });
     setCard(createGiovanniCardTemplate());
     setShowTemplateBanner(false);
     addToast('info', 'Template personale Giovanni caricato');
   }, [addToast]);
 
   const resetCard = useCallback(() => {
+    pushLayoutEvent({ type: 'card.reset', result: 'ok' });
     setCard(createEmptyCard());
     setShowTemplateBanner(true);
     setShowGrid(false);
@@ -294,12 +378,20 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   const handleUpload = useCallback(async (file: File, field: 'photoUrl' | 'logoUrl') => {
     setUploadError(null);
+    pushLayoutEvent({
+      type: 'card.media',
+      element: field,
+      result: 'ok',
+      payload: { mime: file.type, size: file.size },
+    });
     if (!isAllowedLogoMime(file.type)) {
       setUploadError('Formato non supportato. Usa PNG, JPEG o SVG.');
+      pushLayoutEvent({ type: 'card.media', element: field, result: 'error', reason: 'mime' });
       return;
     }
     if (file.size > MAX_RAW_BYTES) {
       setUploadError('File troppo grande (max 5MB)');
+      pushLayoutEvent({ type: 'card.media', element: field, result: 'error', reason: 'size' });
       return;
     }
     try {
@@ -332,6 +424,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   const handleExportAction = useCallback((action: string) => {
     setExportMenuOpen(false);
+    pushLayoutEvent({ type: 'export.start', result: 'ok', payload: { action } });
     switch (action) {
       case 'pdf':
         void exportPdf({ cropMarks: true });
@@ -346,15 +439,16 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         void exportPng('back');
         break;
       case 'svg-front':
-        exportSvg('front');
+        void exportSvg('front');
         break;
       case 'svg-back':
-        exportSvg('back');
+        void exportSvg('back');
         break;
       case 'json':
         exportJson();
         break;
     }
+    pushLayoutEvent({ type: 'export.success', result: 'ok', payload: { action } });
   }, [exportPdf, exportPng, exportSvg, exportJson]);
 
   const openSaveDialog = useCallback(() => {
@@ -558,13 +652,34 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     });
   }, []);
 
+  // v2.9.1: helper that ensures a back-grid element exists when the user adds
+  // content that should render in its own cell (services/socials). Without this,
+  // a card created before v2.5 keeps a backGrid without services/socials cells,
+  // and newly-added services/socials disappear from the SVG export.
+  const ensureBackGridElement = useCallback(
+    (prev: BusinessCard, key: 'services' | 'socials'): BusinessCard['backGrid'] => {
+      const backGrid = prev.backGrid;
+      if (!backGrid) return backGrid;
+      if (backGrid.elements[key]) return backGrid;
+      const preset = gridPresetBackDefault();
+      const presetEl = preset.elements[key];
+      if (!presetEl) return backGrid;
+      return {
+        ...backGrid,
+        elements: { ...backGrid.elements, [key]: presetEl },
+      };
+    },
+    [],
+  );
+
   const addSocial = useCallback(() => {
     setCard((prev) => ({
       ...prev,
       back: { ...prev.back, socials: [...prev.back.socials, { platform: '', url: '' }] },
+      backGrid: ensureBackGridElement(prev, 'socials'),
       updatedAt: new Date().toISOString(),
     }));
-  }, []);
+  }, [ensureBackGridElement]);
 
   const removeSocial = useCallback((idx: number) => {
     setCard((prev) => ({
@@ -581,18 +696,24 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       return {
         ...prev,
         back: { ...prev.back, services: [...current, ''] },
+        backGrid: ensureBackGridElement(prev, 'services'),
         updatedAt: new Date().toISOString(),
       };
     });
-  }, []);
+  }, [ensureBackGridElement]);
 
   const updateService = useCallback((idx: number, value: string) => {
     setCard((prev) => {
       const services = [...(prev.back.services ?? [])];
       services[idx] = value.slice(0, 80);
-      return { ...prev, back: { ...prev.back, services }, updatedAt: new Date().toISOString() };
+      return {
+        ...prev,
+        back: { ...prev.back, services },
+        backGrid: value.trim() ? ensureBackGridElement(prev, 'services') : prev.backGrid,
+        updatedAt: new Date().toISOString(),
+      };
     });
-  }, []);
+  }, [ensureBackGridElement]);
 
   const removeService = useCallback((idx: number) => {
     setCard((prev) => ({
@@ -700,17 +821,18 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       side={gridEditorSide}
       gridEnabled={showGrid}
       onSideChange={(s) => {
-        setGridEditorSide(s);
-        setSelectedGridElement('');
+        setGridEditorSideLogged(s);
+        setSelectedGridElementLogged('');
       }}
       onChangeGrid={patchGrid}
       onApplyPreset={applyGridPreset}
       selected={selectedGridElement}
-      onSelect={setSelectedGridElement}
+      onSelect={setSelectedGridElementLogged}
       onAfterMove={handleAfterMove}
       onAfterResize={handleAfterResize}
+      onAfterAlign={handleAfterAlign}
     />
-  ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize]);
+  ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize, handleAfterAlign, setGridEditorSideLogged, setSelectedGridElementLogged]);
 
   const desktopActions = (
     <div className="card-actions">
@@ -765,8 +887,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
                     side={gridEditorSide}
                     gridEnabled={showGrid}
                     selected={selectedGridElement}
-                    onSelect={setSelectedGridElement}
-                    onChangeSide={(s) => { setGridEditorSide(s); setSelectedGridElement(''); }}
+                    onSelect={setSelectedGridElementLogged}
+                    onChangeSide={(s) => { setGridEditorSideLogged(s); setSelectedGridElementLogged(''); }}
                     onChangeGrid={patchGrid}
                     onAfterMove={handleAfterMove}
                   />

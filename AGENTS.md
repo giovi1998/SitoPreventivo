@@ -565,8 +565,68 @@ item di scope minore:
   `qrPayload` è vuoto. Fix: mock `qrcode` o `qrGenerator.generateQrSvg`
   per test deterministici.
 
+### Card layout/event harness (new, 2026-07)
+
+- **Harness unificato**: tutti gli e2e card usano `e2e/helpers/cardHarness.ts`
+  per login, fill, grid, export, parse SVG (non duplicare più helper).
+- **Event logging**: `src/utils/card/layoutEvents.ts` + shell wiring;
+  in test mode / `localStorage['pq_card_layout_debug']='1'` è disponibile
+  `window.__cardLayoutEvents`. Usato dai test e2e per verificare move ok,
+  collision blocked, export start/success.
+- **Layout audit**: `src/utils/card/layoutAudit.ts` controlla ratio font
+  contatti/socials, overlap label/valore, posizione QR, logo troppo piccolo
+  e testi mancanti. Usata in unit test e e2e.
+- **WYSIWYG test command**: `npx playwright test e2e/card-export-inspection.spec.ts
+  e2e/card-wysiwyg-visual.spec.ts e2e/card-grid-export-roundtrip.spec.ts
+  e2e/card-grid-behavior.spec.ts e2e/card-layout-audit.spec.ts
+  e2e/card-grid-behavior-audit.spec.ts`.
+
 Card module: ~140+ test across `__tests__/` (grid collision, master
 switch, fontScale, AI parity).
+
+### ⚠️ Card export SVG gotchas (leggi prima di toccare `svgRenderer.ts` `buildBackSvg`)
+
+Bug di rendering del retro card nell'export PDF/PNG/SVG vs preview
+React. L'utente vedeva telefono/email "sminchiati" (label e valore non
+allineati, testo galleggiante). Tre cause distinte:
+
+1. **`dominant-baseline` per contatti deve essere `alphabetic`, non
+   `text-before-edge`**. La preview React usa `.card-back-line {
+   align-items: baseline }` (flexbox): label e valore di font-size
+   diverso si allineano sulla stessa baseline alfabetica. Se l'SVG usa
+   `text-before-edge` su entrambi, il valore più grande ha la baseline
+   più bassa e i due testi si "sminchiano" verticalmente (label
+   galleggiante sopra il valore). Fix: `dominant-baseline="alphabetic"`
+   su label e valore, con `y` = baseline condivisa calcolata come
+   `cy + valAscent + pad*0.25` (`valAscent ≈ valSize * 0.8`). Gli altri
+   `<text>` del retro (header eyebrow, services, socials, QR label)
+   restano `text-before-edge`: sono righe singole, non coppie
+   label/valore, e il top-alignment va bene. **Non** cambiare tutto il
+   file a `alphabetic`: romperesti services/socials.
+2. **`wrapTextAtWhitespace` non spezza email/URL senza spazi**. La
+   funzione splitta solo su whitespace/slash. Email come
+   `webdevcaglian@gmail.com` e phone come `35180008042` sono token
+   unici senza separatori: restano su una riga e, se più larghi di
+   `valueMaxW`, escono dalla cella (clip visivo nel PNG/PDF). La
+   preview React usa `overflow-wrap: break-word` e spezza anche dentro
+   la parola. Mitigazione attuale: il calcolo `colLabelWFor` e lo
+   shrink-to-fit del font riducono la probabilità di overflow nella
+   maggior parte dei casi reali. Se servisse wrapping within-word,
+   aggiungere una funzione `breakLongToken(text, maxW, fontSize)` che
+   splitta per chunk di `Math.floor(maxW / (fontSize*0.52))` char.
+3. **`colLabelWFor` può rubare spazio al valore**. La formula
+   `Math.max(cw*0.22, ks*6, pad*1.5)` per la larghezza colonna-label:
+   con `keySize` 40px, `ks*6 = 240px` (troppo largo su cella 512px).
+   La preview CSS dà alla label `flex: 0 0 auto` (larghezza content,
+   ~50px per "TELEFONO" a 9px). Se il valore risulta troppo stretto
+   (es. email troncata), ridurre `ks*6` a `ks*4` o calcolare la
+   larghezza reale del testo label con `key.length * keySize * 0.6`.
+
+Regression test: `svgRenderer.test.ts` → "contact label and value
+share the same baseline (alphabetic, v2.9 regression)" verifica che
+label `TELEFONO` e valore `35180008042` abbiano lo stesso attributo `y`
+(baseline condivisa). Verificato manualmente disattivando il fix: senza
+`alphabetic` le `y` divergono e il test fallisce.
 
 ## Responsive Patterns
 
@@ -710,7 +770,7 @@ Chiavi attuali:
 - Framework: Vitest + React Testing Library + jsdom
 - Run single test: `npx vitest run path/to/file.test.ts`
 - No test database needed, local tests use localStorage path
-- Coverage attuale: ~1864 test su 152 file. Target: 60%.
+- Coverage attuale: ~2034 test su 170 file. Target: 60%.
 
 ## Logging
 

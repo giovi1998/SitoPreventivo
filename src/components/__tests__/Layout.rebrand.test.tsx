@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { TestRouter } from '../../test/TestRouter';
 import Layout from '../Layout';
 
 vi.mock('../ErrorBoundary', () => ({ default: ({ children }: any) => <>{children}</> }));
@@ -9,7 +9,7 @@ const baseUser = { email: 'u@test.com', username: 'tester', role: 'user' };
 
 function renderLayout(props: Partial<React.ComponentProps<typeof Layout>> = {}) {
   return render(
-    <MemoryRouter>
+    <TestRouter>
       <Layout
         view="editor"
         setView={vi.fn()}
@@ -22,7 +22,7 @@ function renderLayout(props: Partial<React.ComponentProps<typeof Layout>> = {}) 
       >
         <div data-testid="child">workspace</div>
       </Layout>
-    </MemoryRouter>
+    </TestRouter>
   );
 }
 

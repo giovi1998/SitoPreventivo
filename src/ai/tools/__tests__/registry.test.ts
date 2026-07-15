@@ -7,16 +7,25 @@ describe('ToolRegistry', () => {
     const r = new ToolRegistry();
     expect(r.getDefinitions().length).toBeGreaterThan(0);
   });
-  it('registers and executes an executor', () => {
+  it('registers and executes an executor returning payload', () => {
     const r = new ToolRegistry();
-    r.register('apply_discount', () => ({ quote: { items: [] } as any, changes: 'ok' }));
+    r.register('apply_discount', () => ({ payload: { items: [] } as any, changes: 'ok' }));
     const result = r.execute('apply_discount', {}, { options: [] } as any);
     expect(result.changes).toBe('ok');
+    expect(result.payload).toEqual({ items: [] });
   });
   it('returns unknown tool message for missing executor', () => {
     const r = new ToolRegistry();
     const result = r.execute('non_existent', {}, {} as any);
     expect(result.changes).toContain('sconosciuto');
+  });
+  it('filterDefinitions keeps only selected tools', () => {
+    const r = new ToolRegistry();
+    const before = r.getDefinitions().length;
+    expect(before).toBeGreaterThan(1);
+    r.filterDefinitions(['apply_discount']);
+    expect(r.getDefinitions()).toHaveLength(1);
+    expect(r.getDefinitions()[0].function.name).toBe('apply_discount');
   });
 });
 

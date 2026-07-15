@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import React from 'react';
+import { TestRouter } from '../../test/TestRouter'; // src/test
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -19,7 +20,7 @@ import { useRouteView, ROUTE_PATHS } from '../useRouteView';
 
 function wrapper(initialPath: string) {
   return ({ children }: { children?: React.ReactNode }) => (
-    <MemoryRouter initialEntries={[initialPath]}>{children}</MemoryRouter>
+    <TestRouter initialEntries={[initialPath]}>{children}</TestRouter>
   );
 }
 

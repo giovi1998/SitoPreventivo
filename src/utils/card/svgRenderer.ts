@@ -1,8 +1,17 @@
 import type { BusinessCard, CardGrid } from '../documentSchemas';
-import { FONT_SCALE_MIN, FONT_SCALE_MAX, QR_SIZE_PX } from '../documentSchemas';
+import { FONT_SCALE_MIN, FONT_SCALE_MAX, deriveGridFromLayout, hasGridElements } from '../documentSchemas';
 import { generateQrSvg } from '../qrGenerator';
 import { resolveCardQrPayload, getEffectiveQrPayload } from './qrPayload';
 import { deriveHostname, deriveHandle } from './textDerivation';
+import {
+  backPad,
+  backHeaderMetrics,
+  gridCellRect,
+  gridCellBox,
+  alignBoxInCell,
+  backQrSizePx,
+  effectiveBackGridForRender,
+} from './backLayout';
 
 // Phase 2.2 REQ-D04: helper per scalare la dimensione del testo in base
 // a `card.style.fontScale` (clamp 0.7-1.5, default 1). Da usare in tutti
@@ -32,6 +41,111 @@ export function svgFontFamily(card: BusinessCard): string {
   return `${quoted}, ${generic}`;
 }
 
+// v2.7: quando l'SVG viene caricato come Image (canvas pipeline per PNG/PDF)
+// o aperto come file standalone, il font-family non è disponibile perché
+// l'SVG è isolato dalla pagina. Il `<style>@import url(...)</style>` dentro
+// l'SVG fa sì che il browser carichi il font insieme al resto del SVG,
+// garantendo che canvas e viewer mostrino il font corretto.
+export const GOOGLE_FONTS_BASE = 'https://fonts.googleapis.com/css2?family=';
+export const FONT_TO_GOOGLE_URL: Record<string, string> = {
+  Inter: 'Inter:wght@400;500;600;700;800&display=swap',
+  Roboto: 'Roboto:wght@400;500;700&display=swap',
+  'Open Sans': 'Open+Sans:wght@400;500;600;700;800&display=swap',
+  Lato: 'Lato:wght@400;700;900&display=swap',
+  Montserrat: 'Montserrat:wght@400;500;600;700;800&display=swap',
+  Poppins: 'Poppins:wght@400;500;600;700;800&display=swap',
+  'Source Sans 3': 'Source+Sans+3:wght@400;600;700&display=swap',
+  'DM Sans': 'DM+Sans:wght@400;500;600;700&display=swap',
+  Figtree: 'Figtree:wght@400;500;600;700;800&display=swap',
+  'Plus Jakarta Sans': 'Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap',
+  Oswald: 'Oswald:wght@400;500;600;700&display=swap',
+  Raleway: 'Raleway:wght@400;500;600;700;800&display=swap',
+  'Playfair Display': 'Playfair+Display:wght@400;500;600;700;800&display=swap',
+  Merriweather: 'Merriweather:wght@400;700;900&display=swap',
+};
+
+const FONT_DATA_CACHE = new Map<string, Promise<string | undefined>>();
+
+function cleanFontFamily(fontFamily: string): string {
+  return fontFamily.trim().split(',')[0].replace(/['"]/g, '');
+}
+
+export function buildSvgFontImport(fontFamily: string): string {
+  const clean = cleanFontFamily(fontFamily);
+  const suffix = FONT_TO_GOOGLE_URL[clean];
+  if (!suffix) return '';
+  const url = `${GOOGLE_FONTS_BASE}${suffix}`.replace(/&/g, '&amp;');
+  return `<style>@import url('${url}');</style>`;
+}
+
+/**
+ * v2.7.1: build a self-contained `<style>` tag with the requested Google Font
+ * embedded as base64 data URIs. This is the only reliable way to make fonts
+ * render synchronously when the SVG is loaded into a canvas or into an `<img>`
+ * element, because `@import` fonts are loaded asynchronously and drawImage()
+ * runs before they are available.
+ *
+ * The result is cached per font family.
+ */
+export async function buildEmbeddedFontImport(fontFamily: string): Promise<string> {
+  const clean = cleanFontFamily(fontFamily);
+  const suffix = FONT_TO_GOOGLE_URL[clean];
+  if (!suffix) return '';
+
+  if (FONT_DATA_CACHE.has(clean)) {
+    return (await FONT_DATA_CACHE.get(clean)) ?? '';
+  }
+
+  const loadPromise = (async () => {
+    const cssUrl = `${GOOGLE_FONTS_BASE}${suffix}`;
+    try {
+      const response = await fetch(cssUrl, { mode: 'cors' });
+      if (!response.ok) return undefined;
+      let cssText = await response.text();
+
+      // v2.8.2: the regex must capture the value inside url(...) without the
+      // surrounding `url(` and `)`, otherwise the replacement becomes
+      // `url(url(data:...))` and the browser rejects the @font-face src.
+      const urlMatches = Array.from(cssText.matchAll(/url\((https:\/\/[^)]+)\)/g));
+      const replacements = await Promise.all(
+        urlMatches.map(async (match) => {
+          const rawUrl = match[1];
+          try {
+            const fontResponse = await fetch(rawUrl, { mode: 'cors' });
+            if (!fontResponse.ok) return null;
+            const blob = await fontResponse.blob();
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const result = reader.result as string;
+                const comma = result.indexOf(',');
+                resolve(comma >= 0 ? result.slice(comma + 1) : '');
+              };
+              reader.onerror = () => reject(reader.error || new Error('FileReader error'));
+              reader.readAsDataURL(blob);
+            });
+            const mime = fontResponse.headers.get('content-type') ?? 'font/woff2';
+            return { fullMatch: match[0], dataUrl: `url(data:${mime};base64,${base64})` };
+          } catch {
+            return null;
+          }
+        }),
+      );
+
+      replacements.forEach((r) => {
+        if (r) cssText = cssText.split(r.fullMatch).join(r.dataUrl);
+      });
+
+      return `<style>${cssText}</style>`;
+    } catch {
+      return undefined;
+    }
+  })();
+
+  FONT_DATA_CACHE.set(clean, loadPromise);
+  return (await loadPromise) ?? '';
+}
+
 export function escapeXml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -45,6 +159,8 @@ export interface BuildSvgOptions {
   withBleed?: boolean;
   includeDebugBoxes?: boolean;
   rotate?: 0 | 90 | 180 | 270;
+  /** v2.7.1: optional self-contained font CSS (base64 embedded) for canvas/PNG/PDF export */
+  embeddedFontCss?: string;
 }
 
 // Simple luminance check to decide if a hex color is light.
@@ -132,7 +248,10 @@ export function buildFrontSvg(
   out += `<rect x="${Math.round(pxW * 0.6)}" y="0" width="${Math.round(pxW * 0.4)}" height="${Math.round(pxH * 0.35)}" fill="url(#diag)"/>`;
 
   // 6. Render front from card.grid (single source of truth)
-  const grid = card.grid;
+  // v2.8: when front.useGrid is false OR the grid has no elements, derive
+  // fresh from layout so stale grids don't hide content (same fix as back).
+  const rawFrontGrid = card.front.useGrid && hasGridElements('front', card) ? card.grid : undefined;
+  const grid = rawFrontGrid ?? deriveGridFromLayout(card, 'front');
   if (grid && grid.cols > 0 && grid.rows > 0) {
     const cellW = pxW / grid.cols;
     const cellH = pxH / grid.rows;
@@ -161,12 +280,24 @@ export function buildFrontSvg(
       const y = logoEl.y * cellH;
       const w = logoEl.w * cellW;
       const h = logoEl.h * cellH;
+      // v2.12: logo box is 72% of the cell (matches preview CSS max-width/height)
+      // so 3×3 alignment can move it. preserveAspectRatio keeps artwork aspect.
+      const alignH = logoEl.alignH ?? 'center';
+      const alignV = logoEl.alignV ?? 'center';
+      const xAlign = alignH === 'left' ? 'xMin' : alignH === 'right' ? 'xMax' : 'xMid';
+      const yAlign = alignV === 'top' ? 'YMin' : alignV === 'bottom' ? 'YMax' : 'YMid';
+      const logoW = w * 0.72;
+      const logoH = h * 0.72;
+      let logoX = x + (w - logoW) / 2;
+      let logoY = y + (h - logoH) / 2;
+      if (alignH === 'left') logoX = x + w * 0.04;
+      else if (alignH === 'right') logoX = x + w - logoW - w * 0.04;
+      if (alignV === 'top') logoY = y + h * 0.04;
+      else if (alignV === 'bottom') logoY = y + h - logoH - h * 0.04;
       if (card.front.logoBackground === 'card') {
         out += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${escapeXml(bg)}"/>`;
       }
-      // Inset 8% for padding within the cell
-      const inset = Math.min(w, h) * 0.08;
-      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${x + inset}" y="${y + inset}" width="${w - inset * 2}" height="${h - inset * 2}" preserveAspectRatio="xMidYMid meet"/>`;
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${logoX}" y="${logoY}" width="${logoW}" height="${logoH}" preserveAspectRatio="${xAlign}${yAlign} meet"/>`;
     }
 
     const textKeys: Array<keyof CardGrid['elements'] & ('name' | 'title' | 'company')> = ['name', 'title', 'company'];
@@ -252,7 +383,9 @@ export function buildBackSvg(
   const text = card.style.textColor;
   const accent = card.style.accentColor;
   const stripW = Math.max(2, Math.round(pxW * 0.008));
-  const pad = Math.max(10, Math.round(pxW * 0.04));
+  // v2.10: pad/header metrics shared with CardPreview CSS (hard WYSIWYG).
+  const padBox = backPad(pxW, pxH);
+  const pad = padBox.x; // legacy local name used in fallback layout below
   const fontScale = card.style.fontScale ?? 1;
   const fontFamily = svgFontFamily(card);
 
@@ -292,39 +425,45 @@ export function buildBackSvg(
     out += `<rect x="0" y="${pxH - stripH}" width="${pxW}" height="${stripH}" fill="${accent}"/>`;
   }
 
-  // Header — v2.5: show "CONTATTI" eyebrow whenever there is at least
-  // one contact OR a wordmark (hostname or company). The wordmark is
-  // optional and shown only if present.
+  // Header — v2.10: sizes from backHeaderMetrics (matches .card-back-header).
   let headerH = 0;
   const hasAnyContact = !!(card.back.phone || card.back.email || card.back.website || card.back.address || card.back.vatNumber);
+  const headerMetrics = backHeaderMetrics(pxW, pxH, fontScale, padBox);
   if (hasAnyContact || headerWord) {
-    const eyebrowSize = fs(pxH * 0.055, fontScale);
-    const wordmarkSize = fs(pxH * 0.052, fontScale);
-    const headerTextH = Math.max(eyebrowSize, wordmarkSize);
-    out += `<text x="${pad + stripW}" y="${pad + eyebrowSize}" font-family="${fontFamily}" font-size="${eyebrowSize}" font-weight="700" fill="${accent}" letter-spacing="2.5">CONTATTI</text>`;
+    const { eyebrowSize, wordmarkSize, textY, dividerY, headerX } = headerMetrics;
+    out += `<text x="${headerX}" y="${textY}" font-family="${fontFamily}" font-size="${eyebrowSize}" font-weight="700" fill="${accent}" letter-spacing="2.5" dominant-baseline="alphabetic">CONTATTI</text>`;
     if (headerWord) {
-      out += `<text x="${pxW - pad}" y="${pad + eyebrowSize}" font-family="${fontFamily}" font-size="${wordmarkSize}" font-weight="600" fill="${accent}" text-anchor="end">${escapeXml(headerWord)}</text>`;
+      out += `<text x="${pxW - padBox.x}" y="${textY}" font-family="${fontFamily}" font-size="${wordmarkSize}" font-weight="600" fill="${accent}" text-anchor="end" dominant-baseline="alphabetic">${escapeXml(headerWord)}</text>`;
     }
-    const divY = pad + headerTextH + Math.round(pxH * 0.02);
-    out += `<line x1="${pad + stripW}" y1="${divY}" x2="${pxW - pad}" y2="${divY}" stroke="${text}" stroke-width="0.4" stroke-dasharray="3,2" opacity="0.18"/>`;
-    // Reserve the same vertical space the preview uses for the header + divider + margin.
-    headerH = divY + Math.round(pxH * 0.025);
+    out += `<line x1="${headerX}" y1="${dividerY}" x2="${pxW - padBox.x}" y2="${dividerY}" stroke="${text}" stroke-width="0.4" stroke-dasharray="3,2" opacity="0.18"/>`;
+    headerH = headerMetrics.bodyTop;
   }
   const bodyTop = headerH;
   const bodyH = pxH - bodyTop;
 
   // Render back from card.backGrid (single source of truth)
-  const grid = card.backGrid ?? card.grid;
+  // v2.8: when back.useGrid is false OR the persisted backGrid has no
+  // usable elements, derive fresh from the default preset so the export
+  // never goes blank.
+  // v2.10: collapse empty services row so socials sit under contacts
+  // (same density as preview when servicesContent is null).
+  const useBackGrid = card.back.useGrid && hasGridElements('back', card);
+  const persistedBackGrid = useBackGrid ? card.backGrid : undefined;
+  const rawBackGrid = persistedBackGrid ?? (useBackGrid ? card.grid : undefined);
+  const baseGrid = rawBackGrid ?? deriveGridFromLayout(card, 'back');
+  const grid = baseGrid ? effectiveBackGridForRender(baseGrid, card) : baseGrid;
   if (grid && grid.cols > 0 && grid.rows > 0) {
     const cellW = pxW / grid.cols;
     const cellH = bodyH / grid.rows;
 
     const contactsEl = grid.elements.contacts;
     if (contactsEl) {
-      const cx = contactsEl.x * cellW + pad * 0.5;
-      const cy = contactsEl.y * cellH + bodyTop + pad * 0.5;
-      const cw = contactsEl.w * cellW - pad;
-      const ch = contactsEl.h * cellH - pad;
+      // v2.10: cell rect from shared backLayout (matches preview padding).
+      const cell = gridCellRect(contactsEl, cellW, cellH, bodyTop, padBox);
+      const cx = cell.x;
+      const cy = cell.y;
+      const cw = cell.w;
+      const ch = cell.h;
 
       const contactEntries: Array<{ key: string; value: string; color?: string; isAccent?: boolean }> = [];
       if (card.back.phone) contactEntries.push({ key: 'Telefono', value: card.back.phone });
@@ -333,16 +472,22 @@ export function buildBackSvg(
       if (card.back.address) contactEntries.push({ key: 'Indirizzo', value: card.back.address });
       if (card.back.vatNumber) contactEntries.push({ key: 'P.IVA', value: card.back.vatNumber });
 
-      // v2.6: contacts were rendering at 0.09/0.12 of min(cw,ch), far
-      // smaller than socials/services (~0.22-0.25) in the same body
-      // grid, so a resized (h:1) contacts cell looked "microscopic"
-      // next to socials. Start from a comparable base and shrink-to-fit
-      // like socials/services do, instead of a fixed tiny factor.
-      let keySize = fs(Math.min(cw, ch) * 0.16, fontScale);
-      let valSize = fs(Math.min(cw, ch) * 0.2, fontScale);
+      // v2.10.1: size fonts vs CARD height (pxH), matching CSS rem on a
+      // ~340px-tall preview (.card-back-key 0.58rem≈9.3px, .card-back-val
+      // 0.78rem≈12.5px). Sizing vs min(cw,ch) blew up at export DPI
+      // (cell ~300px → 48px labels). Then shrink-to-fit short cells.
+      let keySize = fs(pxH * (9.3 / 340), fontScale);
+      let valSize = fs(pxH * (12.5 / 340), fontScale);
       const wrappableKeys = new Set(['Email', 'Telefono']);
-      const colLabelWFor = (ks: number) => Math.max(cw * 0.22, ks * 6, pad * 1.5);
-      const lineGapFor = (ks: number, vs: number) => Math.max(ks, vs) * 1.25;
+      // Label column = longest key glyph width + gap (never overlaps value).
+      // "TELEFONO" ≈ 8 chars; uppercase sans ≈ 0.62em per char + letter-spacing.
+      const longestKey = contactEntries.reduce((n, e) => Math.max(n, e.key.length), 1);
+      const colLabelWFor = (ks: number) => {
+        const textW = ks * longestKey * 0.62 + ks * 0.4; // letter-spacing budget
+        const gap = Math.max(8, ks * 0.5);
+        return Math.min(cw * 0.42, textW + gap);
+      };
+      const lineGapFor = (ks: number, vs: number) => Math.max(ks, vs) * 1.35;
       const linesFor = (vs: number, ks: number) => {
         const colLabelW = colLabelWFor(ks);
         const valueMaxW = Math.max(10, cw - colLabelW - pad * 0.5);
@@ -362,26 +507,53 @@ export function buildBackSvg(
         valSize *= 0.9;
       }
 
+      const contactsAlignH = contactsEl.alignH ?? 'left';
+      const contactsAlignV = contactsEl.alignV ?? 'top';
       const lineGap = lineGapFor(keySize, valSize);
-      let lineY = cy + keySize + pad * 0.25;
+      // v2.9: allinea label e valore sulla stessa baseline alfabetica, come
+      // la preview React (.card-back-line { align-items: baseline }). Prima
+      // usavamo text-before-edge su entrambi: label e valore venivano
+      // top-aligned ma, essendo il valore più grande, la sua baseline era
+      // più bassa e i due testi apparivano "sminchiati" (label galleggiante
+      // sopra il valore). Ora calcoliamo un'unica baseline condivisa e usiamo
+      // dominant-baseline="alphabetic" su entrambi i <text>.
+      const valAscent = Math.round(valSize * 0.8);
+      const contentH = contactEntries.length * lineGap + pad * 0.25;
+      let startY = cy + valAscent + pad * 0.25;
+      if (contactsAlignV === 'center') startY = cy + (ch - contentH) / 2 + valAscent + pad * 0.25;
+      else if (contactsAlignV === 'bottom') startY = cy + ch - contentH + valAscent + pad * 0.25;
+      let lineY = startY;
       const colLabelW = colLabelWFor(keySize);
       const valueMaxW = Math.max(10, cw - colLabelW - pad * 0.5);
+      const labelAnchor = contactsAlignH === 'right' ? 'end' : contactsAlignH === 'center' ? 'middle' : 'start';
+      const valueAnchor = contactsAlignH === 'right' ? 'end' : contactsAlignH === 'center' ? 'middle' : 'start';
+      const labelX = contactsAlignH === 'right'
+        ? cx + cw - colLabelW
+        : contactsAlignH === 'center'
+          ? cx + (cw - colLabelW) / 2
+          : cx;
+      const valueXBase = contactsAlignH === 'right'
+        ? cx + cw
+        : contactsAlignH === 'center'
+          ? cx + cw / 2 + colLabelW / 2
+          : cx + colLabelW;
+      // v2.13: hard clip — text must NEVER paint outside the contacts cell.
+      const contactsClipId = `clipContacts${contactsEl.x}${contactsEl.y}${contactsEl.w}${contactsEl.h}`;
+      const contactsBox = gridCellBox(contactsEl, cellW, cellH, bodyTop);
+      out += `<defs><clipPath id="${contactsClipId}"><rect x="${contactsBox.x}" y="${contactsBox.y}" width="${contactsBox.w}" height="${contactsBox.h}"/></clipPath></defs>`;
+      out += `<g clip-path="url(#${contactsClipId})">`;
       const renderContact = (entry: { key: string; value: string; color?: string; isAccent?: boolean }) => {
-        const wrapped = wrappableKeys.has(entry.key)
-          ? wrapTextAtWhitespace(entry.value, valueMaxW, valSize)
-          : [entry.value];
-        out += `<text x="${cx}" y="${lineY}" font-family="${fontFamily}" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4" dominant-baseline="text-before-edge">${escapeXml(entry.key.toUpperCase())}</text>`;
-        const valueX = cx + colLabelW;
+        // Always wrap values to valueMaxW (not only email/phone) so long
+        // strings never spill past the cell even without clip.
+        const wrapped = wrapTextAtWhitespace(entry.value, valueMaxW, valSize);
+        out += `<text x="${labelX}" y="${lineY}" font-family="${fontFamily}" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4" text-anchor="${labelAnchor}" dominant-baseline="alphabetic">${escapeXml(entry.key.toUpperCase())}</text>`;
         wrapped.forEach((line) => {
-          out += `<text x="${valueX}" y="${lineY}" font-family="${fontFamily}" font-size="${valSize}" font-weight="500" fill="${entry.isAccent ? accent : (entry.color ?? text)}" dominant-baseline="text-before-edge">${escapeXml(line)}</text>`;
+          out += `<text x="${valueXBase}" y="${lineY}" font-family="${fontFamily}" font-size="${valSize}" font-weight="500" fill="${entry.isAccent ? accent : (entry.color ?? text)}" text-anchor="${valueAnchor}" dominant-baseline="alphabetic">${escapeXml(line)}</text>`;
           lineY += lineGap;
         });
       };
       contactEntries.forEach(renderContact);
-      // v2.5: fallback — when the grid has no socials cell (the new
-      // default back grid gives that space to services), render the
-      // socials as a small italic line at the bottom of the contacts
-      // cell, mirroring the CardPreview React fallback.
+      // Fallback: no dedicated socials cell → socials inside contacts, CLIPPED.
       if (!grid.elements.socials && socials.length > 0) {
         const socialsText = socials
           .map((s) => {
@@ -390,31 +562,54 @@ export function buildBackSvg(
             return `${s.platform} ${value}`;
           })
           .join('   ');
-        const socialSize = fs(Math.min(cw, ch) * 0.14, fontScale);
-        out += `<text x="${cx}" y="${lineY + Math.round(ch * 0.04)}" font-family="${fontFamily}" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" dominant-baseline="text-before-edge">${escapeXml(socialsText)}</text>`;
+        // Size vs card height (same as dedicated socials cell), then wrap.
+        let socialSize = fs(pxH * (10 / 340), fontScale);
+        const socialLineH = (s: number) => s * 1.35;
+        const remainH = Math.max(8, cy + ch - lineY - pad * 0.25);
+        while (socialSize > 6 && wrapTextAtWhitespace(socialsText, cw, socialSize).length * socialLineH(socialSize) > remainH) {
+          socialSize *= 0.9;
+        }
+        const lines = wrapTextAtWhitespace(socialsText, cw, socialSize);
+        let sy = lineY + Math.round(socialSize * 0.4);
+        lines.forEach((line) => {
+          if (sy > cy + ch) return;
+          out += `<text x="${cx}" y="${sy}" font-family="${fontFamily}" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" dominant-baseline="text-before-edge">${escapeXml(line)}</text>`;
+          sy += socialLineH(socialSize);
+        });
       }
+      out += '</g>';
     }
 
     // Services (separate grid element)
-    const servicesEl = grid.elements.services;
-    const services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
-    if (servicesEl && services.length > 0) {
-      const sx = servicesEl.x * cellW + pad * 0.5;
-      const sy = servicesEl.y * cellH + bodyTop + pad * 0.5;
-      const sw = servicesEl.w * cellW - pad;
-      const sh = servicesEl.h * cellH - pad;
-      let svcY = sy + pad * 0.25;
+    let services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
+    let servicesEl = grid.elements.services;
+    const socialsEl = grid.elements.socials;
+    // v2.9.1: mirror CardPreview.tsx expansion — when socials are empty, let
+    // services expand into the unused socials row so the left column doesn't
+    // leave an empty gap. We create a temporary merged rect for rendering only.
+    let servicesRenderEl = servicesEl;
+    if (services.length > 0 && !socialsEl && servicesEl) {
+      servicesRenderEl = { ...servicesEl, h: servicesEl.h + 1 };
+    }
+    if (servicesRenderEl && services.length > 0) {
+      const svcCell = gridCellRect(servicesRenderEl, cellW, cellH, bodyTop, padBox);
+      const sx = svcCell.x;
+      const sy = svcCell.y;
+      const sw = svcCell.w;
+      const sh = svcCell.h;
+      const servicesAlignH = servicesRenderEl.alignH ?? 'left';
+      const servicesAlignV = servicesRenderEl.alignV ?? 'top';
+      let svcY = sy + padBox.cellY * 0.25;
       const servicesLabelText = (card.back.servicesLabel ?? '').trim();
       let labelSize = 0;
       if (servicesLabelText) {
-        // v2.5: bumped from 0.18 — label was getting lost in the cell.
-        labelSize = fs(Math.min(sw, sh) * 0.22, fontScale);
-        out += `<text x="${sx}" y="${svcY + labelSize}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="700" fill="${accent}" letter-spacing="1.2" opacity="0.7" dominant-baseline="text-before-edge">${escapeXml(servicesLabelText.toUpperCase())}</text>`;
-        svcY += labelSize * 1.4;
+        // v2.10.1: vs card height (CSS ~0.62rem services label)
+        labelSize = fs(pxH * (10 / 340), fontScale);
+        svcY += labelSize * 1.1;
       }
       const hasLongService = services.some((s) => s.length >= 40);
-      // v2.5: bumped from 0.2 — services were too small to read.
-      let svcSize = fs(Math.min(sw, sh) * 0.25, fontScale) * (hasLongService ? 0.85 : 1);
+      // v2.10.1: vs card height, not min(cell) which explodes at export DPI
+      let svcSize = fs(pxH * (13 / 340), fontScale) * (hasLongService ? 0.85 : 1);
       // v2.5.1: tighter line-height (1.2 instead of 1.35) so 2-3
       // services + label fit a 1-row cell without shrinking too much.
       const svcLineH = (s: number) => s * 1.2;
@@ -429,20 +624,71 @@ export function buildBackSvg(
       while (svcSize > 14 && neededH(svcSize) > sh) {
         svcSize *= 0.92;
       }
+      const blockH = (labelSize ? labelSize * 1.3 : 0) + services.length * svcLineH(svcSize) + pad * 0.5;
+      let startY = svcY;
+      if (servicesAlignV === 'center') startY = sy + (sh - blockH) / 2;
+      else if (servicesAlignV === 'bottom') startY = sy + sh - blockH;
+      const textAnchor = servicesAlignH === 'right' ? 'end' : servicesAlignH === 'center' ? 'middle' : 'start';
+      const textX = servicesAlignH === 'right'
+        ? sx + sw - padBox.cellX * 0.5
+        : servicesAlignH === 'center'
+          ? sx + sw / 2
+          : sx;
+      let labelY = startY;
+      if (servicesLabelText) {
+        out += `<text x="${textX}" y="${labelY}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="700" fill="${accent}" letter-spacing="1.2" opacity="0.7" text-anchor="${textAnchor}" dominant-baseline="text-before-edge">${escapeXml(servicesLabelText.toUpperCase())}</text>`;
+        labelY += labelSize * 1.3;
+      }
       const finalLineH = svcLineH(svcSize);
+      const svcClipId = `clipServices${servicesRenderEl.x}${servicesRenderEl.y}${servicesRenderEl.w}${servicesRenderEl.h}`;
+      const svcBox = gridCellBox(servicesRenderEl, cellW, cellH, bodyTop);
+      out += `<defs><clipPath id="${svcClipId}"><rect x="${svcBox.x}" y="${svcBox.y}" width="${svcBox.w}" height="${svcBox.h}"/></clipPath></defs>`;
+      out += `<g clip-path="url(#${svcClipId})">`;
       services.forEach((svc, idx) => {
-        out += `<text x="${sx}" y="${svcY + (idx + 1) * finalLineH}" font-family="${fontFamily}" font-size="${svcSize}" font-weight="800" fill="${accent}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
+        out += `<text x="${textX}" y="${labelY + idx * finalLineH}" font-family="${fontFamily}" font-size="${svcSize}" font-weight="800" fill="${accent}" text-anchor="${textAnchor}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
       });
+      out += '</g>';
     }
 
-    const socialsEl = grid.elements.socials;
+    if (services.length > 0 && !servicesEl && !socialsEl && contactsEl) {
+      // v2.9.1: no services/socials cells at all but services exist (legacy
+      // grid created before services were added). Render them in the contacts
+      // fallback area, below the contacts text.
+      // This branch is reached only when the persisted grid has no services
+      // element and the user has added services; we avoid losing them.
+      // (mirrors CardPreview.tsx fallback {!grid.elements.services && servicesContent}).
+      const fallbackEl = contactsEl;
+      const fx = fallbackEl.x * cellW + pad * 0.5;
+      const fy = fallbackEl.y * cellH + bodyTop + pad * 0.5 + contactsEl.h * cellH;
+      const fw = fallbackEl.w * cellW - pad;
+      const fh = (grid.rows - fallbackEl.y - fallbackEl.h) * cellH - pad;
+      if (fh > 20) {
+        const servicesLabelText = (card.back.servicesLabel ?? '').trim();
+        let labelSize = 0;
+        let svcY = fy;
+        if (servicesLabelText) {
+          labelSize = fs(Math.min(fw, fh) * 0.18, fontScale);
+          out += `<text x="${fx}" y="${svcY + labelSize}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="700" fill="${accent}" letter-spacing="1.2" opacity="0.7" dominant-baseline="text-before-edge">${escapeXml(servicesLabelText.toUpperCase())}</text>`;
+          svcY += labelSize * 1.4;
+        }
+        let svcSize = fs(Math.min(fw, fh) * 0.2, fontScale);
+        const svcLineH = (s: number) => s * 1.2;
+        const neededH = (s: number) => (labelSize ? labelSize * 1.4 : 0) + services.length * svcLineH(s) + pad * 0.5;
+        while (svcSize > 14 && neededH(svcSize) > fh) svcSize *= 0.92;
+        services.forEach((svc, idx) => {
+          out += `<text x="${fx}" y="${svcY + (idx + 1) * svcLineH(svcSize)}" font-family="${fontFamily}" font-size="${svcSize}" font-weight="800" fill="${accent}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
+        });
+      }
+    }
+
     if (socialsEl && socials.length > 0) {
       // Full cell box (same coordinate system as preview CSS grid).
-      const cellX = socialsEl.x * cellW;
-      const cellY = socialsEl.y * cellH + bodyTop;
-      const cellBoxW = socialsEl.w * cellW;
-      const cellBoxH = socialsEl.h * cellH;
-      const innerPad = pad * 0.35;
+      const box = gridCellBox(socialsEl, cellW, cellH, bodyTop);
+      const cellX = box.x;
+      const cellY = box.y;
+      const cellBoxW = box.w;
+      const cellBoxH = box.h;
+      const innerPad = padBox.cellX * 0.5;
       const sx = cellX + innerPad;
       const sw = Math.max(10, cellBoxW - innerPad * 2);
       const sh = Math.max(10, cellBoxH - innerPad * 2);
@@ -453,7 +699,8 @@ export function buildBackSvg(
           return `${s.platform} ${value}`;
         })
         .join('   ');
-      let socialSize = fs(Math.min(sw, sh) * 0.22, fontScale);
+      // v2.10.1: vs card height (CSS .card-back-socials ~0.62rem ≈ 10px @340)
+      let socialSize = fs(pxH * (10 / 340), fontScale);
       const socialLineH = (s: number) => s * 1.35;
       const neededSocialH = (s: number) => {
         const lines = wrapTextAtWhitespace(socialsText, sw, s);
@@ -475,27 +722,39 @@ export function buildBackSvg(
         : alignH === 'center'
           ? cellX + cellBoxW / 2
           : sx;
+      const clipId = `clipSocials${socialsEl.x}${socialsEl.y}${socialsEl.w}${socialsEl.h}`;
+      out += `<defs><clipPath id="${clipId}"><rect x="${cellX}" y="${cellY}" width="${cellBoxW}" height="${cellBoxH}"/></clipPath></defs>`;
+      out += `<g clip-path="url(#${clipId})">`;
       lines.forEach((line, idx) => {
         const lineY = startY + idx * socialLineH(socialSize);
         out += `<text x="${textX}" y="${lineY}" font-family="${fontFamily}" font-size="${socialSize}" font-weight="500" fill="${text}" opacity="0.78" font-style="italic" text-anchor="${anchor}" dominant-baseline="text-before-edge">${escapeXml(line)}</text>`;
       });
+      out += '</g>';
     }
 
     const qrEl = grid.elements.qr;
     if (qrEl && hasQr) {
-      // Phase 2.2 REQ-E02: in grid-mode la dimensione QR deriva dalla cella,
-      // ma rispetta comunque `qrSize` (small/medium/large) come upper bound
-      // per coerenza con la preview (CardPreview.tsx usa qrSizePxFor).
-      // Mappa i px di QR_SIZE_PX (84/120/160) proporzionalmente alla carta:
-      // la preview è ~340px di altezza per eu-85x55, qui pxH varia con DPI.
-      const qrMaxPx = Math.round(pxH * (QR_SIZE_PX[card.back.qrSize] ?? QR_SIZE_PX.medium) / 340);
-      const qx = qrEl.x * cellW + pad * 0.5;
-      const qy = qrEl.y * cellH + bodyTop + pad * 0.5;
-      const qw = qrEl.w * cellW - pad;
-      const qh = qrEl.h * cellH - pad;
-      const qrSize = Math.min(qw, qh, qrMaxPx);
-      const qrX = qx + (qw - qrSize) / 2;
-      const qrY = qy + (qh - qrSize) / 2;
+      // v2.10: QR size from shared backQrSizePx (same scale as preview CSS
+      // --card-qr-size / PREVIEW_REF_H). Cell rect + align from backLayout.
+      const qrCell = gridCellRect(qrEl, cellW, cellH, bodyTop, padBox);
+      const qx = qrCell.x;
+      const qy = qrCell.y;
+      const qw = qrCell.w;
+      const qh = qrCell.h;
+      const qrAlignH = qrEl.alignH ?? 'center';
+      const qrAlignV = qrEl.alignV ?? 'center';
+      // Reserve space for qrLabel under the QR inside the cell.
+      const labelReserve = card.back.qrLabel ? Math.round(Math.min(qw, qh) * 0.12) : 0;
+      const qrSize = backQrSizePx(card, qw, qh - labelReserve, pxH);
+      const pos = alignBoxInCell(
+        { x: qx, y: qy, w: qw, h: qh - labelReserve },
+        qrSize,
+        qrSize,
+        qrAlignH,
+        qrAlignV,
+      );
+      const qrX = pos.x;
+      const qrY = pos.y;
       const qrObj: any = {
         documentType: 'qrCode',
         id: 'card-back',
@@ -520,12 +779,10 @@ export function buildBackSvg(
       const innerScale = (qrSize - 8) / totalSize;
       out += `<g transform="translate(${qrX + 4} ${qrY + 4}) scale(${innerScale})">${extractQrInner(qrSvg)}</g>`;
 
-      // QR label below QR cell (v2.5: removed hostname wordmark, it
-      // was redundant with the header wordmark at the top of the back
-      // side and overlapped the qrLabel visually).
-      const belowY = qrY + qrSize + Math.round(cellH * 0.04);
+      // QR label below QR, still inside the cell (matches preview density).
       if (card.back.qrLabel) {
-        const labelSize = fs(Math.min(qw, qh) * 0.08, fontScale);
+        const labelSize = fs(Math.min(qw, qh) * 0.07, fontScale);
+        const belowY = qrY + qrSize + Math.round(labelSize * 0.4);
         out += `<text x="${qx + qw / 2}" y="${belowY + labelSize}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
       }
     }
@@ -653,19 +910,18 @@ export function buildCardSvg(
   opts: BuildSvgOptions = {},
 ): string {
   const rotate = opts.rotate ?? 0;
+  const fontImport = opts.embeddedFontCss || buildSvgFontImport(card.style.fontFamily || 'Inter');
   const inner = side === 'front' ? buildFrontSvg(card, pxW, pxH, opts) : buildBackSvg(card, pxW, pxH, opts);
+  const head = fontImport ? `${fontImport}${inner}` : inner;
   if (rotate === 0) {
-    return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${pxW} ${pxH}" width="${pxW}" height="${pxH}">${inner}</svg>`;
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${pxW} ${pxH}" width="${pxW}" height="${pxH}">${head}</svg>`;
   }
   const outW = rotate === 90 || rotate === 270 ? pxH : pxW;
   const outH = rotate === 90 || rotate === 270 ? pxW : pxH;
-  // Rotate around origin then translate so the content lands inside the
-  // swapped viewBox. rotate(angle) in SVG (y-down, clockwise): 90° -> (x,y)->(-y,x),
-  // so we translate by (+pxH, 0); 270° -> (x,y)->(y,-x), translate by (0, +pxW);
-  // 180° -> (x,y)->(-x,-y), translate by (+pxW, +pxH).
   const tx = rotate === 90 ? pxH : rotate === 180 ? pxW : 0;
   const ty = rotate === 180 ? pxH : rotate === 270 ? pxW : 0;
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${outW} ${outH}" width="${outW}" height="${outH}"><g transform="translate(${tx} ${ty}) rotate(${rotate})">${inner}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${outW} ${outH}" width="${outW}" height="${outH}">${fontImport}<g transform="translate(${tx} ${ty}) rotate(${rotate})">${inner}</g></svg>`;
 }
 
 export function extractQrInner(qrSvg: string): string {

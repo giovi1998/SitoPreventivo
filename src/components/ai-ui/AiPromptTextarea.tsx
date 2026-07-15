@@ -31,6 +31,7 @@ export function AiPromptTextarea({
         className="ai-prompt-textarea"
         value={value}
         maxLength={maxLength}
+        aria-label={label ? `${label}` : undefined}
         {...props}
       />
     </label>
