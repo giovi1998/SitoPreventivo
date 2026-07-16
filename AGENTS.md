@@ -59,7 +59,8 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/main.tsx` | React Router setup: `/login`, `/` (HomePage), `/app/*` (8 child routes), `*` (404) |
 | `src/components/AppShell.tsx` | Global state shell (quote, AI, toasts, exports, theme), renders `<Outlet/>` |
 | `src/components/AdminRoute.tsx` | Guard: `user.role === 'admin'` required, else `navigate('/app/editor')` |
-| `src/hooks/useRouteView.ts` | Bridge hook: `pathname ↔ view` (editor\|collection\|qr\|card\|logo\|flyer\|social\|settings\|admin), `setView` calls `navigate()` |
+| `src/hooks/useRouteView.ts` | Bridge hook: `pathname ↔ view` (editor\|collection\|qr\|card\|logo\|flyer\|social\|settings\|admin), `setView` calls `navigate()`. Also handles prefix-match for `:docId` routes. |
+| `src/hooks/useDocumentLoader.ts` | Shared hydration hook for all editors: reads `:docId` param, fetches document, syncs context, handles not-found/invalid redirect, exposes `onReset`/`onSaved` for URL sync. |
 | `src/pages/app/*` | Thin page wrappers (Editor/Collection/Qr/Card/Logo/Settings/Admin), read state from `AppContext` |
 | `docs/logo-ai.md` | **Phase 7**: private docs explaining the disabled "AI Generation" tab (la versione pubblica `LogoAiDocsPage.tsx` + route `/docs/logo-ai` sono state rimosse deliberatamente). |
 | `api/index.ts` | Single Vercel serverless function, entire REST API (monolith, intentional) |
@@ -130,11 +131,16 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 | `/login` | `LoginPage` |, |
 | `/` | `HomePage` |, |
 | `/app` → `/app/editor` (redirect) | `EditorPage` → `EditorView` | login |
+| `/app/editor/:docId` | `EditorPage` → `EditorView` (loads by ID) | login |
 | `/app/collection` | `CollectionPage` → `CollectionView` | login |
 | `/app/qr` | `QrPage` → `QREditor` (lazy) | login |
+| `/app/qr/:docId` | `QrPage` → `QREditor` (loads by ID) | login |
 | `/app/card` | `CardPage` → `CardEditor` (lazy) | login |
+| `/app/card/:docId` | `CardPage` → `CardEditor` (loads by ID) | login |
 | `/app/logo` | `LogoPage` → `LogoEditor` (lazy) | login (**Phase 4 + v2.1**) |
+| `/app/logo/:docId` | `LogoPage` → `LogoEditor` (loads by ID) | login |
 | `/app/flyer` | `FlyerPage` → `FlyerEditor` (lazy) | login |
+| `/app/flyer/:docId` | `FlyerPage` → `FlyerEditor` (loads by ID) | login |
 | `/app/social` | `SocialPage` → `SocialEditor` (lazy) | login (**v2.1**: AI genera 3 post Instagram/Facebook/LinkedIn da card/flyer) |
 | `/app/settings` | `SettingsRoute` → `SettingsPage` | login |
 | `/app/admin` | `AdminPage` → `AdminDashboard` (lazy) | `user.role==='admin'` (via `AdminRoute`) |

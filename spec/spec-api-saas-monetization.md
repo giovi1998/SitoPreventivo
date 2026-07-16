@@ -495,9 +495,7 @@ Decisioni pendenti da confermare prima dell'implementazione:
 
 ## 13. Related Specifications / Further Reading
 
-- `spec/spec-design-url-id-routing.md` — URL-ID routing per documenti
-  nella Collection (frontend app React). Non si sovrappone a questa
-  spec (qui: API key esterne SaaS; là: sessione utente app).
+- `spec/spec-design-url-id-routing.md` — URL-ID routing per documenti (implementata e cancellata, tutti gli AC sono in produzione)
 - `docs/logo-ai.md` — Architettura provider Gemini già integrata (riusata da `/v1/ai/image`)
 - `api/index.ts` — Monolite esistente, contiene tutti i pattern Zod/CORS/auth da replicare
 - `src/utils/watermark.ts` — Sistema tier watermark da portare server-side
