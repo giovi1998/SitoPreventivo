@@ -50,11 +50,16 @@ function AppWrapper() {
           }>
             <Route index element={<IndexRedirect />} />
             <Route path="editor" element={<AdminEditorRoute><EditorPage /></AdminEditorRoute>} />
+            <Route path="editor/:docId" element={<AdminEditorRoute><EditorPage /></AdminEditorRoute>} />
             <Route path="collection" element={<CollectionPage />} />
             <Route path="qr" element={<QrPage />} />
+            <Route path="qr/:docId" element={<QrPage />} />
             <Route path="card" element={<CardPage />} />
+            <Route path="card/:docId" element={<CardPage />} />
             <Route path="logo" element={<LogoPage />} />
+            <Route path="logo/:docId" element={<LogoPage />} />
             <Route path="flyer" element={<FlyerPage />} />
+            <Route path="flyer/:docId" element={<FlyerPage />} />
             <Route path="social" element={<SocialPage />} />
             <Route path="settings" element={<SettingsRoute />} />
             <Route path="admin" element={

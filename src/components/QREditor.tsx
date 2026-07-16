@@ -49,9 +49,11 @@ interface QREditorProps {
   initialQr?: QRCodeType;
   onSaveAsTemplate?: (qr: QRCodeType) => void;
   tier?: 'free' | 'unlocked';
+  onReset?: () => void;
+  onSaved?: (doc: any) => void;
 }
 
-export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier = 'unlocked' }: QREditorProps) {
+export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier = 'unlocked', onReset, onSaved }: QREditorProps) {
   const { save: saveDocumentGuarded } = useDocumentSave();
   // Deep-merge with createEmptyQrCode() defaults: a saved QR without
   // `style` (legacy, partial save, or schema drift) used to crash the
@@ -67,9 +69,19 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier 
   const [exporting, setExporting] = useState<'png' | 'svg' | null>(null);
   const previewRenderIdRef = useRef(0);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedIdRef = useRef<string | undefined>(initialQr?.id);
   const { addToast } = useToast();
 
   const debouncedQr = useDebouncedValue(qr, 300);
+
+  // When the URL-driven document changes, reset local state to the new QR.
+  useEffect(() => {
+    if (!initialQr?.id) return;
+    if (initialQr.id === loadedIdRef.current) return;
+    loadedIdRef.current = initialQr.id;
+    setQr(mergeQrWithDefaults(initialQr));
+    setShowTemplateBanner(false);
+  }, [initialQr]);
 
   const contrastOk = useMemo(
     () => validateQrContrast(qr.style.fgColor, qr.style.bgColor),
@@ -106,6 +118,8 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier 
             addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
           } else if (result.error) {
             logger.error('QR auto-save failed', { err: result.error });
+          } else {
+            if (onSaved) onSaved(sanitized);
           }
         });
       }
@@ -113,7 +127,7 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier 
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [qr, userEmail, saveDocumentGuarded]);
+  }, [qr, userEmail, saveDocumentGuarded, onSaved]);
 
   const updateData = useCallback((patch: Partial<QrCodeData>) => {
     setQr((prev) => ({
@@ -142,6 +156,16 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier 
       updatedAt: new Date().toISOString(),
     }));
   }, []);
+
+  const resetQr = useCallback(() => {
+    setQr(createEmptyQrCode());
+    setShowTemplateBanner(true);
+    setSvgPreview('');
+    setPreviewError(null);
+    setLogoError(null);
+    if (onReset) onReset();
+    else addToast('info', 'Nuovo QR Code vuoto pronto');
+  }, [addToast, onReset]);
 
   const applyGiovanniTemplate = useCallback(() => {
     setQr(createGiovanniQrTemplate());
@@ -233,9 +257,10 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier 
         }
         setQr(toSave);
         addToast('success', `«${title}» salvato`);
+        if (onSaved) onSaved(toSave);
       })
       .catch((err) => addToast('error', (err as Error).message || 'Errore salvataggio'));
-  }, [qr, userEmail, addToast, saveDocumentGuarded]);
+  }, [qr, userEmail, addToast, saveDocumentGuarded, onSaved]);
 
   const openSaveDialog = useCallback(() => {
     if (!qr.data.payload) {
@@ -397,6 +422,7 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier 
 
           <div className="qr-actions">
             <button type="button" onClick={openSaveDialog}>Salva</button>
+            <button type="button" className="btn-secondary" onClick={resetQr}>Nuovo</button>
             <button type="button" onClick={exportPng} disabled={exporting === 'png' || !qr.data.payload}>
               {exporting === 'png' ? 'Esportando…' : 'Scarica PNG'}
             </button>

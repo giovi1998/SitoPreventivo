@@ -105,9 +105,11 @@ interface FlyerEditorShellProps {
   userEmail: string;
   initialFlyer?: Flyer;
   tier?: 'free' | 'unlocked';
+  onReset?: () => void;
+  onSaved?: (doc: any) => void;
 }
 
-export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }: FlyerEditorShellProps): React.ReactElement {
+export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', onReset, onSaved }: FlyerEditorShellProps): React.ReactElement {
   const { save: saveDocumentGuarded, documentCount, documentLimit } = useDocumentSave();
   const { addToast } = useToast();
   const [flyer, setFlyer] = React.useState<Flyer>(() => mergeFlyerWithDefaults(initialFlyer));
@@ -127,6 +129,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
   const [previewFocus, setPreviewFocus] = React.useState(false);
   const [showDebug, setShowDebug] = React.useState(false);
   const [mobileTab, setMobileTab] = React.useState<'ai' | 'manual' | null>(null);
+  const loadedIdRef = React.useRef<string | undefined>(initialFlyer?.id);
   const [aiPrompt, setAiPrompt] = React.useState('');
   const [aiModel, setAiModel] = React.useState('deepseek-chat');
   const [aiTone, setAiTone] = React.useState<FlyerTone>('formale');
@@ -140,6 +143,15 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
   const [heroLibrary, setHeroLibrary] = React.useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.flyerHero));
   const ai = useAIFlyer(userEmail);
   const debouncedFlyer = useDebouncedValue(flyer, 300);
+
+  // When the URL-driven document changes, reset local state to the new flyer.
+  React.useEffect(() => {
+    if (!initialFlyer?.id) return;
+    if (initialFlyer.id === loadedIdRef.current) return;
+    loadedIdRef.current = initialFlyer.id;
+    setFlyer(mergeFlyerWithDefaults(initialFlyer));
+    setShowTemplateBanner(false);
+  }, [initialFlyer]);
   const layoutPlan = React.useMemo(() => computeFlyerLayout(flyer), [flyer]);
   const copyBudget = React.useMemo(() => getFlyerCopyBudget(flyer), [flyer]);
   const budgetWarning = React.useMemo(() => {
@@ -160,13 +172,15 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
           addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
         } else if (result.error) {
           logger.error('Flyer auto-save failed', { err: result.error });
+        } else if (onSaved) {
+          onSaved(sanitized);
         }
       });
     }, 30000);
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [flyer, userEmail, saveDocumentGuarded, addToast]);
+  }, [flyer, userEmail, saveDocumentGuarded, addToast, onSaved]);
 
   // Export PDF/PNG
   React.useEffect(() => {
@@ -237,8 +251,9 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
     setShowTemplateBanner(true);
     setActiveSector('ristorante');
     setHeroError(null);
-    addToast('info', 'Nuovo volantino vuoto pronto');
-  }, [addToast]);
+    if (onReset) onReset();
+    else addToast('info', 'Nuovo volantino vuoto pronto');
+  }, [addToast, onReset]);
 
   const handleHeroUpload = React.useCallback(async (file: File) => {
     setHeroError(null);
@@ -357,8 +372,9 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked' }:
       if (result.error) { addToast('error', result.error); return; }
       setFlyer(toSave);
       addToast('success', `«${title}» salvato`);
+      if (onSaved) onSaved(toSave);
     }).catch((err) => addToast('error', (err as Error).message || 'Errore salvataggio'));
-  }, [flyer, userEmail, addToast, saveDocumentGuarded]);
+  }, [flyer, userEmail, addToast, saveDocumentGuarded, onSaved]);
 
   const openSaveDialog = React.useCallback(() => {
     if (!flyerHasContent(flyer)) { addToast('info', 'Compila almeno il titolo o il copy prima di salvare.'); return; }

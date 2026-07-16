@@ -1,23 +1,30 @@
 import React, { useState } from 'react';
+import type { ViewName } from '../hooks/useRouteView';
 
 interface LayoutProps {
   children: React.ReactNode;
   view: string;
-  setView: (v: string) => void;
+  setView: (v: ViewName, docId?: string | null) => void;
   onLogout: () => void;
   onSave: () => void;
+  onResetQuote?: () => void;
   user: any;
   theme: string;
   setTheme: (t: string) => void;
 }
 
-export default function Layout({ children, view, setView, onLogout, onSave, user, theme, setTheme }: LayoutProps) {
+export default function Layout({ children, view, setView, onLogout, onSave, onResetQuote, user, theme, setTheme }: LayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
   const nav = (v: string) => {
-    setView(v);
+    setView(v as any);
     setDrawerOpen(false);
+  };
+
+  const handleNewQuote = () => {
+    if (onResetQuote) onResetQuote();
+    else nav('editor');
   };
 
   return (
@@ -51,7 +58,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, user
 
         <nav aria-label="Navigazione principale">
           {user?.role === 'admin' && (
-            <button title="Nuovo preventivo" className={view === 'editor' ? 'active' : ''} onClick={() => setView('editor')}>
+            <button title="Nuovo preventivo" className={view === 'editor' ? 'active' : ''} onClick={handleNewQuote}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
               <span className="nav-label">Editor</span>
             </button>
@@ -256,7 +263,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, user
                 </svg>
                 Social AI
               </button>
-              <button className={view === 'editor' ? 'active' : ''} onClick={() => nav('editor')}>
+              <button className={view === 'editor' ? 'active' : ''} onClick={handleNewQuote}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                 Nuovo preventivo
               </button>

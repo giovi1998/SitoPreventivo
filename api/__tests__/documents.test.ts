@@ -404,4 +404,49 @@ describe('documents API', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it('GET /documents/:id returns 200 for owner', async () => {
+    mockDbState.selectResults = [[{ id: 'qr-1', userEmail: 'user@test.com', documentType: 'qrCode', title: 'Test QR' }]];
+    const res = await callHandler({
+      method: 'GET',
+      url: '/api/documents/qr-1?email=user@test.com',
+      headers: { origin: 'http://localhost' },
+      body: {},
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.id).toBe('qr-1');
+  });
+
+  it('GET /documents/:id returns 404 for non-owner (no info leak)', async () => {
+    mockDbState.selectResults = [[{ id: 'qr-1', userEmail: 'other@test.com', documentType: 'qrCode', title: 'Test QR' }]];
+    const res = await callHandler({
+      method: 'GET',
+      url: '/api/documents/qr-1?email=user@test.com',
+      headers: { origin: 'http://localhost' },
+      body: {},
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.body.error).toMatch(/non trovato/i);
+  });
+
+  it('GET /documents/:id returns 404 when type mismatch', async () => {
+    mockDbState.selectResults = [[{ id: 'qr-1', userEmail: 'user@test.com', documentType: 'qrCode', title: 'Test QR' }]];
+    const res = await callHandler({
+      method: 'GET',
+      url: '/api/documents/qr-1?email=user@test.com&type=businessCard',
+      headers: { origin: 'http://localhost' },
+      body: {},
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('GET /documents/:id without email returns 400', async () => {
+    const res = await callHandler({
+      method: 'GET',
+      url: '/api/documents/qr-1',
+      headers: { origin: 'http://localhost' },
+      body: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });

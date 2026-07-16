@@ -2,11 +2,17 @@ import React, { useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EditorView from '../../components/EditorView';
 import { AppContext, AuthContext } from '../../contexts';
+import { useDocumentLoader } from '../../hooks/useDocumentLoader';
 
 export default function EditorPage() {
   const ctx = useContext(AppContext) as any;
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
+  const { initialDoc, onReset, onSaved } = useDocumentLoader({
+    view: 'editor',
+    documentType: 'quote',
+    contextField: 'editingQuote',
+  });
 
   // Defense-in-depth: l'AdminEditorRoute in main.tsx blocca già, ma
   // questo fallback protegge da un eventuale accesso diretto.
@@ -22,7 +28,7 @@ export default function EditorPage() {
 
   return (
     <EditorView
-      quote={ctx.editingQuote}
+      quote={initialDoc || ctx.editingQuote}
       aiText={ctx.aiText}
       setAiText={ctx.setAiText}
       patch={ctx.patch}
@@ -41,6 +47,7 @@ export default function EditorPage() {
       isProcessing={ctx.isProcessing}
       availableModels={ctx.availableModels}
       onResetChat={ctx.resetChat}
+      onReset={onReset}
       isDirty={ctx.isDirty}
       saveQuote={ctx.saveCurrentQuote}
       documentTheme={ctx.documentTheme}

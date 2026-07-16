@@ -15,6 +15,8 @@ interface LogoEditorProps {
   userEmail: string;
   initialLogo?: Logo;
   tier?: 'free' | 'unlocked';
+  onReset?: () => void;
+  onSaved?: (doc: any) => void;
 }
 
 function deepSetBuilder(logo: Logo, patch: Partial<LogoBuilder>): Logo {
@@ -26,7 +28,7 @@ function logoHasContent(logo: Logo): boolean {
   return !!(b.primaryText || b.tagline || b.iconGlyph);
 }
 
-export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }: LogoEditorProps) {
+export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', onReset, onSaved }: LogoEditorProps) {
   const { save: saveDocumentGuarded } = useDocumentSave();
   // Deep-merge with createEmptyLogo() defaults: a saved logo from
   // the Collection might be missing the builder field (legacy save
@@ -38,7 +40,16 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [exporting, setExporting] = useState<'svg' | 'png-512' | 'png-1024' | 'png-2048' | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedIdRef = useRef<string | undefined>(initialLogo?.id);
   const { addToast } = useToast();
+
+  // When the URL-driven document changes, reset local state to the new logo.
+  useEffect(() => {
+    if (!initialLogo?.id) return;
+    if (initialLogo.id === loadedIdRef.current) return;
+    loadedIdRef.current = initialLogo.id;
+    setLogo(mergeLogoWithDefaults(initialLogo));
+  }, [initialLogo]);
 
   // Auto-save ogni 30s se c'è contenuto
   useEffect(() => {
@@ -49,6 +60,8 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
       dataService.saveDocument(userEmail, sanitized).then((result) => {
         if (result?.error) {
           logger.error('Logo auto-save failed', { err: result.error });
+        } else if (onSaved) {
+          onSaved(sanitized);
         }
       }).catch((err) => {
         logger.error('Logo auto-save failed', { err: (err as Error).message });
@@ -57,7 +70,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [logo, userEmail]);
+  }, [logo, userEmail, onSaved]);
 
   const onPatch = useCallback((path: string, value: any) => {
     setLogo((prev) => {
@@ -135,12 +148,13 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
         setLogo(toSave);
         addToast('success', `«${title}» salvato`);
         setShowSaveDialog(false);
+        if (onSaved) onSaved(toSave);
       })
       .catch((err) => {
         logger.error('Logo save failed', { err: (err as Error)?.message });
         addToast('error', (err as Error)?.message || 'Errore salvataggio');
       });
-  }, [logo, userEmail, addToast, saveDocumentGuarded]);
+  }, [logo, userEmail, addToast, saveDocumentGuarded, onSaved]);
 
   const openSaveDialog = useCallback(() => {
     if (!logoHasContent(logo)) {
@@ -177,8 +191,9 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked' }
     localStorage.removeItem('logoAiChat:v1');
     aiStateRef.current = undefined;
     setAiPanelResetKey((k) => k + 1);
-    addToast('info', 'Nuovo logo creato.');
-  }, [logo, addToast]);
+    if (onReset) onReset();
+    else addToast('info', 'Nuovo logo creato.');
+  }, [logo, addToast, onReset]);
 
   return (
     <div className="logo-editor">

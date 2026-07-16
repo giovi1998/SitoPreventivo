@@ -883,6 +883,18 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     return json(req, res, 200, filtered);
   }
 
+  if (path.startsWith('/documents/') && method === 'GET') {
+    const documentId = path.replace('/documents/', '');
+    const userEmail = searchParams.get('email');
+    const type = searchParams.get('type');
+    if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
+    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, documentId));
+    if (!existing || existing.userEmail !== userEmail || (type && existing.documentType !== type)) {
+      return json(req, res, 404, { error: 'Documento non trovato' });
+    }
+    return json(req, res, 200, existing);
+  }
+
   if (path === '/documents' && method === 'POST') {
     const v = validate(DocumentBodySchema, body);
     if (v.error) return json(req, res, 400, { errors: v.errors });

@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-export const ROUTE_PATHS: Record<string, string> = {
+export const ROUTE_PATHS = {
   editor: '/app/editor',
   collection: '/app/collection',
   qr: '/app/qr',
@@ -11,27 +11,37 @@ export const ROUTE_PATHS: Record<string, string> = {
   social: '/app/social',
   settings: '/app/settings',
   admin: '/app/admin',
-};
+} as const;
 
-const PATH_TO_VIEW: Record<string, string> = Object.fromEntries(
-  Object.entries(ROUTE_PATHS).map(([view, path]) => [path, view])
-);
+export type ViewName = keyof typeof ROUTE_PATHS;
 
-const DEFAULT_VIEW = 'editor';
+const DEFAULT_VIEW: ViewName = 'editor';
 
-function pathToView(pathname: string): string {
-  if (PATH_TO_VIEW[pathname]) return PATH_TO_VIEW[pathname];
-  if (pathname === '/app' || pathname === '/app/') return DEFAULT_VIEW;
-  return DEFAULT_VIEW;
+function pathToView(pathname: string): ViewName {
+  const match = pathname.match(/^\/app\/([a-z]+)(?:\/|$)/i);
+  if (!match) return DEFAULT_VIEW;
+  const seg = match[1].toLowerCase();
+  return (seg in ROUTE_PATHS) ? (seg as ViewName) : DEFAULT_VIEW;
 }
 
-function viewToPath(view: string): string {
-  return ROUTE_PATHS[view] || ROUTE_PATHS[DEFAULT_VIEW];
+export function extractDocId(pathname: string): string | undefined {
+  const match = pathname.match(/^\/app\/[a-z]+\/([a-zA-Z0-9_-]{1,100})(?:\/|$)/i);
+  return match?.[1];
+}
+
+function viewToPath(view: ViewName): string {
+  return ROUTE_PATHS[view] ?? ROUTE_PATHS[DEFAULT_VIEW];
+}
+
+export function buildPath(view: ViewName, docId?: string | null): string {
+  const base = viewToPath(view);
+  return docId ? `${base}/${docId}` : base;
 }
 
 export interface RouteView {
-  view: string;
-  setView: (v: string) => void;
+  view: ViewName;
+  setView: (v: ViewName, docId?: string | null) => void;
+  docId?: string;
 }
 
 export function useRouteView(): RouteView {
@@ -39,13 +49,14 @@ export function useRouteView(): RouteView {
   const navigate = useNavigate();
 
   const view = useMemo(() => pathToView(location.pathname), [location.pathname]);
+  const docId = useMemo(() => extractDocId(location.pathname), [location.pathname]);
 
   const setView = useCallback(
-    (v: string) => {
-      navigate(viewToPath(v));
+    (v: ViewName, id?: string | null) => {
+      navigate(buildPath(v, id));
     },
     [navigate]
   );
 
-  return { view, setView };
+  return { view, setView, docId };
 }

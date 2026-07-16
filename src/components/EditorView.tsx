@@ -96,6 +96,7 @@ interface EditorViewProps {
   isProcessing: boolean;
   availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
   onResetChat: () => void;
+  onReset?: () => void;
   isDirty: boolean;
   saveQuote: (opts?: { title?: string; silent?: boolean } | string) => void;
   documentTheme?: DocumentTemplateId;
@@ -112,7 +113,7 @@ interface EditorViewProps {
 export default function EditorView({
   quote, aiText, setAiText, patch, updateOption, addOption, removeOption,
   updateOptions, updateClause, addClause, removeClause, onRunAI, aiModel, onAiModelChange,
-  previewRef, aiLogs, isProcessing, availableModels, onResetChat,
+  previewRef, aiLogs, isProcessing, availableModels, onResetChat, onReset,
   isDirty, saveQuote, documentTheme = 'corporate',
   onSave, onExportPDF, onExportDOCX, onImportPDF, onSaveAsTemplate,
   lastSaveTime, pdfLoading, docxLoading,
@@ -378,6 +379,11 @@ export default function EditorView({
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
             </button>
           )}
+          {onReset && (
+            <button onClick={onReset} className="mobile-action-btn" title="Nuovo preventivo" aria-label="Nuovo preventivo">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            </button>
+          )}
           <button onClick={onExportPDF} className="mobile-action-btn mobile-action-btn-export" title="Esporta PDF (Ctrl+P)" aria-label="Esporta PDF" disabled={pdfLoading}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
@@ -403,6 +409,12 @@ export default function EditorView({
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Manuale
         </button>
+        {onReset && (
+          <button data-testid="reset-quote" onClick={onReset} aria-label="Nuovo preventivo">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Nuovo
+          </button>
+        )}
         {!previewFocus && (
           <button data-testid="focus-toggle-mobile" onClick={() => setPreviewFocus(true)} aria-pressed={false} className="">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>

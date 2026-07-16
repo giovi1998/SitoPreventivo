@@ -84,9 +84,11 @@ export interface CardEditorShellProps {
   initialCard?: BusinessCard;
   documentTheme: 'corporate' | 'minimal' | 'creative' | 'legal' | 'luxury';
   tier: 'free' | 'unlocked';
+  onReset?: () => void;
+  onSaved?: (doc: any) => void;
 }
 
-export default function CardEditorShell({ userEmail, initialCard, documentTheme, tier }: CardEditorShellProps) {
+export default function CardEditorShell({ userEmail, initialCard, documentTheme, tier, onReset, onSaved }: CardEditorShellProps) {
   const { save: saveDocumentGuarded } = useDocumentSave();
   const [card, setCard] = useState<BusinessCard>(() => mergeCardWithDefaults(initialCard));
   const [showTemplateBanner, setShowTemplateBanner] = useState<boolean>(() => !initialCard);
@@ -363,8 +365,9 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     setUploadError(null);
     setAiText('');
     setExportMenuOpen(false);
-    addToast('info', 'Nuovo bigliettino vuoto pronto');
-  }, [addToast]);
+    if (onReset) onReset();
+    else addToast('info', 'Nuovo bigliettino vuoto pronto');
+  }, [addToast, onReset]);
 
   const removeCoverImage = useCallback(() => {
     patchFront({ coverImageUrl: null });
@@ -488,7 +491,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     loadedIdRef.current = sanitized.id;
     setShowSaveDialog(false);
     addToast('success', `«${title}» salvato. Visibile in Collection.`);
-  }, [card, userEmail, addToast, saveDocumentGuarded]);
+    if (onSaved) onSaved(sanitized);
+  }, [card, userEmail, addToast, saveDocumentGuarded, onSaved]);
 
   const runCardAI = useCallback(async (mode: string = 'custom') => {
     const quick = findCardQuickAction(mode);
@@ -636,13 +640,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         } else {
           // Keep title in sync if auto-derived (no toast noise).
           if (card.title !== title) setCard((prev) => (prev.title === title ? prev : { ...prev, title }));
+          if (onSaved && sanitized.id) onSaved(sanitized);
         }
       });
     }, AUTO_SAVE_DELAY_MS);
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [card, userEmail, saveDocumentGuarded, addToast]);
+  }, [card, userEmail, saveDocumentGuarded, addToast, onSaved]);
 
   const updateSocial = useCallback((idx: number, key: 'platform' | 'url', value: string) => {
     setCard((prev) => {

@@ -16,7 +16,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
   };
 });
 
-import { useRouteView, ROUTE_PATHS } from '../useRouteView';
+import { useRouteView, ROUTE_PATHS, buildPath } from '../useRouteView';
 
 function wrapper(initialPath: string) {
   return ({ children }: { children?: React.ReactNode }) => (
@@ -96,6 +96,26 @@ describe('useRouteView', () => {
     const { result } = renderHook(() => useRouteView(), { wrapper: wrapper('/app/editor') });
     act(() => result.current.setView('flyer'));
     expect(mocks.navigate).toHaveBeenCalledWith('/app/flyer');
+  });
+
+  it('maps /app/card/abc to view="card" and docId="abc"', () => {
+    const { result } = renderHook(() => useRouteView(), { wrapper: wrapper('/app/card/abc') });
+    expect(result.current.view).toBe('card');
+    expect(result.current.docId).toBe('abc');
+  });
+
+  it('setView("card", "abc") navigates to /app/card/abc', () => {
+    const { result } = renderHook(() => useRouteView(), { wrapper: wrapper('/app/editor') });
+    act(() => result.current.setView('card', 'abc'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/app/card/abc');
+  });
+
+  it('buildPath returns bare path when docId is omitted', () => {
+    expect(buildPath('qr')).toBe('/app/qr');
+  });
+
+  it('buildPath returns id path when docId is provided', () => {
+    expect(buildPath('qr', 'qr-1')).toBe('/app/qr/qr-1');
   });
 
   it('exposes ROUTE_PATHS map with all 9 view keys', () => {

@@ -13,10 +13,12 @@ interface FlyerEditorProps {
   userEmail: string;
   initialFlyer?: Flyer;
   tier?: 'free' | 'unlocked';
+  onReset?: () => void;
+  onSaved?: (doc: any) => void;
 }
 
-export default function FlyerEditor({ userEmail, initialFlyer, tier = 'unlocked' }: FlyerEditorProps) {
-  return <FlyerEditorShell userEmail={userEmail} initialFlyer={initialFlyer} tier={tier} />;
+export default function FlyerEditor({ userEmail, initialFlyer, tier = 'unlocked', onReset, onSaved }: FlyerEditorProps) {
+  return <FlyerEditorShell userEmail={userEmail} initialFlyer={initialFlyer} tier={tier} onReset={onReset} onSaved={onSaved} />;
 }
 
 export { FlyerPreview };

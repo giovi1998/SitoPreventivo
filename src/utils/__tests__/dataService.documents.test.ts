@@ -115,4 +115,56 @@ describe('dataService documents (local path)', () => {
       setItemSpy.mockRestore();
     }
   });
+
+  describe('getDocument (URL Document-ID Routing)', () => {
+    it('returns the matching document by id, email and type', async () => {
+      const qr = { ...createGiovanniQrTemplate(), id: 'qr-1', userEmail: 'user@test.com' };
+      const card = { ...qr, id: 'card-1', documentType: 'businessCard' };
+      await dataService.saveDocument('user@test.com', qr);
+      await dataService.saveDocument('user@test.com', card);
+      const doc = await dataService.getDocument('user@test.com', 'qr-1', 'qrCode');
+      expect(doc).not.toBeNull();
+      expect(doc?.id).toBe('qr-1');
+      expect(doc?.documentType).toBe('qrCode');
+    });
+
+    it('returns null when id is not found', async () => {
+      const qr = { ...createGiovanniQrTemplate(), id: 'qr-1', userEmail: 'user@test.com' };
+      await dataService.saveDocument('user@test.com', qr);
+      const doc = await dataService.getDocument('user@test.com', 'missing', 'qrCode');
+      expect(doc).toBeNull();
+    });
+
+    it('returns null when userEmail does not match (ownership guard)', async () => {
+      const qr = { ...createGiovanniQrTemplate(), id: 'qr-1', userEmail: 'user@test.com' };
+      await dataService.saveDocument('user@test.com', qr);
+      const doc = await dataService.getDocument('other@test.com', 'qr-1', 'qrCode');
+      expect(doc).toBeNull();
+    });
+
+    it('returns null when documentType does not match', async () => {
+      const qr = { ...createGiovanniQrTemplate(), id: 'qr-1', userEmail: 'user@test.com' };
+      await dataService.saveDocument('user@test.com', qr);
+      const doc = await dataService.getDocument('user@test.com', 'qr-1', 'businessCard');
+      expect(doc).toBeNull();
+    });
+
+    it('calls the API in non-local mode', async () => {
+      Object.defineProperty(window, 'location', {
+        value: { ...originalLocation, hostname: 'example.com' },
+        writable: true,
+        configurable: true,
+      });
+      vi.resetModules();
+      const ds = (await import('../dataService')).default;
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { id: 'qr-1', documentType: 'qrCode', userEmail: 'user@test.com', data: { type: 'url', payload: 'x' } } }),
+      } as any);
+      const doc = await ds.getDocument('user@test.com', 'qr-1', 'qrCode');
+      expect(fetchMock).toHaveBeenCalledWith('/api/documents/qr-1?email=user%40test.com&type=qrCode', expect.any(Object));
+      expect(doc?.id).toBe('qr-1');
+    });
+  });
 });

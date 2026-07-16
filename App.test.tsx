@@ -82,10 +82,11 @@ async function renderApp() {
   const App = (await import('./App')).default;
   return render(
     <AuthContext.Provider value={authValue as any}>
-      <MemoryRouter initialEntries={['/app/editor']}>
+      <MemoryRouter initialEntries={['/app/editor']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/app" element={<App />}>
             <Route path="editor" element={<EditorTestStub />} />
+            <Route path="editor/:docId" element={<EditorTestStub />} />
           </Route>
         </Routes>
       </MemoryRouter>

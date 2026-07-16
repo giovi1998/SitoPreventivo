@@ -292,6 +292,20 @@ const dataService = {
   },
 
   // ─── DOCUMENTS (QR, card, flyer, logo) ───────
+  async getDocument(email, docId, documentType) {
+    if (!email || !docId) return null;
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_documents:v1') || [];
+      const doc = all.find(d => d.id === docId && d.userEmail === email && d.documentType === documentType);
+      return doc ? hydrateDocument(doc) : null;
+    }
+    const qs = new URLSearchParams({ email });
+    if (documentType) qs.set('type', documentType);
+    const result = await api('GET', `/documents/${encodeURIComponent(docId)}?${qs.toString()}`);
+    if (result.error) return null;
+    return hydrateDocument(result.data || result);
+  },
+
   async saveDocument(email, document) {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_documents:v1') || [];

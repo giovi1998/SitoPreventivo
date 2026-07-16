@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import FlyerPage from '../app/FlyerPage';
 import { AuthContext, AppContext } from '../../contexts';
+import { TestRouter } from '../../test/TestRouter';
 
 vi.mock('../../components/FlyerEditor', () => ({
   default: (props: any) => (
@@ -16,17 +17,27 @@ function authValue(user: any) {
 }
 
 function appValue(extra: any = {}) {
-  return { tier: 'free', flyerDocument: null, ...extra };
+  return { tier: 'free', flyerDocument: null, setFlyerDocument: vi.fn(), ...extra };
+}
+
+function wrapper(children: React.ReactNode, path = '/app/flyer') {
+  return (
+    <TestRouter initialEntries={[path]}>
+      {children}
+    </TestRouter>
+  );
 }
 
 describe('FlyerPage', () => {
   it('renders FlyerEditor with the current user email and tier=unlocked for admin', async () => {
     render(
-      <AuthContext.Provider value={authValue({ email: 'admin@gmail.com' }) as any}>
-        <AppContext.Provider value={appValue()}>
-          <FlyerPage />
-        </AppContext.Provider>
-      </AuthContext.Provider>
+      wrapper(
+        <AuthContext.Provider value={authValue({ email: 'admin@gmail.com' }) as any}>
+          <AppContext.Provider value={appValue()}>
+            <FlyerPage />
+          </AppContext.Provider>
+        </AuthContext.Provider>
+      )
     );
     await waitFor(() => expect(screen.getByTestId('flyer-editor')).toBeInTheDocument());
     expect(screen.getByTestId('flyer-editor').getAttribute('data-user-email')).toBe('admin@gmail.com');
@@ -35,11 +46,13 @@ describe('FlyerPage', () => {
 
   it('passes tier=unlocked when context tier is unlocked', async () => {
     render(
-      <AuthContext.Provider value={authValue({ email: 'mario@rossi.com' }) as any}>
-        <AppContext.Provider value={appValue({ tier: 'unlocked' })}>
-          <FlyerPage />
-        </AppContext.Provider>
-      </AuthContext.Provider>
+      wrapper(
+        <AuthContext.Provider value={authValue({ email: 'mario@rossi.com' }) as any}>
+          <AppContext.Provider value={appValue({ tier: 'unlocked' })}>
+            <FlyerPage />
+          </AppContext.Provider>
+        </AuthContext.Provider>
+      )
     );
     await waitFor(() => expect(screen.getByTestId('flyer-editor')).toBeInTheDocument());
     expect(screen.getByTestId('flyer-editor').getAttribute('data-tier')).toBe('unlocked');
@@ -47,11 +60,13 @@ describe('FlyerPage', () => {
 
   it('passes tier=free for non-admin with no unlocked tier', async () => {
     render(
-      <AuthContext.Provider value={authValue({ email: 'mario@rossi.com' }) as any}>
-        <AppContext.Provider value={appValue({ tier: 'free' })}>
-          <FlyerPage />
-        </AppContext.Provider>
-      </AuthContext.Provider>
+      wrapper(
+        <AuthContext.Provider value={authValue({ email: 'mario@rossi.com' }) as any}>
+          <AppContext.Provider value={appValue({ tier: 'free' })}>
+            <FlyerPage />
+          </AppContext.Provider>
+        </AuthContext.Provider>
+      )
     );
     await waitFor(() => expect(screen.getByTestId('flyer-editor')).toBeInTheDocument());
     expect(screen.getByTestId('flyer-editor').getAttribute('data-tier')).toBe('free');
@@ -59,11 +74,13 @@ describe('FlyerPage', () => {
 
   it('renders FlyerEditor with empty email when user is null', async () => {
     render(
-      <AuthContext.Provider value={authValue(null) as any}>
-        <AppContext.Provider value={appValue()}>
-          <FlyerPage />
-        </AppContext.Provider>
-      </AuthContext.Provider>
+      wrapper(
+        <AuthContext.Provider value={authValue(null) as any}>
+          <AppContext.Provider value={appValue()}>
+            <FlyerPage />
+          </AppContext.Provider>
+        </AuthContext.Provider>
+      )
     );
     await waitFor(() => expect(screen.getByTestId('flyer-editor')).toBeInTheDocument());
     expect(screen.getByTestId('flyer-editor').getAttribute('data-user-email')).toBe('');

@@ -6,7 +6,7 @@ import Topbar from './Topbar';
 import ErrorBoundary from './ErrorBoundary';
 import TierLimitModal from './TierLimitModal';
 import type { PremiumQuote, DocumentTemplateId } from '../utils/quoteSchema';
-import { migrateFromLegacy, toLegacyFormat, recalculateQuote, addEmptyOption } from '../utils/quoteSchema';
+import { migrateFromLegacy, toLegacyFormat, recalculateQuote, addEmptyOption, createEmptyQuote } from '../utils/quoteSchema';
 import { generateDOCX } from '../utils/generateDOCX';
 import PdfImportModal from './PdfImportModal';
 import SaveDialog from './SaveDialog';
@@ -19,6 +19,7 @@ import { summarizeMergeChanges, buildErrorSuggestion } from '../utils/mergeSumma
 import { needsAnalysis } from '../ai/promptUtils';
 import { AppContext, AuthContext } from '../contexts';
 import { useRouteView } from '../hooks/useRouteView';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAI } from '../hooks/useAI';
 import { useToast } from '../hooks/useToast';
 import { tryCatch } from '../utils/errors';
@@ -28,8 +29,8 @@ import { isLocalhost } from '../utils/env';
 
 function generateId() {
   const year = new Date().getFullYear();
-  const num = Math.floor(100 + Math.random() * 899);
-  return `PRV-${year}-${num}`;
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `PRV-${year}-${rand}`;
 }
 
 const STARTER_OPTIONS_LEGACY = [
@@ -63,7 +64,9 @@ const STARTER_QUOTE_PREMIUM = migrateFromLegacy({
 });
 
 export default function AppShell() {
-  const { view, setView } = useRouteView();
+  const { view, setView, docId: routeDocId } = useRouteView();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [quote, setQuote] = useState<PremiumQuote>(STARTER_QUOTE_PREMIUM);
   const [quotes, setQuotes] = useState<any[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -117,6 +120,16 @@ export default function AppShell() {
   useEffect(() => {
     localStorage.setItem('documentTheme', documentTheme);
   }, [documentTheme]);
+
+  // URL Document-ID Routing: keep the quote URL in sync with the active
+  // document id. When a new quote is created/saved and the URL is still
+  // /app/editor (root), replace it with /app/editor/:quoteId.
+  useEffect(() => {
+    if (location.pathname !== '/app/editor') return;
+    if (!quote.quoteId) return;
+    if (routeDocId && routeDocId === quote.quoteId) return;
+    navigate(`/app/editor/${quote.quoteId}`, { replace: true });
+  }, [location.pathname, routeDocId, quote.quoteId, navigate]);
 
   // Phase 5: refresh tier when user changes
   const refreshTier = useCallback(async () => {
@@ -229,9 +242,9 @@ export default function AppShell() {
         // guard in main.tsx, but admin skips onboarding anyway.
         // Phase 3: added 'flyer' to the allowlist.
         const preferred = settings.preferredDocumentType as string | undefined;
-        if (preferred && ['editor', 'qr', 'card', 'flyer', 'logo'].includes(preferred)) {
-          setView(preferred);
-        }
+    if (preferred && ['editor', 'qr', 'card', 'flyer', 'logo'].includes(preferred)) {
+      setView(preferred as any);
+    }
       } catch (err) {
         console.error('[Onboarding] Non-critical: failed to apply settings to quote', err);
       }
@@ -346,7 +359,8 @@ export default function AppShell() {
 
   const duplicate = (saved: any) => {
     const now = new Date().toISOString();
-    const copy = migrateFromLegacy({ ...saved, id: generateId(), status: 'Bozza', date: now.slice(0, 10), title: `${saved.title} (copia)` });
+    const newId = generateId();
+    const copy = migrateFromLegacy({ ...saved, id: newId, status: 'Bozza', date: now.slice(0, 10), title: `${saved.title} (copia)` });
     const legacy = toLegacyFormat(copy);
     setQuotes((c: any[]) => {
       const updated = [legacy, ...c];
@@ -354,7 +368,7 @@ export default function AppShell() {
       return updated;
     });
     setQuote(copy);
-    setView("editor");
+    setView('editor', newId);
     setIsDirty(true);
     addToast('success', 'Preventivo duplicato');
   };
@@ -371,9 +385,10 @@ export default function AppShell() {
   };
 
   const createFromTemplate = (template: any) => {
-    const migrated = migrateFromLegacy({ ...template, id: generateId(), status: 'Bozza', date: new Date().toISOString().slice(0, 10) });
+    const newId = generateId();
+    const migrated = migrateFromLegacy({ ...template, id: newId, status: 'Bozza', date: new Date().toISOString().slice(0, 10) });
     setQuote(migrated);
-    setView("editor");
+    setView('editor', newId);
     setIsDirty(true);
     addToast('success', 'Template applicato');
   };
@@ -482,36 +497,44 @@ export default function AppShell() {
   const openQuote = (saved: any) => {
     const migrated = migrateFromLegacy(saved);
     setQuote(migrated);
-    setView("editor");
+    setView('editor', saved.id ?? migrated.quoteId);
     addToast('info', `${saved.id} aperto in modifica.`);
   };
 
   // Phase 6: dispatch a document of any type to its editor. Volantini
   // (flyers) are routed to the FlyerEditor since fase 3.
+  // URL Document-ID Routing: each opened document navigates to
+  // /app/{type}/{id} so it is refresh-safe and bookmarkable.
   const openDocument = (doc: any) => {
     if (!doc) return;
+    const docId = doc.id || doc.quoteId;
+    if (!docId) {
+      logger.warn('openDocument called without id', { documentType: doc.documentType });
+      addToast('error', 'Il documento non ha un ID valido');
+      return;
+    }
     switch (doc.documentType) {
       case 'quote': {
         const migrated = migrateFromLegacy(doc);
         setQuote(migrated);
-        setView('editor');
+        setView('editor', docId);
         break;
       }
       case 'qrCode':
         setQrDocument(doc);
-        setView('qr');
+        setView('qr', docId);
         break;
       case 'businessCard':
         setCardDocument(doc);
-        setView('card');
+        setView('card', docId);
         break;
       case 'logo':
         setLogoDocument(doc);
-        setView('logo');
+        setView('logo', docId);
         break;
       case 'flyer':
         setFlyerDocument(doc);
-        setView('flyer');
+        setView('flyer', docId);
         break;
       default:
         addToast('error', `Tipo documento non supportato: ${doc.documentType}`);
@@ -569,9 +592,16 @@ export default function AppShell() {
     addToast('success', `PDF importato: ${importedQuote.project?.title}`);
   };
 
+  const resetQuote = useCallback(() => {
+    setQuote(createEmptyQuote());
+    setIsDirty(false);
+    setView('editor');
+    addToast('info', 'Nuovo preventivo vuoto');
+  }, [setQuote, setView, addToast]);
+
   const ctxValue = {
     editingQuote: quote, setEditingQuote: setQuote, saveQuote, quotes,
-    setView, openQuote, duplicate, removeQuote: (id: string) => {
+    setView, openQuote, resetQuote, duplicate, removeQuote: (id: string) => {
       setQuotes((c: any[]) => c.filter((q: any) => q.id !== id));
       if (user?.email) dataService.deleteQuote(id, user.email);
     },
@@ -605,7 +635,7 @@ export default function AppShell() {
     <AppContext.Provider value={ctxValue}>
       <GlobalStyles />
       <ErrorBoundary>
-        <Layout view={view} setView={setView} onLogout={logout} onSave={saveQuote} user={user} theme={theme} setTheme={setTheme}>
+        <Layout view={view} setView={setView} onLogout={logout} onSave={saveQuote} onResetQuote={resetQuote} user={user} theme={theme} setTheme={setTheme}>
           <Topbar
             view={view}
             onSave={saveQuote}

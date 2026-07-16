@@ -53,9 +53,12 @@ function renderAppShellAt(initialPath: string, user?: any) {
           <Route path="/app" element={<AppShell />}>
             <Route index element={<div data-testid="child-default">default</div>} />
             <Route path="editor" element={<div data-testid="child-editor">editor</div>} />
+            <Route path="editor/:docId" element={<div data-testid="child-editor">editor</div>} />
             <Route path="collection" element={<div data-testid="child-collection">collection</div>} />
             <Route path="qr" element={<div data-testid="child-qr">qr</div>} />
+            <Route path="qr/:docId" element={<div data-testid="child-qr">qr</div>} />
             <Route path="card" element={<div data-testid="child-card">card</div>} />
+            <Route path="card/:docId" element={<div data-testid="child-card">card</div>} />
             <Route path="settings" element={<div data-testid="child-settings">settings</div>} />
           </Route>
         </Routes>
