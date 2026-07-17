@@ -48,7 +48,7 @@ const STARTER_CLAUSES_LEGACY = [
 ];
 
 const STARTER_QUOTE_PREMIUM = migrateFromLegacy({
-  id: generateId(),
+  id: 'starter',
   title: "PREVENTIVO SITO WEB",
   client: "Francesca",
   contact: "Francesca",
@@ -595,6 +595,7 @@ export default function AppShell() {
   const resetQuote = useCallback(() => {
     setQuote(createEmptyQuote());
     setIsDirty(false);
+    setLastSaveTime(null);
     setView('editor');
     addToast('info', 'Nuovo preventivo vuoto');
   }, [setQuote, setView, addToast]);

@@ -500,7 +500,7 @@ export function migrateFromLegacy(legacy: LegacyQuote): PremiumQuote {
     }
     const summary = calculateOptionSummary(items);
     return {
-      id: String(opt.id ?? '') || generateId('opt'),
+      id: opt.id ? String(opt.id) : generateId('opt'),
       label: opt.title || `Opzione ${i + 1}`,
       description: opt.description || '',
       isDefault: i === 0,
