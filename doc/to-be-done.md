@@ -1,7 +1,13 @@
 # To Be Done — Gap analysis spec ↔ codebase
 
-Snapshot 2026-07-15. Cross-check di 12 spec in `spec/` con
+Snapshot 2026-07-18. Cross-check degli spec in `spec/` con
 l'implementazione attuale di `src/`, `api/`, `e2e/`.
+
+> **Cleanup 2026-07-18**: gli 8 spec marcati DONE qui sotto sono stati
+> **cancellati da `spec/`** dopo verifica (traccia in git history).
+> Spec attivi: `spec-design-ai-first-ux-redesign.md` (roadmap fasi
+> 12-14), `spec-design-flyer-refactor-preview-ai.md` (gap TB-007),
+> `spec-api-saas-monetization.md` (NOT-STARTED, track futuro).
 
 ## Legenda stato
 
@@ -27,7 +33,9 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 | 9 | `spec-design-card-grid-layout-event-audit.md` | **DONE** | Harness, events, audit, WYSIWYG, 8 e2e file migrati |
 | 10 | `spec-design-flyer-refactor-preview-ai.md` | **DONE** (gap storico noto) | 12/12 utils + 11/11 components, test 4/10 (vedi AGENTS §11) |
 | 11 | `spec-design-logo-text-auto-positioning.md` | **DONE** | `hasBgImage` + `textColorMode` + `textBackdrop` + `unionTextBox` |
-| 12 | `spec-tool-ai-card-flyer-tools.md` | **DONE** | `ToolAwareOrchestrator` wired end-to-end in `AIOrchestrator`, `CardAIOrchestrator`, `FlyerAIOrchestrator`; test tool path e fallback verdi |
+| 12 | `spec-tool-ai-card-flyer-tools.md` | **DONE** | `ToolAwareOrchestrator` wired end-to-end in `AIOrchestrator`, `CardAIOrchestrator`, `FlyerAIOrchestrator`; test tool path e fallback verdi. Gap residuo UI: callback `onToolStart/Complete` non passati da `useAICard` → assorbito in REQ-LOG-001 spec #14 |
+| 13 | `spec-api-saas-monetization.md` | **NOT-STARTED** | Zero Stripe/api-key in `api/` (verificato 2026-07-18). Track futuro separato, mantenuto in `spec/` |
+| 14 | `spec-design-ai-first-ux-redesign.md` | **SPEC WRITTEN** | Fasi 12-14: AI Observability (REQ-LOG-001…015), Design System & UX (REQ-DS/UX), AI Console & AI-first (REQ-AI). Include fix toast fantasma, `trackUsage` require-bug, ghost rate limit, doppia palette. Da implementare |
 
 ---
 
@@ -142,18 +150,16 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 
 ---
 
-## Spec da cancellare (già implementati e sostituiti)
+## Spec cancellati
 
-| File | Motivo cancellazione |
-|------|----------------------|
-| `spec/spec-design-ai-card-cover-image.md` | **SUPERSEDED** da `spec-design-ai-card-context-aware-cover.md` (testo+visione). Vision-grounded l'ha reso obsoleto |
-| `spec/spec-design-ai-card-text-vision-split.md` | **MERGED** in `context-aware-cover.md` §REQ-001/002/003. Architettura documentata ma non c'è codice nuovo da tracciare separatamente |
-| `spec/spec-design-ai-card-vision-input.md` | **MERGED** in `context-aware-cover.md` (input shape A/B e grounding instruction). Stesso destino del text-vision-split |
+Cleanup eseguito in due ondate (traccia in git history):
 
-Le 3 spec sopra possono essere rimosse o mantenute come archivio
-storico. Suggerimento: mantenere le superseded come riferimento
-(rimangono informative sul perché delle scelte), marcare
-`status: superseded` in frontmatter.
+1. **Prima ondata**: `spec-design-ai-card-cover-image.md` (SUPERSEDED),
+   `spec-design-ai-card-text-vision-split.md` (MERGED),
+   `spec-design-ai-card-vision-input.md` (MERGED).
+2. **2026-07-18**: spec #1, #2, #6, #7, #8, #9, #11, #12 della tabella
+   sopra — tutti DONE e verificati. Il gap residuo di #12 (callback tool
+   non esposti in UI) è assorbito in REQ-LOG-001 dello spec #14.
 
 ---
 

@@ -184,9 +184,12 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 Stato corrente delle fasi di sviluppo. Le spec implementate sono state
 cancellate dopo verifica completa. Traccia storica in git history.
 
-Spec superstiti: `spec-design-flyer-refactor-preview-ai.md` (Phase 11
-parziale), `spec-tool-ai-card-flyer-tools.md` (tools definiti ma non
-wireati).
+Spec attivi in `spec/`: `spec-design-ai-first-ux-redesign.md` (Fasi
+12-14, roadmap corrente: AI Observability → Design System/UX → AI
+Console/AI-first), `spec-design-flyer-refactor-preview-ai.md` (Phase 11,
+solo gap test TB-007), `spec-api-saas-monetization.md` (NOT-STARTED,
+track futuro). Gli spec implementati sono stati cancellati il
+2026-07-18 dopo verifica (traccia in git history + `doc/to-be-done.md`).
 
 | Fase | Stato | Note |
 |------|-------|------|
@@ -202,6 +205,9 @@ wireati).
 | 9, Card Refactor Submodules | ✅ done | 11 utils + 9 components `src/utils/card/*` + `src/components/card/*`, barrel/shell pattern. |
 | 10, Card Grid UX Alignment | ✅ done | alignH/alignV (9-pos), preset retro separato, e2e. |
 | 11, Flyer Refactor Preview/AI | ⚠️ parziale | Architettura 12/12 utils + 11/11 components + 5/5 CSS. Gap: test matrix 4/10, `ai/flyer/budgets.ts` in `utils/flyer/budgets.ts` (deviazione equivalente). Spec mantenuta. |
+| 12, AI Observability | 📋 spec scritto | `spec-design-ai-first-ux-redesign.md` §3.1: `useAILogs` condiviso, fix `trackUsage` (require→ESM), token reali flyer + costo immagini Gemini, `X-Request-Id`, log server JSON, rate limit ghost fix, persistenza `pq_ai_logs:v1` (sessionStorage). |
+| 13, Design System & UX | 📋 spec scritto | `spec-design-ai-first-ux-redesign.md` §3.2: token "The Classic" globali, purge teal/blu, ToastProvider context (fix toast fantasma), kit `ai-ui` CSS, Primary Action Bar uniforme, breakpoint 768/1024, copy alignment, HomePage AIDA. |
+| 14, AI Console & AI-first | 📋 spec scritto | `spec-design-ai-first-ux-redesign.md` §3.3: `AIConsole` rail/bottom-sheet unico per 5 editor, AI-first entry (prompt suggerito su doc vuoto), onboarding AI-first, badge provider uniforme. QR resta manuale (eccezione documentata). |
 
 ### ⚠️ Volantino rendering gotchas (leggi prima di toccare il rendering)
 
@@ -719,7 +725,7 @@ The order is **critical**: `/api/(.*) -> /api` MUST come **before** the SPA catc
 - Lo streaming funziona per **tutte** le risposte AI (testo + tool), non solo per i tool.
 - Dopo l'esecuzione di tool, viene fatta una **seconda chiamata** (multi-turn) per generare la sintesi finale (qualità migliore).
 - Token usage viene accumulato tra le due chiamate e mostrato in `result.response.usage`.
-- Log "a blocchi": `useAI.ts` emette un'entry di log ogni 400ms con preview del contenuto ricevuto.
+- Log "a blocchi": gli hook AI emettono un aggiornamento dell'entry di stream ogni **≥80 caratteri** ricevuti (soglia a delta caratteri, NON temporale). Fase 12 (spec ai-first-ux-redesign) unificherà questo plumbing in `useAILogs`.
 
 ## Test, OBBLIGATORI
 
@@ -751,7 +757,7 @@ Posizione test:
 ## Auth Security
 
 - `ADMIN_PASSWORD` validated with **constant-time compare** (`crypto.timingSafeEqual`).
-- Rate limiting in-memory: 5 login attempts / 15min per IP, 30 AI stream calls / min per IP, 200 logs / min per IP.
+- Rate limiting in-memory: 5 login attempts / 15min per IP. Enforced (via `consumeRateLimit`): aichat 30/min, flyerCopy 10/min, onboarding 5/min, Gemini image endpoints 5-10/min. **Ghost (dichiarati ma NON enforced, fix in Fase 12)**: `/api/logs` 200/min, `/users/tokens` 30/min, `/ai/chat/stream` 30/min — usano `checkRateLimit` read-only senza `recordRateAttempt`.
 - `bodyParser` size limit: 1 MB.
 - CORS in production: solo `ALLOWED_ORIGIN` o `*.vercel.app`. In dev: `*`.
 
@@ -782,7 +788,7 @@ Chiavi attuali:
 
 - **Server** (inline in `api/index.ts`): JSON strutturato in production tramite `console.error/info/etc`. Sostituisce tutti i `console.error` esistenti.
 - **Client** (`src/utils/logger.ts`): usa `sendBeacon` (no blocking) per inviare eventi a `/api/logs` → Vercel logs.
-- I client log in production sono filtrati: solo `warn`/`error` arrivano al server.
+- I client log in production: `debug` è droppato client-side; `info`/`warn`/`error` arrivano TUTTI al server via beacon (solo `warn`/`error` vanno anche in console browser). Nessun retry/coda sul beacon.
 
 ## Git Guardrails
 
