@@ -124,12 +124,17 @@ export default function AppShell() {
   // URL Document-ID Routing: keep the quote URL in sync with the active
   // document id. When a new quote is created/saved and the URL is still
   // /app/editor (root), replace it with /app/editor/:quoteId.
+  // Guard: only sync after the document has been saved at least once. The
+  // starter quote has a stable placeholder ID that does not exist in the DB;
+  // pushing it into the URL would cause useDocumentLoader to 404 and bounce
+  // back to /app/editor, breaking sidebar navigation.
   useEffect(() => {
     if (location.pathname !== '/app/editor') return;
     if (!quote.quoteId) return;
     if (routeDocId && routeDocId === quote.quoteId) return;
+    if (!lastSaveTime) return;
     navigate(`/app/editor/${quote.quoteId}`, { replace: true });
-  }, [location.pathname, routeDocId, quote.quoteId, navigate]);
+  }, [location.pathname, routeDocId, quote.quoteId, navigate, lastSaveTime]);
 
   // Phase 5: refresh tier when user changes
   const refreshTier = useCallback(async () => {
