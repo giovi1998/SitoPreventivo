@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import SocialEditor from '../SocialEditor';
 
 // Mock useAISocial to avoid provider/network calls
@@ -17,33 +18,39 @@ vi.mock('../../hooks/useToast', () => ({
   useToast: () => ({ addToast: vi.fn() }),
 }));
 
+function renderWithRouter(ui: React.ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
 describe('SocialEditor (spec 12 UI integration)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders the form with source type, source doc and tone selectors', () => {
-    render(
+    renderWithRouter(
       <SocialEditor
         userEmail="test@example.com"
         cardDocuments={[{ id: 'c1', title: 'Bigliettino Test', front: { name: 'Mario' } } as never]}
         flyerDocuments={[{ id: 'f1', title: 'Volantino Test', content: { headline: 'Sagra' } } as never]}
       />
     );
-    expect(screen.getByText('Social AI')).toBeDefined();
+    expect(screen.getByText('Generatore post social')).toBeDefined();
     expect(screen.getByText('Bigliettino')).toBeDefined();
     expect(screen.getByText('Volantino')).toBeDefined();
   });
 
-  it('shows empty state when no documents available (v2.1 fix)', () => {
-    render(
+  it('shows empty state with CTAs when no documents available (v2.1 fix)', () => {
+    renderWithRouter(
       <SocialEditor userEmail="t@e.com" cardDocuments={[]} flyerDocuments={[]} />
     );
-    expect(screen.getByText(/Nessun bigliettino o volantino/i)).toBeDefined();
+    expect(screen.getByText(/Nessun documento sorgente/i)).toBeDefined();
+    expect(screen.getByRole('link', { name: /Crea bigliettino/i })).toBeDefined();
+    expect(screen.getByRole('link', { name: /Crea volantino/i })).toBeDefined();
   });
 
   it('lists card documents in the source dropdown', () => {
-    render(
+    renderWithRouter(
       <SocialEditor
         userEmail="t@e.com"
         cardDocuments={[{ id: 'c1', title: 'Mario Card' } as never]}
@@ -54,7 +61,7 @@ describe('SocialEditor (spec 12 UI integration)', () => {
   });
 
   it('switches to flyer source and lists flyers', () => {
-    render(
+    renderWithRouter(
       <SocialEditor
         userEmail="t@e.com"
         cardDocuments={[]}

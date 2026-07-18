@@ -1,10 +1,12 @@
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import type { BusinessCard, Flyer } from '../utils/documentSchemas';
 import { useAISocial } from '../hooks/useAISocial';
 import type { SocialSource, SocialTone } from '../ai/prompts/socialSystem';
 import { useToast } from '../hooks/useToast';
 import AILogPanel from './AILogPanel';
 import { AiSelect, AiGenerateButton } from './ai-ui';
+import './SocialEditor.css';
 
 interface Props {
   userEmail: string;
@@ -12,7 +14,11 @@ interface Props {
   flyerDocuments: Flyer[];
 }
 
-const TONES: SocialTone[] = ['professional', 'casual', 'promotional'];
+const TONES: { value: SocialTone; label: string }[] = [
+  { value: 'professional', label: 'Professionale' },
+  { value: 'casual', label: 'Informale' },
+  { value: 'promotional', label: 'Promozionale' },
+];
 
 export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments }: Props) {
   const { generate, posts, isProcessing, logs, reset } = useAISocial(userEmail);
@@ -20,6 +26,8 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
   const [sourceType, setSourceType] = useState<'card' | 'flyer'>('card');
   const [sourceId, setSourceId] = useState<string>('');
   const [tone, setTone] = useState<SocialTone>('promotional');
+
+  const hasSources = cardDocuments.length > 0 || flyerDocuments.length > 0;
 
   const availableSources = useMemo(() => {
     return sourceType === 'card'
@@ -80,78 +88,107 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
   return (
     <div className="social-editor">
       <header className="social-editor-header">
-        <h1>Social AI</h1>
-        <p>Genera 3 post coordinati (Instagram, Facebook, LinkedIn) a partire da un bigliettino o volantino.</p>
+        <h1>Generatore post social</h1>
+        <p>Genera 3 post coordinati (Instagram, Facebook, LinkedIn) a partire da un bigliettino o un volantino della tua Collection.</p>
       </header>
 
-      {cardDocuments.length === 0 && flyerDocuments.length === 0 && (
+      {!hasSources && (
         <div className="social-empty" role="status">
-          <p>Nessun bigliettino o volantino salvato nella tua Collection.</p>
-          <p>Crea prima un bigliettino (tab Bigliettini) o un volantino (tab Volantini), poi torna qui per generare post social coordinati.</p>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="18" cy="5" r="3" />
+            <circle cx="6" cy="12" r="3" />
+            <circle cx="18" cy="19" r="3" />
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+          </svg>
+          <p className="social-empty-title">Nessun documento sorgente</p>
+          <p className="social-empty-text">
+            Non hai ancora bigliettini o volantini salvati nella Collection. Creane uno, poi torna qui per generare post social coordinati a partire dal suo contenuto.
+          </p>
+          <div className="social-empty-ctas">
+            <Link to="/app/card" className="social-empty-cta">Crea bigliettino</Link>
+            <Link to="/app/flyer" className="social-empty-cta secondary">Crea volantino</Link>
+          </div>
         </div>
       )}
 
-      {(cardDocuments.length > 0 || flyerDocuments.length > 0) && (
-        <div className="social-editor-form">
-        <AiSelect
-          label="Tipo sorgente"
-          value={sourceType}
-          onChange={(e) => { setSourceType(e.target.value as 'card' | 'flyer'); setSourceId(''); }}
-          options={[
-            { value: 'card', label: 'Bigliettino' },
-            { value: 'flyer', label: 'Volantino' },
-          ]}
-        />
-        <AiSelect
-          label="Documento sorgente"
-          value={sourceId}
-          onChange={(e) => setSourceId(e.target.value)}
-          options={[
-            { value: '', label: '— Seleziona —' },
-            ...availableSources.map((s) => ({ value: s.id, label: s.label })),
-          ]}
-        />
-        <AiSelect
-          label="Tono"
-          value={tone}
-          onChange={(e) => setTone(e.target.value as SocialTone)}
-          options={TONES.map((t) => ({ value: t, label: t }))}
-        />
-        <div className="social-editor-actions">
-          <AiGenerateButton
-            isProcessing={isProcessing}
-            loadingText="Generando…"
-            onClick={handleGenerate}
-            disabled={!sourceId}
-          >
-            Genera 3 post
-          </AiGenerateButton>
-          <button type="button" onClick={reset} disabled={isProcessing}>
-            Reset
-          </button>
-        </div>
-      </div>
-      )}
-
-      {posts.length === 3 && (
-        <div className="social-posts-grid">
-          {posts.map((post, i) => (
-            <div key={i} className={`social-post-card platform-${post.platform}`}>
-              <h3>{post.platform}</h3>
-              <p className="social-post-caption">{post.caption}</p>
-              {post.hashtags.length > 0 && (
-                <p className="social-post-hashtags">{post.hashtags.join(' ')}</p>
-              )}
-              <p className="social-post-tone">Tono: {post.tone}</p>
-              <button type="button" onClick={() => copyPost(post.caption)}>
-                Copia caption
+      {hasSources && (
+        <div className="social-editor-grid">
+          <section className="social-editor-form" aria-label="Configurazione post">
+            <h2 className="social-form-title">Configura generazione</h2>
+            <p className="social-form-hint">L'AI legge il contenuto del documento scelto e scrive 3 caption ottimizzate per piattaforma.</p>
+            <AiSelect
+              label="Tipo sorgente"
+              value={sourceType}
+              onChange={(e) => { setSourceType(e.target.value as 'card' | 'flyer'); setSourceId(''); }}
+              options={[
+                { value: 'card', label: 'Bigliettino' },
+                { value: 'flyer', label: 'Volantino' },
+              ]}
+            />
+            <AiSelect
+              label="Documento sorgente"
+              value={sourceId}
+              onChange={(e) => setSourceId(e.target.value)}
+              options={[
+                { value: '', label: '— Seleziona —' },
+                ...availableSources.map((s) => ({ value: s.id, label: s.label })),
+              ]}
+            />
+            <AiSelect
+              label="Tono"
+              value={tone}
+              onChange={(e) => setTone(e.target.value as SocialTone)}
+              options={TONES.map((t) => ({ value: t.value, label: t.label }))}
+            />
+            <div className="social-editor-actions">
+              <AiGenerateButton
+                isProcessing={isProcessing}
+                loadingText="Generando…"
+                onClick={handleGenerate}
+                disabled={!sourceId}
+              >
+                Genera 3 post
+              </AiGenerateButton>
+              <button type="button" className="social-reset-btn" onClick={reset} disabled={isProcessing}>
+                Reset
               </button>
             </div>
-          ))}
+          </section>
+
+          <div className="social-results">
+            {posts.length === 3 && (
+              <div className="social-posts-grid">
+                {posts.map((post, i) => (
+                  <article key={i} className={`social-post-card platform-${post.platform}`}>
+                    <header className="social-post-head">
+                      <span className="social-platform-badge">
+                        <span className="social-platform-dot" aria-hidden="true" />
+                        {post.platform}
+                      </span>
+                    </header>
+                    <p className="social-post-caption">{post.caption}</p>
+                    {post.hashtags.length > 0 && (
+                      <p className="social-post-hashtags">{post.hashtags.join(' ')}</p>
+                    )}
+                    <footer className="social-post-foot">
+                      <p className="social-post-tone">Tono: {post.tone}</p>
+                      <button type="button" className="social-copy-btn" onClick={() => copyPost(post.caption)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                        Copia caption
+                      </button>
+                    </footer>
+                  </article>
+                ))}
+              </div>
+            )}
+            <AILogPanel logs={logs} isProcessing={isProcessing} />
+          </div>
         </div>
       )}
-
-      <AILogPanel logs={logs} isProcessing={isProcessing} />
     </div>
   );
 }
