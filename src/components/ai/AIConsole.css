@@ -159,6 +159,24 @@
   letter-spacing: 0.06em;
 }
 
+/* REQ-AI-006: badge provider uniforme */
+.ai-provider-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.65rem;
+  color: var(--muted, #647086);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ai-provider-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #e62020);
+}
+
 /* Mobile: full-width drawer anchored to the bottom */
 @media (max-width: 768px) {
   .ai-console {

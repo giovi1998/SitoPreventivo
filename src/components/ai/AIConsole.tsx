@@ -1,6 +1,8 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import AILogPanel from '../AILogPanel';
+import AIProviderBadge from './AIProviderBadge';
 import type { AILogEntry } from '../../ai/types';
+import { getAiConsoleExpanded, setAiConsoleExpanded, type EditorKind } from '../../utils/uiPrefs';
 import './AIConsole.css';
 
 export interface AIConsoleProps {
@@ -18,8 +20,28 @@ export interface AIConsoleProps {
   quickActions?: React.ReactNode;
   /** Module-specific AI sections (e.g. "Sfondo AI") */
   children?: React.ReactNode;
-  /** Expand the console by default on desktop */
+  /**
+   * Expand the console by default on desktop. Ignored when `editorKind` is
+   * set and the user has a persisted preference in pq_ui:v1.
+   */
   defaultExpanded?: boolean;
+  /**
+   * Editor identity: persiste lo stato expanded in pq_ui:v1 (REQ-AI-003).
+   * Senza editorKind lo stato è solo in memoria.
+   */
+  editorKind?: EditorKind;
+  /**
+   * Prompt suggerito contestuale (REQ-AI-003): precompila la textarea e le
+   * dà focus quando la console è espansa. Usato per l'AI-first entry su
+   * documento vuoto.
+   */
+  suggestedPrompt?: string;
+  /**
+   * Nasconde la prompt textarea built-in (es. Social AI: la generazione non
+   * ha prompt libero, i controlli stanno nei children). onSubmitPrompt non
+   * viene mai chiamato in questo modo.
+   */
+  hidePrompt?: boolean;
   /** Optional className for the host */
   className?: string;
 }
@@ -33,10 +55,37 @@ export default function AIConsole({
   quickActions,
   children,
   defaultExpanded = true,
+  editorKind,
+  suggestedPrompt,
+  hidePrompt = false,
   className = '',
 }: AIConsoleProps): React.ReactElement {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const [prompt, setPrompt] = useState('');
+  const [expanded, setExpanded] = useState<boolean>(() => {
+    if (editorKind) {
+      const persisted = getAiConsoleExpanded(editorKind);
+      if (persisted !== undefined) return persisted;
+    }
+    return defaultExpanded;
+  });
+  const [prompt, setPrompt] = useState(suggestedPrompt ?? '');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // AI-first entry (REQ-AI-003): prompt suggerito + focus quando espansa.
+  useEffect(() => {
+    if (expanded && suggestedPrompt && textareaRef.current) {
+      setPrompt((current) => (current.trim() ? current : suggestedPrompt));
+      textareaRef.current.focus();
+    }
+    // solo al mount / cambio suggestedPrompt
+  }, [suggestedPrompt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleExpanded = useCallback(() => {
+    setExpanded((v) => {
+      const next = !v;
+      if (editorKind) setAiConsoleExpanded(editorKind, next);
+      return next;
+    });
+  }, [editorKind]);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -54,7 +103,7 @@ export default function AIConsole({
       <button
         type="button"
         className="ai-console__toggle"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={toggleExpanded}
         aria-label={expanded ? 'Comprimi AI Assist' : 'Espandi AI Assist'}
         aria-expanded={expanded}
       >
@@ -74,33 +123,36 @@ export default function AIConsole({
             {isProcessing && <span className="ai-console__status">AI in elaborazione…</span>}
           </header>
 
-          <form className="ai-console__prompt" onSubmit={handleSubmit}>
-            <textarea
-              className="ai-console__textarea"
-              placeholder={
-                tier === 'free'
-                  ? 'Passa a Pro per generare con l\'AI…'
-                  : 'Descrivi cosa vuoi creare, l\'AI costruisce tutto.'
-              }
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={3}
-              disabled={tier === 'free'}
-            />
-            {tier === 'free' && (
-              <p className="ai-console__guard">
-                L'AI richiede il piano Pro. {" "}
-                <a href="mailto:info@quickbrand.it?subject=Sblocca%20Quickbrand%20Pro">Sblocca ora</a>
-              </p>
-            )}
-            <button
-              type="submit"
-              className="ai-console__submit"
-              disabled={!prompt.trim() || isProcessing || tier === 'free'}
-            >
-              Genera
-            </button>
-          </form>
+          {!hidePrompt && (
+            <form className="ai-console__prompt" onSubmit={handleSubmit}>
+              <textarea
+                ref={textareaRef}
+                className="ai-console__textarea"
+                placeholder={
+                  tier === 'free'
+                    ? 'Passa a Pro per generare con l\'AI…'
+                    : 'Descrivi cosa vuoi creare, l\'AI costruisce tutto.'
+                }
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                rows={3}
+                disabled={tier === 'free'}
+              />
+              {tier === 'free' && (
+                <p className="ai-console__guard">
+                  L'AI richiede il piano Pro. {" "}
+                  <a href="mailto:info@quickbrand.it?subject=Sblocca%20Quickbrand%20Pro">Sblocca ora</a>
+                </p>
+              )}
+              <button
+                type="submit"
+                className="ai-console__submit"
+                disabled={!prompt.trim() || isProcessing || tier === 'free'}
+              >
+                Genera
+              </button>
+            </form>
+          )}
 
           {quickActions && <div className="ai-console__quick">{quickActions}</div>}
 
@@ -111,7 +163,7 @@ export default function AIConsole({
           </div>
 
           <footer className="ai-console__footer">
-            <span className="ai-console__badge">Powered by DeepSeek · Gemini</span>
+            <AIProviderBadge />
           </footer>
         </div>
       )}

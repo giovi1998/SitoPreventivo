@@ -1,11 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import type { BusinessCard, Flyer } from '../utils/documentSchemas';
 import { useAISocial } from '../hooks/useAISocial';
 import type { SocialSource, SocialTone } from '../ai/prompts/socialSystem';
 import { useToast } from '../hooks/useToast';
-import AILogPanel from './AILogPanel';
+import AIConsole from './ai/AIConsole';
 import { AiSelect, AiGenerateButton } from './ai-ui';
+import { AuthContext } from '../contexts';
+import dataService from '../utils/dataService';
 import './SocialEditor.css';
 
 interface Props {
@@ -23,6 +25,20 @@ const TONES: { value: SocialTone; label: string }[] = [
 export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments }: Props) {
   const { generate, posts, isProcessing, logs, reset } = useAISocial(userEmail);
   const { addToast } = useToast();
+  const { user } = useContext(AuthContext);
+  const [tier, setTier] = useState<'free' | 'unlocked'>('free');
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      setTier('unlocked');
+      return;
+    }
+    let active = true;
+    dataService.getUserSettings(userEmail)
+      .then((s: any) => { if (active) setTier(s?.tier === 'unlocked' ? 'unlocked' : 'free'); })
+      .catch(() => { if (active) setTier('free'); });
+    return () => { active = false; };
+  }, [userEmail, user?.role]);
   const [sourceType, setSourceType] = useState<'card' | 'flyer'>('card');
   const [sourceId, setSourceId] = useState<string>('');
   const [tone, setTone] = useState<SocialTone>('promotional');
@@ -113,51 +129,9 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
       )}
 
       {hasSources && (
-        <div className="social-editor-grid">
-          <section className="social-editor-form" aria-label="Configurazione post">
-            <h2 className="social-form-title">Configura generazione</h2>
-            <p className="social-form-hint">L'AI legge il contenuto del documento scelto e scrive 3 caption ottimizzate per piattaforma.</p>
-            <AiSelect
-              label="Tipo sorgente"
-              value={sourceType}
-              onChange={(e) => { setSourceType(e.target.value as 'card' | 'flyer'); setSourceId(''); }}
-              options={[
-                { value: 'card', label: 'Bigliettino' },
-                { value: 'flyer', label: 'Volantino' },
-              ]}
-            />
-            <AiSelect
-              label="Documento sorgente"
-              value={sourceId}
-              onChange={(e) => setSourceId(e.target.value)}
-              options={[
-                { value: '', label: '— Seleziona —' },
-                ...availableSources.map((s) => ({ value: s.id, label: s.label })),
-              ]}
-            />
-            <AiSelect
-              label="Tono"
-              value={tone}
-              onChange={(e) => setTone(e.target.value as SocialTone)}
-              options={TONES.map((t) => ({ value: t.value, label: t.label }))}
-            />
-            <div className="social-editor-actions">
-              <AiGenerateButton
-                isProcessing={isProcessing}
-                loadingText="Generando…"
-                onClick={handleGenerate}
-                disabled={!sourceId}
-              >
-                Genera 3 post
-              </AiGenerateButton>
-              <button type="button" className="social-reset-btn" onClick={reset} disabled={isProcessing}>
-                Reset
-              </button>
-            </div>
-          </section>
-
+        <div className="social-editor-grid social-editor-grid--with-rail">
           <div className="social-results">
-            {posts.length === 3 && (
+            {posts.length === 3 ? (
               <div className="social-posts-grid">
                 {posts.map((post, i) => (
                   <article key={i} className={`social-post-card platform-${post.platform}`}>
@@ -184,9 +158,64 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
                   </article>
                 ))}
               </div>
+            ) : (
+              <p className="social-results-hint">
+                Configura la generazione dalla rail AI Assist a destra: l'AI legge il documento scelto e scrive 3 caption ottimizzate per piattaforma.
+              </p>
             )}
-            <AILogPanel logs={logs} isProcessing={isProcessing} />
           </div>
+
+          {/* Phase 14 (REQ-AI-002): un solo modello — l'AI sta nella rail a destra */}
+          <AIConsole
+            editorKind="social"
+            isProcessing={isProcessing}
+            logs={logs}
+            tier={tier}
+            onSubmitPrompt={() => {}}
+            hidePrompt
+          >
+            <section className="social-editor-form" aria-label="Configurazione post">
+              <h2 className="social-form-title">Configura generazione</h2>
+              <p className="social-form-hint">L'AI legge il contenuto del documento scelto e scrive 3 caption ottimizzate per piattaforma.</p>
+              <AiSelect
+                label="Tipo sorgente"
+                value={sourceType}
+                onChange={(e) => { setSourceType(e.target.value as 'card' | 'flyer'); setSourceId(''); }}
+                options={[
+                  { value: 'card', label: 'Bigliettino' },
+                  { value: 'flyer', label: 'Volantino' },
+                ]}
+              />
+              <AiSelect
+                label="Documento sorgente"
+                value={sourceId}
+                onChange={(e) => setSourceId(e.target.value)}
+                options={[
+                  { value: '', label: '— Seleziona —' },
+                  ...availableSources.map((s) => ({ value: s.id, label: s.label })),
+                ]}
+              />
+              <AiSelect
+                label="Tono"
+                value={tone}
+                onChange={(e) => setTone(e.target.value as SocialTone)}
+                options={TONES.map((t) => ({ value: t.value, label: t.label }))}
+              />
+              <div className="social-editor-actions">
+                <AiGenerateButton
+                  isProcessing={isProcessing}
+                  loadingText="Generando…"
+                  onClick={handleGenerate}
+                  disabled={!sourceId}
+                >
+                  Genera 3 post
+                </AiGenerateButton>
+                <button type="button" className="social-reset-btn" onClick={reset} disabled={isProcessing}>
+                  Reset
+                </button>
+              </div>
+            </section>
+          </AIConsole>
         </div>
       )}
     </div>
