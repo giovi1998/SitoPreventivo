@@ -45,21 +45,21 @@ describe('HomePage, Quickbrand rebrand', () => {
     expect(screen.getByText(/©\s*2026\s*Quickbrand\s*·\s*Giovanni Cidu/i)).toBeInTheDocument();
   });
 
-  // AC-004
-  it('H1 contains the new disruptor headline with accent on "60 secondi."', () => {
+  // AC-004 aggiornato Phase 13b/14 (REQ-UX-010 + REQ-AI-008): hero AI-first
+  it('H1 is the AI-first headline with accent on "L\'AI costruisce il tuo brand kit."', () => {
     renderHome();
     const h1 = screen.getByRole('heading', { level: 1 });
-    expect(h1.textContent ?? '').toContain('Smetti di pagare le agenzie.');
-    expect(h1.textContent ?? '').toContain('tipografia in 60 secondi.');
+    expect(h1.textContent ?? '').toContain('Descrivi la tua attività.');
+    expect(h1.textContent ?? '').toContain("L'AI costruisce il tuo brand kit.");
     const accent = h1.querySelector('.hp-h1-accent');
     expect(accent).not.toBeNull();
-    expect(accent?.textContent ?? '').toContain('60 secondi.');
+    expect(accent?.textContent ?? '').toContain("L'AI costruisce");
   });
 
-  // REQ-M01
-  it('hero eyebrow reads "Logo · Biglietti · Pronti per la stampa"', () => {
+  // REQ-M01 aggiornato Phase 13b/14 (AI-first)
+  it('hero eyebrow reads "AI brand kit · Pronti per la stampa"', () => {
     renderHome();
-    expect(screen.getByText(/Logo\s*·\s*Biglietti\s*·\s*Pronti per la stampa/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI brand kit\s*·\s*Pronti per la stampa/i)).toBeInTheDocument();
   });
 
   // REQ-M04
@@ -70,21 +70,37 @@ describe('HomePage, Quickbrand rebrand', () => {
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
-  // AC-005
-  it('"Cosa include Quickbrand" section has 4 cards in order: Biglietti → Logo → QR → Preventivi', () => {
+  // AC-005 aggiornato Phase 13b/14 (REQ-UX-010): bento 6 strumenti
+  it('"Gli strumenti dell\'AI" bento has 6 cards: Biglietti → Logo → Volantini → Social → QR → Preventivi', () => {
     const { container } = renderHome();
-    const cards = container.querySelectorAll('.hp-create-item h3');
-    expect(cards.length).toBe(4);
-    expect(cards[0]?.textContent ?? '').toMatch(/Biglietti da visita/i);
-    expect(cards[1]?.textContent ?? '').toMatch(/Logo SVG/i);
-    expect(cards[2]?.textContent ?? '').toMatch(/^QR Code$/i);
-    expect(cards[3]?.textContent ?? '').toMatch(/Preventivi/i);
+    const cards = container.querySelectorAll('.hp-bento .hp-create-item h3');
+    expect(cards.length).toBe(6);
+    expect(cards[0]?.textContent ?? '').toMatch(/Biglietti da visita AI/i);
+    expect(cards[1]?.textContent ?? '').toMatch(/Logo AI/i);
+    expect(cards[2]?.textContent ?? '').toMatch(/Volantini AI/i);
+    expect(cards[3]?.textContent ?? '').toMatch(/Social AI/i);
+    expect(cards[4]?.textContent ?? '').toMatch(/^QR Code$/i);
+    expect(cards[5]?.textContent ?? '').toMatch(/Preventivi/i);
   });
 
-  // REQ-M08 step 2 mentions collision detection
+  // REQ-UX-010: niente meta-label cheap nella pagina
+  it('has no cheap meta-labels ("SECTION 0", "QUESTION 0")', () => {
+    const { container } = renderHome();
+    expect(container.textContent ?? '').not.toMatch(/SECTION 0/i);
+    expect(container.textContent ?? '').not.toMatch(/QUESTION 0/i);
+  });
+
+  // REQ-UX-011: sezioni con scroll-reveal
+  it('main sections use the reveal class for scroll-reveal motion', () => {
+    const { container } = renderHome();
+    const revealed = container.querySelectorAll('.hp-section.reveal');
+    expect(revealed.length).toBeGreaterThanOrEqual(4);
+  });
+
+  // REQ-M08 step 2 mentions collision detection (ora citata anche nel bento)
   it('step 2 of "Come funziona" mentions collision detection', () => {
     renderHome();
-    expect(screen.getByText(/collision detection/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/collision detection/i).length).toBeGreaterThanOrEqual(1);
   });
 
   // REQ-M08 step 3 mentions PDF 10-up

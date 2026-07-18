@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import CardPreview from '../components/CardPreview';
 import '../components/CardEditor.css';
@@ -11,9 +11,38 @@ interface HomePageProps {
 
 const giovanniCard = createGiovanniCardTemplate();
 
+/**
+ * Phase 13b (REQ-UX-011): scroll-reveal via IntersectionObserver.
+ * Nessuna libreria (CON-002). Disattivato con prefers-reduced-motion (CSS).
+ */
+function useReveal() {
+  useEffect(() => {
+    const els = Array.from(document.querySelectorAll('.hp .reveal'));
+    if (els.length === 0) return;
+    if (typeof IntersectionObserver !== 'function') {
+      els.forEach((el) => el.classList.add('reveal-visible'));
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('reveal-visible');
+            io.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12 }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+}
+
 export default function HomePage({ user }: HomePageProps) {
   const [flipped, setFlipped] = useState(false);
   const toggle = () => setFlipped((f) => !f);
+  useReveal();
 
   return (
     <div className="hp">
@@ -42,17 +71,15 @@ export default function HomePage({ user }: HomePageProps) {
       {/* ─── Hero ─────────────────────────────────────────── */}
       <section className="hp-hero">
         <div className="hp-hero-inner">
-          <p className="hp-eyebrow">Logo · Biglietti · Pronti per la stampa</p>
+          <p className="hp-eyebrow">AI brand kit · Pronti per la stampa</p>
           <h1 className="hp-h1">
-            Smetti di pagare le agenzie.<br />
-            Il tuo brand, pronto per la<br />
-            <span className="hp-h1-accent">tipografia in 60 secondi.</span>
+            Descrivi la tua attività.<br />
+            <span className="hp-h1-accent">L'AI costruisce il tuo brand kit.</span>
           </h1>
           <p className="hp-sub">
-            Quickbrand ti dà logo in SVG e biglietti da visita professionali
-            in pochi clic. Editor a griglia con precisione svizzera, AI che
-            ottimizza palette e testi in tempo reale, export PDF 10-up e
-            vettoriali puri. Dall'idea al file pronto in 60 secondi.
+            Logo SVG, bigliettini, volantini e post social coordinati: l'AI
+            genera la prima bozza, tu la rifinisci con l'editor a griglia.
+            Export PDF pronti per la tipografia, in 60 secondi.
           </p>
           <div className="hp-cta-row">
             {user ? (
@@ -66,43 +93,60 @@ export default function HomePage({ user }: HomePageProps) {
         </div>
       </section>
 
-      {/* ─── Cosa include Quickbrand ─────────────────────── */}
-      <section className="hp-section">
-        <h2 className="hp-section-h">Cosa include Quickbrand</h2>
-        <div className="hp-create-grid">
-          <article className="hp-create-item">
+      {/* ─── Interest: bento strumenti (Phase 13b, REQ-UX-010) ────────── */}
+      <section className="hp-section reveal">
+        <h2 className="hp-section-h">Gli strumenti dell'AI</h2>
+        <p className="hp-section-sub">
+          Cinque strumenti, un unico sistema coordinato. L'AI scrive e propone, tu controlli il risultato.
+        </p>
+        <div className="hp-bento">
+          <article className="hp-create-item hp-bento-wide">
             <div className="hp-create-icon" data-color="red">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="4" x2="8" y2="10"/></svg>
             </div>
-            <h3>Biglietti da visita</h3>
-            <p>Layout split, centrato o sinistro. Foto, logo, QR sul retro con contatti e social. Export PDF 10-up pronto tipografia (A4 con 10 bigliettini già posizionati), PNG alta risoluzione o SVG vettoriale puro.</p>
+            <h3>Biglietti da visita AI</h3>
+            <p>Descrivi la tua attività: l'AI compone fronte e retro con foto, logo, QR e contatti. Grid editor con collision detection — non puoi sbagliare layout. Export PDF 10-up pronto tipografia, PNG o SVG.</p>
           </article>
-          <article className="hp-create-item">
+          <article className="hp-create-item hp-bento-wide">
             <div className="hp-create-icon" data-color="red">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20"/><path d="M12 2a14.5 14.5 0 0 1 0 20"/></svg>
             </div>
-            <h3>Logo SVG</h3>
-            <p>Builder con 4 template per settore (tech, food, fashion, professionista), 3 layout, 48 icone Lucide. Esporta SVG editabile o PNG fino a 2048px. Zero costi AI: qualità deterministica.</p>
+            <h3>Logo AI</h3>
+            <p>Tre domande, tre concept: l'AI propone testo, colori, icona e uno sfondo artistico generato. Il testo resta vettoriale e modificabile. Esporta SVG o PNG fino a 2048px.</p>
+          </article>
+          <article className="hp-create-item">
+            <div className="hp-create-icon" data-color="red">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v12H4z"/><path d="M4 16l5-5 4 4 3-3 4 4"/><circle cx="9" cy="8" r="1.5"/></svg>
+            </div>
+            <h3>Volantini AI</h3>
+            <p>L'AI scrive headline, body e CTA dal tuo brief. 4 layout × 5 formati, bleed 3mm per la tipografia.</p>
+          </article>
+          <article className="hp-create-item">
+            <div className="hp-create-icon" data-color="red">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            </div>
+            <h3>Social AI</h3>
+            <p>Tre post coordinati (Instagram, Facebook, LinkedIn) generati dal tuo bigliettino o volantino.</p>
           </article>
           <article className="hp-create-item">
             <div className="hp-create-icon" data-color="red">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
             </div>
             <h3>QR Code</h3>
-            <p>7 tipi: URL, testo, email, telefono, vCard, WiFi, SMS. Stili square, rounded o dots. Logo overlay opzionale. Export SVG vettoriale.</p>
+            <p>7 tipi: URL, testo, email, telefono, vCard, WiFi, SMS. Stili square, rounded o dots. Export SVG.</p>
           </article>
           <article className="hp-create-item">
             <div className="hp-create-icon" data-color="red">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
             </div>
             <h3>Preventivi</h3>
-            <p>Fino a 4 opzioni per preventivo, con costi una tantum e mensili, IVA, acconto, saldo e clausole. PDF professionale. Per chi serve anche la parte commerciale.</p>
+            <p>Fino a 4 opzioni con costi una tantum e mensili, IVA, acconto e clausole. PDF professionale.</p>
           </article>
         </div>
       </section>
 
-      {/* ─── Card demo flip 3D ────────────────────────────── */}
-      <section className="hp-section hp-demo-section">
+      {/* ─── Desire: card demo flip 3D ────────────────────── */}
+      <section className="hp-section hp-demo-section reveal">
         <h2 className="hp-section-h">Gratis con watermark. Sbloccata, pronta per la stampa.</h2>
         <p className="hp-section-sub">
           Tocca o passa il mouse sulla card per vedere il file finale.
@@ -147,7 +191,7 @@ export default function HomePage({ user }: HomePageProps) {
       </section>
 
       {/* ─── Come funziona ────────────────────────────────── */}
-      <section className="hp-section hp-steps-section">
+      <section className="hp-section hp-steps-section reveal">
         <h2 className="hp-section-h">Come funziona</h2>
         <ol className="hp-steps">
           <li className="hp-step">
@@ -169,7 +213,7 @@ export default function HomePage({ user }: HomePageProps) {
       </section>
 
       {/* ─── Perché noi (Phase 7, spec REQ-008) ─────────── */}
-      <section className="hp-section hp-why-section" aria-labelledby="hp-why-h">
+      <section className="hp-section hp-why-section reveal" aria-labelledby="hp-why-h">
         <h2 id="hp-why-h" className="hp-section-h">Perché Quickbrand</h2>
         <p className="hp-section-sub">
           Tre differenze concrete rispetto a web agency, Canva e Looka.
@@ -190,8 +234,8 @@ export default function HomePage({ user }: HomePageProps) {
         </div>
       </section>
 
-      {/* ─── Pricing, Subscription mensile ──────────────── */}
-      <section className="hp-section hp-pricing-section" id="pricing">
+      {/* ─── Action: pricing ─────────────────────────────── */}
+      <section className="hp-section hp-pricing-section reveal" id="pricing">
         <h2 className="hp-section-h">Un piano. Tutto incluso.</h2>
         <p className="hp-section-sub">
           Il piano Pro copre l'AI che usi davvero e sblocca i file pronti per
@@ -337,13 +381,13 @@ export default function HomePage({ user }: HomePageProps) {
         .hp-btn-primary{padding:8px 16px;border-radius:10px;font-weight:700;font-size:.88rem;color:#fff;background:var(--qb-ink);text-decoration:none;transition:box-shadow .15s,transform .1s}
         .hp-btn-primary:hover{box-shadow:0 4px 12px rgba(0,0,0,.18);transform:translateY(-1px)}
 
-        /* ─── Hero ────────────────────────────────────── */
-        .hp-hero{padding:80px 24px 64px;text-align:center}
-        .hp-hero-inner{max-width:680px;margin:0 auto}
+        /* ─── Hero (Attention) ────────────────────────── */
+        .hp-hero{padding:96px 24px 72px;text-align:center}
+        .hp-hero-inner{max-width:64rem;margin:0 auto}
         .hp-eyebrow{font-size:.78rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--qb-red);margin:0 0 20px}
-        .hp-h1{font-size:clamp(2rem,5.5vw,3.2rem);font-weight:900;letter-spacing:-.035em;line-height:1.08;margin:0 0 24px;color:var(--qb-ink)}
+        .hp-h1{font-family:'Outfit',ui-sans-serif,system-ui,sans-serif;font-size:clamp(2.5rem,5vw,4.5rem);font-weight:800;letter-spacing:-.035em;line-height:1.06;margin:0 0 24px;color:var(--qb-ink)}
         .hp-h1-accent{color:var(--qb-red)}
-        .hp-sub{font-size:1.1rem;color:var(--qb-ink);opacity:.78;line-height:1.6;margin:0 0 32px}
+        .hp-sub{font-size:1.15rem;color:var(--qb-ink);opacity:.78;line-height:1.6;margin:0 0 32px;max-width:46rem;margin-left:auto;margin-right:auto}
         .hp-cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
         .hp-cta{display:inline-block;padding:14px 32px;background:var(--qb-red);color:#fff;border-radius:12px;font-weight:800;font-size:1.02rem;text-decoration:none;letter-spacing:-.01em;transition:transform .15s,box-shadow .2s}
         .hp-cta:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(230,32,32,.32)}
@@ -353,16 +397,27 @@ export default function HomePage({ user }: HomePageProps) {
         .hp-hero-foot{font-size:.82rem;color:var(--qb-muted);margin:0}
 
         /* ─── Section base ────────────────────────────── */
-        .hp-section{max-width:1080px;margin:0 auto;padding:64px 24px}
+        .hp-section{max-width:1080px;margin:0 auto;padding:96px 24px}
+
+        /* ─── Motion v1: scroll-reveal (REQ-UX-011) ─────── */
+        .reveal{opacity:0;transform:translateY(24px);transition:opacity .6s ease-out,transform .6s ease-out}
+        .reveal-visible{opacity:1;transform:none}
+        @media(prefers-reduced-motion:reduce){
+          .reveal{opacity:1;transform:none;transition:none}
+          .hp-create-item,.hp-create-item:hover{transition:none;transform:none}
+        }
         .hp-section-h{font-size:clamp(1.6rem,3.5vw,2.1rem);font-weight:900;letter-spacing:-.03em;margin:0 0 16px;text-align:center;color:var(--qb-ink)}
         .hp-section-h-secondary{margin-top:48px;font-size:clamp(1.3rem,3vw,1.7rem);position:relative}
         .hp-section-h-secondary::before{content:'';display:block;width:40px;height:2px;background:var(--qb-red);margin:0 auto 16px;opacity:.7}
         .hp-section-sub{font-size:1rem;color:var(--qb-muted);text-align:center;max-width:560px;margin:0 auto 40px;line-height:1.55}
 
-        /* ─── Cosa include Quickbrand ─────────────────── */
-        .hp-create-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px}
-        .hp-create-item{background:var(--qb-paper);border:1px solid var(--qb-border);border-radius:14px;padding:24px;transition:transform .2s,box-shadow .2s,border-color .2s}
-        .hp-create-item:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.06);border-color:var(--qb-ink)}
+        /* ─── Interest: bento strumenti (gapless, dense) ── */
+        .hp-bento{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-flow:dense;gap:20px}
+        .hp-bento-wide{grid-column:span 2}
+        @media(max-width:900px){.hp-bento{grid-template-columns:repeat(2,1fr)}.hp-bento-wide{grid-column:span 2}}
+        @media(max-width:600px){.hp-bento{grid-template-columns:1fr}.hp-bento-wide{grid-column:span 1}}
+        .hp-create-item{background:var(--qb-paper);border:1px solid var(--qb-border);border-radius:14px;padding:24px;transition:transform .3s ease-out,box-shadow .3s ease-out,border-color .3s ease-out;overflow:hidden}
+        .hp-create-item:hover{transform:translateY(-3px) scale(1.01);box-shadow:0 8px 24px rgba(0,0,0,.06);border-color:var(--qb-ink)}
         [data-theme="dark"] .hp-create-item:hover{box-shadow:0 8px 24px rgba(0,0,0,.4)}
         .hp-create-icon{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;margin-bottom:14px}
         .hp-create-icon svg{width:22px;height:22px}
