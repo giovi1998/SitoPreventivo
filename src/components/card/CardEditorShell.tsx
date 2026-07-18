@@ -14,6 +14,7 @@ import {
 } from '../../utils/documentSchemas';
 import { CardGridControls, type GridSide } from './CardGridControls';
 import CardAIControls from './CardAIControls';
+import AIConsole from '../ai/AIConsole';
 import {
   CardFrontFields,
   CardBackFields,
@@ -98,7 +99,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [aiText, setAiText] = useState('');
   const [aiModel, setAiModel] = useState('deepseek-chat');
-  const [showAi, setShowAi] = useState(true);
+  // Phase 14: lo stato expanded della rail AI è gestito da AIConsole in
+  // pq_ui:v1 (editorKind='card'), non più da useState locale.
   const [showGrid, setShowGrid] = useState(false);
   const [isCoverGenerating, setIsCoverGenerating] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -790,24 +792,33 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     </>
   ), [card, patchFront, patchBack, patchStyle, handleUpload, removePhoto, removeLogo, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial, tier, handleGeneratePhoto, isPhotoGenerating, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt]);
 
+  const aiPanelProps = {
+    aiModel,
+    onModelChange: setAiModel,
+    aiText,
+    onTextChange: setAiText,
+    availableModels,
+    isProcessing: isCardProcessing || isCoverGenerating,
+    onRun: runCardAI,
+    onReset: resetCardChat,
+    logs: cardAiLogs,
+    tier,
+    onGenerateCover: handleGenerateCover,
+    onRemoveCover: handleRemoveCover,
+    card,
+  } as const;
+
   const aiPanel = useMemo(() => (
     <CardAIControls
       variant={isMobile ? 'mobile' : 'desktop'}
-      aiModel={aiModel}
-      onModelChange={setAiModel}
-      aiText={aiText}
-      onTextChange={setAiText}
-      availableModels={availableModels}
-      isProcessing={isCardProcessing || isCoverGenerating}
-      onRun={runCardAI}
-      onReset={resetCardChat}
-      logs={cardAiLogs}
-      tier={tier}
-      onGenerateCover={handleGenerateCover}
-      onRemoveCover={handleRemoveCover}
-      card={card}
+      {...aiPanelProps}
     />
   ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, card]);
+
+  // Phase 14: variante bare per la AIConsole rail (niente AILogPanel doppio)
+  const aiPanelBare = useMemo(() => (
+    <CardAIControls variant="desktop" bare {...aiPanelProps} />
+  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, card]);
 
   const previewPanel = useMemo(() => (
     <CardPreviewSurface
@@ -938,36 +949,21 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
             {gridControls}
           </section>
 
-          {showAi ? (
-            <section className="card-editor-ai" aria-label="AI che modifica il bigliettino">
-              <div className="panel-kicker">
-                <span>AI Assist</span>
-                <button
-                  className="panel-toggle"
-                  onClick={() => setShowAi(false)}
-                  title="Collassa pannello AI"
-                  aria-label="Collassa AI"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <polyline points="15 18 9 12 15 6" />
-                  </svg>
-                </button>
-              </div>
-              {aiPanel}
-            </section>
-          ) : (
-            <button
-              className="card-ai-expand"
-              onClick={() => setShowAi(true)}
-              title="Espandi pannello AI"
-              aria-label="Espandi AI"
+          {/* Phase 14 (REQ-AI-002): la colonna AI usa la AIConsole rail
+              condivisa (collapse persistito in pq_ui:v1, badge provider,
+              AILogPanel integrato). CardAIControls ci entra in bare mode. */}
+          <section className="card-editor-ai" aria-label="AI che modifica il bigliettino">
+            <AIConsole
+              editorKind="card"
+              isProcessing={isCardProcessing || isCoverGenerating}
+              logs={cardAiLogs}
+              tier={tier}
+              onSubmitPrompt={(text) => setAiText(text)}
+              hidePrompt
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-              <span>AI</span>
-            </button>
-          )}
+              {aiPanelBare}
+            </AIConsole>
+          </section>
         </div>
       )}
 

@@ -29,6 +29,11 @@ export interface CardAIControlsProps {
   logs: AILogEntry[];
   variant: 'desktop' | 'mobile';
   tier?: 'free' | 'unlocked';
+  /**
+   * Phase 14 (REQ-AI-002): dentro la AIConsole rail l'AILogPanel è fornito
+   * dalla console — `bare` lo nasconde per evitare duplicati.
+   */
+  bare?: boolean;
   onGenerateCover?: (side: 'front' | 'back' | 'both') => void;
   onRemoveCover?: (side: 'front' | 'back') => void;
   card?: BusinessCard;
@@ -95,6 +100,7 @@ export default function CardAIControls({
   logs,
   variant,
   tier = 'free',
+  bare = false,
   onGenerateCover,
   onRemoveCover,
   card,
@@ -242,7 +248,7 @@ export default function CardAIControls({
       {backgroundSection}
       {quickSection}
       {promptSection}
-      <AILogPanel logs={logs} isProcessing={isProcessing} />
+      {!bare && <AILogPanel logs={logs} isProcessing={isProcessing} />}
     </div>
   );
 }
