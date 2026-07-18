@@ -124,4 +124,18 @@ describe('OnboardingModal (regression: submit must call onComplete with all fiel
     expect(screen.getByText(/bigliettini/i)).toBeInTheDocument();
     expect(screen.getByText(/logo/i)).toBeInTheDocument();
   });
+
+  // REQ-AI-005: onboarding AI-first — il BrandNameGenerator è visibile di
+  // default allo step 1, senza click preliminari; il path manuale resta
+  // raggiungibile via "Preferisco scrivere io".
+  it('AI-first: brand name generator visible by default at step 1, manual path still available', () => {
+    const onComplete = vi.fn();
+    render(<OnboardingModal onComplete={onComplete} />);
+    // generatore visibile senza click (il toggle offre il path manuale)
+    expect(screen.getByRole('button', { name: /Preferisco scrivere io/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Genera nome brand con AI/i })).not.toBeInTheDocument();
+    // path manuale: il toggle nasconde il generatore
+    fireEvent.click(screen.getByRole('button', { name: /Preferisco scrivere io/i }));
+    expect(screen.getByRole('button', { name: /Genera nome brand con AI/i })).toBeInTheDocument();
+  });
 });

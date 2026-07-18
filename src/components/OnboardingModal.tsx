@@ -162,7 +162,9 @@ export default function OnboardingModal({ onComplete, isAdmin = false }: Onboard
   const [defaultVat, setDefaultVat] = useState(22);
   const [preferredDocumentType, setPreferredDocumentType] = useState<PreferredDocumentType | null>(null);
   const { suggest: suggestOnboarding, isProcessing: aiSuggesting, suggestions: aiSuggestions } = useAIOnboarding();
-  const [showBrandGenerator, setShowBrandGenerator] = useState(false);
+  // Phase 14 (REQ-AI-005): onboarding AI-first — il generatore è visibile
+  // di default; il path manuale resta disponibile ("Preferisco scrivere io").
+  const [showBrandGenerator, setShowBrandGenerator] = useState(true);
 
   const handleBrandApply = (result: BrandNameSuggestions) => {
     if (result.displayName && !displayName) setDisplayName(result.displayName);
@@ -274,7 +276,7 @@ export default function OnboardingModal({ onComplete, isAdmin = false }: Onboard
               className="onb-brand-toggle"
               title="Genera nome brand con AI (stile namelix.com)"
             >
-              {showBrandGenerator ? 'Nascondi generatore' : 'Genera nome brand con AI'}
+              {showBrandGenerator ? 'Preferisco scrivere io' : 'Genera nome brand con AI'}
             </button>
             {showBrandGenerator && (
               <BrandNameGenerator onApply={handleBrandApply} />

@@ -960,6 +960,9 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
               tier={tier}
               onSubmitPrompt={(text) => setAiText(text)}
               hidePrompt
+              // REQ-AI-003: su card vuota la rail propone un prompt contestuale
+              // con focus; l'expanded resta default true (o pq_ui:v1 se persistito).
+              suggestedPrompt={!cardHasContent(card) ? 'Descrivi la tua attività, creo il bigliettino.' : undefined}
             >
               {aiPanelBare}
             </AIConsole>
