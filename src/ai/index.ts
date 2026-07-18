@@ -211,6 +211,7 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
       onStream?: (chunk: AIStreamChunk) => void;
       onToolStart?: (toolCallId: string, name: string) => void;
       onToolComplete?: (toolCallId: string, name: string, result: string) => void;
+      requestId?: string;
     }
   ): Promise<ProcessResult> {
     const provider = providerRegistry.getProvider(options?.modelId);
@@ -255,6 +256,7 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
         tools: toolsDefs,
         temperature: wantsTools ? 0.7 : 0.2,
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
+        requestId: options?.requestId,
       })) {
         options.onStream!(chunk);
 
@@ -280,6 +282,7 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
         tools: toolsDefs,
         temperature: wantsTools ? 0.7 : 0.2,
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
+        requestId: options?.requestId,
       });
     }
 

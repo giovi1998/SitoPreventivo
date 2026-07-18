@@ -142,9 +142,12 @@ async function api(method, path, body, options = {}) {
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const url = `${API_BASE}${path}`;
+    const headers = {};
+    if (body) headers['Content-Type'] = 'application/json';
+    if (options.requestId) headers['X-Request-Id'] = options.requestId;
     const res = await fetch(url, {
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
@@ -504,20 +507,22 @@ const dataService = {
   },
 
   // ─── AI STREAM CHAT ──────────────────────────────
-  async streamChat(params) {
+  async streamChat(params, options = {}) {
+    const { requestId } = options;
+    const streamHeaders = requestId ? { 'Content-Type': 'application/json', 'X-Request-Id': requestId } : { 'Content-Type': 'application/json' };
     if (IS_LOCAL) {
       const key = import.meta.env.VITE_DEEPSEEK_API_KEY || lsGet('deepseekApiKey') || '';
       if (!key) return { error: 'Chiave DeepSeek non configurata.' };
       const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        headers: { ...streamHeaders, 'Authorization': `Bearer ${key}` },
         body: JSON.stringify({ ...params, stream: true }),
       });
       return res;
     }
     const res = await fetch('/api/ai/chat/stream', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: streamHeaders,
       body: JSON.stringify(params),
     });
     return res;
@@ -555,14 +560,16 @@ const dataService = {
   },
 
   // ─── AI CHAT (proxy in prod, direct in local) ────
-  async chatWithAI({ model, messages, response_format, temperature }) {
+  async chatWithAI({ model, messages, response_format, temperature, requestId } = {}) {
     if (IS_LOCAL) {
       const key = import.meta.env.VITE_DEEPSEEK_API_KEY || lsGet('deepseekApiKey') || '';
       if (!key) return { error: 'Chiave DeepSeek non configurata. Inseriscila nella Dashboard Admin (solo sviluppo locale).' };
       try {
+        const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` };
+        if (requestId) headers['X-Request-Id'] = requestId;
         const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+          headers,
           body: JSON.stringify({
             model: model || 'deepseek-chat',
             messages,
@@ -582,7 +589,7 @@ const dataService = {
       }
     }
     // Production: use Vercel Serverless Function proxy (key stays server-side)
-    return await api('POST', '/ai/chat', { model, messages, response_format, temperature }, { timeoutMs: 30000 });
+    return await api('POST', '/ai/chat', { model, messages, response_format, temperature }, { timeoutMs: 30000, requestId });
   },
 
   // ─── TEMPLATES ──────────────────────────────────

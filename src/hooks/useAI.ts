@@ -1,22 +1,13 @@
-import { useState, useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import type { PremiumQuote } from '../utils/quoteSchema';
-import type { AIStreamChunk, AILogEntry, ProcessResult } from '../ai/types';
+import type { AIStreamChunk } from '../ai/types';
 import { AIOrchestrator } from '../ai/index';
-import {
-  StreamBuffer,
-  summarizeMergeChanges,
-  describeAIError,
-  createStreamEntry,
-  createEntry,
-  createErrorEntry,
-  createSuccessEntry,
-  createToolEntry,
-  createInfoEntry,
-} from '../ai/eventLog';
+import { useAILogs } from './useAILogs';
 import { formatToolCall, formatToolResult } from '../ai/toolLabels';
 import dataService from '../utils/dataService';
 import { logger } from '../utils/logger';
 import { mapAiError } from '../utils/ai/mapAiError';
+import { newRequestId } from '../utils/ai/requestId';
 
 interface UseAIReturn {
   processPrompt: (
@@ -27,16 +18,40 @@ interface UseAIReturn {
       onProgress?: (msg: string) => void;
       onStream?: (chunk: AIStreamChunk) => void;
     }
-  ) => Promise<ProcessResult>;
+  ) => ReturnType<AIOrchestrator['processPrompt']>;
   resetChat: () => void;
-  aiLogs: AILogEntry[];
+  aiLogs: ReturnType<typeof useAILogs>['logs'];
   isProcessing: boolean;
   sessionId: string | null;
   availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
-  addLog: (entry: AILogEntry) => void;
 }
 
-const MAX_LOG_ENTRIES = 40;
+function safeJson(s: string | undefined): Record<string, unknown> {
+  if (!s) return {};
+  try {
+    const parsed = JSON.parse(s);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function describeAIError(errorKind: string): string {
+  switch (errorKind) {
+    case 'empty':
+      return 'La risposta AI è vuota: riprova con un prompt più specifico.';
+    case 'not_json':
+    case 'invalid_json':
+    case 'followup_not_json':
+      return 'La risposta AI non era nel formato previsto. Riprova con un prompt più specifico.';
+    case 'followup_failed':
+      return "L'elaborazione della risposta AI è fallita. Riprova.";
+    case 'invalid_quote':
+      return "I dati inviati all'AI non sono validi. Controlla il preventivo.";
+    default:
+      return "Errore durante l'elaborazione AI.";
+  }
+}
 
 function parseResultChanges(changes: string[]): {
   toolCount: number;
@@ -45,7 +60,7 @@ function parseResultChanges(changes: string[]): {
 } {
   let toolCount = 0;
   const mergeChanges: string[] = [];
-  let errorKind: 'empty' | 'not_json' | 'invalid_json' | 'followup_not_json' | 'followup_failed' | 'invalid_quote' | 'other_error' | null = null;
+  let errorKind: ReturnType<typeof parseResultChanges>['errorKind'] = null;
 
   for (const c of changes) {
     if (c.startsWith('tool:')) {
@@ -73,36 +88,17 @@ function parseResultChanges(changes: string[]): {
 }
 
 export function useAI(userEmail?: string): UseAIReturn {
-  const [aiLogs, setAiLogs] = useState<AILogEntry[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [availableModels] = useState(() => {
-    const orch = new AIOrchestrator();
-    return orch.getProviderList();
-  });
-
   const orchestratorRef = useRef<AIOrchestrator | null>(null);
-  const streamBufferRef = useRef(new StreamBuffer());
-  const startedToolsRef = useRef<Set<string>>(new Set());
-  const toolStartRef = useRef<Map<string, number>>(new Map());
-  const streamEntryIdRef = useRef<string | null>(null);
-  const streamStartRef = useRef<number>(0);
-  const lastCharCountRef = useRef<number>(0);
+  const { logs: aiLogs, isProcessing, startStream, appendStream, finalizeStream, info, success, error, tool, clear } = useAILogs('useAI');
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const availableModels = useRef(new AIOrchestrator().getProviderList()).current;
 
   const getOrchestrator = useCallback(() => {
-    if (!orchestratorRef.current) {
-      orchestratorRef.current = new AIOrchestrator();
-    }
+    if (!orchestratorRef.current) orchestratorRef.current = new AIOrchestrator();
     return orchestratorRef.current;
   }, []);
 
-  const addLog = useCallback((entry: AILogEntry) => {
-    setAiLogs((prev) => [...prev.slice(-(MAX_LOG_ENTRIES - 1)), entry]);
-  }, []);
-
-  const updateLog = useCallback((id: string, patch: Partial<AILogEntry>) => {
-    setAiLogs((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
-  }, []);
+  const updateSessionId = useCallback(() => setSessionId(getOrchestrator().getCurrentSessionId()), [getOrchestrator]);
 
   const processPrompt = useCallback(
     async (
@@ -113,180 +109,98 @@ export function useAI(userEmail?: string): UseAIReturn {
         onProgress?: (msg: string) => void;
         onStream?: (chunk: AIStreamChunk) => void;
       }
-    ): Promise<ProcessResult> => {
-      if (!prompt.trim() && !options?.modelId) {
-        throw new Error("Inserisci un prompt per l'AI.");
-      }
-
-      setIsProcessing(true);
+    ) => {
+      if (!prompt.trim() && !options?.modelId) throw new Error("Inserisci un prompt per l'AI.");
+      const requestId = newRequestId();
 
       if (userEmail && userEmail !== 'admin@gmail.com') {
-        try {
-          const profile = await dataService.getUserProfile(userEmail);
-          if (profile.error) throw new Error(profile.error);
-          if (profile.tokensUsed >= profile.tokenLimit) {
-            throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
-          }
-        } catch (err: any) {
-          setIsProcessing(false);
-          throw err;
+        const profile = await dataService.getUserProfile(userEmail);
+        if (profile.error) throw new Error(profile.error);
+        if (profile.tokensUsed >= profile.tokenLimit) {
+          throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
         }
       }
 
       const promptPreview = prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt;
-      addLog(createEntry('info', `📤 Invio richiesta: "${promptPreview}"`, { detail: prompt }));
-      streamBufferRef.current.clear();
-      startedToolsRef.current = new Set();
-      toolStartRef.current = new Map();
-      streamEntryIdRef.current = null;
-      lastCharCountRef.current = 0;
+      info(`Invio richiesta: "${promptPreview}"`, prompt, { requestId });
+      const streamId = startStream('Generazione in corso…', { requestId });
 
       try {
         const orchestrator = getOrchestrator();
         options?.onProgress?.('🤖 Chiamata AI in corso...');
 
-        // Prima chiamata
-        let result = await orchestrator.processPrompt(quote, prompt, {
+        const run = async (onStream?: (chunk: AIStreamChunk) => void) => orchestrator.processPrompt(quote, prompt, {
           modelId: options?.modelId,
-          onStream: (chunk: AIStreamChunk) => {
-            if (chunk.type === 'content' && chunk.content) {
-              streamBufferRef.current.append(chunk.content);
-
-              if (!streamEntryIdRef.current) {
-                const entry = createStreamEntry();
-                streamEntryIdRef.current = entry.id;
-                streamStartRef.current = Date.now();
-                addLog(entry);
-              }
-
-              const id = streamEntryIdRef.current;
-              const total = streamBufferRef.current.getRaw().length;
-              if (id && total - lastCharCountRef.current >= 80) {
-                lastCharCountRef.current = total;
-                const elapsed = ((Date.now() - streamStartRef.current) / 1000).toFixed(1);
-                updateLog(id, { msg: `Generazione in corso... ${total} caratteri · ${elapsed}s` });
-              }
-              return;
-            }
-            if (chunk.type === 'tool_call' && chunk.toolCall) {
-              const { id, function: fn } = chunk.toolCall;
-              if (!startedToolsRef.current.has(id)) {
-                startedToolsRef.current.add(id);
-                toolStartRef.current.set(id, Date.now());
-                addLog(createToolEntry(`⚙ ${formatToolCall(fn.name, safeJson(fn.arguments))}, avviato`));
-              }
-              return;
-            }
-            if (chunk.type === 'error' && chunk.error) {
-              addLog(createErrorEntry(chunk.error));
-            }
-          },
+          requestId,
+          onStream,
           onToolStart: (toolCallId, name) => {
-            if (!startedToolsRef.current.has(toolCallId)) {
-              startedToolsRef.current.add(toolCallId);
-              toolStartRef.current.set(toolCallId, Date.now());
-              addLog(createToolEntry(`⚙ ${name}, avviato`));
-            }
+            tool(`⚙ ${name}, avviato`);
           },
           onToolComplete: (toolCallId, name, toolResult) => {
-            const start = toolStartRef.current.get(toolCallId);
-            const durationMs = start ? Date.now() - start : undefined;
-            addLog(createToolEntry(`⚙ ${formatToolResult(toolResult, name)}, fatto`, durationMs));
+            tool(`⚙ ${formatToolResult(toolResult, name)}, fatto`);
           },
         });
 
-        // Se la risposta è completamente vuota (no content, no tool calls)
-        // ritenta una volta con il prompt semplificato.
+        let result = await run((chunk) => {
+          if (chunk.type === 'content' && chunk.content) {
+            appendStream(streamId, chunk.content);
+          } else if (chunk.type === 'tool_call' && chunk.toolCall) {
+            tool(`⚙ ${formatToolCall(chunk.toolCall.function.name, safeJson(chunk.toolCall.function.arguments))}, avviato`);
+          }
+          options?.onStream?.(chunk);
+        });
+
         const resultIsEmpty = !result.response?.content && (!result.response?.toolCalls || result.response.toolCalls.length === 0);
         if (resultIsEmpty) {
-          console.warn('[useAI] Prima risposta vuota da DeepSeek, ritento con prompt semplificato');
-          addLog(createErrorEntry('⚠ Prima risposta vuota. Riprovo con prompt semplificato...'));
-          streamBufferRef.current.clear();
-          result = await orchestrator.processPrompt(quote, prompt, {
-            modelId: options?.modelId,
-            onStream: (chunk: AIStreamChunk) => {
-              if (chunk.type === 'content' && chunk.content) {
-                streamBufferRef.current.append(chunk.content);
-                if (!streamEntryIdRef.current) {
-                  const entry = createStreamEntry();
-                  streamEntryIdRef.current = entry.id;
-                  streamStartRef.current = Date.now();
-                  addLog(entry);
-                }
-              }
-            },
+          info('⚠ Prima risposta vuota. Riprovo con prompt semplificato…', undefined, { requestId });
+          const retryStreamId = startStream('Riprovo con prompt semplificato…', { requestId });
+          result = await run((chunk) => {
+            if (chunk.type === 'content' && chunk.content) appendStream(retryStreamId, chunk.content);
           });
+          finalizeStream(retryStreamId, true, { detail: result.rawResponse?.slice(0, 2048) });
         }
 
-        setSessionId(result.sessionId);
+        const tokens = result.response.usage
+          ? { prompt: result.response.usage.promptTokens, completion: result.response.usage.completionTokens, total: result.response.usage.totalTokens }
+          : undefined;
+        updateSessionId();
+        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
 
         if (userEmail && userEmail !== 'admin@gmail.com' && result.response.usage?.totalTokens) {
           dataService.trackTokens(userEmail, result.response.usage.totalTokens);
         }
 
-        const streamId = streamEntryIdRef.current;
-        if (streamId) {
-          const elapsed = ((Date.now() - streamStartRef.current) / 1000).toFixed(1);
-          const tokens = result.response.usage?.totalTokens ?? 0;
-          updateLog(streamId, {
-            status: 'done',
-            msg: `✅ Risposta ricevuta, ${tokens.toLocaleString('it-IT')} token · ${elapsed}s`,
-            detail: result.rawResponse,
-          });
-        }
-
         const { toolCount, mergeChanges, errorKind } = parseResultChanges(result.changes);
-        const hasModifications = toolCount > 0 || mergeChanges.length > 0;
+        const hasRealModifications = mergeChanges.length > 0;
 
         if (errorKind) {
-          addLog(createErrorEntry(describeAIError(errorKind)));
+          error(describeAIError(errorKind), undefined, { requestId });
         }
-
-        if (mergeChanges.length > 0) {
+        if (hasRealModifications) {
           const changeList = mergeChanges.map((c) => `• ${c}`).join('\n');
-          addLog(createSuccessEntry(
-            `${mergeChanges.length} modifica${mergeChanges.length > 1 ? 'e' : ''} applicata${mergeChanges.length > 1 ? 'e' : ''}`,
-            changeList
-          ));
-        }
-
-        if (!hasModifications && !errorKind) {
+          success(`${mergeChanges.length} modifica${mergeChanges.length > 1 ? 'e' : ''} applicata${mergeChanges.length > 1 ? 'e' : ''}`, changeList, { requestId });
+        } else if (toolCount === 0 && !errorKind) {
           const aiText = (result.rawResponse || '').trim();
-          if (aiText) {
-            addLog(createInfoEntry(aiText));
-          } else {
-            addLog(createInfoEntry('Nessuna modifica applicata'));
-          }
+          info(aiText || 'Nessuna modifica applicata', undefined, { requestId });
         }
 
         return result;
       } catch (err: any) {
         const msg = err.message || 'Errore AI';
         const hint = mapAiError(err);
-
-        const streamId = streamEntryIdRef.current;
-        if (streamId) {
-          updateLog(streamId, { status: 'error', msg: '❌ Generazione fallita', detail: msg });
-        }
+        finalizeStream(streamId, false, { errorMsg: msg });
         logger.error('AI processPrompt failed', { route: 'useAI', err: msg });
-        addLog(createErrorEntry(hint));
         throw new Error(hint);
-      } finally {
-        setIsProcessing(false);
-        streamEntryIdRef.current = null;
       }
     },
-    [userEmail, addLog, getOrchestrator, updateLog]
+    [userEmail, info, startStream, appendStream, finalizeStream, success, error, tool, getOrchestrator, updateSessionId]
   );
 
   const resetChat = useCallback(() => {
-    const orch = getOrchestrator();
-    orch.resetSession();
+    getOrchestrator().resetSession();
     setSessionId(null);
-    setAiLogs([]);
-    streamBufferRef.current.clear();
-    streamEntryIdRef.current = null;
-  }, [getOrchestrator]);
+    clear();
+  }, [getOrchestrator, clear]);
 
   return {
     processPrompt,
@@ -295,16 +209,5 @@ export function useAI(userEmail?: string): UseAIReturn {
     isProcessing,
     sessionId,
     availableModels,
-    addLog,
   };
-}
-
-function safeJson(s: string | undefined): Record<string, unknown> {
-  if (!s) return {};
-  try {
-    const parsed = JSON.parse(s);
-    return typeof parsed === 'object' && parsed !== null ? parsed : {};
-  } catch {
-    return {};
-  }
 }

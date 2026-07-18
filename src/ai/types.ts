@@ -50,6 +50,8 @@ export interface ChatOptions {
   responseFormat?: { type: 'json_object' | 'text' };
   signal?: AbortSignal;
   stream?: boolean;
+  /** Observability: client-generated request id propagated to the server. */
+  requestId?: string;
 }
 
 export interface AIStreamChunk {
@@ -76,7 +78,7 @@ export interface ChatSession {
   updatedAt: string;
 }
 
-export type AILogEntryType = 'info' | 'success' | 'error' | 'tool' | 'stream' | 'result';
+export type AILogEntryType = 'info' | 'success' | 'error' | 'tool' | 'stream';
 
 export interface AILogEntry {
   id: string;
@@ -86,6 +88,15 @@ export interface AILogEntry {
   status?: 'pending' | 'done' | 'error';
   durationMs?: number;
   detail?: string;
+  // v2 observability fields
+  requestId?: string;
+  sessionId?: string;
+  modelId?: string;
+  tokens?: {
+    prompt: number;
+    completion: number;
+    total: number;
+  };
 }
 
 export interface ProcessResult {
@@ -94,4 +105,13 @@ export interface ProcessResult {
   sessionId: string;
   changes: string[];
   rawResponse?: string;
+}
+
+export interface FlyerProcessResult {
+  flyer: unknown;
+  response: AIResponse;
+  sessionId: string;
+  changes: string[];
+  rawResponse?: string;
+  applied: boolean;
 }

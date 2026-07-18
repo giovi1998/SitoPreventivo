@@ -11,6 +11,7 @@ import { generateDOCX } from '../utils/generateDOCX';
 import PdfImportModal from './PdfImportModal';
 import SaveDialog from './SaveDialog';
 import ToastContainer from './ToastContainer';
+import { ToastProvider } from '../hooks/useToast';
 import ConfirmModal from './ConfirmModal';
 import OnboardingModal from './OnboardingModal';
 import dataService from '../utils/dataService';
@@ -638,10 +639,11 @@ export default function AppShell() {
   } as any;
 
   return (
-    <AppContext.Provider value={ctxValue}>
-      <GlobalStyles />
-      <ErrorBoundary>
-        <Layout view={view} setView={setView} onLogout={logout} onSave={saveQuote} onResetQuote={resetQuote} user={user} theme={theme} setTheme={setTheme}>
+    <ToastProvider>
+      <AppContext.Provider value={ctxValue}>
+        <GlobalStyles />
+        <ErrorBoundary>
+          <Layout view={view} setView={setView} onLogout={logout} onSave={saveQuote} onResetQuote={resetQuote} user={user} theme={theme} setTheme={setTheme}>
           <Topbar
             view={view}
             onSave={saveQuote}
@@ -711,6 +713,7 @@ export default function AppShell() {
           addToast('success', 'Piano sbloccato! Documenti illimitati.');
         }}
       />
-    </AppContext.Provider>
+      </AppContext.Provider>
+    </ToastProvider>
   );
 }

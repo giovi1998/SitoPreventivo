@@ -1,15 +1,8 @@
-import { useState, useRef, useCallback } from 'react';
+import { useRef, useCallback } from 'react';
 import type { BusinessCard } from '../utils/documentSchemas';
-import type { AIStreamChunk, AILogEntry } from '../ai/types';
+import type { AIStreamChunk } from '../ai/types';
 import { CardAIOrchestrator } from '../ai/cardOrchestrator';
-import {
-  StreamBuffer,
-  createEntry,
-  createStreamEntry,
-  createErrorEntry,
-  createSuccessEntry,
-  createInfoEntry,
-} from '../ai/eventLog';
+import { useAILogs } from './useAILogs';
 import dataService from '../utils/dataService';
 import { buildCardCoverBrief } from '../utils/card/coverBrief';
 import {
@@ -21,8 +14,8 @@ import { logger } from '../utils/logger';
 import { isLocalhost } from '../utils/env';
 import { mapAiError } from '../utils/ai/mapAiError';
 import { buildCardPhotoBrief } from '../utils/card/photoBrief';
-
-const MAX_LOG_ENTRIES = 40;
+import { newRequestId } from '../utils/ai/requestId';
+import { IMAGE_TOKEN_COST } from '../ai/costs';
 
 interface UseAICardReturn {
   processCardPrompt: (
@@ -38,52 +31,47 @@ interface UseAICardReturn {
     changes: string[];
     rawResponse?: string;
   }>;
-  // Spec v2.4: generate an AI cover image for the front or back of the card.
   generateCover: (
     card: BusinessCard,
     side?: 'front' | 'back',
     prompt?: string,
     options?: { onProgress?: (msg: string) => void }
   ) => Promise<string>;
-  /** Profession-style illustration that replaces the portrait photo. */
   generatePhoto: (
     card: BusinessCard,
     options?: { promptOverride?: string; onProgress?: (msg: string) => void }
   ) => Promise<string>;
   resetCardChat: () => void;
-  cardAiLogs: AILogEntry[];
+  cardAiLogs: ReturnType<typeof useAILogs>['logs'];
   isCardProcessing: boolean;
   availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
 }
 
 export function useAICard(userEmail?: string): UseAICardReturn {
-  const [cardAiLogs, setCardAiLogs] = useState<AILogEntry[]>([]);
-  const [isCardProcessing, setIsCardProcessing] = useState(false);
-  const [availableModels] = useState(() => {
-    const orch = new CardAIOrchestrator();
-    return orch.getProviderList();
-  });
-
+  const { logs: cardAiLogs, isProcessing: isCardProcessing, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAICard');
+  const availableModels = useRef(new CardAIOrchestrator().getProviderList()).current;
   const orchestratorRef = useRef<CardAIOrchestrator | null>(null);
-  const streamBufferRef = useRef(new StreamBuffer());
-  const streamEntryIdRef = useRef<string | null>(null);
-  const streamStartRef = useRef<number>(0);
-  const lastCharCountRef = useRef<number>(0);
 
   const getOrchestrator = useCallback(() => {
-    if (!orchestratorRef.current) {
-      orchestratorRef.current = new CardAIOrchestrator();
-    }
+    if (!orchestratorRef.current) orchestratorRef.current = new CardAIOrchestrator();
     return orchestratorRef.current;
   }, []);
 
-  const addLog = useCallback((entry: AILogEntry) => {
-    setCardAiLogs((prev) => [...prev.slice(-(MAX_LOG_ENTRIES - 1)), entry]);
-  }, []);
+  const ensureTokenBudget = useCallback(async () => {
+    if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
+      const profile = await dataService.getUserProfile(userEmail);
+      if (profile.error) throw new Error(profile.error);
+      if (profile.tokensUsed >= profile.tokenLimit) {
+        throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
+      }
+    }
+  }, [userEmail]);
 
-  const updateLog = useCallback((id: string, patch: Partial<AILogEntry>) => {
-    setCardAiLogs((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
-  }, []);
+  const trackImageTokens = useCallback(() => {
+    if (userEmail && userEmail !== 'admin@gmail.com') {
+      Promise.resolve(dataService.trackTokens(userEmail, IMAGE_TOKEN_COST) as unknown as Promise<unknown>).catch(() => {});
+    }
+  }, [userEmail]);
 
   const processCardPrompt = useCallback(
     async (
@@ -95,32 +83,13 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         onStream?: (chunk: AIStreamChunk) => void;
       }
     ) => {
-      if (!prompt.trim()) {
-        throw new Error("Inserisci un prompt per l'AI.");
-      }
-
-      setIsCardProcessing(true);
-
-      // Token check (skip for admin and localhost)
-      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
-        try {
-          const profile = await dataService.getUserProfile(userEmail);
-          if (profile.error) {
-            throw new Error(profile.error);
-          } else if (profile.tokensUsed >= profile.tokenLimit) {
-            throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
-          }
-        } catch (err: any) {
-          setIsCardProcessing(false);
-          throw err;
-        }
-      }
+      if (!prompt.trim()) throw new Error("Inserisci un prompt per l'AI.");
+      const requestId = newRequestId();
+      await ensureTokenBudget();
 
       const promptPreview = prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt;
-      addLog(createEntry('info', `📤 Invio richiesta: "${promptPreview}"`, { detail: prompt }));
-      streamBufferRef.current.clear();
-      streamEntryIdRef.current = null;
-      lastCharCountRef.current = 0;
+      info(`📤 Invio richiesta: "${promptPreview}"`, prompt, { requestId });
+      const streamId = startStream('Generazione in corso…', { requestId });
 
       try {
         const orchestrator = getOrchestrator();
@@ -128,122 +97,69 @@ export function useAICard(userEmail?: string): UseAICardReturn {
 
         const result = await orchestrator.processPrompt(card, prompt, {
           modelId: options?.modelId,
+          requestId,
           onStream: (chunk: AIStreamChunk) => {
             if (chunk.type === 'content' && chunk.content) {
-              streamBufferRef.current.append(chunk.content);
-
-              if (!streamEntryIdRef.current) {
-                const entry = createStreamEntry();
-                streamEntryIdRef.current = entry.id;
-                streamStartRef.current = Date.now();
-                addLog(entry);
-              }
-
-              const id = streamEntryIdRef.current;
-              const total = streamBufferRef.current.getRaw().length;
-              if (id && total - lastCharCountRef.current >= 80) {
-                lastCharCountRef.current = total;
-                const elapsed = ((Date.now() - streamStartRef.current) / 1000).toFixed(1);
-                updateLog(id, { msg: `Generazione in corso... ${total} caratteri · ${elapsed}s` });
-              }
-              options?.onStream?.(chunk);
-              return;
-            }
-            if (chunk.type === 'error' && chunk.error) {
-              addLog(createErrorEntry(chunk.error));
+              appendStream(streamId, chunk.content);
             }
             options?.onStream?.(chunk);
           },
         });
 
-        // Track tokens
         if (userEmail && userEmail !== 'admin@gmail.com' && result.response.usage?.totalTokens) {
-          dataService.trackTokens(userEmail, result.response.usage.totalTokens);
+          Promise.resolve(dataService.trackTokens(userEmail, result.response.usage.totalTokens) as unknown as Promise<unknown>).catch(() => {});
         }
 
-        // Finalize stream entry
-        const streamId = streamEntryIdRef.current;
-        if (streamId) {
-          const elapsed = ((Date.now() - streamStartRef.current) / 1000).toFixed(1);
-          const tokens = result.response.usage?.totalTokens ?? 0;
-          updateLog(streamId, {
-            status: 'done',
-            msg: `✅ Risposta ricevuta, ${tokens.toLocaleString('it-IT')} token · ${elapsed}s`,
-            detail: result.rawResponse,
-          });
-        }
+        const tokens = result.response.usage
+          ? { prompt: result.response.usage.promptTokens, completion: result.response.usage.completionTokens, total: result.response.usage.totalTokens }
+          : undefined;
+        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
 
-        // Log changes
         const realChanges = result.changes.filter((c: string) => !c.startsWith('error:'));
         const errorChanges = result.changes.filter((c: string) => c.startsWith('error:'));
 
         if (realChanges.length > 0) {
           const changeList = realChanges.map((c: string) => `• ${c}`).join('\n');
-          addLog(createSuccessEntry(
+          success(
             `${realChanges.length} modifica${realChanges.length > 1 ? 'e' : ''} applicata${realChanges.length > 1 ? 'e' : ''}`,
-            changeList
-          ));
+            changeList,
+            { requestId }
+          );
         }
-
         if (errorChanges.length > 0) {
-          addLog(createErrorEntry('Alcune modifiche non sono state applicate (formato non valido)'));
+          error('Alcune modifiche non sono state applicate (formato non valido)', errorChanges.join('; '), { requestId });
         }
-
         if (realChanges.length === 0 && errorChanges.length === 0) {
           const aiText = (result.rawResponse || '').trim();
-          if (aiText) {
-            addLog(createInfoEntry(aiText));
-          } else {
-            addLog(createInfoEntry('Nessuna modifica applicata'));
-          }
+          info(aiText || 'Nessuna modifica applicata', undefined, { requestId });
         }
 
-        return {
-          card: result.card,
-          changes: result.changes,
-          rawResponse: result.rawResponse,
-        };
+        return { card: result.card, changes: result.changes, rawResponse: result.rawResponse };
       } catch (err: any) {
         const msg = err.message || 'Errore AI';
         const hint = mapAiError(err);
-
-        const streamId = streamEntryIdRef.current;
-        if (streamId) {
-          updateLog(streamId, { status: 'error', msg: '❌ Generazione fallita', detail: msg });
-        }
+        finalizeStream(streamId, false, { errorMsg: msg });
         logger.error('Card AI processPrompt failed', { route: 'useAICard', err: msg });
-        addLog(createErrorEntry(hint));
         throw new Error(hint);
-      } finally {
-        setIsCardProcessing(false);
-        streamEntryIdRef.current = null;
       }
     },
-    [userEmail, addLog, getOrchestrator, updateLog]
+    [userEmail, ensureTokenBudget, info, startStream, appendStream, finalizeStream, success, error, getOrchestrator]
   );
 
   const resetCardChat = useCallback(() => {
-    const orch = getOrchestrator();
-    orch.resetSession();
-    setCardAiLogs([]);
-    streamBufferRef.current.clear();
-    streamEntryIdRef.current = null;
-  }, [getOrchestrator]);
+    getOrchestrator().resetSession();
+    clear();
+  }, [getOrchestrator, clear]);
 
   const generateCover = useCallback(
     async (card: BusinessCard, side: 'front' | 'back' = 'front', promptOverride?: string, options?: { onProgress?: (msg: string) => void }) => {
-      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
-        const profile = await dataService.getUserProfile(userEmail);
-        if (profile.error) throw new Error(profile.error);
-        if (profile.tokensUsed >= profile.tokenLimit) {
-          throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
-        }
-      }
+      const requestId = newRequestId();
+      await ensureTokenBudget();
 
       const { prompt: coverPrompt, context: coverContext } =
         promptOverride ? { prompt: promptOverride, context: '' } : buildCardCoverBrief(card, side);
 
-      addLog(createEntry('info', `🎨 Generazione cover AI in corso (${side})...`, { detail: coverPrompt }));
+      info(`🎨 Generazione cover AI in corso (${side})...`, coverPrompt, { requestId });
       options?.onProgress?.(`🎨 Generazione cover AI in corso (${side})...`);
 
       try {
@@ -257,7 +173,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         const apiBase = import.meta.env?.VITE_API_BASE || '';
         const res = await fetch(`${apiBase}/api/ai/card-cover`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
           body: JSON.stringify(payload),
         });
 
@@ -267,40 +183,36 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         }
 
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
-        addLog(createSuccessEntry(`Cover AI (${side}) generata`, `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`));
+        trackImageTokens();
+        success(`Cover AI (${side}) generata`, `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId });
         return `data:${data.mimeType};base64,${data.imageBase64}`;
       } catch (err: any) {
         const hint = mapAiError(err);
         logger.error('Card AI generateCover failed', { route: 'useAICard.generateCover', err: err?.message });
-        addLog(createErrorEntry(`❌ ${hint}`));
+        error(`❌ ${hint}`, undefined, { requestId });
         throw new Error(hint);
       }
     },
-    [userEmail, addLog]
+    [userEmail, ensureTokenBudget, trackImageTokens, info, success, error]
   );
 
   const generatePhoto = useCallback(
     async (card: BusinessCard, options?: { promptOverride?: string; onProgress?: (msg: string) => void }) => {
-      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
-        const profile = await dataService.getUserProfile(userEmail);
-        if (profile.error) throw new Error(profile.error);
-        if (profile.tokensUsed >= profile.tokenLimit) {
-          throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
-        }
-      }
+      const requestId = newRequestId();
+      await ensureTokenBudget();
 
       const brief = buildCardPhotoBrief(card);
       const override = options?.promptOverride?.trim();
       const prompt = override && override.length > 0 ? override.slice(0, 1000) : brief.prompt;
       const context = override && override.length > 0 ? '' : brief.context;
-      addLog(createEntry('info', '🖼️ Generazione foto AI in corso...', { detail: prompt }));
+      info('🖼️ Generazione foto AI in corso...', prompt, { requestId });
       options?.onProgress?.('🖼️ Generazione foto AI in corso...');
 
       try {
         const apiBase = import.meta.env?.VITE_API_BASE || '';
         const res = await fetch(`${apiBase}/api/ai/card-photo`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
           body: JSON.stringify({
             prompt,
             context: context || undefined,
@@ -314,19 +226,17 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         }
 
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
-        addLog(createSuccessEntry(
-          'Foto AI generata',
-          `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`,
-        ));
+        trackImageTokens();
+        success('Foto AI generata', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId });
         return `data:${data.mimeType};base64,${data.imageBase64}`;
       } catch (err: any) {
         const hint = mapAiError(err);
         logger.error('Card AI generatePhoto failed', { route: 'useAICard.generatePhoto', err: err?.message });
-        addLog(createErrorEntry(`❌ ${hint}`));
+        error(`❌ ${hint}`, undefined, { requestId });
         throw new Error(hint);
       }
     },
-    [userEmail, addLog]
+    [userEmail, ensureTokenBudget, trackImageTokens, info, success, error]
   );
 
   return {

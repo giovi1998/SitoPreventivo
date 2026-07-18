@@ -51,6 +51,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       onStream?: (chunk: AIStreamChunk) => void;
       onToolStart?: (toolCallId: string, name: string) => void;
       onToolComplete?: (toolCallId: string, name: string, result: string) => void;
+      requestId?: string;
     },
   ): Promise<CardProcessResult> {
     const provider = providerRegistry.getProvider(options?.modelId);
@@ -93,6 +94,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         temperature: wantsAnalysis ? 0.3 : 0.4,
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
+        requestId: options?.requestId,
       })) {
         options.onStream!(chunk);
 
@@ -117,6 +119,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         temperature: wantsAnalysis ? 0.3 : 0.4,
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
+        requestId: options?.requestId,
       });
     }
 

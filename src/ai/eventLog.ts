@@ -114,6 +114,6 @@ export function createToolEntry(msg: string, durationMs?: number, detail?: strin
   return createEntry('tool', msg, { durationMs, detail });
 }
 
-export function createInfoEntry(msg: string): AILogEntry {
-  return createEntry('info', msg);
+export function createInfoEntry(msg: string, detail?: string): AILogEntry {
+  return createEntry('info', msg, detail ? { detail } : undefined);
 }

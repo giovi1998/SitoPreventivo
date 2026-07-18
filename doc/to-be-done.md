@@ -35,7 +35,7 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 | 11 | `spec-design-logo-text-auto-positioning.md` | **DONE** | `hasBgImage` + `textColorMode` + `textBackdrop` + `unionTextBox` |
 | 12 | `spec-tool-ai-card-flyer-tools.md` | **DONE** | `ToolAwareOrchestrator` wired end-to-end in `AIOrchestrator`, `CardAIOrchestrator`, `FlyerAIOrchestrator`; test tool path e fallback verdi. Gap residuo UI: callback `onToolStart/Complete` non passati da `useAICard` → assorbito in REQ-LOG-001 spec #14 |
 | 13 | `spec-api-saas-monetization.md` | **NOT-STARTED** | Zero Stripe/api-key in `api/` (verificato 2026-07-18). Track futuro separato, mantenuto in `spec/` |
-| 14 | `spec-design-ai-first-ux-redesign.md` | **SPEC WRITTEN** | Fasi 12-14: AI Observability (REQ-LOG-001…015), Design System & UX (REQ-DS/UX), AI Console & AI-first (REQ-AI). Include fix toast fantasma, `trackUsage` require-bug, ghost rate limit, doppia palette. Da implementare |
+| 14 | `spec-design-ai-first-ux-redesign.md` | **IN PROGRESS** | Fase 12 (AI Observability) ✅: `useAILogs` + migrazione completa dei 6 hook AI, `AILogEntry` v2, `BaseOrchestrator.trackUsage` fix ESM, `IMAGE_TOKEN_COST`, `X-Request-Id` end-to-end, ghost rate limit fix logs/tokens/aistream. Fase 13 (ToastProvider context ✅; da completare: design tokens purge, Primary Action Bar, breakpoint, HomePage AIDA). Fase 14 (AIConsole shell ✅; da completare: migrazione editor al nuovo pattern, AI-first entry) |
 
 ---
 

@@ -13,7 +13,6 @@ const TYPE_ICONS: Record<AILogEntry['type'], string> = {
   error: '⚠',
   tool: '⚙',
   stream: '🤖',
-  result: '✅',
 };
 
 const TYPE_LABELS: Record<AILogEntry['type'], string> = {
@@ -22,7 +21,6 @@ const TYPE_LABELS: Record<AILogEntry['type'], string> = {
   error: 'Errore',
   tool: 'Tool',
   stream: 'Stream',
-  result: 'Risultato',
 };
 
 export default function AILogPanel({ logs, isProcessing }: AILogPanelProps): React.ReactElement {

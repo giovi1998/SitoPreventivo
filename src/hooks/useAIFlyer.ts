@@ -1,22 +1,14 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef } from 'react';
 import type { Flyer, FlyerSector, FlyerTone } from '../utils/documentSchemas';
-import type { AIStreamChunk, AILogEntry } from '../ai/types';
 import { FlyerAIOrchestrator, type FlyerRefineAction } from '../ai/flyerOrchestrator';
 import { buildFlyerHeroPayload, getDefaultHeroSector, getDefaultHeroTone, renderFlyerScreenshot } from '../utils/flyer/heroImage';
-import {
-  StreamBuffer,
-  createEntry,
-  createStreamEntry,
-  createErrorEntry,
-  createSuccessEntry,
-  createInfoEntry,
-} from '../ai/eventLog';
+import { useAILogs } from './useAILogs';
 import dataService from '../utils/dataService';
 import { isLocalhost } from '../utils/env';
 import { logger } from '../utils/logger';
 import { mapAiError } from '../utils/ai/mapAiError';
-
-const MAX_LOG_ENTRIES = 40;
+import { newRequestId } from '../utils/ai/requestId';
+import { IMAGE_TOKEN_COST } from '../ai/costs';
 
 interface UseAIFlyerReturn {
   generate: (
@@ -35,176 +27,90 @@ interface UseAIFlyerReturn {
     options?: { sector?: FlyerSector; tone?: FlyerTone; promptOverride?: string }
   ) => Promise<{ flyer: Flyer; applied: boolean; error?: string }>;
   reset: () => void;
-  logs: AILogEntry[];
+  logs: ReturnType<typeof useAILogs>['logs'];
   isProcessing: boolean;
   availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
 }
 
-/**
- * React hook wrapping FlyerAIOrchestrator with the standard log +
- * stream-buffer + token-tracking plumbing (see useAICard for the
- * original pattern).
- */
 export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
-  const [logs, setLogs] = useState<AILogEntry[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [availableModels] = useState(() => {
-    const orch = new FlyerAIOrchestrator();
-    return orch.getProviderList();
-  });
-
+  const { logs, isProcessing, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAIFlyer');
+  const availableModels = useRef(new FlyerAIOrchestrator().getProviderList()).current;
   const orchestratorRef = useRef<FlyerAIOrchestrator | null>(null);
-  const streamBufferRef = useRef(new StreamBuffer());
-  const streamEntryIdRef = useRef<string | null>(null);
-  const streamStartRef = useRef<number>(0);
-  const lastCharCountRef = useRef<number>(0);
 
   const getOrchestrator = useCallback(() => {
-    if (!orchestratorRef.current) {
-      orchestratorRef.current = new FlyerAIOrchestrator();
-    }
+    if (!orchestratorRef.current) orchestratorRef.current = new FlyerAIOrchestrator();
     return orchestratorRef.current;
   }, []);
 
-  const addLog = useCallback((entry: AILogEntry) => {
-    setLogs((prev) => [...prev.slice(-(MAX_LOG_ENTRIES - 1)), entry]);
-  }, []);
-
-  const updateLog = useCallback((id: string, patch: Partial<AILogEntry>) => {
-    setLogs((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
-  }, []);
+  const ensureTokenBudget = async (requestId: string) => {
+    if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
+      const profile = await dataService.getUserProfile(userEmail);
+      if (profile.error) throw new Error(profile.error);
+      if (profile.tokensUsed >= profile.tokenLimit) {
+        throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
+      }
+    }
+  };
 
   const runWith = useCallback(
     async (
       label: string,
-      run: (
-        onStream: (chunk: AIStreamChunk) => void
-      ) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean }>,
-      modelId?: string
+      run: (onStream: (chunk: any) => void) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean; response?: { usage?: { promptTokens: number; completionTokens: number; totalTokens: number } } }>,
+      modelId?: string,
     ) => {
-      setIsProcessing(true);
-      streamBufferRef.current.clear();
-      streamEntryIdRef.current = null;
-      lastCharCountRef.current = 0;
+      const requestId = newRequestId();
+      await ensureTokenBudget(requestId);
+      info(`📤 ${label}`, undefined, { requestId });
+      const streamId = startStream('Generazione in corso…', { requestId });
 
-      if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
-        try {
-          const profile = await dataService.getUserProfile(userEmail);
-          if (profile.error) throw new Error(profile.error);
-          if (profile.tokensUsed >= profile.tokenLimit) {
-            throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
-          }
-        } catch (err: any) {
-          setIsProcessing(false);
-          throw err;
-        }
-      }
-
-      addLog(createEntry('info', `📤 ${label}`));
       try {
-        const orch = getOrchestrator();
         const result = await run((chunk) => {
           if (chunk.type === 'content' && chunk.content) {
-            streamBufferRef.current.append(chunk.content);
-            if (!streamEntryIdRef.current) {
-              const entry = createStreamEntry();
-              streamEntryIdRef.current = entry.id;
-              streamStartRef.current = Date.now();
-              addLog(entry);
-            }
-            const id = streamEntryIdRef.current;
-            const total = streamBufferRef.current.getRaw().length;
-            if (id && total - lastCharCountRef.current >= 80) {
-              lastCharCountRef.current = total;
-              const elapsed = ((Date.now() - streamStartRef.current) / 1000).toFixed(1);
-              updateLog(id, { msg: `Generazione in corso... ${total} caratteri · ${elapsed}s` });
-            }
-            return;
-          }
-          if (chunk.type === 'error' && chunk.error) {
-            addLog(createErrorEntry(chunk.error));
+            appendStream(streamId, chunk.content);
           }
         });
 
-        if (userEmail && userEmail !== 'admin@gmail.com' && result.rawResponse) {
-          // Token accounting is approximate (we use the rawResponse
-          // length as a proxy if usage is missing). The card
-          // orchestrator exposes the real usage in
-          // `result.response.usage`; the flyer orchestrator returns
-          // the same shape. We try to pull the real total first.
-        }
-        if (userEmail && userEmail !== 'admin@gmail.com') {
-          // We don't have direct access to AIResponse.usage from
-          // here; track the raw response length as an approximation
-          // (4 chars ≈ 1 token). This matches the conservative
-          // approach used elsewhere in the codebase.
-          const approxTokens = Math.max(1, Math.ceil((result.rawResponse?.length || 0) / 4));
-          dataService.trackTokens(userEmail, approxTokens).catch(() => {});
-        }
+        const tokens = result.response?.usage
+          ? { prompt: result.response.usage.promptTokens, completion: result.response.usage.completionTokens, total: result.response.usage.totalTokens }
+          : undefined;
+        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
 
-        const streamId = streamEntryIdRef.current;
-        if (streamId) {
-          const elapsed = ((Date.now() - streamStartRef.current) / 1000).toFixed(1);
-          updateLog(streamId, {
-            status: 'done',
-            msg: `✅ Risposta ricevuta · ${elapsed}s`,
-            detail: result.rawResponse,
-          });
+        if (userEmail && userEmail !== 'admin@gmail.com') {
+          const total = tokens?.total ?? Math.max(1, Math.ceil((result.rawResponse?.length || 0) / 4));
+          dataService.trackTokens(userEmail, total).catch(() => {});
         }
 
         const realChanges = result.changes.filter((c) => !c.startsWith('error:'));
         const errorChanges = result.changes.filter((c) => c.startsWith('error:'));
-
         if (result.applied && realChanges.length > 0) {
-          addLog(createSuccessEntry(
-            `${realChanges.length} modifica applicata (copy aggiornato)`,
-            realChanges.join('\n')
-          ));
+          success(`${realChanges.length} modifica applicata (copy aggiornato)`, realChanges.join('\n'), { requestId });
         }
         if (errorChanges.length > 0) {
-          addLog(createErrorEntry(
-            'Risposta AI non valida (formato non riconosciuto). Riprova con un brief più chiaro.'
-          ));
+          error('Risposta AI non valida (formato non riconosciuto). Riprova con un brief più chiaro.', errorChanges.join('; '), { requestId });
         }
         if (!result.applied && errorChanges.length === 0) {
-          addLog(createInfoEntry('Nessuna modifica applicata'));
+          info('Nessuna modifica applicata', undefined, { requestId });
         }
         return result;
       } catch (err: any) {
         const msg = err?.message || 'Errore AI';
         const hint = mapAiError(err);
-        const streamId = streamEntryIdRef.current;
-        if (streamId) {
-          updateLog(streamId, { status: 'error', msg: '❌ Generazione fallita', detail: msg });
-        }
+        finalizeStream(streamId, false, { errorMsg: msg });
         logger.error('Flyer AI failed', { route: 'useAIFlyer', err: msg });
-        addLog(createErrorEntry(hint));
         throw new Error(hint);
-      } finally {
-        setIsProcessing(false);
-        streamEntryIdRef.current = null;
       }
     },
-    [userEmail, addLog, updateLog, getOrchestrator]
+    [userEmail, info, startStream, appendStream, finalizeStream, success, error]
   );
 
   const generate = useCallback(
     async (flyer: Flyer, brief: string, tone: FlyerTone, options?: { modelId?: string }) => {
       const trimmed = brief.trim();
-      if (!trimmed) {
-        throw new Error('Inserisci un brief per generare il copy.');
-      }
+      if (!trimmed) throw new Error('Inserisci un brief per generare il copy.');
       return runWith(
         `Invio richiesta: "${trimmed.length > 60 ? trimmed.slice(0, 57) + '...' : trimmed}" (${tone})`,
-        async (onStream) => {
-          const orch = getOrchestrator();
-          const r = await orch.generateCopy(flyer, trimmed, tone, {
-            modelId: options?.modelId,
-            onStream,
-          });
-          return { flyer: r.flyer, changes: r.changes, rawResponse: r.rawResponse, applied: r.applied };
-        },
-        options?.modelId
+        async (onStream) => getOrchestrator().generateCopy(flyer, trimmed, tone, { modelId: options?.modelId, onStream }),
+        options?.modelId,
       );
     },
     [getOrchestrator, runWith]
@@ -214,15 +120,8 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
     async (flyer: Flyer, action: FlyerRefineAction, options?: { modelId?: string }) => {
       return runWith(
         `Rifinisci copy: ${action}`,
-        async (onStream) => {
-          const orch = getOrchestrator();
-          const r = await orch.refineCopy(flyer, action, {
-            modelId: options?.modelId,
-            onStream,
-          });
-          return { flyer: r.flyer, changes: r.changes, rawResponse: r.rawResponse, applied: r.applied };
-        },
-        options?.modelId
+        async (onStream) => getOrchestrator().refineCopy(flyer, action, { modelId: options?.modelId, onStream }),
+        options?.modelId,
       );
     },
     [getOrchestrator, runWith]
@@ -230,61 +129,51 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
 
   const generateHero = useCallback(
     async (flyer: Flyer, options?: { sector?: FlyerSector; tone?: FlyerTone; promptOverride?: string }) => {
+      const requestId = newRequestId();
       const sector = options?.sector || getDefaultHeroSector(flyer);
       const tone = options?.tone || getDefaultHeroTone(flyer);
       const promptPreview = options?.promptOverride
         ? `prompt override (${options.promptOverride.length} char)`
         : `sector="${sector}" tone="${tone}"`;
-      addLog(createEntry('info', `🖼️ Generazione hero AI: ${promptPreview}`));
+      info('🖼️ Generazione hero AI: ' + promptPreview, undefined, { requestId });
+
       try {
         const flyerImage = await renderFlyerScreenshot(flyer);
         const payload = buildFlyerHeroPayload(flyer, sector, tone, { flyerImage }, userEmail, options?.promptOverride);
         const apiBase = import.meta.env?.VITE_API_BASE || '';
         const res = await fetch(`${apiBase}/api/ai/flyer-hero`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
           body: JSON.stringify(payload),
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: 'Errore generazione hero' }));
-          const hint = mapAiError(err.error || `Hero AI ${res.status}`);
-          addLog(createErrorEntry(hint));
-          return { flyer, applied: false, error: hint };
+          throw new Error(mapAiError(err.error || `Hero AI ${res.status}`));
         }
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
         const heroImage = `data:${data.mimeType};base64,${data.imageBase64}`;
-        const updated: Flyer = {
-          ...flyer,
-          content: { ...flyer.content, heroImage },
-          updatedAt: new Date().toISOString(),
-        };
-        addLog(createSuccessEntry('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`));
+        const updated: Flyer = { ...flyer, content: { ...flyer.content, heroImage }, updatedAt: new Date().toISOString() };
+
+        if (userEmail && userEmail !== 'admin@gmail.com') {
+          dataService.trackTokens(userEmail, IMAGE_TOKEN_COST).catch(() => {});
+        }
+
+        success('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId });
         return { flyer: updated, applied: true };
       } catch (err) {
         const hint = mapAiError(err);
         logger.error('Flyer AI generateHero failed', { route: 'useAIFlyer.generateHero', err: hint });
-        addLog(createErrorEntry(hint));
+        error(hint, undefined, { requestId });
         return { flyer, applied: false, error: hint };
       }
     },
-    [addLog, userEmail],
+    [info, success, error, userEmail]
   );
 
   const reset = useCallback(() => {
-    const orch = getOrchestrator();
-    orch.resetSession();
-    setLogs([]);
-    streamBufferRef.current.clear();
-    streamEntryIdRef.current = null;
-  }, [getOrchestrator]);
+    getOrchestrator().resetSession();
+    clear();
+  }, [getOrchestrator, clear]);
 
-  return {
-    generate,
-    refine,
-    generateHero,
-    reset,
-    logs,
-    isProcessing,
-    availableModels,
-  };
+  return { generate, refine, generateHero, reset, logs, isProcessing, availableModels };
 }

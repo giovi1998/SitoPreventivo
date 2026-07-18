@@ -22,6 +22,7 @@ vi.mock('../../ai/index', () => ({
       }),
       getProviderList: vi.fn().mockReturnValue([{ id: 'deepseek-chat', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true }]),
       resetSession: vi.fn(),
+      getCurrentSessionId: vi.fn().mockReturnValue('sess-1'),
     };
   }),
 }));
@@ -29,6 +30,7 @@ vi.mock('../../ai/index', () => ({
 describe('useAI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
   it('returns initial state', () => {
@@ -86,12 +88,14 @@ describe('useAI', () => {
 
   it('log "Invio richiesta" includes the prompt text sent to the AI', async () => {
     const { result } = renderHook(() => useAI('user@test.com'));
+    const prompt = 'Rendi il preventivo premium';
     await act(async () => {
-      await result.current.processPrompt({ quoteId: 'q' } as any, 'Rendi il preventivo premium');
+      await result.current.processPrompt({ quoteId: 'q' } as any, prompt);
     });
-    const requestLog = result.current.aiLogs.find((l) => l.msg.includes('Invio richiesta'));
+    const requestLog = result.current.aiLogs.find((l) => l.type === 'info' && l.msg.includes('Invio richiesta'));
     expect(requestLog).toBeDefined();
-    expect(requestLog!.msg).toContain('Rendi il preventivo premium');
+    expect(requestLog!.msg).toContain('Invio richiesta');
+    expect(requestLog!.detail).toContain(prompt);
   });
 
   it('log "Invio richiesta" stores full prompt in detail field', async () => {
@@ -100,7 +104,7 @@ describe('useAI', () => {
     await act(async () => {
       await result.current.processPrompt({ quoteId: 'q' } as any, longPrompt);
     });
-    const requestLog = result.current.aiLogs.find((l) => l.msg.includes('Invio richiesta'));
+    const requestLog = result.current.aiLogs.find((l) => l.type === 'info' && l.msg.includes('Invio richiesta'));
     expect(requestLog).toBeDefined();
     expect(requestLog!.detail).toBe(longPrompt);
   });
@@ -140,6 +144,7 @@ describe('useAI', () => {
           }),
           getProviderList: vi.fn().mockReturnValue([{ id: 'deepseek-chat', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true }]),
           resetSession: vi.fn(),
+          getCurrentSessionId: vi.fn().mockReturnValue('s1'),
         };
       }),
     }));
@@ -170,6 +175,7 @@ describe('useAI', () => {
           }),
           getProviderList: vi.fn().mockReturnValue([{ id: 'deepseek-chat', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true }]),
           resetSession: vi.fn(),
+          getCurrentSessionId: vi.fn().mockReturnValue('s1'),
         };
       }),
     }));

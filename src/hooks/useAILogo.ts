@@ -1,16 +1,11 @@
 import { useRef, useCallback, useState } from 'react';
 import type { Logo } from '../utils/documentSchemas';
 import { LogoAIOrchestrator, type LogoProcessResult } from '../ai/logoOrchestrator';
-import {
-  StreamBuffer,
-  createEntry,
-  createStreamEntry,
-  createErrorEntry,
-  createSuccessEntry,
-  createInfoEntry,
-} from '../ai/eventLog';
-import type { AILogEntry } from '../ai/types';
+import { useAILogs } from './useAILogs';
 import { mapAiError } from '../utils/ai/mapAiError';
+import { IMAGE_TOKEN_COST } from '../ai/costs';
+import { newRequestId } from '../utils/ai/requestId';
+import dataService from '../utils/dataService';
 
 export interface UseAILogoReturn {
   generate: (
@@ -23,24 +18,27 @@ export interface UseAILogoReturn {
     context: { activity: string; mood: string; target: string; imagePrompt?: string },
   ) => Promise<{ logo: Logo; applied: boolean; error?: string }>;
   reset: () => void;
-  logs: AILogEntry[];
+  logs: ReturnType<typeof useAILogs>['logs'];
   isProcessing: boolean;
   isGeneratingBg: boolean;
   availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
 }
 
-const MAX_LOG_ENTRIES = 40;
-const STREAM_UPDATE_THRESHOLD = 80; // chars
 
 export function useAILogo(userEmail?: string): UseAILogoReturn {
   const orchestratorRef = useRef<LogoAIOrchestrator | null>(null);
-  const [logs, setLogs] = useState<AILogEntry[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingBg, setIsGeneratingBg] = useState(false);
-  const streamBufferRef = useRef(new StreamBuffer());
-  const streamEntryIdRef = useRef<string | null>(null);
-  const lastCharCountRef = useRef(0);
-  const streamStartRef = useRef(0);
+  const {
+    logs,
+    isProcessing,
+    startStream,
+    appendStream,
+    finalizeStream,
+    info,
+    success,
+    error,
+    clear,
+  } = useAILogs('useAILogo');
 
   const getOrchestrator = (): LogoAIOrchestrator => {
     if (!orchestratorRef.current) orchestratorRef.current = new LogoAIOrchestrator();
@@ -49,66 +47,51 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
 
   const availableModels = getOrchestrator().getProviderList();
 
-  const addLog = useCallback((entry: AILogEntry) => {
-    setLogs((prev) => {
-      const next = [...prev, entry];
-      if (next.length > MAX_LOG_ENTRIES) next.shift();
-      return next;
-    });
-  }, []);
-
-  const updateLog = useCallback((id: string, patch: Partial<AILogEntry>) => {
-    setLogs((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, ...patch } : l)),
-    );
-  }, []);
+  const trackImage = useCallback(
+    () => {
+      if (userEmail && userEmail !== 'admin@gmail.com') {
+        dataService.trackTokens(userEmail, IMAGE_TOKEN_COST).catch(() => {});
+      }
+    },
+    [userEmail]
+  );
 
   const generate = useCallback(
     async (logo: Logo, brief: string, options?: { sector?: string; onProgress?: (msg: string) => void }) => {
-      setIsProcessing(true);
+      const requestId = newRequestId();
       const promptPreview = brief.length > 60 ? brief.slice(0, 57) + '...' : brief;
-      addLog(createEntry('info', `Invio richiesta: "${promptPreview}"`, { detail: brief }));
-      streamBufferRef.current.clear();
-      streamEntryIdRef.current = null;
-      lastCharCountRef.current = 0;
+      info(`Invio richiesta: "${promptPreview}"`, brief, { requestId });
+      const streamId = startStream('Generazione in corso…', {
+        requestId,
+        sessionId: getOrchestrator().getCurrentSessionId() ?? undefined,
+      });
 
       try {
         const result = await getOrchestrator().generateLogo(logo, brief, {
           sector: options?.sector,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
-              streamBufferRef.current.append(chunk.content);
-              if (!streamEntryIdRef.current) {
-                const entry = createStreamEntry();
-                streamEntryIdRef.current = entry.id;
-                streamStartRef.current = Date.now();
-                addLog(entry);
-              }
-              const id = streamEntryIdRef.current;
-              const total = streamBufferRef.current.getRaw().length;
-              if (id && total - lastCharCountRef.current >= STREAM_UPDATE_THRESHOLD) {
-                lastCharCountRef.current = total;
-                const elapsed = ((Date.now() - streamStartRef.current) / 1000).toFixed(1);
-                updateLog(id, { msg: `Generazione in corso... ${total} caratteri · ${elapsed}s` });
-              }
-              return;
-            }
-            if (chunk.type === 'error' && chunk.error) {
-              addLog(createErrorEntry(chunk.error));
+              appendStream(streamId, chunk.content);
+              options?.onProgress?.(`Generazione in corso… ${chunk.content.length} caratteri`);
+            } else if (chunk.type === 'error' && chunk.error) {
+              throw new Error(chunk.error);
             }
           },
           userEmail,
         });
 
-        // Completa la stream entry
-        if (streamEntryIdRef.current) {
-          const total = streamBufferRef.current.getRaw().length;
-          const elapsed = ((Date.now() - streamStartRef.current) / 1000).toFixed(1);
-          updateLog(streamEntryIdRef.current, {
-            msg: `Risposta ricevuta · ${total} caratteri · ${elapsed}s`,
-            status: 'done',
-          });
-        }
+        const tokens = result.response?.usage
+          ? {
+              prompt: result.response.usage.promptTokens,
+              completion: result.response.usage.completionTokens,
+              total: result.response.usage.totalTokens,
+            }
+          : undefined;
+
+        finalizeStream(streamId, true, {
+          tokens,
+          detail: result.rawResponse?.slice(0, 2048),
+        });
 
         if (result.applied) {
           const summary = [
@@ -117,54 +100,56 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
             `Layout: ${result.logo.builder.layout}`,
             `Colori: ${result.logo.builder.primaryColor} + ${result.logo.builder.secondaryColor}`,
           ].join(' · ');
-          addLog(createSuccessEntry('Logo generato', summary));
+          success('Logo generato', summary, { requestId });
         } else {
-          addLog(createErrorEntry('AI non ha restituito parametri validi', result.changes.join(',')));
+          error('AI non ha restituito parametri validi', result.changes.join(','), { requestId });
         }
         return result;
       } catch (err) {
         const hint = mapAiError(err);
-        addLog(createErrorEntry(hint));
+        finalizeStream(streamId, false, { errorMsg: hint });
         throw new Error(hint);
-      } finally {
-        setIsProcessing(false);
-        streamBufferRef.current.clear();
-        streamEntryIdRef.current = null;
       }
     },
-    [addLog, updateLog, userEmail],
+    [info, startStream, appendStream, finalizeStream, success, error, userEmail]
   );
 
   const generateBackground = useCallback(
     async (logo: Logo, context: { activity: string; mood: string; target: string; imagePrompt?: string }) => {
+      const requestId = newRequestId();
+      const promptPreview = context.imagePrompt
+        ? context.imagePrompt.slice(0, 50) + '...'
+        : `activity="${context.activity.slice(0, 40)}"`;
+      info(`Background AI: ${promptPreview}`, undefined, { requestId });
       setIsGeneratingBg(true);
-      const promptPreview = context.imagePrompt ? context.imagePrompt.slice(0, 50) + '...' : `activity="${context.activity.slice(0, 40)}"`;
-      addLog(createEntry('info', `Background AI: ${promptPreview}`));
       try {
         const result = await getOrchestrator().generateBackground(logo, context, { userEmail });
         if (result.applied) {
-          addLog(createSuccessEntry('Background generato', `${result.logo.builder.backgroundImage?.length ?? 0} char base64`));
+          success(
+            'Background generato',
+            `${result.logo.builder.backgroundImage?.length ?? 0} char base64`,
+            { requestId }
+          );
+          trackImage();
         } else {
-          addLog(createErrorEntry(mapAiError(result.error ?? 'Background non generato')));
+          error(mapAiError(result.error ?? 'Background non generato'), undefined, { requestId });
         }
         return result;
       } catch (err) {
         const hint = mapAiError(err);
-        addLog(createErrorEntry(hint));
+        error(hint, undefined, { requestId });
         throw new Error(hint);
       } finally {
         setIsGeneratingBg(false);
       }
     },
-    [addLog, userEmail],
+    [info, success, error, trackImage, userEmail]
   );
 
   const reset = useCallback(() => {
     getOrchestrator().resetSession();
-    setLogs([]);
-    streamBufferRef.current.clear();
-    streamEntryIdRef.current = null;
-  }, []);
+    clear();
+  }, [clear]);
 
   return { generate, generateBackground, reset, logs, isProcessing, isGeneratingBg, availableModels };
 }

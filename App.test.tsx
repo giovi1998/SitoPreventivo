@@ -20,6 +20,7 @@ vi.mock('./src/hooks/useAI', () => ({
 }));
 
 vi.mock('./src/hooks/useToast', () => ({
+  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useToast: () => ({
     toasts: [],
     addToast: mocks.addToast,

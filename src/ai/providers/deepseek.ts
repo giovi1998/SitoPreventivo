@@ -5,6 +5,11 @@ import dataService from '../../utils/dataService';
 const API_URL = 'https://api.deepseek.com/v1/chat/completions';
 const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
+function newRequestId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 export class DeepSeekProvider extends BaseAIProvider {
   readonly name = 'DeepSeek';
   readonly model: string;
@@ -18,25 +23,27 @@ export class DeepSeekProvider extends BaseAIProvider {
 
   async chat(messages: ChatMessage[], options?: ChatOptions): Promise<AIResponse> {
     const body = this.buildRequestBody(messages, options);
+    const requestId = options?.requestId ?? newRequestId();
 
     if (IS_LOCAL) {
-      return this.callLocal(body);
+      return this.callLocal(body, requestId);
     }
 
-    return this.callProxy(body);
+    return this.callProxy(body, requestId);
   }
 
   async *stream(messages: ChatMessage[], options?: ChatOptions): AsyncGenerator<AIStreamChunk> {
     const body = this.buildRequestBody(messages, { ...options, stream: true });
+    const requestId = options?.requestId ?? newRequestId();
 
     if (IS_LOCAL) {
-      yield* this.streamLocal(body);
+      yield* this.streamLocal(body, requestId);
     } else {
-      yield* this.streamProxy(body);
+      yield* this.streamProxy(body, requestId);
     }
   }
 
-  private async callLocal(body: Record<string, unknown>): Promise<AIResponse> {
+  private async callLocal(body: Record<string, unknown>, requestId: string): Promise<AIResponse> {
     const key = await dataService.getDeepseekKey();
     if (!key) {
       return {
@@ -48,15 +55,15 @@ export class DeepSeekProvider extends BaseAIProvider {
 
     const res = await fetch(API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId, Authorization: `Bearer ${key}` },
       body: JSON.stringify(body),
     });
 
     return this.handleResponse(res);
   }
 
-  private async callProxy(body: Record<string, unknown>): Promise<AIResponse> {
-    const result = await dataService.chatWithAI(body as any);
+  private async callProxy(body: Record<string, unknown>, requestId: string): Promise<AIResponse> {
+    const result = await dataService.chatWithAI({ ...(body as any), requestId });
     if (result.error) throw new Error(result.error);
     return this.parseResult(result);
   }
@@ -82,20 +89,18 @@ export class DeepSeekProvider extends BaseAIProvider {
     };
   }
 
-  private async *streamLocal(body: Record<string, unknown>): AsyncGenerator<AIStreamChunk> {
+  private async *streamLocal(body: Record<string, unknown>, requestId: string): AsyncGenerator<AIStreamChunk> {
     const key = await dataService.getDeepseekKey();
     if (!key) {
-      console.warn('[DeepSeek] Chiave non configurata in localStorage né in VITE_DEEPSEEK_API_KEY');
       yield { type: 'error', error: 'Chiave DeepSeek non configurata' };
       return;
     }
-    console.info(`[DeepSeek] Chiamata a ${API_URL} con modello=${this.model}, key length=${key.length}`);
 
     let res: Response;
     try {
       res = await fetch(API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId, Authorization: `Bearer ${key}` },
         body: JSON.stringify(body),
       });
     } catch (err) {
@@ -123,10 +128,10 @@ export class DeepSeekProvider extends BaseAIProvider {
     yield* this.parseSSEStream(res);
   }
 
-  private async *streamProxy(body: Record<string, unknown>): AsyncGenerator<AIStreamChunk> {
+  private async *streamProxy(body: Record<string, unknown>, requestId: string): AsyncGenerator<AIStreamChunk> {
     const res = await fetch('/api/ai/chat/stream', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
       body: JSON.stringify(body),
     });
 

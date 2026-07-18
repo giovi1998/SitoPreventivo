@@ -89,7 +89,7 @@ export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
     flyer: Flyer,
     brief: string,
     tone: FlyerTone,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void }
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string }
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
       const budget = getFlyerCopyBudget(flyer);
@@ -115,7 +115,7 @@ export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
   async refineCopy(
     flyer: Flyer,
     action: FlyerRefineAction,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void }
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string }
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
       const currentJson = JSON.stringify({
@@ -141,7 +141,7 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
   private async runPrompt(
     flyer: Flyer,
     buildPrompt: () => string,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void },
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string },
     changeLabel?: string
   ): Promise<FlyerProcessResult> {
     const provider: AIProvider = providerRegistry.getProvider(options?.modelId);
@@ -174,6 +174,7 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
         temperature: 0.7,
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : { type: 'json_object' },
+        requestId: options?.requestId,
       })) {
         options.onStream!(chunk);
         if (chunk.type === 'content') {
@@ -196,6 +197,7 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
         temperature: 0.7,
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : { type: 'json_object' },
+        requestId: options?.requestId,
       });
     }
 

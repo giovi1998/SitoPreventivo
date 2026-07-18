@@ -205,9 +205,9 @@ track futuro). Gli spec implementati sono stati cancellati il
 | 9, Card Refactor Submodules | ✅ done | 11 utils + 9 components `src/utils/card/*` + `src/components/card/*`, barrel/shell pattern. |
 | 10, Card Grid UX Alignment | ✅ done | alignH/alignV (9-pos), preset retro separato, e2e. |
 | 11, Flyer Refactor Preview/AI | ⚠️ parziale | Architettura 12/12 utils + 11/11 components + 5/5 CSS. Gap: test matrix 4/10, `ai/flyer/budgets.ts` in `utils/flyer/budgets.ts` (deviazione equivalente). Spec mantenuta. |
-| 12, AI Observability | 📋 spec scritto | `spec-design-ai-first-ux-redesign.md` §3.1: `useAILogs` condiviso, fix `trackUsage` (require→ESM), token reali flyer + costo immagini Gemini, `X-Request-Id`, log server JSON, rate limit ghost fix, persistenza `pq_ai_logs:v1` (sessionStorage). |
-| 13, Design System & UX | 📋 spec scritto | `spec-design-ai-first-ux-redesign.md` §3.2: token "The Classic" globali, purge teal/blu, ToastProvider context (fix toast fantasma), kit `ai-ui` CSS, Primary Action Bar uniforme, breakpoint 768/1024, copy alignment, HomePage AIDA. |
-| 14, AI Console & AI-first | 📋 spec scritto | `spec-design-ai-first-ux-redesign.md` §3.3: `AIConsole` rail/bottom-sheet unico per 5 editor, AI-first entry (prompt suggerito su doc vuoto), onboarding AI-first, badge provider uniforme. QR resta manuale (eccezione documentata). |
+| 12, AI Observability | ✅ done | `spec-design-ai-first-ux-redesign.md` §3.1: `useAILogs` condiviso, fix `trackUsage` (require→ESM), `IMAGE_TOKEN_COST`, `X-Request-Id` end-to-end (client→proxy→log server), log server JSON, rate limit ghost fix logs/tokens/aistream, persistenza `pq_ai_logs:v1`. Tutti i 6 hook AI migrati: `useAI`, `useAICard`, `useAIFlyer`, `useAILogo`, `useAISocial`, `useAIOnboarding`. |
+| 13, Design System & UX | ⚠️ in progress | `spec-design-ai-first-ux-redesign.md` §3.2: ToastProvider context fix (toast fantasma), varianti toast info/success/warning/error. Da completare: token "The Classic" globali, purge teal/blu, kit `ai-ui` CSS, Primary Action Bar, breakpoint 768/1024, HomePage AIDA. |
+| 14, AI Console & AI-first | ⚠️ in progress | `spec-design-ai-first-ux-redesign.md` §3.3: shell `AIConsole` (rail desktop + bottom sheet mobile) e badge provider. Da completare: migrazione 5 editor al nuovo pattern, AI-first entry, onboarding AI-first. QR resta manuale. |
 
 ### ⚠️ Volantino rendering gotchas (leggi prima di toccare il rendering)
 

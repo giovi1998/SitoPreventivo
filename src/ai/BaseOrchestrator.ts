@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { chatStore } from './chat/store';
 import { providerRegistry } from './providers/registry';
 import { ToolRegistry } from './tools/registry';
+import dataService from '../utils/dataService';
 import type { ChatMessage, AIResponse, AIStreamChunk, AIProvider, AIToolCall, ToolExecutor, ToolResult } from './types';
 
 type AIUsage = NonNullable<AIResponse['usage']>;
@@ -192,10 +193,9 @@ export abstract class BaseOrchestrator {
     const totalTokens = usage.totalTokens ?? (usage.promptTokens + usage.completionTokens);
     if (!totalTokens) return;
     try {
-      const mod = require('../utils/dataService') as typeof import('../utils/dataService');
-      mod.default?.trackTokens?.(userEmail, totalTokens);
+      dataService.trackTokens(userEmail, totalTokens);
     } catch {
-      // dataService is client-only; in tests/serverless it may not be reachable
+      // Silent on errors to avoid breaking the user-facing flow.
     }
   }
 

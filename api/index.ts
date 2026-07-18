@@ -126,6 +126,39 @@ function json(req: VercelRequest, res: VercelResponse, status: number, data: unk
   res.status(status).json(data);
 }
 
+function getRequestId(req: VercelRequest): string {
+  const header = req.headers['x-request-id'];
+  const value = Array.isArray(header) ? header[0] : header;
+  if (value) return value;
+  return crypto.randomUUID();
+}
+
+interface AILogPayload {
+  tag: string;
+  requestId: string;
+  email?: string;
+  model?: string;
+  durationMs: number;
+  tokens?: number;
+  outcome: 'ok' | 'error';
+  errorKind?: string;
+  sizeKB?: number;
+}
+
+function logAI(payload: AILogPayload): void {
+  console.info(JSON.stringify({ ...payload, ts: Date.now() }));
+}
+
+function jsonWithRequestId(
+  req: VercelRequest,
+  res: VercelResponse,
+  status: number,
+  data: Record<string, unknown>,
+  requestId: string
+): void {
+  json(req, res, status, { ...data, requestId });
+}
+
 function errorResponse(req: VercelRequest, res: VercelResponse, status: number, err: unknown): void {
   const errMsg = (err as Error)?.message || String(err);
   const errStack = (err as Error)?.stack;
@@ -441,7 +474,7 @@ const handleHealth: RouteHandler = async (path, method, req, res, body) => {
 
   if (path === '/logs' && method === 'POST') {
     const ip = getClientIp(req);
-    const rl = checkRateLimit(ip, 'logs', 200, 60 * 1000);
+    const rl = consumeRateLimit(ip, 'logs', 200, 60 * 1000);
     if (rl.blocked) {
       return json(req, res, 429, { error: 'Troppi log' });
     }
@@ -579,7 +612,7 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
 
   if (path === '/users/tokens' && method === 'POST') {
     const ip = getClientIp(req);
-    const rl = checkRateLimit(ip, 'tokens', 30, 60 * 1000);
+    const rl = consumeRateLimit(ip, 'tokens', 30, 60 * 1000);
     if (rl.blocked) {
       return json(req, res, 429, { error: 'Troppi aggiornamenti token. Attendi un minuto.' });
     }
@@ -1029,12 +1062,12 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
 
 const handleAI: RouteHandler = async (path, method, req, res, body) => {
   if (path === '/ai/chat' && method === 'POST') {
-    // Spec 7: Zod validation + rate-limit aichat 30/min/IP + userEmail log.
+    const requestId = getRequestId(req);
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'aichat', 30, 60 * 1000);
     if (rl.blocked) {
       res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
-      return json(req, res, 429, { error: 'Troppe richieste AI. Attendi un minuto.' });
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste AI. Attendi un minuto.' }, requestId);
     }
     const v = validate(
       z.object({
@@ -1057,20 +1090,20 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
       }),
       body
     );
-    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
-    if (v.data.userEmail) {
-      console.info('[ai_chat] user', { email: v.data.userEmail, ts: Date.now() });
-    } else {
-      console.info('[ai_chat_anon] request', { ts: Date.now() });
+    if (v.error) {
+      logAI({ tag: 'ai_chat', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
+    const userEmail = v.data.userEmail;
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
-      console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set', { path });
-      return json(req, res, 503, { error: 'DeepSeek non configurato.' });
+      logAI({ tag: 'ai_chat', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'DeepSeek non configurato.' }, requestId);
     }
     const { model, messages, response_format, temperature } = v.data;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
+    const startedAt = Date.now();
     let apiRes: Response;
     try {
       apiRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -1085,8 +1118,10 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
         signal: controller.signal,
       });
     } catch (err) {
+      clearTimeout(timeout);
       if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError') {
-        return json(req, res, 504, { error: 'DeepSeek non ha risposto entro 25 secondi. Riprova.' });
+        logAI({ tag: 'ai_chat', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'timeout' });
+        return jsonWithRequestId(req, res, 504, { error: 'DeepSeek non ha risposto entro 25 secondi. Riprova.' }, requestId);
       }
       throw err;
     } finally {
@@ -1094,13 +1129,25 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
     }
     if (!apiRes.ok) {
       const errBody = await apiRes.text().catch(() => 'Unknown error');
-      if (apiRes.status === 402) return json(req, res, 402, { error: 'Credito DeepSeek esaurito. Ricarica su platform.deepseek.com' });
-      if (apiRes.status === 401) return json(req, res, 401, { error: 'Chiave API DeepSeek non valida' });
-      if (apiRes.status === 429) return json(req, res, 429, { error: 'Troppe richieste a DeepSeek. Attendi qualche secondo e riprova.' });
-      return json(req, res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` });
+      const errorKind = apiRes.status === 402 ? 'quota' : apiRes.status === 401 ? 'auth' : apiRes.status === 429 ? 'rate_limit' : 'upstream';
+      logAI({ tag: 'ai_chat', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (apiRes.status === 402) return jsonWithRequestId(req, res, 402, { error: 'Credito DeepSeek esaurito. Ricarica su platform.deepseek.com' }, requestId);
+      if (apiRes.status === 401) return jsonWithRequestId(req, res, 401, { error: 'Chiave API DeepSeek non valida' }, requestId);
+      if (apiRes.status === 429) return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste a DeepSeek. Attendi qualche secondo e riprova.' }, requestId);
+      return jsonWithRequestId(req, res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
     }
     const data = await apiRes.json();
-    return json(req, res, 200, data);
+    const usage = (data as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }).usage;
+    logAI({
+      tag: 'ai_chat',
+      requestId,
+      email: userEmail,
+      model: model || 'deepseek-chat',
+      durationMs: Date.now() - startedAt,
+      outcome: 'ok',
+      tokens: usage?.total_tokens,
+    });
+    return json(req, res, 200, { ...data, requestId });
   }
 
   // Phase 3: dedicated copy endpoint for flyers. Same DeepSeek upstream
@@ -1112,16 +1159,17 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
   // dataService.chatWithAI client side). The endpoint trusts the client
   // to have a valid session.
   if (path === '/ai/copy-flyer' && method === 'POST') {
+    const requestId = getRequestId(req);
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'flyerCopy', 10, 60 * 1000);
     if (rl.blocked) {
       res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
-      return json(req, res, 429, { error: 'Troppe generazioni di copy. Attendi un minuto.' });
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni di copy. Attendi un minuto.' }, requestId);
     }
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
-      console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set', { path });
-      return json(req, res, 503, { error: 'DeepSeek non configurato.' });
+      logAI({ tag: 'ai_copy_flyer', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'DeepSeek non configurato.' }, requestId);
     }
     const v = validate(
       z.object({
@@ -1133,8 +1181,12 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
       }),
       body
     );
-    if (v.error) return json(req, res, 400, { errors: v.errors });
+    if (v.error) {
+      logAI({ tag: 'ai_copy_flyer', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { errors: v.errors }, requestId);
+    }
     const { brief, tone, layout, size, model } = v.data;
+    const startedAt = Date.now();
     // Brief is sanitized server-side: strip HTML tags and control
     // characters before it hits the LLM prompt. This is a defense in
     // depth: the client sanitizes too (see sanitizeFlyerBrief in
@@ -1189,8 +1241,10 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         signal: controller.signal,
       });
     } catch (err) {
+      clearTimeout(timeout);
       if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError') {
-        return json(req, res, 504, { error: 'DeepSeek non ha risposto entro 25 secondi. Riprova.' });
+        logAI({ tag: 'ai_copy_flyer', requestId, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'timeout' });
+        return jsonWithRequestId(req, res, 504, { error: 'DeepSeek non ha risposto entro 25 secondi. Riprova.' }, requestId);
       }
       throw err;
     } finally {
@@ -1198,31 +1252,37 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     }
     if (!apiRes.ok) {
       const errBody = await apiRes.text().catch(() => 'Unknown error');
-      if (apiRes.status === 402) return json(req, res, 402, { error: 'Credito DeepSeek esaurito.' });
-      if (apiRes.status === 401) return json(req, res, 401, { error: 'Chiave API DeepSeek non valida' });
-      if (apiRes.status === 429) return json(req, res, 429, { error: 'Troppe richieste a DeepSeek. Attendi qualche secondo e riprova.' });
-      return json(req, res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` });
+      const errorKind = apiRes.status === 402 ? 'quota' : apiRes.status === 401 ? 'auth' : apiRes.status === 429 ? 'rate_limit' : 'upstream';
+      logAI({ tag: 'ai_copy_flyer', requestId, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (apiRes.status === 402) return jsonWithRequestId(req, res, 402, { error: 'Credito DeepSeek esaurito.' }, requestId);
+      if (apiRes.status === 401) return jsonWithRequestId(req, res, 401, { error: 'Chiave API DeepSeek non valida' }, requestId);
+      if (apiRes.status === 429) return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste a DeepSeek. Attendi qualche secondo e riprova.' }, requestId);
+      return jsonWithRequestId(req, res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
     }
     const data = await apiRes.json();
     const content = data?.choices?.[0]?.message?.content;
     if (typeof content !== 'string') {
-      return json(req, res, 502, { error: 'Risposta AI vuota o malformata' });
+      logAI({ tag: 'ai_copy_flyer', requestId, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_response' });
+      return jsonWithRequestId(req, res, 502, { error: 'Risposta AI vuota o malformata' }, requestId);
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(content);
     } catch {
-      return json(req, res, 502, { error: 'AI non ha restituito JSON valido', raw: content.slice(0, 500) });
+      logAI({ tag: 'ai_copy_flyer', requestId, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'not_json' });
+      return jsonWithRequestId(req, res, 502, { error: 'AI non ha restituito JSON valido', raw: content.slice(0, 500) }, requestId);
     }
-    console.info('[flyerCopy] generated', { tone, layout, size });
-    return json(req, res, 200, { data: parsed, raw: content });
+    const usage = (data as { usage?: { total_tokens?: number } }).usage;
+    logAI({ tag: 'ai_copy_flyer', requestId, model: model || 'deepseek-chat', durationMs: Date.now() - startedAt, outcome: 'ok', tokens: usage?.total_tokens });
+    return json(req, res, 200, { data: parsed, raw: content, requestId });
   }
 
   if (path === '/ai/chat/stream' && method === 'POST') {
+    const requestId = getRequestId(req);
     const ip = getClientIp(req);
-    const rl = checkRateLimit(ip, 'aistream', 30, 60 * 1000);
+    const rl = consumeRateLimit(ip, 'aistream', 30, 60 * 1000);
     if (rl.blocked) {
-      return json(req, res, 429, { error: 'Troppe richieste AI. Attendi un minuto.' });
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste AI. Attendi un minuto.' }, requestId);
     }
     const v = validate(
       z.object({
@@ -1245,18 +1305,18 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }),
       body
     );
-    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
-    if (v.data.userEmail) {
-      console.info('[ai_chat_stream] user', { email: v.data.userEmail, ts: Date.now() });
-    } else {
-      console.info('[ai_chat_stream_anon] request', { ts: Date.now() });
+    if (v.error) {
+      logAI({ tag: 'ai_chat_stream', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
+    const userEmail = v.data.userEmail;
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
-      console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set', { path });
-      return json(req, res, 503, { error: 'DeepSeek non configurato.' });
+      logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'DeepSeek non configurato.' }, requestId);
     }
-    const { model, messages, tools, temperature, max_tokens, userEmail: _userEmail } = v.data;
+    const { model, messages, tools, temperature, max_tokens } = v.data;
+    const startedAt = Date.now();
     const upBody = {
       model: model || 'deepseek-chat',
       messages,
@@ -1281,36 +1341,42 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       });
     } catch (err) {
       clearTimeout(timeout);
-      if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError') {
-        return json(req, res, 504, { error: 'DeepSeek non ha risposto entro 60 secondi. Riprova.' });
+      const errorKind = err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError' ? 'timeout' : 'connection';
+      logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (errorKind === 'timeout') {
+        return jsonWithRequestId(req, res, 504, { error: 'DeepSeek non ha risposto entro 60 secondi. Riprova.' }, requestId);
       }
-      console.error('[Stream] Errore di connessione', { msg: (err as Error)?.message });
-      return json(req, res, 502, { error: `Connessione fallita: ${(err as Error)?.message || 'unknown'}` });
+      return jsonWithRequestId(req, res, 502, { error: `Connessione fallita: ${(err as Error)?.message || 'unknown'}` }, requestId);
     }
     if (!apiRes.ok) {
       clearTimeout(timeout);
       const errBody = await apiRes.text().catch(() => 'Unknown');
-      if (apiRes.status === 402) return json(req, res, 402, { error: 'Credito DeepSeek esaurito' });
-      if (apiRes.status === 401) return json(req, res, 401, { error: 'Chiave API DeepSeek non valida' });
-      if (apiRes.status === 429) return json(req, res, 429, { error: 'Troppe richieste. Attendi e riprova.' });
-      return json(req, res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` });
+      const errorKind = apiRes.status === 402 ? 'quota' : apiRes.status === 401 ? 'auth' : apiRes.status === 429 ? 'rate_limit' : 'upstream';
+      logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (apiRes.status === 402) return jsonWithRequestId(req, res, 402, { error: 'Credito DeepSeek esaurito' }, requestId);
+      if (apiRes.status === 401) return jsonWithRequestId(req, res, 401, { error: 'Chiave API DeepSeek non valida' }, requestId);
+      if (apiRes.status === 429) return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste. Attendi e riprova.' }, requestId);
+      return jsonWithRequestId(req, res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
     }
     const contentType = apiRes.headers.get('content-type') || '';
     if (!contentType.includes('text/event-stream')) {
       clearTimeout(timeout);
       const data = await apiRes.json();
-      return json(req, res, 200, data);
+      return json(req, res, 200, { ...data, requestId });
     }
     addCorsHeaders(req, res);
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('X-Request-Id', requestId);
     const reader = apiRes.body?.getReader();
     if (!reader) {
       clearTimeout(timeout);
+      logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_body' });
       return res.end();
     }
+    logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'ok' });
     const decoder = new TextDecoder();
     try {
       while (true) {
@@ -1320,7 +1386,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         res.write(chunk);
       }
     } catch (err) {
-      console.error('[Stream] Errore durante lo streaming', { msg: (err as Error)?.message });
+      console.error('[Stream] Errore durante lo streaming', { msg: (err as Error)?.message, requestId });
       if (!res.writableEnded) {
         res.end();
       }
@@ -1375,15 +1441,17 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
   }
 
   if (path === '/ai/card-cover' && method === 'POST') {
+    const requestId = getRequestId(req);
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'aiCardCover', 5, 60 * 1000);
     if (rl.blocked) {
       res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
-      return json(req, res, 429, { error: 'Troppe generazioni di cover. Attendi un minuto.' });
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni di cover. Attendi un minuto.' }, requestId);
     }
     const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
-      return json(req, res, 503, { error: 'Cover AI non configurata (GEMINI_API_KEY mancante)' });
+      logAI({ tag: 'ai_card_cover', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Cover AI non configurata (GEMINI_API_KEY mancante)' }, requestId);
     }
     const v = validate(
       z.object({
@@ -1396,12 +1464,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }),
       body,
     );
-    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
-    if (v.data.userEmail) {
-      console.info('[ai_card_cover] user', { email: v.data.userEmail, ts: Date.now() });
+    if (v.error) {
+      logAI({ tag: 'ai_card_cover', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
     try {
-      // Dynamic require of @google/genai (node_modules, always bundled).
+      // Dynamic import of @google/genai (node_modules, always bundled).
       // Avoids the ESM/CJS interop issue with static import and the
       // "Cannot find module src/..." issue with importing from src/.
       const { GoogleGenAI } = await import('@google/genai');
@@ -1435,38 +1505,43 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       );
       const image = interaction.output_image;
       if (!image || !image.data) {
-        return json(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' });
+        logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_image' });
+        return jsonWithRequestId(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' }, requestId);
       }
       const imageBase64 = image.data;
       const mimeType = image.mime_type || 'image/png';
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > 500_000) {
-        return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+        logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
       }
-      return json(req, res, 200, { data: { imageBase64, mimeType } });
+      const sizeKB = sizeBytes / 1024;
+      logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
-      if (msg.startsWith('GEMINI_401')) return json(req, res, 401, { error: 'Chiave Gemini non valida' });
-      if (msg.startsWith('GEMINI_429')) return json(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
-      if (msg.startsWith('GEMINI_TIMEOUT')) return json(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' });
-      return json(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+      const errorKind = msg.startsWith('GEMINI_401') ? 'auth' : msg.startsWith('GEMINI_429') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation') ? 'copyright' : 'upstream';
+      logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
+      if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
+      if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
     }
   }
 
   if (path === '/ai/logo-background' && method === 'POST') {
+    const requestId = getRequestId(req);
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'aiLogoBg', 5, 60 * 1000);
     if (rl.blocked) {
       res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
-      return json(req, res, 429, { error: 'Troppe generazioni background. Attendi un minuto.' });
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni background. Attendi un minuto.' }, requestId);
     }
-    // Supporta sia GEMINI_API_KEY (canonical, server-side) sia
-    // VITE_GEMINI_API_KEY (se l'utente l'ha messa in .env locale con
-    // prefisso VITE_). In Vercel production, solo GEMINI_API_KEY è
-    // sicura (VITE_* viene esposta al bundle client).
     const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
-      return json(req, res, 503, { error: 'Logo AI background non configurato (GEMINI_API_KEY mancante)' });
+      logAI({ tag: 'ai_logo_background', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Logo AI background non configurato (GEMINI_API_KEY mancante)' }, requestId);
     }
     const v = validate(
       z.object({
@@ -1477,12 +1552,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }),
       body,
     );
-    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
-    if (v.data.userEmail) {
-      console.info('[ai_logo_background] user', { email: v.data.userEmail, ts: Date.now() });
+    if (v.error) {
+      logAI({ tag: 'ai_logo_background', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
     try {
-      // Dynamic require of @google/genai (node_modules, always bundled).
+      // Dynamic import of @google/genai (node_modules, always bundled).
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
       const hasImages = !!(v.data.logoImage || v.data.previousBackground);
@@ -1511,35 +1588,43 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       );
       const image = interaction.output_image;
       if (!image || !image.data) {
-        return json(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' });
+        logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_image' });
+        return jsonWithRequestId(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' }, requestId);
       }
       const imageBase64 = image.data;
       const mimeType = image.mime_type || 'image/png';
-      // Clamp 500KB base64 to stay within Vercel response limits.
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > 500_000) {
-        return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+        logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
       }
-      return json(req, res, 200, { data: { imageBase64, mimeType } });
+      const sizeKB = sizeBytes / 1024;
+      logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
-      if (msg.startsWith('GEMINI_401')) return json(req, res, 401, { error: 'Chiave Gemini non valida' });
-      if (msg.startsWith('GEMINI_429')) return json(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
-      if (msg.startsWith('GEMINI_TIMEOUT')) return json(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' });
-      return json(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+      const errorKind = msg.startsWith('GEMINI_401') ? 'auth' : msg.startsWith('GEMINI_429') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation') ? 'copyright' : 'upstream';
+      logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
+      if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
+      if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
     }
   }
 
   if (path === '/ai/flyer-hero' && method === 'POST') {
+    const requestId = getRequestId(req);
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'aiFlyerHero', 5, 60 * 1000);
     if (rl.blocked) {
       res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
-      return json(req, res, 429, { error: 'Troppe generazioni hero. Attendi un minuto.' });
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni hero. Attendi un minuto.' }, requestId);
     }
     const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
-      return json(req, res, 503, { error: 'Hero AI non configurata (GEMINI_API_KEY mancante)' });
+      logAI({ tag: 'ai_flyer_hero', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Hero AI non configurata (GEMINI_API_KEY mancante)' }, requestId);
     }
     const v = validate(
       z.object({
@@ -1551,10 +1636,12 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }),
       body,
     );
-    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
-    if (v.data.userEmail) {
-      console.info('[ai_flyer_hero] user', { email: v.data.userEmail, ts: Date.now() });
+    if (v.error) {
+      logAI({ tag: 'ai_flyer_hero', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
     try {
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
@@ -1581,36 +1668,45 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       );
       const image = interaction.output_image;
       if (!image || !image.data) {
-        return json(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' });
+        logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_image' });
+        return jsonWithRequestId(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' }, requestId);
       }
       const imageBase64 = image.data;
       const mimeType = image.mime_type || 'image/png';
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > 500_000) {
-        return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+        logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
       }
-      return json(req, res, 200, { data: { imageBase64, mimeType } });
+      const sizeKB = sizeBytes / 1024;
+      logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
-      if (msg.startsWith('GEMINI_401')) return json(req, res, 401, { error: 'Chiave Gemini non valida' });
-      if (msg.startsWith('GEMINI_429')) return json(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
-      if (msg.startsWith('GEMINI_TIMEOUT')) return json(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' });
-      return json(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+      const errorKind = msg.startsWith('GEMINI_401') ? 'auth' : msg.startsWith('GEMINI_429') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation') ? 'copyright' : 'upstream';
+      logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
+      if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
+      if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
     }
   }
 
   // Profession-style photo for business card portrait slot (replaces photoUrl).
   // Same Gemini stack as card-cover / flyer-hero; all logic stays in this monolith.
   if (path === '/ai/card-photo' && method === 'POST') {
+    const requestId = getRequestId(req);
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'aiCardPhoto', 5, 60 * 1000);
     if (rl.blocked) {
       res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
-      return json(req, res, 429, { error: 'Troppe generazioni foto. Attendi un minuto.' });
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni foto. Attendi un minuto.' }, requestId);
     }
     const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
-      return json(req, res, 503, { error: 'Foto AI non configurata (GEMINI_API_KEY mancante)' });
+      logAI({ tag: 'ai_card_photo', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Foto AI non configurata (GEMINI_API_KEY mancante)' }, requestId);
     }
     const v = validate(
       z.object({
@@ -1620,10 +1716,12 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }),
       body,
     );
-    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
-    if (v.data.userEmail) {
-      console.info('[ai_card_photo] user', { email: v.data.userEmail, ts: Date.now() });
+    if (v.error) {
+      logAI({ tag: 'ai_card_photo', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
     try {
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
@@ -1643,24 +1741,28 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       );
       const image = interaction.output_image;
       if (!image || !image.data) {
-        return json(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' });
+        logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_image' });
+        return jsonWithRequestId(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' }, requestId);
       }
       const imageBase64 = image.data;
       const mimeType = image.mime_type || 'image/png';
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > 500_000) {
-        return json(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+        logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
       }
-      return json(req, res, 200, { data: { imageBase64, mimeType } });
+      const sizeKB = sizeBytes / 1024;
+      logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
-      if (msg.startsWith('GEMINI_401')) return json(req, res, 401, { error: 'Chiave Gemini non valida' });
-      if (msg.startsWith('GEMINI_429')) return json(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
-      if (msg.startsWith('GEMINI_TIMEOUT')) return json(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' });
-      if (msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation')) {
-        return json(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' });
-      }
-      return json(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+      const errorKind = msg.startsWith('GEMINI_401') ? 'auth' : msg.startsWith('GEMINI_429') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation') ? 'copyright' : 'upstream';
+      logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
+      if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
+      if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
     }
   }
 

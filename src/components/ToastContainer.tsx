@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import type { ToastItem } from '../hooks/useToast';
 
-const TOAST_COLORS: Record<string, { bg: string; icon: string }> = {
+const TOAST_COLORS: Record<ToastItem['type'], { bg: string; icon: string }> = {
+  info: { bg: '#334155', icon: 'ℹ' },
   success: { bg: '#059669', icon: '✓' },
   warning: { bg: '#D97706', icon: '⚠' },
   error: { bg: '#DC2626', icon: '✕' },
@@ -13,7 +14,7 @@ function Toast({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: string)
     return () => clearTimeout(timer);
   }, [toast.id, toast.durationMs, onDismiss]);
 
-  const c = TOAST_COLORS[toast.type] || TOAST_COLORS.success;
+  const c = TOAST_COLORS[toast.type] ?? TOAST_COLORS.info;
   return (
     <div onClick={() => onDismiss(toast.id)} className="toast" style={{ background: c.bg }}>
       <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{c.icon}</span>
