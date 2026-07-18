@@ -4,6 +4,7 @@ import { builderToSvg, sanitizeSvg } from '../utils/logoGenerator';
 import { useAILogo } from '../hooks/useAILogo';
 import { useToast } from '../hooks/useToast';
 import AILogPanel from './AILogPanel';
+import AIProviderBadge from './ai/AIProviderBadge';
 import {
   AiTierGuard,
   AiPromptTextarea,
@@ -451,8 +452,9 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
   return (
     <section className="logo-ai-panel" aria-label="AI Assist">
       <h2>AI Assist</h2>
+      {/* Phase 14 (REQ-AI-006): dicitura ad-hoc sostituita dal badge uniforme */}
       {config?.provider === 'gemini' && (
-        <p className="logo-ai-provider">Powered by Gemini Nano Banana 2 Lite (background) + DeepSeek (parametri)</p>
+        <p className="logo-ai-provider"><AIProviderBadge /></p>
       )}
       <p className="logo-ai-hint">
         Rispondi a 3 domande. L'AI propone 3 concept di logo + background artistico. Il testo resta

@@ -41,17 +41,29 @@ describe('LogoEditor', () => {
     generateMock.mockClear();
     generateBackgroundMock.mockClear();
     localStorage.clear();
+    // Phase 14: LogoAiPanel è montato al boot (AI-first su logo vuoto) e
+    // chiama /api/ai/logo-config. Alcuni test fanno spyOn + mockRestore su
+    // fetch, che può lasciare global.fetch undefined in jsdom: ri-stub a
+    // ogni test per renderlo deterministico.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ enabled: false, provider: 'none' }) }));
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('renders initial empty logo with tablist (AC-001)', () => {
+  it('renders initial empty logo with tablist, AI-first on empty doc (AC-001 + REQ-AI-003)', () => {
     render(<LogoEditor userEmail="user@test.com" />);
     expect(screen.getByRole('heading', { level: 1, name: /Logo/i })).toBeInTheDocument();
     const tablist = screen.getByRole('tablist');
     expect(tablist).toBeInTheDocument();
+    // Phase 14 (REQ-AI-003): documento vuoto → entry AI-first (tab AI attivo)
+    expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('renders builder tab selected when the logo has content', () => {
+    render(<LogoEditor userEmail="user@test.com" initialLogo={{ ...createEmptyLogo(), builder: { ...createEmptyLogo().builder, primaryText: 'Acme' } }} />);
     expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'false');
   });
@@ -352,6 +364,8 @@ describe('LogoEditor', () => {
 
   it('sector template click loads that template into the editor', () => {
     render(<LogoEditor userEmail="user@test.com" />);
+    // Phase 14: doc vuoto parte sul tab AI → tornare al Builder per i template
+    fireEvent.click(screen.getByRole('tab', { name: /Builder/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Tech$/i }));
     const input = screen.getByLabelText(/Testo principale/i) as HTMLInputElement;
     expect(input.value).toBe('CodeLab');
@@ -365,6 +379,7 @@ describe('LogoEditor', () => {
 
     it('resets to an empty logo without confirmation when content is empty', () => {
       render(<LogoEditor userEmail="user@test.com" />);
+      fireEvent.click(screen.getByRole('tab', { name: /Builder/i }));
       fireEvent.click(screen.getByRole('button', { name: /^Tech$/i }));
       expect((screen.getByLabelText(/Testo principale/i) as HTMLInputElement).value).toBe('CodeLab');
       // Reset back to empty first so this specific assertion path is moot;
@@ -375,6 +390,7 @@ describe('LogoEditor', () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
       try {
         render(<LogoEditor userEmail="user@test.com" />);
+        fireEvent.click(screen.getByRole('tab', { name: /Builder/i }));
         fireEvent.click(screen.getByRole('button', { name: /^Tech$/i }));
         expect((screen.getByLabelText(/Testo principale/i) as HTMLInputElement).value).toBe('CodeLab');
         fireEvent.click(screen.getByRole('button', { name: /^Nuovo$/i }));
@@ -389,6 +405,7 @@ describe('LogoEditor', () => {
       const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
       try {
         render(<LogoEditor userEmail="user@test.com" />);
+        fireEvent.click(screen.getByRole('tab', { name: /Builder/i }));
         fireEvent.click(screen.getByRole('button', { name: /^Tech$/i }));
         fireEvent.click(screen.getByRole('button', { name: /^Nuovo$/i }));
         expect((screen.getByLabelText(/Testo principale/i) as HTMLInputElement).value).toBe('CodeLab');

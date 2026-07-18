@@ -36,7 +36,12 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
   // first read of logo.builder.X (layout, primaryText, ...). Same
   // pattern as the QR / Card mergeQr / mergeCard helpers.
   const [logo, setLogo] = useState<Logo>(() => mergeLogoWithDefaults(initialLogo));
-  const [tab, setTab] = useState<'builder' | 'ai'>('builder');
+  // Phase 14 (REQ-AI-003): su logo vuoto l'entry è AI-first (tab AI attivo);
+  // su logo con contenuto resta il builder (lo stato AI della chat è in
+  // aiStateRef, sopravvive al cambio tab senza localStorage, v2.3 fix).
+  const [tab, setTab] = useState<'builder' | 'ai'>(() =>
+    logoHasContent(mergeLogoWithDefaults(initialLogo)) ? 'builder' : 'ai'
+  );
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [exporting, setExporting] = useState<'svg' | 'png-512' | 'png-1024' | 'png-2048' | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
