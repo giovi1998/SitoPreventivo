@@ -1,6 +1,7 @@
 import React from 'react';
 import DocumentPreview from './DocumentPreview';
 import AILogPanel from './AILogPanel';
+import AIConsole from './ai/AIConsole';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -198,14 +199,10 @@ export default function EditorView({
     { mode: 'simple', label: 'Semplifica' },
   ];
 
-  const aiPanel = (
-    <section className="panel ai-panel" aria-label="AI del preventivo">
-      <div className="panel-kicker">
-        <span>AI Assist</span>
-        <button className="panel-toggle" onClick={() => setShowAi(false)} title="Collassa pannello" aria-label="Collassa AI">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-      </div>
+  // Phase 14 (REQ-AI-002): `bare` nasconde kicker/collapse/Log AI quando il
+  // pannello è dentro la AIConsole rail (li fornisce la console).
+  const aiPanelSections = (
+    <>
       <AiSection title="Modello AI" collapsible defaultOpen>
         <AiSelect
           value={aiModel}
@@ -251,10 +248,44 @@ export default function EditorView({
           </button>
         </div>
       </AiSection>
+    </>
+  );
+
+  const aiPanel = (
+    <section className="panel ai-panel" aria-label="AI del preventivo">
+      <div className="panel-kicker">
+        <span>AI Assist</span>
+        <button className="panel-toggle" onClick={() => setShowAi(false)} title="Collassa pannello" aria-label="Collassa AI">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      </div>
+      {aiPanelSections}
       <AiSection title="Log AI" collapsible defaultOpen>
         <AILogPanel logs={aiLogs} isProcessing={isProcessing} />
       </AiSection>
     </section>
+  );
+
+  // Phase 14 (REQ-AI-002): rail AIConsole a destra (un solo modello
+  // mentale). Quote è admin-only → tier unlocked.
+  const aiConsoleRail = (
+    <AIConsole
+      editorKind="editor"
+      isProcessing={isProcessing}
+      logs={aiLogs}
+      tier="unlocked"
+      onSubmitPrompt={(text) => setAiText(text)}
+      hidePrompt
+      quickActions={
+        <button type="button" className="card-ai-reset" onClick={onResetChat} disabled={isProcessing}>
+          Nuova conversazione
+        </button>
+      }
+    >
+      <section className="panel ai-panel" aria-label="AI del preventivo">
+        {aiPanelSections}
+      </section>
+    </AIConsole>
   );
 
   const manualPanel = (
@@ -335,15 +366,6 @@ export default function EditorView({
 
   return (
     <div className={`editor-grid ${previewFocus ? 'focus-mode' : ''} ${!showAi && !showManual ? 'both-collapsed' : ''} ${!showAi || !showManual ? 'one-collapsed' : ''}`}>
-      <div className={`editor-col ai-col ${showAi ? '' : 'collapsed'}`}>
-        {showAi ? aiPanel : (
-          <div className="panel-tab" onClick={() => setShowAi(true)} title="Mostra pannello AI">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-            <span>AI</span>
-          </div>
-        )}
-      </div>
-
       <div className={`editor-col manual-col ${showManual ? '' : 'collapsed'}`}>
         {showManual ? manualPanel : (
           <div className="panel-tab" onClick={() => setShowManual(true)} title="Mostra pannello controllo">
@@ -435,6 +457,16 @@ export default function EditorView({
         </div>
         <DocumentPreview ref={previewRef as React.Ref<HTMLElement>} quote={quote} documentTheme={documentTheme} />
       </section>
+
+      {/* Phase 14 (REQ-AI-002): l'AI sta nella rail a destra */}
+      <div className={`editor-col ai-col ${showAi ? '' : 'collapsed'}`}>
+        {showAi ? aiConsoleRail : (
+          <div className="panel-tab" onClick={() => setShowAi(true)} title="Mostra pannello AI">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            <span>AI</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
