@@ -17,6 +17,7 @@ import {
   DOT_STYLES,
 } from '../utils/qrGenerator';
 import SaveDialog from './SaveDialog';
+import ActionBar from './ActionBar';
 import { useToast } from '../hooks/useToast';
 import { logger } from '../utils/logger';
 
@@ -420,21 +421,24 @@ export default function QREditor({ userEmail, initialQr, onSaveAsTemplate, tier 
             </div>
           </fieldset>
 
-          <div className="qr-actions">
-            <button type="button" onClick={openSaveDialog}>Salva</button>
-            <button type="button" className="btn-secondary" onClick={resetQr}>Nuovo</button>
-            <button type="button" onClick={exportPng} disabled={exporting === 'png' || !qr.data.payload}>
-              {exporting === 'png' ? 'Esportando…' : 'Scarica PNG'}
-            </button>
-            <button type="button" onClick={exportSvg} disabled={exporting === 'svg' || !qr.data.payload}>
-              {exporting === 'svg' ? 'Esportando…' : 'Scarica SVG'}
-            </button>
+          {/* Phase 13b (REQ-UX-004/005): cluster azioni uniforme ActionBar —
+              Salva primary, Esporta menu (PNG/SVG), Nuovo ghost */}
+          <ActionBar
+            onNew={resetQr}
+            onSave={openSaveDialog}
+            exportItems={[
+              { id: 'png', label: exporting === 'png' ? 'Esportando…' : 'PNG (raster)', disabled: !qr.data.payload },
+              { id: 'svg', label: exporting === 'svg' ? 'Esportando…' : 'SVG (vettoriale)', disabled: !qr.data.payload },
+            ]}
+            onExport={(id) => { if (id === 'png') exportPng(); else if (id === 'svg') exportSvg(); }}
+            exportDisabled={exporting !== null}
+          >
             {onSaveAsTemplate && (
-              <button type="button" onClick={() => onSaveAsTemplate(qr)}>
+              <button type="button" className="qr-template-btn" onClick={() => onSaveAsTemplate(qr)}>
                 Salva come template
               </button>
             )}
-          </div>
+          </ActionBar>
         </section>
 
         <section className="qr-editor-preview" aria-label="Anteprima QR">

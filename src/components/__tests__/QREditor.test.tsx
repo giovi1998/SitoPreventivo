@@ -84,7 +84,9 @@ describe('QREditor', () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     try {
       render(<QREditor userEmail="user@test.com" initialQr={{ ...createEmptyQrCode(), data: { type: 'url', payload: 'https://example.com' } }} />);
-      const btn = await screen.findByRole('button', { name: /Scarica PNG/i });
+      // Phase 13b (REQ-UX-005): export nel menu "Esporta" dell'ActionBar
+      fireEvent.click(await screen.findByRole('button', { name: /Esporta ▾/i }));
+      const btn = await screen.findByRole('menuitem', { name: /PNG \(raster\)/i });
       fireEvent.click(btn);
       await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
       expect(clickSpy).toHaveBeenCalled();
@@ -102,7 +104,8 @@ describe('QREditor', () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     try {
       render(<QREditor userEmail="user@test.com" initialQr={{ ...createEmptyQrCode(), data: { type: 'url', payload: 'https://example.com' } }} />);
-      const btn = await screen.findByRole('button', { name: /Scarica SVG/i });
+      fireEvent.click(await screen.findByRole('button', { name: /Esporta ▾/i }));
+      const btn = await screen.findByRole('menuitem', { name: /SVG \(vettoriale\)/i });
       fireEvent.click(btn);
       await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
     } finally {

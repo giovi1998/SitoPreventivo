@@ -88,12 +88,18 @@ describe('LogoEditor', () => {
     expect(screen.getByText(/Riscatta un codice/i)).toBeInTheDocument();
   });
 
-  it('shows export SVG and export PNG buttons (AC-008, AC-009)', () => {
+  // Phase 13b (REQ-UX-005): gli export vivono nel menu "Esporta" dell'ActionBar
+  const openExportMenu = () => {
+    fireEvent.click(screen.getByRole('button', { name: /Esporta ▾/i }));
+  };
+
+  it('shows export SVG and export PNG items in the Esporta menu (AC-008, AC-009, REQ-UX-005)', () => {
     render(<LogoEditor userEmail="user@test.com" initialLogo={{ ...createEmptyLogo(), builder: { ...createEmptyLogo().builder, primaryText: 'Acme' } }} />);
-    expect(screen.getByRole('button', { name: /Esporta SVG/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Esporta PNG 512/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Esporta PNG 1024/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Esporta PNG 2048/i })).toBeInTheDocument();
+    openExportMenu();
+    expect(screen.getByRole('menuitem', { name: /SVG vettoriale/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /PNG 512×512/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /PNG 1024×1024/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /PNG 2048×2048/i })).toBeInTheDocument();
   });
 
   it('export SVG triggers a download with sanitized content (AC-008)', async () => {
@@ -106,7 +112,8 @@ describe('LogoEditor', () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     try {
       render(<LogoEditor userEmail="user@test.com" initialLogo={{ ...createEmptyLogo(), builder: { ...createEmptyLogo().builder, primaryText: 'Acme' } }} />);
-      fireEvent.click(screen.getByRole('button', { name: /Esporta SVG/i }));
+      openExportMenu();
+      fireEvent.click(screen.getByRole('menuitem', { name: /SVG vettoriale/i }));
       await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
       const blobArg = createObjectURL.mock.calls[0][0];
       expect(blobArg).toBeInstanceOf(Blob);
@@ -136,7 +143,8 @@ describe('LogoEditor', () => {
     };
     try {
       render(<LogoEditor userEmail="user@test.com" initialLogo={{ ...createEmptyLogo(), builder: { ...createEmptyLogo().builder, primaryText: 'Acme' } }} />);
-      fireEvent.click(screen.getByRole('button', { name: /Esporta PNG 1024/i }));
+      openExportMenu();
+      fireEvent.click(screen.getByRole('menuitem', { name: /PNG 1024×1024/i }));
       await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
     } finally {
       URL.createObjectURL = originalCreate;

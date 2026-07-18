@@ -4,6 +4,7 @@ import { createEmptyLogo, createLogoTemplate, mergeLogoWithDefaults } from '../u
 import { builderToSvg, sanitizeSvg, svgToPng } from '../utils/logoGenerator';
 import dataService from '../utils/dataService';
 import SaveDialog from './SaveDialog';
+import ActionBar from './ActionBar';
 import BuilderPanel from './BuilderPanel';
 import LogoAiPanel, { type LogoAiState } from './LogoAiPanel';
 import { useToast } from '../hooks/useToast';
@@ -200,64 +201,31 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
     else addToast('info', 'Nuovo logo creato.');
   }, [logo, addToast, onReset]);
 
+  // Phase 13b (REQ-UX-004/005): cluster azioni uniforme — Salva primary,
+  // Esporta secondary con menu (SVG/PNG 512/1024/2048), Nuovo ghost.
+  const handleExportAction = useCallback((id: string) => {
+    if (id === 'svg') exportSvg();
+    else if (id === 'png-512') exportPng(512);
+    else if (id === 'png-1024') exportPng(1024);
+    else if (id === 'png-2048') exportPng(2048);
+  }, [exportSvg, exportPng]);
+
   return (
     <div className="logo-editor">
       <header className="logo-editor-header">
         <h1>Logo</h1>
-        <div className="logo-editor-actions">
-          <button
-            type="button"
-            onClick={handleNew}
-            aria-label="Nuovo"
-            title="Crea un nuovo logo (azzera builder e chat AI)"
-          >
-            Nuovo
-          </button>
-          <button
-            type="button"
-            onClick={openSaveDialog}
-            aria-label="Salva"
-            title="Salva logo in Collection"
-          >
-            Salva
-          </button>
-          <button
-            type="button"
-            onClick={exportSvg}
-            disabled={exporting !== null}
-            aria-label="Esporta SVG"
-            title="Esporta come file SVG vettoriale"
-          >
-            {exporting === 'svg' ? 'Esportando…' : 'Esporta SVG'}
-          </button>
-          <button
-            type="button"
-            onClick={() => exportPng(512)}
-            disabled={exporting !== null}
-            aria-label="Esporta PNG 512"
-            title="Esporta PNG 512×512"
-          >
-            Esporta PNG 512
-          </button>
-          <button
-            type="button"
-            onClick={() => exportPng(1024)}
-            disabled={exporting !== null}
-            aria-label="Esporta PNG 1024"
-            title="Esporta PNG 1024×1024"
-          >
-            Esporta PNG 1024
-          </button>
-          <button
-            type="button"
-            onClick={() => exportPng(2048)}
-            disabled={exporting !== null}
-            aria-label="Esporta PNG 2048"
-            title="Esporta PNG 2048×2048"
-          >
-            Esporta PNG 2048
-          </button>
-        </div>
+        <ActionBar
+          onNew={handleNew}
+          onSave={openSaveDialog}
+          exportItems={[
+            { id: 'svg', label: exporting === 'svg' ? 'Esportando…' : 'SVG vettoriale' },
+            { id: 'png-512', label: 'PNG 512×512' },
+            { id: 'png-1024', label: 'PNG 1024×1024' },
+            { id: 'png-2048', label: 'PNG 2048×2048' },
+          ]}
+          onExport={handleExportAction}
+          exportDisabled={exporting !== null}
+        />
       </header>
 
       <div className="logo-tabs" role="tablist" aria-label="Modalità di creazione logo">

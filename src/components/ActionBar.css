@@ -1,0 +1,146 @@
+/* Primary Action Bar (REQ-UX-004): cluster fisso bottom-right desktop,
+   sticky-bottom mobile con safe-area. Token-only (PAT-004). */
+
+.action-bar {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 8px 10px;
+  box-shadow: var(--shadow-md);
+}
+
+.action-bar__extra {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  padding-left: var(--space-2);
+  max-width: 320px;
+}
+
+.action-bar__cluster {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-bar__btn {
+  border-radius: var(--radius-pill);
+  padding: 10px 18px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast),
+    box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.action-bar__btn--primary {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-weight: var(--weight-extrabold);
+}
+
+.action-bar__btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, black);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.action-bar__btn--secondary {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.action-bar__btn--secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.action-bar__btn--ghost {
+  background: transparent;
+  border: none;
+  color: var(--ink-muted);
+}
+
+.action-bar__btn--ghost:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--surface-hov);
+  box-shadow: none;
+}
+
+.action-bar__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.action-bar__export {
+  position: relative;
+}
+
+.action-bar__menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  z-index: 61;
+}
+
+.action-bar__menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.action-bar__menu-item:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: none;
+  transform: none;
+}
+
+.action-bar__menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 767px) {
+  .action-bar {
+    position: sticky;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    justify-content: flex-end;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .action-bar__extra {
+    display: none;
+  }
+}
