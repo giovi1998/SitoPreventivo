@@ -48,6 +48,12 @@ interface FlyerAiPanelProps {
   onReset: () => void;
   onCollapse: () => void;
   tier?: 'free' | 'unlocked';
+  /**
+   * Phase 14 (REQ-AI-002): dentro la AIConsole rail l'header "AI Assist",
+   * il bottone collapse e la sezione Log AI sono forniti dalla console —
+   * `bare` li nasconde per evitare duplicati.
+   */
+  bare?: boolean;
   onGenerateHero?: () => void;
   onRemoveHero?: () => void;
   onResetHero?: () => void;
@@ -69,7 +75,7 @@ interface FlyerAiPanelProps {
 export function FlyerAiPanel({
   aiPrompt, setAiPrompt, aiModel, setAiModel, aiTone, setAiTone, ai,
   flyer, onGenerate, onRefine, onReset, hasCopy, onCollapse,
-  tier = 'free',
+  tier = 'free', bare = false,
   onGenerateHero, onRemoveHero, onResetHero, isGeneratingHero = false,
   heroPrompt = '', setHeroPrompt, heroSector, setHeroSector,
   heroTone = 'formale', setHeroTone,
@@ -88,12 +94,14 @@ export function FlyerAiPanel({
 
   return (
     <section className="panel ai-panel" aria-label="AI Assist del volantino">
-      <div className="panel-kicker">
-        <span>AI Assist</span>
-        <button className="panel-toggle" onClick={onCollapse} title="Collassa" aria-label="Collassa AI">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
-        </button>
-      </div>
+      {!bare && (
+        <div className="panel-kicker">
+          <span>AI Assist</span>
+          <button className="panel-toggle" onClick={onCollapse} title="Collassa" aria-label="Collassa AI">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6" /></svg>
+          </button>
+        </div>
+      )}
 
       {onGenerateHero && flyer.style.layout !== 'centered' && (
         <AiSection title="Hero Image" collapsible defaultOpen={false} hint="Immagine hero del volantino generata da AI.">
@@ -245,14 +253,16 @@ export function FlyerAiPanel({
         {!hasCopy && <p style={{ fontSize: '.78rem', color: 'var(--muted)', margin: '6px 0 0' }}>ℹ️ Genera prima il copy o compila manualmente i campi.</p>}
       </AiSection>
 
-      <AiSection 
-        title="Log AI" 
-        collapsible 
-        defaultOpen 
-        extra={<button type="button" className="card-ai-reset" onClick={onReset} disabled={ai.isProcessing}>↻ Nuova sessione</button>}
-      >
-        <AILogPanel logs={ai.logs} isProcessing={ai.isProcessing} />
-      </AiSection>
+      {!bare && (
+        <AiSection
+          title="Log AI"
+          collapsible
+          defaultOpen
+          extra={<button type="button" className="card-ai-reset" onClick={onReset} disabled={ai.isProcessing}>↻ Nuova sessione</button>}
+        >
+          <AILogPanel logs={ai.logs} isProcessing={ai.isProcessing} />
+        </AiSection>
+      )}
     </section>
   );
 }

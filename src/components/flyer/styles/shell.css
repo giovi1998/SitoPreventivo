@@ -4,8 +4,9 @@
 
 .flyer-editor-shell .editor-grid {
   display: grid;
-  grid-template-columns: 320px 1fr 420px;
-  grid-template-areas: "ai manual preview";
+  grid-template-columns: 1fr 420px auto;
+  /* Phase 14 (REQ-AI-002): l'AI sta nella rail a destra */
+  grid-template-areas: "manual preview ai";
   gap: 16px;
   align-items: start;
   padding: 16px;
@@ -28,7 +29,7 @@
 
 @media (max-width: 1279px) {
   .flyer-editor-shell .editor-grid {
-    grid-template-columns: 280px 1fr 360px;
+    grid-template-columns: 1fr 360px auto;
     gap: 12px;
     padding: 12px;
   }

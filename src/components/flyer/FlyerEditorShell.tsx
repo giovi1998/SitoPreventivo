@@ -1,5 +1,6 @@
 import React from 'react';
 import FlyerAiPanel from './FlyerAiPanel';
+import AIConsole from '../ai/AIConsole';
 import FlyerManualPanel from './FlyerManualPanel';
 import FlyerPreviewPanel from './FlyerPreviewPanel';
 import type { Flyer, FlyerSize, FlyerOrientation, FlyerLayout, FlyerContent, FlyerTone } from '../../utils/documentSchemas';
@@ -381,33 +382,59 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
     setShowSaveDialog(true);
   }, [flyer, addToast]);
 
+  const aiPanelProps = {
+    aiPrompt, setAiPrompt,
+    aiModel, setAiModel,
+    aiTone, setAiTone,
+    ai, flyer, debouncedFlyer,
+    hasCopy: flyerHasCopy(flyer),
+    onGenerate: handleGenerate, onRefine: handleRefine, onReset: handleAiReset,
+    tier,
+    onGenerateHero: handleGenerateHero,
+    onRemoveHero: removeHero,
+    onResetHero: handleResetHero,
+    isGeneratingHero,
+    heroPrompt,
+    setHeroPrompt,
+    heroSector,
+    setHeroSector,
+    heroTone,
+    setHeroTone,
+    showHeroPromptEditor,
+    setShowHeroPromptEditor,
+    heroLibrary,
+    onSaveHeroPrompt: handleSaveHeroPrompt,
+    onApplyHeroPrompt: handleApplyHeroPrompt,
+    onDeleteHeroPrompt: handleDeleteHeroPrompt,
+  } as const;
+
   const aiPanel = (
     <FlyerAiPanel
-      aiPrompt={aiPrompt} setAiPrompt={setAiPrompt}
-      aiModel={aiModel} setAiModel={setAiModel}
-      aiTone={aiTone} setAiTone={setAiTone}
-      ai={ai} flyer={flyer} debouncedFlyer={debouncedFlyer}
-      hasCopy={flyerHasCopy(flyer)}
-      onGenerate={handleGenerate} onRefine={handleRefine} onReset={handleAiReset}
+      {...aiPanelProps}
       onCollapse={() => setShowAi(false)}
-      tier={tier}
-      onGenerateHero={handleGenerateHero}
-      onRemoveHero={removeHero}
-      onResetHero={handleResetHero}
-      isGeneratingHero={isGeneratingHero}
-      heroPrompt={heroPrompt}
-      setHeroPrompt={setHeroPrompt}
-      heroSector={heroSector}
-      setHeroSector={setHeroSector}
-      heroTone={heroTone}
-      setHeroTone={setHeroTone}
-      showHeroPromptEditor={showHeroPromptEditor}
-      setShowHeroPromptEditor={setShowHeroPromptEditor}
-      heroLibrary={heroLibrary}
-      onSaveHeroPrompt={handleSaveHeroPrompt}
-      onApplyHeroPrompt={handleApplyHeroPrompt}
-      onDeleteHeroPrompt={handleDeleteHeroPrompt}
     />
+  );
+
+  // Phase 14 (REQ-AI-002): su desktop l'AI vive nella rail AIConsole a
+  // destra (un solo modello mentale). La console fornisce rail, collapse
+  // persistito (pq_ui:v1), header, AILogPanel e provider badge; il pannello
+  // volantino ci entra in modalità `bare` (senza header/log duplicati).
+  const aiConsoleRail = (
+    <AIConsole
+      editorKind="flyer"
+      isProcessing={ai.isProcessing || isGeneratingHero}
+      logs={ai.logs}
+      tier={tier}
+      onSubmitPrompt={(text) => { setAiPrompt(text); }}
+      hidePrompt
+      quickActions={
+        <button type="button" className="card-ai-reset" onClick={handleAiReset} disabled={ai.isProcessing}>
+          ↻ Nuova sessione
+        </button>
+      }
+    >
+      <FlyerAiPanel {...aiPanelProps} bare onCollapse={() => {}} />
+    </AIConsole>
   );
 
   const manualPanel = (
@@ -433,7 +460,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
   return (
     <div className={`flyer-editor-shell editor-grid ${previewFocus ? 'focus-mode' : ''} ${!showAi && !showManual ? 'both-collapsed' : ''} ${!showAi || !showManual ? 'one-collapsed' : ''}`}>
       <div className={`editor-col ai-col ${showAi ? '' : 'collapsed'}`}>
-        {showAi ? aiPanel : (
+        {showAi ? aiConsoleRail : (
           <div className="panel-tab" onClick={() => setShowAi(true)} title="Mostra AI" role="button" aria-label="Mostra AI">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6" /></svg>
             <span>AI</span>
