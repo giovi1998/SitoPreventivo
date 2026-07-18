@@ -35,6 +35,8 @@ const baseTopbarProps = {
 describe('Layout sidebar collapsed styling', () => {
   beforeEach(() => {
     cleanup();
+    // Phase 13b: collapsed è persistito in pq_ui:v1 — va azzerato tra test
+    localStorage.clear();
   });
 
   it('sidebar-collapse-btn has sidebar-collapsed class on app-shell when collapsed', () => {

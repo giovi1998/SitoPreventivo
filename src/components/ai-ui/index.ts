@@ -1,3 +1,5 @@
+import './ai-ui.css';
+
 export * from './AiSection';
 export * from './AiPromptTextarea';
 export * from './AiSelect';

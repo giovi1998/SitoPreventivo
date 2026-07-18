@@ -3,13 +3,39 @@
   color: #E2E8F0;
   border-radius: 8px;
   padding: 8px;
-  font-family: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
+  font-family: var(--font-mono, 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace);
   font-size: 12px;
   line-height: 1.4;
   max-height: 280px;
   display: flex;
   flex-direction: column;
   border: 1px solid #1E293B;
+}
+
+/* REQ-DS-007: variante theme-aware (light/dark segue il tema globale) */
+.ai-log-panel--themed {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.ai-log-panel--themed .ai-log-header {
+  border-bottom-color: var(--line);
+  color: var(--ink-muted);
+}
+
+.ai-log-panel--themed .ai-log-btn {
+  border-color: var(--line);
+  color: var(--ink-muted);
+}
+
+.ai-log-panel--themed .ai-log-entry {
+  border-left-color: var(--line);
+}
+
+.ai-log-panel--themed .ai-log-detail {
+  background: var(--surface-2);
+  color: var(--ink-sec);
 }
 
 .ai-log-header {

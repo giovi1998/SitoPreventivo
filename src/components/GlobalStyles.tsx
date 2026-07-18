@@ -192,6 +192,9 @@ export default function GlobalStyles() {
     .brand strong{display:block;font-size:.95rem;font-weight:var(--weight-extrabold);letter-spacing:-.02em}
     .brand small{display:block;color:#8896ab;margin-top:2px;font-size:.78rem}
     .sidebar nav{display:grid;gap:4px}
+    .sidebar .nav-group-label{font-size:.62rem;font-weight:var(--weight-extrabold);text-transform:uppercase;letter-spacing:.14em;color:#5a6b82;padding:14px 14px 4px}
+    .sidebar .nav-group-label:first-child{padding-top:4px}
+    .app-shell.sidebar-collapsed .nav-group-label{display:none}
     .sidebar nav button{display:flex;align-items:center;gap:10px;background:transparent;color:#8896ab;border:none;border-radius:10px;padding:10px 14px;text-align:left;font-size:.88rem;font-weight:var(--weight-semibold);transition:all var(--transition-fast)}
     .sidebar nav button svg{flex-shrink:0;opacity:.6;transition:opacity var(--transition-fast)}
     .sidebar nav button:hover{background:rgba(255,255,255,.06);color:#cfe0f2;transform:none;box-shadow:none}

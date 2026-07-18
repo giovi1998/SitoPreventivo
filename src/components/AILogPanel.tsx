@@ -5,6 +5,12 @@ import './AILogPanel.css';
 interface AILogPanelProps {
   logs: AILogEntry[];
   isProcessing: boolean;
+  /**
+   * Phase 13b (REQ-DS-007): 'dark' (default) = terminale scuro, usato nella
+   * AI Console rail (signature element, resta scuro anche in light mode).
+   * 'themed' = segue il tema globale (surface/ink/line), per usi fuori rail.
+   */
+  theme?: 'dark' | 'themed';
 }
 
 const TYPE_ICONS: Record<AILogEntry['type'], string> = {
@@ -23,7 +29,7 @@ const TYPE_LABELS: Record<AILogEntry['type'], string> = {
   stream: 'Stream',
 };
 
-export default function AILogPanel({ logs, isProcessing }: AILogPanelProps): React.ReactElement {
+export default function AILogPanel({ logs, isProcessing, theme = 'dark' }: AILogPanelProps): React.ReactElement {
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [fullscreenOpen, setFullscreenOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -56,7 +62,7 @@ export default function AILogPanel({ logs, isProcessing }: AILogPanelProps): Rea
 
   return (
     <>
-      <div className="ai-log-panel" role="log" aria-label="Log attività AI" aria-live="polite">
+      <div className={`ai-log-panel${theme === 'themed' ? ' ai-log-panel--themed' : ''}`} role="log" aria-label="Log attività AI" aria-live="polite">
         <div className="ai-log-header">
           <span className="ai-log-count">
             {logs.length === 0 ? 'Nessuna attività' : `${logs.length} eventi`}

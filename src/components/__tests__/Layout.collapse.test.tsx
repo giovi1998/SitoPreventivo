@@ -20,6 +20,8 @@ function renderLayout(props = {}) {
 describe('Layout sidebar collapse button', () => {
   beforeEach(() => {
     cleanup();
+    // Phase 13b: collapsed è persistito in pq_ui:v1 — va azzerato tra test
+    localStorage.clear();
   });
 
   it('renders sidebar collapse button with label "Comprimi" by default', () => {
@@ -83,6 +85,7 @@ describe('Layout sidebar collapse button', () => {
 describe('Layout sidebar collapse button regression', () => {
   beforeEach(() => {
     cleanup();
+    localStorage.clear();
   });
 
   it('does not use deprecated class sidebar-collapse-toggle', () => {
