@@ -3,11 +3,11 @@
 
 /* ─── AI Panel ───────────────────────────────────────── */
 .card-ai-fieldset {
-  border-color: color-mix(in srgb, var(--accent, #01696F) 25%, var(--line));
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--line));
 }
 
 .card-ai-fieldset legend {
-  color: var(--accent, #01696F);
+  color: var(--accent);
 }
 
 .card-ai-model-row {
@@ -46,8 +46,8 @@
 }
 
 .card-ai-actions button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent, #01696F) 8%, var(--surface));
-  border-color: var(--accent, #01696F);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-color: var(--accent);
 }
 
 .card-ai-actions button:disabled {
@@ -85,7 +85,7 @@
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
-  color: var(--accent, #01696F);
+  color: var(--accent);
 }
 
 .card-ai-section__hint {
@@ -151,9 +151,9 @@
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .card-ai-cover-item__btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent, #01696F) 8%, var(--surface));
-  border-color: var(--accent, #01696F);
-  color: var(--accent, #01696F);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .card-ai-cover-item__btn:disabled {
   opacity: 0.5;
@@ -173,7 +173,7 @@
   border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--accent, #01696F) 6%, var(--surface));
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
 }
 .card-ai-cover-thumb img {
   width: 100%;
@@ -242,9 +242,9 @@
   transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.05s;
 }
 .card-ai-chip:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
-  border-color: var(--accent, #01696F);
-  color: var(--accent, #01696F);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .card-ai-chip:active:not(:disabled) {
   transform: translateY(1px);
@@ -328,7 +328,7 @@
   overflow-y: auto;
   padding: 12px;
   background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--accent, #01696F) 25%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line));
   border-radius: var(--radius-md);
 }
 
@@ -341,7 +341,7 @@
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--accent, #01696F);
+  color: var(--accent);
 }
 
 .card-editor-3col .card-editor-ai .panel-kicker button {
@@ -385,7 +385,7 @@
   align-items: center;
   gap: 4px;
   padding: 10px 8px;
-  background: var(--accent, #01696F);
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 8px;

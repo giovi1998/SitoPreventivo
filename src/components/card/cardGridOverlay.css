@@ -46,8 +46,8 @@
 }
 
 .card-preview-zoom-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
-  color: var(--accent, #01696F);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent);
 }
 
 .card-preview-zoom-btn:disabled {
@@ -70,8 +70,8 @@
 }
 
 .card-preview-zoom-label:hover {
-  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
-  color: var(--accent, #01696F);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent);
 }
 
 .card-grid-toggle {
@@ -89,9 +89,9 @@
 }
 
 .card-grid-toggle.active {
-  background: color-mix(in srgb, var(--accent, #01696F) 12%, var(--surface));
-  color: var(--accent, #01696F);
-  border-color: var(--accent, #01696F);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .card-grid-overlay {
@@ -111,7 +111,7 @@
 .card-grid-editor {
   margin-top: 12px;
   padding: 12px;
-  border: 1px dashed color-mix(in srgb, var(--accent, #01696F) 30%, var(--line));
+  border: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--line));
   border-radius: var(--radius-md);
   background: var(--surface);
   display: flex;
@@ -124,7 +124,7 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--accent, #01696F);
+  color: var(--accent);
 }
 
 /* Phase 2.2 fix: hint quando i controlli grid sono disabilitati (master
@@ -136,7 +136,7 @@
   line-height: 1.35;
   color: var(--info-text, #1e4a7a);
   background: var(--blue-bg, #e8f0fe);
-  border: 1px solid color-mix(in srgb, var(--accent, #01696F) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   border-radius: var(--radius-sm);
 }
 
@@ -184,13 +184,13 @@
 }
 
 .card-grid-align-matrix button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
-  border-color: var(--accent, #01696F);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-color: var(--accent);
 }
 
 .card-grid-align-matrix button.active {
-  background: var(--accent, #01696F);
-  border-color: var(--accent, #01696F);
+  background: var(--accent);
+  border-color: var(--accent);
   color: white;
 }
 
@@ -226,8 +226,8 @@
 
 .card-grid-arrows button:hover:not(:disabled),
 .card-grid-resize button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
-  border-color: var(--accent, #01696F);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-color: var(--accent);
 }
 
 .card-grid-arrows button:disabled,

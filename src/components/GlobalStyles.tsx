@@ -1,6 +1,5 @@
 export default function GlobalStyles() {
   return <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=Figtree:wght@400;600;700&family=Inter:wght@400;600;700;800&family=Lato:wght@400;700&family=Merriweather:wght@400;700&family=Montserrat:wght@400;600;700&family=Open+Sans:wght@400;600;700&family=Oswald:wght@400;600;700&family=Playfair+Display:wght@400;700&family=Plus+Jakarta+Sans:wght@400;600;700&family=Poppins:wght@400;600;700&family=Raleway:wght@400;600;700&family=Roboto:wght@400;500;700&family=Source+Sans+3:wght@400;600;700&display=swap');
     :root{color-scheme:light dark;
       --accent:#E62020;
       --sidebar:#082033;
@@ -26,6 +25,26 @@ export default function GlobalStyles() {
       --info-bg:#FFF1F1;
       --info-border:#F8BFBF;
       --info-text:#7A1414;
+      /* The Classic esteso (Phase 13b) */
+      --paper:#FFFFFF;
+      --accent-soft:#FCE8E8;
+      --accent-softer:#FFF1F1;
+      --success:#10B981;
+      /* Ghost tokens, ora definiti (REQ-DS-003) */
+      --primary:var(--accent);
+      --ink-soft:var(--muted);
+      --ink-muted:var(--muted);
+      --bg:var(--surface);
+      --surface-2:var(--surface-sun);
+      --danger-bg:var(--red-bg);
+      --accent-bg:var(--accent-soft);
+      --radius-pill:var(--radius-full);
+      /* Tipografia (REQ-DS-004) */
+      --font-display:'Outfit','Inter',ui-sans-serif,system-ui,sans-serif;
+      --font-body:'Inter',ui-sans-serif,system-ui,sans-serif;
+      --font-mono:'JetBrains Mono',ui-monospace,'Roboto Mono',monospace;
+      --text-xs:12px; --text-sm:14px; --text-base:16px; --text-lg:20px;
+      --text-xl:24px; --text-2xl:32px; --text-3xl:40px; --text-4xl:48px;
       --overlay:rgba(0,0,0,.3);
       --shadow-sm:0 2px 12px rgba(19,35,58,.04);
       --shadow-md:0 8px 24px rgba(19,35,58,.08);
@@ -77,6 +96,25 @@ export default function GlobalStyles() {
       --info-bg:rgba(255,59,59,.10);
       --info-border:rgba(255,59,59,.18);
       --info-text:#FF8A8A;
+      /* The Classic esteso (Phase 13b) */
+      --paper:#1a1d27;
+      --accent-soft:rgba(255,59,59,.10);
+      --accent-softer:rgba(255,59,59,.10);
+      --success:#22c55e;
+      /* Ghost tokens, ora definiti (REQ-DS-003) */
+      --primary:var(--accent);
+      --ink-soft:var(--muted);
+      --ink-muted:var(--muted);
+      --bg:var(--surface);
+      --surface-2:var(--surface-sun);
+      --danger-bg:var(--red-bg);
+      --accent-bg:var(--accent-soft);
+      --radius-pill:var(--radius-full);
+      --font-display:'Outfit','Inter',ui-sans-serif,system-ui,sans-serif;
+      --font-body:'Inter',ui-sans-serif,system-ui,sans-serif;
+      --font-mono:'JetBrains Mono',ui-monospace,'Roboto Mono',monospace;
+      --text-xs:12px; --text-sm:14px; --text-base:16px; --text-lg:20px;
+      --text-xl:24px; --text-2xl:32px; --text-3xl:40px; --text-4xl:48px;
       --overlay:rgba(0,0,0,.6);
       --shadow-sm:0 2px 12px rgba(0,0,0,.2);
       --shadow-md:0 8px 24px rgba(0,0,0,.3);
@@ -564,7 +602,7 @@ export default function GlobalStyles() {
     .btn-ghost{background:var(--surface-hov);border:none;color:var(--muted)}
     .btn-ghost:hover{background:var(--line-lt)}
     .btn-primary{background:var(--accent);border:none;color:#fff}
-    .btn-primary:hover{box-shadow:0 4px 12px rgba(11,87,208,.3)}
+    .btn-primary:hover{box-shadow:0 4px 12px color-mix(in srgb,var(--accent) 30%,transparent)}
     .btn-primary:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
 
     /* ─── CONFIRM MODAL ─────────────────────────────── */
@@ -583,7 +621,7 @@ export default function GlobalStyles() {
     .tier-limit-redeem{display:flex;flex-direction:column;gap:10px;margin-top:8px}
     .tier-limit-label{font-size:.78rem;font-weight:var(--weight-semibold);color:var(--ink)}
     .tier-limit-input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-md);font-size:.88rem;font-family:'Roboto Mono',monospace;background:var(--bg);color:var(--ink);box-sizing:border-box}
-    .tier-limit-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(11,87,208,.12)}
+    .tier-limit-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
     .tier-limit-input:disabled{opacity:.5;cursor:not-allowed}
     .tier-limit-error{margin:0;padding:8px 10px;background:rgba(220,38,38,.08);color:#dc2626;border-radius:var(--radius-sm);font-size:.8rem}
     .tier-limit-hint{margin:8px 0 0;font-size:.72rem;color:var(--muted)}

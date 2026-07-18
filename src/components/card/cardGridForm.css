@@ -5,7 +5,7 @@
 .card-mobile-grid-editor {
   margin-top: 12px;
   padding: 12px;
-  border: 1px dashed color-mix(in srgb, var(--accent, #01696F) 30%, var(--line));
+  border: 1px dashed color-mix(in srgb, var(--accent) 30%, var(--line));
   border-radius: 8px;
   display: flex;
   flex-direction: column;
@@ -16,7 +16,7 @@
   padding: 10px;
   font-size: 0.9rem;
   font-weight: 600;
-  background: var(--accent, #01696F);
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -200,8 +200,8 @@
   padding: 4px 10px;
   font-size: 0.85rem;
   background: transparent;
-  color: var(--accent, #01696F);
-  border: 1px dashed var(--accent, #01696F);
+  color: var(--accent);
+  border: 1px dashed var(--accent);
   border-radius: var(--radius-sm);
   cursor: pointer;
   align-self: flex-start;
@@ -239,14 +239,14 @@
 }
 
 .card-action-primary {
-  background: var(--accent, #01696F) !important;
+  background: var(--accent) !important;
   color: #fff !important;
-  border-color: var(--accent, #01696F) !important;
+  border-color: var(--accent) !important;
 }
 
 .card-action-primary:hover:not(:disabled) {
   filter: brightness(1.08);
-  background: var(--accent, #01696F) !important;
+  background: var(--accent) !important;
 }
 
 /* ─── B1: 3 color pickers in a row ─────────────────────── */
@@ -355,8 +355,8 @@
 .card-advanced-qr-badge {
   font-size: 0.65rem;
   font-weight: 600;
-  color: var(--accent, #01696F);
-  background: color-mix(in srgb, var(--accent, #01696F) 12%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   padding: 1px 6px;
   border-radius: 999px;
   text-transform: uppercase;
@@ -416,7 +416,7 @@
 }
 
 .card-export-list button:active {
-  background: color-mix(in srgb, var(--accent, #01696F) 10%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .card-export-hint {

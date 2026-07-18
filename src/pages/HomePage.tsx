@@ -203,7 +203,7 @@ export default function HomePage({ user }: HomePageProps) {
             <h3>Free</h3>
             <div className="hp-price"><span>€0</span><small>per sempre</small></div>
             <ul>
-              <li>3 documenti salvati</li>
+              <li>10 documenti salvati</li>
               <li>Watermark su export e preview</li>
               <li>150 DPI PDF · 72 DPI PNG</li>
               <li>AI: 0 prompt/mese</li>

@@ -34,12 +34,12 @@
 }
 
 .card-mobile-save-btn {
-  background: var(--accent, #01696F);
+  background: var(--accent);
   color: #fff;
 }
 
 .card-mobile-save-btn:hover {
-  background: color-mix(in srgb, var(--accent, #01696F) 85%, black);
+  background: color-mix(in srgb, var(--accent) 85%, black);
 }
 
 .card-mobile-export-wrap {
@@ -55,8 +55,8 @@
 }
 
 .card-mobile-export-btn:hover {
-  border-color: var(--accent, #01696F);
-  color: var(--accent, #01696F);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .card-mobile-export-menu {
@@ -95,8 +95,8 @@
 }
 
 .card-mobile-export-menu button:hover {
-  background: color-mix(in srgb, var(--accent, #01696F) 10%, var(--surface));
-  color: var(--accent, #01696F);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent);
 }
 
 /* Push content above sticky toolbar */

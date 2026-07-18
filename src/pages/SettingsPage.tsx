@@ -309,7 +309,7 @@ export default function SettingsPage() {
                   className="settings-form-input"
                   value={redeemCode}
                   onChange={(e) => setRedeemCode(e.target.value)}
-                  placeholder="PQ-XXXXXXXX-XXXXXXXX-XXXXXXXX"
+                  placeholder="QB-XXXXXXXX-XXXXXXXX-XXXXXXXX"
                   disabled={redeemBusy}
                   data-testid="settings-redeem-input"
                   autoComplete="off"

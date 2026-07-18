@@ -110,7 +110,7 @@ export default function LoginPage() {
 
           <div className="auth-form-header">
             <h2>{isRegister ? 'Crea il tuo account' : 'Bentornato'}</h2>
-            <p>{isRegister ? 'Registrati per iniziare a creare preventivi' : 'Accedi per continuare a creare preventivi'}</p>
+            <p>{isRegister ? 'Registrati per creare il tuo brand kit con l\'AI' : 'Accedi per continuare a costruire il tuo brand'}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="auth-form">

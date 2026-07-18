@@ -67,7 +67,7 @@
 }
 
 .onb-progress-bar.is-on {
-  background: var(--accent, #0b57d0);
+  background: var(--accent);
 }
 
 .onb-progress-count {
@@ -115,8 +115,8 @@
 }
 
 .onb-input:focus {
-  border-color: var(--accent, #0b57d0);
-  box-shadow: 0 0 0 3px rgba(11, 87, 208, 0.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 /* Choice buttons (profession + IVA) */
@@ -151,13 +151,13 @@
 }
 
 .onb-choice:hover {
-  border-color: var(--accent, #0b57d0);
+  border-color: var(--accent);
 }
 
 .onb-choice.is-selected {
-  border-color: var(--accent, #0b57d0);
-  background: rgba(11, 87, 208, 0.08);
-  color: var(--accent, #0b57d0);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
 }
 
 .onb-choice--big {
@@ -223,14 +223,14 @@
 }
 
 .onb-doc-card:hover:not(.is-disabled) {
-  border-color: var(--accent, #0b57d0);
+  border-color: var(--accent);
   transform: translateY(-1px);
 }
 
 .onb-doc-card.is-selected {
-  border-color: var(--accent, #0b57d0);
-  background: rgba(11, 87, 208, 0.08);
-  color: var(--accent, #0b57d0);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
 }
 
 .onb-doc-card.is-disabled {
@@ -289,14 +289,14 @@
 }
 
 .onb-btn--primary {
-  background: var(--accent, #0b57d0);
+  background: var(--accent);
   color: #fff;
-  box-shadow: 0 4px 16px rgba(11, 87, 208, 0.3);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .onb-btn--primary:hover:not(.is-disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(11, 87, 208, 0.35);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .onb-btn--primary.is-disabled {

@@ -49,7 +49,7 @@
     transition: background 0.15s;
   }
   .card-editor-tab.active {
-    background: var(--accent, #01696F);
+    background: var(--accent);
     color: #fff;
   }
   .card-editor-tabs-content {
@@ -67,7 +67,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: var(--accent, #01696F);
+  background: var(--accent);
   color: #fff;
   border: none;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
@@ -149,7 +149,7 @@
   justify-content: space-between;
   font-size: 0.85rem;
   font-weight: 700;
-  color: var(--accent, #01696F);
+  color: var(--accent);
   margin-bottom: 6px;
 }
 

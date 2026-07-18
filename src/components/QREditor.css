@@ -160,9 +160,9 @@ details.qr-fieldset[open] > summary {
 }
 
 .flyer-preview-fullscreen-btn:hover {
-  background: rgba(1, 105, 111, 0.08);
-  border-color: var(--accent, #01696f);
-  color: var(--accent, #01696f);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .qr-fieldset legend {
@@ -244,6 +244,7 @@ details.qr-fieldset[open] > summary {
 .qr-editor-preview h2 {
   margin: 0;
   font-size: 1rem;
+  color: var(--ink);
 }
 
 /* Flyer preview: confine the watermark to the preview frame only
@@ -259,8 +260,6 @@ details.qr-fieldset[open] > summary {
   z-index: 5;
   mix-blend-mode: multiply;
   user-select: none;
-}
-  color: var(--ink);
 }
 
 .qr-preview-svg {
@@ -321,9 +320,9 @@ details.qr-fieldset[open] > summary {
   overflow-y: auto;
   padding: 12px;
   background: var(--surface);
-  border: 1.5px solid var(--accent, #01696f);
+  border: 1.5px solid var(--accent);
   border-radius: var(--radius-md);
-  box-shadow: 0 2px 8px rgba(1, 105, 111, 0.08);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .flyer-editor-3col .flyer-editor-ai .panel-kicker {
@@ -335,7 +334,7 @@ details.qr-fieldset[open] > summary {
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--accent, #01696f);
+  color: var(--accent);
 }
 
 .flyer-editor-3col .flyer-editor-ai .panel-kicker button {
@@ -417,9 +416,9 @@ details.qr-fieldset[open] > summary {
 }
 
 .flyer-ai-chip:hover:not(:disabled) {
-  background: rgba(1, 105, 111, 0.06);
-  border-color: var(--accent, #01696f);
-  color: var(--accent, #01696f);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .flyer-ai-chip:disabled {
@@ -461,8 +460,8 @@ details.qr-fieldset[open] > summary {
 }
 
 .flyer-ai-quick-card:hover:not(:disabled) {
-  background: rgba(1, 105, 111, 0.06);
-  border-color: var(--accent, #01696f);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-color: var(--accent);
 }
 
 .flyer-ai-quick-card:disabled {

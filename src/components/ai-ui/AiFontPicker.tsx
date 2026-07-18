@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { ensureDocumentFonts } from '../../utils/fontLoader';
 
 export interface FontOption {
   value: string;
@@ -54,6 +55,12 @@ export function AiFontPicker({
   const normalized = normalizeFont(value);
   const isKnown = fontList.some((f) => normalizeFont(f.value) === normalized || f.value === value);
   const [showCustom, setShowCustom] = useState(!isKnown && allowCustom);
+
+  // Phase 13b (REQ-DS-005): le famiglie Google dei picker documento sono
+  // caricate lazy alla prima apertura del picker, non all'avvio dell'app.
+  useEffect(() => {
+    ensureDocumentFonts();
+  }, []);
 
   const selectValue = isKnown
     ? (fontList.find((f) => normalizeFont(f.value) === normalized || f.value === value)?.value ?? normalized)

@@ -47,8 +47,8 @@
 }
 
 .card-reset-btn:hover {
-  border-color: var(--accent, #01696F);
-  color: var(--accent, #01696F);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .card-template-banner {
@@ -71,7 +71,7 @@
   padding: 6px 14px;
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--accent, #01696F);
+  background: var(--accent);
   color: #fff;
   font-weight: 500;
   cursor: pointer;

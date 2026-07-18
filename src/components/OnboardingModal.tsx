@@ -119,7 +119,7 @@ function buildSteps(isAdmin: boolean) {
     {
       key: 'name',
       title: 'Benvenuto!',
-      subtitle: 'PrecisionQuote è la suite di branding per la tua attività. QR, bigliettini e logo, pronti per la stampa.',
+      subtitle: 'Quickbrand è la suite di branding per la tua attività. QR, bigliettini e logo, pronti per la stampa.',
     },
     {
       key: 'company',

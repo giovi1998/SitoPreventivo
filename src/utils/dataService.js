@@ -749,7 +749,9 @@ function randomHex(n) {
 }
 
 function generateUnlockCode() {
-  return `PQ-${randomHex(8)}-${randomHex(8)}-${randomHex(8)}`;
+  // Phase 13b: prefisso QB- per i nuovi codici. I codici PQ- esistenti
+  // restano validi (redeem confronta solo la stringa normalizzata).
+  return `QB-${randomHex(8)}-${randomHex(8)}-${randomHex(8)}`;
 }
 
 export default dataService;

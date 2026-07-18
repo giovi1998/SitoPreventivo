@@ -151,10 +151,18 @@ describe('dataService tier (local path)', () => {
 
   // ─── adminGenerateUnlockCode ─────────────────────────
   describe('adminGenerateUnlockCode', () => {
-    it('generates code matching PQ-XXXX-XXXX-XXXX format', async () => {
+    it('generates code matching QB-XXXX-XXXX-XXXX format', async () => {
       const result = await dataService.adminGenerateUnlockCode('starter');
       expect(result.success).toBe(true);
-      expect(result.code).toMatch(/^PQ-[0-9A-F]{8}-[0-9A-F]{8}-[0-9A-F]{8}$/);
+      expect(result.code).toMatch(/^QB-[0-9A-F]{8}-[0-9A-F]{8}-[0-9A-F]{8}$/);
+    });
+
+    it('legacy PQ- codes still redeem (back-compat after QB- switch)', async () => {
+      lsSet(UNLOCK_CODES_KEY, [
+        { code: 'PQ-AAAAAAA1-BBBBBBBB-CCCCCCCC', package: 'starter', usedBy: null, usedAt: null },
+      ]);
+      const result = await dataService.redeemUnlockCode(FREE_USER, 'PQ-AAAAAAA1-BBBBBBBB-CCCCCCCC');
+      expect(result.success).toBe(true);
     });
 
     it('persists the code in unlock_codes with createdBy=admin', async () => {

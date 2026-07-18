@@ -45,7 +45,7 @@
 
 .logo-editor-actions button:hover:not(:disabled) {
   background: var(--surface-2, rgba(0, 0, 0, 0.04));
-  border-color: var(--primary, #01696F);
+  border-color: var(--primary);
 }
 
 .logo-editor-actions button:disabled {
@@ -71,8 +71,8 @@
 }
 
 .logo-tab.active {
-  color: var(--primary, #01696F);
-  border-bottom-color: var(--primary, #01696F);
+  color: var(--primary);
+  border-bottom-color: var(--primary);
 }
 
 .logo-ai-disabled {
@@ -103,7 +103,7 @@
 }
 
 .logo-ai-card a {
-  color: var(--primary, #01696F);
+  color: var(--primary);
   text-decoration: underline;
 }
 
@@ -200,7 +200,7 @@
 
 .builder-template-btn:hover {
   background: var(--surface-2, rgba(0, 0, 0, 0.04));
-  border-color: var(--primary, #01696F);
+  border-color: var(--primary);
 }
 
 .builder-icon-search {
@@ -261,8 +261,8 @@
 }
 
 .builder-icon-btn.selected {
-  border-color: var(--primary, #01696F);
-  background: rgba(1, 105, 111, 0.08);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .builder-icon-name {
@@ -373,12 +373,12 @@
 }
 
 .builder-color-preset:hover {
-  border-color: var(--primary, #01696F);
+  border-color: var(--primary);
 }
 
 .builder-color-preset.selected {
-  border-color: var(--primary, #01696F);
-  background: rgba(1, 105, 111, 0.08);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .builder-color-swatch {
@@ -415,13 +415,13 @@
 }
 
 .builder-chip:hover {
-  border-color: var(--primary, #01696F);
+  border-color: var(--primary);
 }
 
 .builder-chip.active {
-  border-color: var(--primary, #01696F);
-  background: rgba(1, 105, 111, 0.1);
-  color: var(--primary, #01696F);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--primary);
   font-weight: 600;
 }
 
@@ -452,7 +452,7 @@
 }
 
 .builder-ai-bg-remove:hover {
-  border-color: var(--primary, #01696F);
+  border-color: var(--primary);
 }
 
 .builder-ai-bg-regen {
@@ -467,8 +467,8 @@
 }
 
 .builder-ai-bg-regen:hover:not(:disabled) {
-  border-color: var(--primary, #01696F);
-  background: rgba(1, 105, 111, 0.06);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .builder-ai-bg-regen:disabled,
@@ -533,7 +533,7 @@
 }
 
 .builder-nudge-btn:hover {
-  border-color: var(--primary, #01696F);
+  border-color: var(--primary);
   background: var(--surface-2, rgba(0, 0, 0, 0.04));
 }
 
