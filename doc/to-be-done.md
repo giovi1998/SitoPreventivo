@@ -5,8 +5,9 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 
 > **Cleanup 2026-07-18**: gli 8 spec marcati DONE qui sotto sono stati
 > **cancellati da `spec/`** dopo verifica (traccia in git history).
-> Spec attivi: `spec-design-ai-first-ux-redesign.md` (roadmap fasi
-> 12-14), `spec-design-flyer-refactor-preview-ai.md` (gap TB-007),
+> **Cleanup 2026-07-18 (sera)**: anche `spec-design-ai-first-ux-redesign.md`
+> (fasi 12-14) è stato cancellato dopo completamento — vedi riga spec #14.
+> Spec attivi: `spec-design-flyer-refactor-preview-ai.md` (gap TB-007),
 > `spec-api-saas-monetization.md` (NOT-STARTED, track futuro).
 
 ## Legenda stato
@@ -35,7 +36,7 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 | 11 | `spec-design-logo-text-auto-positioning.md` | **DONE** | `hasBgImage` + `textColorMode` + `textBackdrop` + `unionTextBox` |
 | 12 | `spec-tool-ai-card-flyer-tools.md` | **DONE** | `ToolAwareOrchestrator` wired end-to-end in `AIOrchestrator`, `CardAIOrchestrator`, `FlyerAIOrchestrator`; test tool path e fallback verdi. Gap residuo UI: callback `onToolStart/Complete` non passati da `useAICard` → assorbito in REQ-LOG-001 spec #14 |
 | 13 | `spec-api-saas-monetization.md` | **NOT-STARTED** | Zero Stripe/api-key in `api/` (verificato 2026-07-18). Track futuro separato, mantenuto in `spec/` |
-| 14 | `spec-design-ai-first-ux-redesign.md` | **IN PROGRESS** | Fase 12 (AI Observability) ✅: `useAILogs` + migrazione completa dei 6 hook AI, `AILogEntry` v2, `BaseOrchestrator.trackUsage` fix ESM, `IMAGE_TOKEN_COST`, `X-Request-Id` end-to-end, ghost rate limit fix logs/tokens/aistream. Fase 13 (ToastProvider context ✅; da completare: design tokens purge, Primary Action Bar, breakpoint, HomePage AIDA). Fase 14 (AIConsole shell ✅; da completare: migrazione editor al nuovo pattern, AI-first entry) |
+| 14 | `spec-design-ai-first-ux-redesign.md` | **DONE** | Fase 12 ✅ (useAILogs, 6 hook migrati, AILogEntry v2, trackUsage ESM, IMAGE_TOKEN_COST, X-Request-Id, ghost rate limit fix). Fase 13 ✅ (ToastProvider, token The Classic + purge teal/blu, ai-ui.css, ActionBar logo/QR, sidebar gruppi + pq_ui:v1, breakpoint canonici, font lazy, copy AI-first, HomePage AIDA + motion). Fase 14 ✅ (AIConsole rail in social/flyer/card/quote, logo tab AI-first, AIProviderBadge, suggestedPrompt doc vuoto, onboarding AI-first). Deviazioni documentate in AGENTS.md §13-14. Spec cancellato dopo verifica (185 file, 2177 test verdi). |
 
 ---
 

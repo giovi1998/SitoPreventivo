@@ -116,8 +116,14 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/hooks/useAILogo.ts` | Hook client-side per `useAILogo` (generate 3 concept + generateBackground + isProcessing + isGeneratingBg). |
 | `src/hooks/useAISocial.ts` | Hook per `useAISocial` (generate posts, posts state, logs). |
 | `src/hooks/useAIOnboarding.ts` | Hook per `useAIOnboarding` (suggest, isProcessing, suggestions). |
-| `src/components/SocialEditor.tsx` | **v2.2**: editor AI per generare 3 post social da card o flyer, usa `AILogPanel` per i log. |
-| `src/components/BrandNameGenerator.tsx` | **v2.1**: generatore nome brand UX namelix-like (3-step chat: descrizione → mood → keyword → 5 nomi). |
+| `src/components/SocialEditor.tsx` | **v2.2**: editor AI per generare 3 post social da card o flyer. **Phase 14**: rail `AIConsole` a destra, form config come children. |
+| `src/components/BrandNameGenerator.tsx` | **v2.1**: generatore nome brand UX namelix-like (3-step chat: descrizione → mood → keyword → 5 nomi). **Phase 14**: visibile di default in onboarding. |
+| `src/components/ai/AIConsole.tsx` | **Phase 14**: rail AI unificata (collapse in `pq_ui:v1`, `suggestedPrompt`+focus su doc vuoto, `hidePrompt`, quickActions, slot children, `AILogPanel` + `AIProviderBadge`). Bottom drawer su mobile (<768px). |
+| `src/components/ai/AIProviderBadge.tsx` | **Phase 14** (REQ-AI-006): badge provider unico "DeepSeek · Gemini". |
+| `src/components/ActionBar.tsx` | **Phase 13b** (REQ-UX-004/005): cluster azioni uniforme Salva/Esporta(menu)/Nuovo, fixed bottom-right desktop, sticky-bottom mobile. Usato da LogoEditor e QREditor. |
+| `src/components/ai-ui/ai-ui.css` | **Phase 13b** (REQ-UX-003): stili kit ai-ui (solo `.ai-generate-btn` primary extrabold, chip/quick card ghost). Importato dal barrel `ai-ui/index.ts`. |
+| `src/utils/uiPrefs.ts` | **Phase 13b/14**: `pq_ui:v1` (`sidebarCollapsed`, `aiConsoleExpanded` per editor). |
+| `src/utils/fontLoader.ts` | **Phase 13b** (REQ-DS-005): lazy load famiglie font picker documento (iniettate al primo `AiFontPicker`). Inter/Outfit/JetBrains Mono statici in `index.html`. |
 | `src/ai/cardMerge.ts` | Merge risposta AI → card (grid, style, text, photo-preserv) |
 | `vite.config.js` | Port 8000, SPA fallback for /app route. Dev proxy per `/api/ai/logo-config` + `/api/ai/logo-background` (STESSI path del client/prod, vedi gotcha sotto), `loadEnv()` esplicito per popolare `process.env` (Vite non lo fa di default fuori da `import.meta.env`). |
 | `vercel.json` | Build runs `db:migrate` before `build` |
@@ -184,12 +190,12 @@ Real URL-based multipage (no more `useState('view')`). State lives in `AppShell`
 Stato corrente delle fasi di sviluppo. Le spec implementate sono state
 cancellate dopo verifica completa. Traccia storica in git history.
 
-Spec attivi in `spec/`: `spec-design-ai-first-ux-redesign.md` (Fasi
-12-14, roadmap corrente: AI Observability → Design System/UX → AI
-Console/AI-first), `spec-design-flyer-refactor-preview-ai.md` (Phase 11,
+Spec attivi in `spec/`: `spec-design-flyer-refactor-preview-ai.md` (Phase 11,
 solo gap test TB-007), `spec-api-saas-monetization.md` (NOT-STARTED,
-track futuro). Gli spec implementati sono stati cancellati il
-2026-07-18 dopo verifica (traccia in git history + `doc/to-be-done.md`).
+track futuro). Gli spec implementati sono stati cancellati dopo verifica
+(traccia in git history + `doc/to-be-done.md`); anche
+`spec-design-ai-first-ux-redesign.md` (Fasi 12-14) è stato cancellato il
+2026-07-18 dopo completamento (deviazioni documentate sotto, §13-14).
 
 | Fase | Stato | Note |
 |------|-------|------|
@@ -206,8 +212,8 @@ track futuro). Gli spec implementati sono stati cancellati il
 | 10, Card Grid UX Alignment | ✅ done | alignH/alignV (9-pos), preset retro separato, e2e. |
 | 11, Flyer Refactor Preview/AI | ⚠️ parziale | Architettura 12/12 utils + 11/11 components + 5/5 CSS. Gap: test matrix 4/10, `ai/flyer/budgets.ts` in `utils/flyer/budgets.ts` (deviazione equivalente). Spec mantenuta. |
 | 12, AI Observability | ✅ done | `spec-design-ai-first-ux-redesign.md` §3.1: `useAILogs` condiviso, fix `trackUsage` (require→ESM), `IMAGE_TOKEN_COST`, `X-Request-Id` end-to-end (client→proxy→log server), log server JSON, rate limit ghost fix logs/tokens/aistream, persistenza `pq_ai_logs:v1`. Tutti i 6 hook AI migrati: `useAI`, `useAICard`, `useAIFlyer`, `useAILogo`, `useAISocial`, `useAIOnboarding`. |
-| 13, Design System & UX | ⚠️ in progress | `spec-design-ai-first-ux-redesign.md` §3.2: ToastProvider context fix (toast fantasma), varianti toast info/success/warning/error. Da completare: token "The Classic" globali, purge teal/blu, kit `ai-ui` CSS, Primary Action Bar, breakpoint 768/1024, HomePage AIDA. |
-| 14, AI Console & AI-first | ⚠️ in progress | `spec-design-ai-first-ux-redesign.md` §3.3: shell `AIConsole` (rail desktop + bottom sheet mobile) e badge provider. Da completare: migrazione 5 editor al nuovo pattern, AI-first entry, onboarding AI-first. QR resta manuale. |
+| 13, Design System & UX | ✅ done | Token "The Classic" + ghost token definiti in `GlobalStyles` `:root` (light+dark), purge teal/blu chrome (test grep `designTokens.test.ts`), tipografia Outfit/Inter/JetBrains Mono, font picker lazy (`fontLoader.ts` + `AiFontPicker`), kit `ai-ui/ai-ui.css` (solo `.ai-generate-btn` primary), ToastProvider context, sidebar gruppi Crea/Archivio/Sistema + collapsed in `pq_ui:v1` (`uiPrefs.ts`), breakpoint canonici `BP_SHELL=768`/`BP_WORKSPACE=1024` in `useMediaQuery.ts`, `AILogPanel` prop `theme`, fix orfano QREditor.css, copy AI-first (Login/Onboarding/HomePage), unlock code `QB-` (PQ- legacy validi), HomePage AIDA + bento 6 strumenti + motion reveal, `ActionBar` (logo+QR). Deviazioni: valori token esistenti non rimappati (solo aggiunte/alias); breakpoint storici CSS migrati progressivamente (costanti per codice nuovo); card/flyer/quote mantengono i loro cluster azioni (ActionBar applicato a logo+QR). |
+| 14, AI Console & AI-first | ✅ done | `AIConsole` rail (collapse persistito `pq_ui:v1` per `editorKind`, `suggestedPrompt`+focus su doc vuoto, `hidePrompt`, quickActions, `AIProviderBadge`). Migrati: social (rail + form children), flyer (col sx → rail dx, grid `"manual preview ai"`, `FlyerAiPanel bare`), card (col dx, `CardAIControls bare`, `showAi` rimosso), quote (ai-col dopo preview, sezioni condivise). Onboarding AI-first (BrandNameGenerator default, toggle "Preferisco scrivere io"). Deviazioni: **logo** mantiene tab Builder/AI top-level (chat 3-step + concept card non comprimibili in rail 320px) con tab default `ai` su logo vuoto; **QR** resta manuale (eccezione documentata); mobile card/flyer/quote mantengono bottom sheet/overlay esistenti. |
 
 ### ⚠️ Volantino rendering gotchas (leggi prima di toccare il rendering)
 
@@ -642,7 +648,7 @@ label `TELEFONO` e valore `35180008042` abbiano lo stesso attributo `y`
 
 ## Responsive Patterns
 
-- **`useMediaQuery(query)`**: hook React, ritorna `boolean`, listener su `change` event, cleanup su unmount, fallback SSR
+- **`useMediaQuery(query)`**: hook React, ritorna `boolean`, listener su `change` event, cleanup su unmount, fallback SSR. **Phase 13b**: breakpoint canonici esportati `BP_SHELL=768`/`BP_WORKSPACE=1024` + `MQ_SHELL`/`MQ_WORKSPACE` + `useIsMobileShell()`/`useIsMobileWorkspace()` — codice nuovo DEVE usare questi (breakpoint storici CSS migrati progressivamente)
 - **Conditional render, NOT CSS hide**: il 3-col desktop NON è nel DOM quando mobile (evita duplicati)
 - **Tab system** (`CardEditorTabs`): 3 tab (Anteprima, Modifica, AI) su mobile (<900px)
 - **FAB AI** (`CardAIFab`): bottone floating 56px, sempre visibile in mobile, badge con log count
@@ -776,13 +782,15 @@ Chiavi attuali:
 - `registeredUsers`, array utenti (dev only fallback)
 - `deepseekApiKey`, chiave DeepSeek (solo dev)
 - `authToken`, `userEmail`, `username`, `userRole`, `dataRegistrazione`, sessione
+- `pq_ai_logs:v1`, **Phase 12**: ring buffer AI log in **sessionStorage** (non localStorage), max 100 entry, detail ≤2KB, mai immagini base64
+- `pq_ui:v1`, **Phase 13b/14**: preferenze UI (`uiPrefs.ts`): `sidebarCollapsed`, `aiConsoleExpanded` per editor (card/flyer/logo/social/editor)
 
 ## Testing
 
 - Framework: Vitest + React Testing Library + jsdom
 - Run single test: `npx vitest run path/to/file.test.ts`
 - No test database needed, local tests use localStorage path
-- Coverage attuale: ~2034 test su 170 file. Target: 60%.
+- Coverage attuale: ~2177 test su 185 file. Target: 60%.
 
 ## Logging
 
