@@ -1,4 +1,4 @@
-# Architettura AI - PrecisionQuote
+# Architettura AI - Quickbrand
 
 ## Provider AI (Predisposizione Multi-Modello)
 

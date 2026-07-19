@@ -1,4 +1,4 @@
-# PrecisionQuote, Suite branding per piccole attività
+# Quickbrand, Suite branding per piccole attività
 
 App React/TypeScript + Vite per creare preventivi multi-opzione per servizi digitali. Layout PDF professionale con 4 opzioni, IVA, acconto/saldo, clausole e riepilogo comparativo. Moduli aggiuntivi: QR Code, Bigliettini da visita, **Logo Builder**, sistema di tier (free / unlocked) con watermark e codici sblocco, collection unificata multi-documento. Integrazione AI DeepSeek per modifiche rapide.
 

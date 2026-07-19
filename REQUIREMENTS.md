@@ -1,4 +1,4 @@
-# PrecisionQuote, Prerequisiti e Setup
+# Quickbrand, Prerequisiti e Setup
 
 ## Requisiti di Sistema
 

@@ -1,4 +1,4 @@
-# AGENTS.md, PrecisionQuote
+# AGENTS.md – Quickbrand
 
 ## Quick Commands
 

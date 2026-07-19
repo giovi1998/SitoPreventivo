@@ -185,6 +185,91 @@ Sprint 3 (opz):     TB-007 test flyer refactor (6 file)
 
 ---
 
+## Roadmap business / go-to-market (dal BP appendice luglio 2026)
+
+Item tecnici e commerciali emersi dall'analisi di mercato 2026-07
+(`doc/business-plan.md` §A-G). Non sono bug: sono la strada per i
+primi clienti paganti.
+
+### Feature prodotto (in ordine di priorità)
+
+#### TB-011 Stripe Checkout automatico 🔴 P0 business
+- **Perché**: vendita online senza email manuali; sblocca la gamba SaaS.
+- **Trigger BP**: 15+ transazioni/mese OPPURE retainer > €500/mese. La
+  spec va preparata ORA anche se l'attivazione è post-validazione.
+- **Scope**: tabella `payments`, `POST /api/checkout`,
+  `POST /api/stripe/webhook` (genera codice QB- automatico),
+  subscription Pro €9/mese. Costo Stripe 1.5% + €0.25 EU.
+- **Effort**: ~20h. Spec parziale in `spec-api-saas-monetization.md`.
+
+#### TB-012 Landing page generator interno 🔴 P0 business
+- **Perché**: gap più grosso vs Durable. Il pacchetto Apertura €349
+  include "sito 1 pagina" ma oggi è lavoro manuale 2-3h/cliente.
+- **Scope step 2 (BP §E)**: nuovo modulo app — da dati flyer → HTML
+  statico → export ZIP. Admin deploya per il cliente (Netlify/Vercel
+  free). 30 min/cliente invece di 2-3h.
+- **Step 3 (dopo 5+ siti/mese)**: publish 1-click su
+  `nome.quickbrand.it` via Vercel API (~80h, non ora).
+- **NON fare**: website builder self-service (step 4 BP) — trappola
+  che ci mette contro Durable/10Web.
+- **Effort step 2**: ~40h.
+
+#### TB-013 QR menu ristoranti 🟡 P1
+- **Perché**: verticale forte del target (bar/ristoranti in apertura).
+- **Scope**: tipo documento `qrMenu`: QR → menu PDF/landing. Riusa
+  QREditor + flyer engine per il layout menu.
+- **Effort**: ~15h.
+
+#### TB-014 Google Business Profile helper 🟡 P1
+- **Perché**: incluso nel pacchetto Presenza €690 ma oggi 100% manuale.
+- **Scope**: checklist guidata + export dati formattati (NAP,
+  categorie, descrizione AI da dati brand) pronti da copiare in GMB.
+- **Effort**: ~10h.
+
+#### TB-015 Multi-lingua EN/DE export 🟡 P1
+- **Perché**: turismo Sardegna = tedeschi/inglesi; i B&B pagano per
+  materiali bilingui.
+- **Scope**: traduzione AI (DeepSeek) dei campi testo card/flyer/social,
+  toggle lingua in export. Valutare anche UI inglese (post-validazione).
+- **Effort**: ~20h.
+
+### Marketing (non-codice, ma tracciato qui)
+
+#### TB-016 Meta Ads test €300 🟡 P1 (dopo prima consegna reale)
+- **Setup**: campagna Lead Generation (form nativo Meta), geo 25km
+  Cagliari, 25-55 anni, interessi piccola impresa/ristorazione.
+- **Budget**: €10/giorno × 30gg. Atteso: 15-40 lead, 1-3 clienti.
+- **Gate**: CPA < €25 e ≥2 mesi positivi prima di scalare a €20-30/gg.
+- **Creatività**: carosello prima/dopo fatto con Quickbrand stesso.
+- **Regole BP §D**: mai ads prima di 5 consegne reali; Q4 (nov-dic)
+  ridurre budget (+40% costi e-commerce); Q1-Q3 concentrare.
+
+#### TB-017 Landing vendita Apertura €349 🔴 P0 business
+- **Perché**: serve UNA pagina con UNA offerta per l'outreach diretto.
+- **Scope**: adattare HomePage (già AIDA da Phase 13b) o landing
+  dedicata: offerta Apertura, 3-5 esempi portfolio, form
+  contatto/WhatsApp, 3 recensioni.
+- **Effort**: ~4h (no codice nuovo, solo copy/struttura).
+
+#### TB-018 Portfolio 5 esempi settore 🔴 P0 business
+- **Perché**: senza portfolio niente credibilità (BP §G settimana 1-2).
+- **Scope**: ristorante, B&B, bar, negozio, studio professionale —
+  fatti con l'app stessa (logo+card+flyer per ciascuno).
+- **Effort**: ~8-10h con gli strumenti AI esistenti.
+
+### Esclusi deliberatamente (con motivazione)
+
+- **Marketplace template community**: niente domanda, complessità alta.
+- **Chatbot clienti**: scope creep, nessun cliente l'ha chiesto.
+- **App mobile nativa**: la webapp mobile è sufficiente.
+- **Website builder generico self-service**: guerra persa vs
+  Durable/10Web/Framer AI (vedi BP §B).
+- **Equity a collaboratori esterni**: l'app e il brand restano di
+  proprietà esclusiva; collaborazioni solo rev-share su clienti
+  portati o fee a progetto (BP §F).
+
+---
+
 ## Note su come migliorare la "harness della codebase"
 
 1. **Mancano fixture builders condivisi**. Ogni test e2e ricrea da zero

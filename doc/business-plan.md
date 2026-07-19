@@ -26,9 +26,9 @@ Il vantaggio non è la grafica migliore del mondo — è la velocità e il fatto
 
 ### AI come vantaggio competitivo
 
-L'AI è attiva in **3 moduli su 5** (preventivo, bigliettino, volantino) — il 60% del prodotto. Logo e QR sono AI-free per scelta tecnica. Il vantaggio non è "abbiamo l'AI" (ce l'hanno tutti), ma:
+L'AI è attiva in **5 moduli su 6** (preventivo, bigliettino, volantino, logo, social) — solo il QR resta manuale per scelta tecnica. Il vantaggio non è "abbiamo l'AI" (ce l'hanno tutti), ma:
 
-1. **AI contestualizzata per modulo**: la card AI conosce il grid 9-pos, la flyer AI rispetta density target e char budget per layout, la quote AI conosce i tool. Niente AI generica come Canva/Looka.
+1. **AI contestualizzata per modulo**: la card AI conosce il grid 9-pos, la flyer AI rispetta density target e char budget per layout, la quote AI conosce i tool, la logo AI genera 3 concept + background Gemini con prompt Nano-Banana, la social AI legge card/flyer e genera post coordinati. Niente AI generica come Canva/Looka.
 2. **Costo marginale sostenibile**: il piano Pro €9/mese include 1.000 prompt AI. Costo DeepSeek per 1.000 prompt ≈ €0.50-1 (flash), margine ~85-90%.
 3. **Costo/prompt trascurabile sui pacchetti una tantum**: ~€0.01-0.03/prompt (flash) rende l'AI inclusa anche in Starter €49 sostenibile.
 
@@ -38,7 +38,7 @@ L'AI è attiva in **3 moduli su 5** (preventivo, bigliettino, volantino) — il 
 - **VistaPrint IT** (varia): niente AI, solo stampa.
 - **Web agency** (€2.500-8.000): umana, lenta, niente AI.
 
-Nessun competitor ha AI contestualizzata in 3 moduli con pricing integrato. Manteniamo questo vantaggio finché DeepSeek V4 resta competitivo sui costi (vedi sezione costi AI per proiezioni).
+Nessun competitor ha AI contestualizzata in 5 moduli con pricing integrato. Manteniamo questo vantaggio finché DeepSeek V4 resta competitivo sui costi (vedi sezione costi AI per proiezioni).
 
 ### Costi AI (DeepSeek V4)
 
@@ -96,9 +96,9 @@ L'offerta è strutturata in due modalità complementari:
 
 | Piano | Tipo | Contenuto | Prezzo | Valore di mercato |
 |---|---|---|---:|---:|
-| **Free** | per sempre | 3 documenti, watermark, 0 AI/mese | **€0** | — |
+| **Free** | per sempre | 10 documenti, watermark, 0 AI/mese | **€0** | — |
 | **Pro** | /mese | Documenti illimitati, no watermark, 1.000 prompt AI/mese, extra €0.01/prompt | **€9/mese** | Costo AI coperto + watermark rimosso |
-| **Starter** | una tantum | Documenti illimitati, no watermark, 300 DPI export (senza AI) | **€49** una tantum | €200-400 (1 anno Canva Pro) |
+| **Starter** | una tantum | Documenti illimitati, no watermark, 300 DPI export (senza AI) | **€69** una tantum (o €49/anno) | €200-400 (1 anno Canva Pro) |
 | **Apertura** | una tantum | Starter + 250 volantini stampati + landing/sito 1 pagina, consegna 3 giorni | **€349** una tantum | €1.200-1.800 |
 | **Presenza** | una tantum | Apertura + sito 3-5 pagine, Google My Business, 3 grafiche social, consegna 3-5 giorni | **€690** una tantum | €3.500-5.000 |
 | **Manutenzione** | /mese | Aggiornamenti sito, 1-2 grafiche, hosting gestito | **€49/mese** | €80-150/mese (agenzia) |
@@ -125,7 +125,7 @@ Il piano **Pro a €9/mese** include 1.000 prompt AI con margine enorme (costo D
 
 > **Confronto prezzi onesto:** un'agenzia a Cagliari chiede €2.500-8.000 solo per il sito, con tempi di 2-4 settimane. Il pacchetto Presenza a €690 include sito + Google My Business + 3 grafiche + stampa = -80% rispetto al mercato. Il prezzo è basso perché gran parte del lavoro è automatizzato (template + AI), non artigianale. **Noi facciamo margine sul volume, non sul singolo progetto.**
 
-> **Tier system (Phase 5):** il piano **Pro** e i pacchetti una tantum (Starter, Apertura, Presenza, Custom) mappano 1:1 sulle tipologie di `unlock_codes` nel database. Il piano **Free** (gratuito) consente fino a 3 documenti salvati con watermark visibile su export PDF, PNG e nelle preview live. L'admin può sbloccare direttamente un utente dalla dashboard (vedi `POST /admin/unlock-user` in `api/index.ts`) o generare codici dalla tab "Codici sblocco". Il cliente riscatta da Impostazioni → "Il mio account".
+> **Tier system (Phase 5):** il piano **Pro** e i pacchetti una tantum (Starter, Apertura, Presenza, Custom) mappano 1:1 sulle tipologie di `unlock_codes` nel database. Il piano **Free** (gratuito) consente fino a 10 documenti salvati con watermark visibile su export PDF, PNG e nelle preview live. L'admin può sbloccare direttamente un utente dalla dashboard (vedi `POST /admin/unlock-user` in `api/index.ts`) o generare codici dalla tab "Codici sblocco". Il cliente riscatta da Impostazioni → "Il mio account".
 
 ---
 
@@ -260,7 +260,7 @@ La spec tecnica Phase 5 del progetto implementa esattamente questo modello comme
 
 | Offerta commerciale | Implementazione tecnica (`db/schema.ts` + `api/index.ts`) |
 |---|---|
-| **Free** (default) | `user_settings.tier = 'free'`, `documentCount` parte da 0, limite 3 |
+| **Free** (default) | `user_settings.tier = 'free'`, `documentCount` parte da 0, limite 10 (`FREE_DOCUMENT_LIMIT`) |
 | **Starter** €49 | `unlock_codes.package = 'starter'` → `tier = 'unlocked'`, no watermark, 300 DPI |
 | **Apertura** €349 | `unlock_codes.package = 'apertura'` + stampa inclusa |
 | **Presenza** €690 | `unlock_codes.package = 'presenza'` + Google My Business + social |
@@ -269,14 +269,14 @@ La spec tecnica Phase 5 del progetto implementa esattamente questo modello comme
 
 **Meccanismi tecnici chiave:**
 
-- **Generazione codici:** admin crea codici formato `PQ-<8hex>-<8hex>-<8hex>` dalla Dashboard Admin → tab "Codici sblocco" (`POST /api/admin/generate-unlock-code`)
+- **Generazione codici:** admin crea codici formato `QB-<8hex>-<8hex>-<8hex>` dalla Dashboard Admin → tab "Codici sblocco" (`POST /api/admin/generate-unlock-code`). Codici legacy `PQ-` restano validi in redeem.
 - **Redeem:** utente inserisce codice in Impostazioni → "Il mio account" (`POST /api/users/redeem-code`). Race-condition safe via `WHERE used_by IS NULL` atomico
 - **Watermark anti-bypass:** applicato in 3 punti:
   1. Export PDF (pdfmake background function) — invisibile da rimuovere post-generation
   2. Export PNG (Canvas 2D, post-drawImage)
   3. Preview live (overlay SVG diagonale con `pointer-events: none`) — copre anche gli screenshot
 - **DPI gate:** PDF 300→150 DPI per free; PNG 300→72 DPI per free; lato PNG clampato a 1200px free vs 4096px unlocked
-- **Document limit enforcement:** `useDocumentSave` hook wrappa `dataService.saveDocument` con `checkDocumentLimit()`; TierLimitModal appare automaticamente al 4° tentativo
+- **Document limit enforcement:** `useDocumentSave` hook wrappa `dataService.saveDocument` con `checkDocumentLimit()`; TierLimitModal appare automaticamente all'11° tentativo
 - **Admin short-circuit:** `admin@gmail.com` ha tier `unlocked` implicito senza row in `user_settings` (FK constraint) — coerente con tutti gli altri admin short-circuit del progetto
 - **Security:**
   - Rate limit redeem: 5 tentativi / 15min per IP
@@ -305,7 +305,7 @@ Dopo il periodo di validazione iniziale (60 giorni, 2 clienti paganti, vedi sopr
 ### Q1 post-validazione (3-6 mesi)
 
 - **Stripe Checkout automatico**: trigger quando 15+ transazioni/mese O retainer > €500/mese. Setup stimato 20 ore (skill `vercel-serverless-monolith` disponibile). Tabella `payments` + endpoint `/api/checkout` + `/api/stripe/webhook`. Costo Stripe 1.5% + €0.25 EU.
-- **AI Logo v2**: abilitare tab AI in `LogoEditor.tsx` con `REPLICATE_API_TOKEN` (Recraft-V3). Setup ~30 ore (specifica già scritta). Pricing: incluso in Pro, €0.05/generazione extra (Recraft è più caro di DeepSeek).
+- **AI Logo v2**: ~~abilitare tab AI in `LogoEditor.tsx` con `REPLICATE_API_TOKEN` (Recraft-V3).~~ ✅ **GIÀ FATTO** (v2.1/v2.2, luglio 2026): Logo AI attivo con DeepSeek (3 concept) + Gemini Nano Banana (background). Replicate non più necessario.
 - **Multi-provider AI**: aggiungere OpenAI/Anthropic in `providerRegistry` come fallback. DeepSeek resta default per costo. Setup ~10 ore.
 
 ### Q2-Q3 post-validazione (6-12 mesi)
@@ -402,7 +402,7 @@ Risposta breve: **NO, mai.**
    - NON ha row in `user_settings` (FK constraint a `users.email` che non lo contiene) — coerente con tutti gli altri admin short-circuit
    - Preview live: nessun watermark overlay (perché `tier = 'unlocked'`)
    - Export PDF/PNG: nessun watermark pdfmake/canvas (perché `tier = 'unlocked'`)
-   - Documenti illimitati, nessun limite 3
+   - Documenti illimitati, nessun limite 10
 
 2. **Utente con codice riscattato** (chi paga):
    - Dopo `POST /users/redeem-code` con codice valido → `tier = 'unlocked'` salvato in `user_settings.tier`
@@ -411,7 +411,7 @@ Risposta breve: **NO, mai.**
 
 3. **Free user** (senza account, o con account senza redeem):
    - `tier = 'free'` (default in `user_settings.tier`)
-   - `documentCount` parte da 0, limite 3
+   - `documentCount` parte da 0, limite 10
    - Watermark overlay su preview live (DOM SVG, anti-screenshot)
    - Watermark pdfmake in export PDF (background + footer)
    - Watermark canvas in export PNG (post-drawImage)
@@ -431,7 +431,7 @@ Per confermare che admin/paid non hanno watermark:
 # → Preview: nessun watermark
 # → Export: nessun watermark
 
-# 3. Test codice: crea nuovo account free, salva 3 doc, prova 4°
+# 3. Test codice: crea nuovo account free, salva 10 doc, prova l'11°
 # → TierLimitModal appare automaticamente (free limit reached)
 # → Inserisci TEST-UNLOCK
 # → Modal chiude, tier unlocked, salvataggio riesce
@@ -444,3 +444,194 @@ Per confermare che admin/paid non hanno watermark:
 - `src/components/PreviewWatermark.tsx` riga 22: `if (tier === 'unlocked') return null;` (no overlay)
 - `api/index.ts` riga 644: `if (email === ADMIN_EMAIL) { return unlocked, documentLimit: null };`
 - `src/components/AppShell.tsx` riga 119: `if (user.email === 'admin@gmail.com') { setTier('unlocked'); }`
+
+---
+---
+
+# Appendice luglio 2026: analisi mercato, marketing e strategia
+
+Aggiornamento del BP con dati di mercato verificati (luglio 2026), costi Meta Ads, strategia sito web, modello servizio fatto-per-te e gestione collaborazioni.
+
+---
+
+## A. Analisi TAM / SAM / SOM
+
+Fonti dati: Movimprese/Unioncamere (~330k nuove iscrizioni/anno Italia, ~8-9k Sardegna, imprese attive Italia ~4.4M, Sardegna ~140k), WordStream, pricing competitor live.
+
+| Livello | Definizione | Dimensione | Valore/anno |
+|---|---|---|---|
+| **TAM** (Total Addressable Market) | Piccole imprese italiane che comprano branding/web/print. 4.4M imprese, spesa media €400-1.000 ogni 2-3 anni | ~1.5M acquisti/anno | **~€800M-1.2B** |
+| **SAM** (Serviceable Available Market) | Occasioni *urgenti* nella fascia prezzo €49-700: nuove aperture rilevanti (~130k/anno su 330k totali, ~40% servizi/commercio/turismo) + rinnovi stagionali turismo (~200k strutture ricettive × 15%/anno = 30k) + eventi/campagne (~40k) | **~200k occasioni/anno** | **~€60M** (a €300 medi) |
+| **SOM** (Serviceable Obtainable Market, 3 anni) | Quota ottenibile da founder solo + AI: anno 1 Cagliari (30-50 clienti), anno 2 Sardegna + primi online (100-150), anno 3 online Italia (250-400) | 400 clienti anno 3 | **€120-200k ricavi anno 3** |
+
+**Lettura:** il SOM anno 3 è ~0.3% del SAM — ambizioso ma non fantasioso. Il vincolo non è il mercato (c'è) ma la capacità di vendita/delivery: a 400 clienti/anno servono ~1.600 ore di delivery → a quel punto o si alzano i prezzi o si automatizza (ed è esattamente quando il SaaS diventa la gamba principale).
+
+**Nota di realismo:** lo scenario "mese tipo" (€2.819 netti) di questo BP è il mese 6-8 nella migliore ipotesi, non il mese 1. I primi 90 giorni realisticamente fatturano €0-700. Conversione cold outreach: 2-4% su contatti caldi, 0.5-1% su email fredde (il 7% ipotizzato nel piano di validazione è ottimistico).
+
+---
+
+## B. Competitor aggiornati (luglio 2026, prezzi verificati live)
+
+| Player | Offerta | Prezzo | Minaccia | Note |
+|---|---|---|---|---|
+| **Durable** | Sito AI in 30s + logo + CRM + blog agent | Free / $25/m Launch / $49/m Grow | 🔴 Alta | 3M+ business. Ma: no stampa, no italiano, self-service |
+| **Canva Pro** | Magic Studio AI generico | €12/mese | 🔴 Alta | Ubiquo, ma self-service: il nostro cliente non vuole fare da sé |
+| **10Web / Hostinger AI** | Siti WordPress AI | €3-30/mese | 🟡 Media | Prezzo aggressivo su hosting |
+| **Looka** | Logo AI + brand kit | $20-65 una tantum / $96-129/anno | 🟡 Media | Solo logo, niente sito/stampa |
+| **Brandmark** | Logo AI one-time | $25-175 una tantum | 🟢 Bassa | Pay once, forever |
+| **Tailor Brands** | LLC + branding (US) | $199-249/anno | 🟢 Bassa | US-centric, irrilevante in Italia |
+| **VistaPrint** | Stampa + design base | €15-50 | 🟡 Media | Solo stampa |
+| **Agenzie locali** | Sito + brand | €1.200-8.000 | 🟢 Bassa sul prezzo, 🔴 alta sulla fiducia | 2-4 settimane di consegna |
+
+**Lo spazio resta intatto:** nessun operatore in Italia fa *esecuzione completa* (design AI + stampa + sito) in 72h a prezzo fisso sotto €700. Durable è il più vicino concettualmente ma è self-service, in inglese, senza stampa e senza umano.
+
+**Sul rischio "amici che fanno la stessa app":** un SaaS self-service generico (grafica+siti con AI) nel 2026 compete con Durable/10Web/Mixo/Wix ADI/Framer AI — player con $20M+ di funding e team da 50+ persone. Senza funding è una guerra persa. Le uniche vie per un competitor nuovo: (1) verticale stretta (solo wedding, solo palestre, solo dentisti — l'AI contestualizzata per UN settore batte quella generica), (2) service business come questo BP. Vedi sezione F per come gestire la collaborazione.
+
+---
+
+## C. Servizio fatto-per-te (done-for-you): il modello operativo
+
+Il servizio fatto-per-te è la gamba di ricavo principale nei primi 12 mesi. L'app Quickbrand è lo *strumento interno* che permette di consegnare in 3 giorni ciò che un'agenzia consegna in 3 settimane. L'app è il vantaggio di costo, non il prodotto venduto.
+
+### Il prodotto venduto: UN solo eroe
+
+**"Stai aprendo? In 3 giorni hai biglietti, volantini stampati, logo e sito. €349."**
+
+Un'offerta sola, un prezzo solo, una pagina sola. Starter/Presenza/Manutenzione esistono ma si propongono solo dopo, in upsell. Ogni opzione extra in fase di vendita dimezza la conversione.
+
+### Workflow delivery (pacchetto Apertura, target ≤5 ore)
+
+| Step | Tempo | Strumento |
+|---|---|---|
+| 1. Brief (form online o call 15 min) | 30 min | Form dedicato |
+| 2. Logo: 3 concept AI → scelta cliente | 45 min | LogoEditor AI (DeepSeek+Gemini) |
+| 3. Card + flyer: generazione AI → selezione | 60 min | CardEditor + FlyerEditor AI |
+| 4. Raffinatezza + export print-ready | 45 min | Export 300 DPI |
+| 5. Landing 1 pagina (da dati flyer) | 60-90 min | Boilerplate/template |
+| 6. Ordine stampa + consegna file | 30 min | Pixartprinting/Stampaprint |
+| **Totale** | **~4,5-5h** | |
+
+A €349 su 4,5h = **€77/ora lordi**. Il rischio unico: revisioni infinite. Regola scritta ovunque: **1 round di revisione incluso, poi €25/round**.
+
+### Script vendita (contatto diretto nuove aperture)
+
+> "Ciao, ho visto che aprite tra poco [da lista CCIAA / insegna in allestimento]. Io faccio il pacchetto apertura: biglietti da visita, 250 volantini stampati, logo e sito — pronto in 3 giorni, €349 tutto incluso. Ti mando due esempi di lavori fatti per [settore]? Se ti piacciono partiamo questa settimana."
+
+Tre elementi: (1) dimostra di sapere che stanno aprendo (personalizzato, non spam), (2) prezzo detto subito (filtra i non-target), (3) prova (portfolio settore). Se rispondono "quanto costa?" hai già perso: il prezzo va detto PRIMA che lo chiedano.
+
+### Upsell naturale (dopo consegna)
+
+- Mese 1: "Ti serve anche Google Business Profile + 3 grafiche social? €341 e hai il pacchetto Presenza completo."
+- Mese 2: "Aggiornamenti sito + 1 grafica/mese, €59/mese" (manutenzione — venduta solo a chi hai già servito, mai a freddo: margine €25-35/ora ma cash flow ricorrente).
+- Referral meccanico: ogni pacchetto include 50 biglietti extra + "porta un amico, -20% per entrambi". A Cagliari il passaparola batte qualsiasi ads.
+
+---
+
+## D. Meta Ads (Instagram/Facebook): costi reali di una campagna fatta bene
+
+Benchmark (WordStream, giugno 2026, dati US; l'Italia è tipicamente -30/50% su CPC/CPM):
+
+| Metrica | Media US (tutti i settori) | Servizi consumer US | **Stima realistica Italia locale** |
+|---|---|---|---|
+| CPC (costo per click) | $1.72 | $3.08 | **€0.40-1.00** |
+| CTR | 0.90% | 0.62% | 0.8-1.5% |
+| CPA (costo per lead/azione) | $18.68 | $31.11 | **€8-20** |
+| CPM (costo per 1000 impression) | ~$10-15 | ~$15-20 | **€4-9** |
+
+### Budget campagna test (fase validazione, 1 mese)
+
+| Voce | Costo |
+|---|---|
+| Budget ads (€10/giorno × 30 gg) | €300 |
+| Creatività (3-5 varianti, fatte in casa con Quickbrand stesso) | €0 |
+| Landing page (la tua, già esistente) | €0 |
+| Pixel Meta + setup account | 2h tempo |
+| **Totale mese 1** | **€300 + 4-6h** |
+
+**Risultato atteso mese 1:** 30-60k impression geo-target Cagliari, 300-750 click, 15-40 lead, 1-3 clienti paganti. Con 2 clienti Apertura (€698) la campagna si ripaga 2.3×. Sotto 1 cliente: spegni e torna all'outreach diretto (che resta il canale primario).
+
+### Struttura campagna consigliata
+
+1. **Obiettivo: Lead Generation** (form nativo Meta, non conversioni su sito) — i lead form Meta costano 30-50% in meno e per servizi locali convertono meglio. Campi: nome, telefono, "quando apri?"
+2. **Targeting:** raggio 25km Cagliari, 25-55 anni, interessi "piccola impresa/imprenditoria/ristorazione". Niente lookalike finché non hai 50+ clienti.
+3. **Creatività:** carosello prima/dopo (branding brutto → branding Quickbrand), testo "Apri tra poco? Tutto pronto in 3 giorni, €349". La creatività conta più del targeting nel 2026 (Advantage+ gestisce già il resto).
+4. **Stagionalità:** budget concentrato feb-mag (aperture + pre-stagione turistica) e set-ott. Q4 (nov-dic) costa +40% per l'e-commerce — ridurre.
+
+### Quando ha senso spendere di più
+
+- Scala a €20-30/giorno solo se CPA < €25 e almeno 2 mesi consecutivi in positivo.
+- Sopra €1.000/mese di budget valuta un media buyer freelance (€300-500/mese di fee) — sotto quella cifra gestisci da solo, il margine non copre il professionista.
+- **Regola:** non spendere in ads prima di avere 5 consegne reali fatte bene. Le ads amplificano ciò che esiste; se il delivery è fragile, comprano solo insoddisfazione più in fretta.
+
+---
+
+## E. Sito web: design e automazione
+
+### Cosa serve al business (non al cliente)
+
+Il sito Quickbrand stesso è oggi l'app. Per vendere il servizio serve una **landing pubblica** separata (o la HomePage esistente adattata): 1 offerta (Apertura €349), 3-5 esempi portfolio, form contatto/WhatsApp, 3 recensioni. Costa 0€ se fatta in casa (la HomePage AIDA di Phase 13b è già l'80% del lavoro). Un designer freelance per una landing custom costerebbe €300-800 — spreco in fase di validazione.
+
+### Gap prodotto: il cliente vuole il sito *pubblicato*, non i file
+
+Questo è il gap più grosso vs Durable: loro pubblicano siti, noi generiamo documenti. Nel pacchetto Apertura oggi "sito 1 pagina" è lavoro manuale (2-3h). Soluzioni in ordine di effort:
+
+| Approccio | Come | Effort | Costo ricorrente |
+|---|---|---|---|
+| **1. Boilerplate manuale** (ora) | Template HTML statico, compili a mano, deploy Netlify/Vercel free | 0h dev, 2-3h/cliente | €0 |
+| **2. Landing generator interno** | Nuovo modulo app: da dati flyer → HTML statico → export ZIP. Tu deployi per il cliente | ~40h dev, 30 min/cliente | €0 |
+| **3. Publish 1-click** | Modulo + API Vercel: deploy automatico su `nome.quickbrand.it` o dominio cliente | ~80h dev, 5 min/cliente | €0-20/anno per dominio |
+| **4. Builder self-service** | Il cliente edita la sua landing nell'app | 200h+ dev | — fuori scope anno 1 |
+
+**Raccomandazione:** step 2 subito (Q3 2026), step 3 quando hai 5+ siti/mese. Lo step 4 è la trappola: diventare un website builder generico = competere con Durable.
+
+### Funzionalità utili da integrare (priorità)
+
+| # | Feature | Perché | Effort |
+|---|---|---|---|
+| 1 | Stripe Checkout | Vendita online senza email manuali (spec esistente) | ~20h |
+| 2 | Landing generator (step 2 sopra) | Chiude il gap vs Durable nel pacchetto Apertura | ~40h |
+| 3 | QR menu ristoranti | Verticale forte del target (bar/ristoranti): QR → menu PDF/landing | ~15h |
+| 4 | Google Business Profile helper | Checklist/export dati GMB (è nel pacchetto Presenza ma oggi manuale) | ~10h |
+| 5 | Multi-lingua EN/DE export | Turismo Sardegna = tedeschi/inglesi, i B&B pagano per questo | ~20h |
+| 6 | Fatturazione elettronica | Solo dopo €30k/anno fatturato | post |
+| 7 | White label per agenzie | Solo quando 3+ agenzie chiedono | post |
+
+**NON fare:** marketplace template, chatbot clienti, app mobile, website builder generico. Distrazioni che consumano il vantaggio di velocità.
+
+---
+
+## F. Collaborazioni senza cedere quote dell'azienda
+
+Scenario: una persona propone di "fare insieme" un progetto simile, ma l'asset di valore (l'app, il brand, i clienti) deve restare di una sola proprietà. Strutture possibili senza equity:
+
+| Modello | Come funziona | Quando usarlo | Rischio |
+|---|---|---|---|
+| **Revenue share su progetto** | X% (10-25%) sui ricavi dei clienti che la persona porta, per 12-24 mesi | Collaboratore commerciale | Basso: niente clienti = niente costo |
+| **Fee fissa a progetto** | €Y fisso per ogni pacchetto venduto/consegnato | Delivery partner | Basso |
+| **Licenza d'uso** | La persona usa l'app per i SUOI clienti, paga fee mensile o per progetto | Chi vuole fare il suo business parallelo | Medio: serve contratto chiaro su IP |
+| **Partnership su verticale nuovo** | Collaboratore sviluppa un settore (es. wedding) con brand condiviso, rev share 70/30 | Espansione senza tempo proprio | Medio-alto: definire uscita |
+| **Semplice fornitura** | Paghi ore di lavoro a tariffa, niente percentuali | Competenze tecniche spot | Nullo |
+
+**Regole di protezione (valide sempre):**
+1. **IP dell'app: mai in discussione.** Il codice resta di chi l'ha scritto. Qualsiasi collaborazione è sui *ricavi*, non sull'*asset*. Contratto scritto (anche semplice, ma scritto) che dice: l'app, il brand Quickbrand e il codice restano di proprietà esclusiva; la collaborazione copre solo [definire].
+2. **Cliente di chi è di chi.** Se il collaboratore porta il cliente, rev share su quel cliente per X mesi, poi basta. I clienti acquisiti dall'azienda restano dell'azienda.
+3. **Niente esclusiva reciproca lunga.** Massimo 6-12 mesi, rinnovabile.
+4. **Campanelli d'allarme su persona "ambigua":** chiede accesso admin al codice/server "per imparare"; vuole quote "perché l'idea era mia" (le idee non valgono niente, vale l'esecuzione — e l'esecuzione qui è 2.100+ test e mesi di lavoro); propone di registrare dominio/partita IVA "insieme"; parla di percentuali prima di aver portato un solo cliente.
+5. **Test pratico:** proponi il modello 1 (rev share su clienti portati). Chi porta valore reale accetta: è la struttura più win-win. Chi punta all'asset rifiuta — e hai la risposta che cercavi.
+
+**Alternativa se la persona ha competenze complementari forti (es. vendita):** valuta un "founder commerciale" con vesting su *nuova entità* separata (non sull'app): nuova SRL dove l'app entra in licenza, quote 70/30 o 60/40 con vesting 4 anni. Ma solo dopo 3-6 mesi di collaborazione provata su progetti reali, mai a scatola chiusa.
+
+---
+
+## G. Piano aggiornato: prossimi 90 giorni
+
+| Settimana | Azione | Obiettivo |
+|---|---|---|
+| 1-2 | Portfolio: 5 esempi settore (ristorante, B&B, bar, negozio, studio) fatti con l'app | Credibilità |
+| 2-3 | Landing vendita Apertura €349 (HomePage adattata) + form contatto | Conversione |
+| 3-6 | 30 contatti diretti nuove aperture (CCIAA + giro fisico) | 1-2 clienti paganti |
+| 4 | Prima consegna Apertura, cronometrata | Validare ≤5h delivery |
+| 6-8 | Meta Ads test €300 (solo se ≥1 consegna fatta) | CPA < €25 |
+| 8-12 | 3-5 consegne totali + primo upsell manutenzione | €1.000-1.500 ricavi |
+
+Gate di validazione invariato: **2 clienti paganti su 30 contatti entro 60 giorni**. Se non accade, il problema è messaggio/target, non il prodotto.

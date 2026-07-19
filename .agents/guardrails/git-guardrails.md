@@ -1,9 +1,9 @@
 ---
 name: git-guardrails
-description: Git safety rules for PrecisionQuote. Blocks destructive operations to prevent accidental data loss.
+description: Git safety rules for Quickbrand. Blocks destructive operations to prevent accidental data loss.
 ---
 
-# Git Guardrails — PrecisionQuote
+# Git Guardrails — Quickbrand
 
 ## Blocked Commands
 
