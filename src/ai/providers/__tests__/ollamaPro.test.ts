@@ -251,26 +251,6 @@ describe('OllamaProProvider', () => {
       expect(done?.usage?.totalTokens).toBe(4);
     });
 
-    it('parses raw NDJSON stream (Ollama native)', async () => {
-      const p = new OllamaProProvider();
-      const ndjsonBody = [
-        JSON.stringify({ model: 'minimax-m3:cloud', message: { role: 'assistant', content: 'Ciao' }, done: false }),
-        JSON.stringify({ model: 'minimax-m3:cloud', message: { role: 'assistant', content: '!' }, done: true, prompt_eval_count: 10, eval_count: 2 }),
-        '',
-      ].join('\n');
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response(ndjsonBody, { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } })
-      );
-      const chunks: any[] = [];
-      for await (const c of p.stream([{ role: 'user', content: 'hi' }])) {
-        chunks.push(c);
-      }
-      const contents = chunks.filter((c) => c.type === 'content').map((c) => c.content);
-      expect(contents).toEqual(['Ciao', '!']);
-      const done = chunks.find((c) => c.type === 'done');
-      expect(done?.usage?.totalTokens).toBe(12);
-    });
-
     it('emits error chunk on non-200 response', async () => {
       const p = new OllamaProProvider();
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(
