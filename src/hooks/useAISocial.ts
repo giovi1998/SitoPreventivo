@@ -7,6 +7,9 @@ import {
 import type { SocialSource, SocialTone } from '../ai/prompts/socialSystem';
 import { useAILogs } from './useAILogs';
 import { newRequestId } from '../utils/ai/requestId';
+import dataService from '../utils/dataService';
+import { resolveProviderId } from '../utils/resolveProviderId';
+import { calculateCostUsd } from '../ai/providerPricing';
 
 export interface UseAISocialReturn {
   generate: (
@@ -18,11 +21,14 @@ export interface UseAISocialReturn {
   logs: ReturnType<typeof useAILogs>['logs'];
   posts: SocialPost[];
   isProcessing: boolean;
+  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
+  lastCostUsd: number;
 }
 
 export function useAISocial(userEmail?: string): UseAISocialReturn {
   const orchestratorRef = useRef<SocialAIOrchestrator | null>(null);
   const [posts, setPosts] = useState<SocialPost[]>([]);
+  const [lastCostUsd, setLastCostUsd] = useState(0);
   const { logs, isProcessing, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAISocial');
 
   const getOrchestrator = (): SocialAIOrchestrator => {
@@ -44,6 +50,7 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
 
       try {
         const result = await getOrchestrator().generatePosts(source, tone, {
+          modelId: resolveProviderId(),
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -64,6 +71,12 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
           : undefined;
 
         finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
+
+        if (userEmail && userEmail !== 'admin@gmail.com' && result.response?.usage) {
+          const cost = calculateCostUsd(resolveProviderId(), result.response.usage);
+          setLastCostUsd(cost);
+          dataService.trackTokens(userEmail, result.response.usage.totalTokens, cost).catch(() => {});
+        }
 
         if (result.applied) {
           setPosts(result.posts);
@@ -88,5 +101,7 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
     clear();
   }, [clear]);
 
-  return { generate, reset, logs, posts, isProcessing };
+  const availableModels = getOrchestrator().getProviderList();
+
+  return { generate, reset, logs, posts, isProcessing, availableModels, lastCostUsd };
 }

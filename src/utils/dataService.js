@@ -477,17 +477,25 @@ const dataService = {
   },
 
   // ─── TRACK AI TOKENS ────────────────────────────
-  async trackTokens(email, tokens) {
+  async trackTokens(email, tokens, costUsd) {
     if (IS_LOCAL) {
       const users = lsGet('registeredUsers') || [];
       const idx = users.findIndex(u => u.email === email);
       if (idx >= 0) {
         users[idx].tokensUsed = (users[idx].tokensUsed || 0) + tokens;
+        // TB-023: traccia costo USD (opzionale, backward compatible)
+        if (typeof costUsd === 'number' && costUsd > 0) {
+          users[idx].tokensCostUsd = (users[idx].tokensCostUsd || 0) + costUsd;
+        }
         lsSet('registeredUsers', users);
       }
       return;
     }
-    api('POST', '/users/tokens', { email, tokens }).catch(() => {});
+    const payload = { email, tokens };
+    if (typeof costUsd === 'number' && costUsd > 0) {
+      payload.costUsd = costUsd;
+    }
+    api('POST', '/users/tokens', payload).catch(() => {});
   },
 
   // ─── GET USER PROFILE (with token info) ─────────

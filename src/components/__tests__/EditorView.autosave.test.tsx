@@ -73,7 +73,7 @@ const baseProps = {
   previewRef: { current: null },
   aiLogs: [],
   isProcessing: false,
-  availableModels: [{ id: 'm1', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true }],
+  availableModels: [{ id: 'm1', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true, supportsVision: false }],
   onResetChat: vi.fn(),
   isDirty: false,
   saveQuote: vi.fn(),

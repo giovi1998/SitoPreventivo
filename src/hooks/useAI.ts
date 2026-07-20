@@ -8,6 +8,8 @@ import dataService from '../utils/dataService';
 import { logger } from '../utils/logger';
 import { mapAiError } from '../utils/ai/mapAiError';
 import { newRequestId } from '../utils/ai/requestId';
+import { resolveProviderId } from '../utils/resolveProviderId';
+import { calculateCostUsd } from '../ai/providerPricing';
 
 interface UseAIReturn {
   processPrompt: (
@@ -23,7 +25,8 @@ interface UseAIReturn {
   aiLogs: ReturnType<typeof useAILogs>['logs'];
   isProcessing: boolean;
   sessionId: string | null;
-  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
+  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
+  lastCostUsd: number;
 }
 
 function safeJson(s: string | undefined): Record<string, unknown> {
@@ -91,6 +94,7 @@ export function useAI(userEmail?: string): UseAIReturn {
   const orchestratorRef = useRef<AIOrchestrator | null>(null);
   const { logs: aiLogs, isProcessing, startStream, appendStream, finalizeStream, info, success, error, tool, clear } = useAILogs('useAI');
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [lastCostUsd, setLastCostUsd] = useState(0);
   const availableModels = useRef(new AIOrchestrator().getProviderList()).current;
 
   const getOrchestrator = useCallback(() => {
@@ -130,7 +134,7 @@ export function useAI(userEmail?: string): UseAIReturn {
         options?.onProgress?.('🤖 Chiamata AI in corso...');
 
         const run = async (onStream?: (chunk: AIStreamChunk) => void) => orchestrator.processPrompt(quote, prompt, {
-          modelId: options?.modelId,
+          modelId: resolveProviderId(options?.modelId),
           requestId,
           onStream,
           onToolStart: (toolCallId, name) => {
@@ -167,7 +171,9 @@ export function useAI(userEmail?: string): UseAIReturn {
         finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
 
         if (userEmail && userEmail !== 'admin@gmail.com' && result.response.usage?.totalTokens) {
-          dataService.trackTokens(userEmail, result.response.usage.totalTokens);
+          const cost = calculateCostUsd(resolveProviderId(options?.modelId), result.response.usage);
+          setLastCostUsd(cost);
+          dataService.trackTokens(userEmail, result.response.usage.totalTokens, cost);
         }
 
         const { toolCount, mergeChanges, errorKind } = parseResultChanges(result.changes);
@@ -209,5 +215,6 @@ export function useAI(userEmail?: string): UseAIReturn {
     isProcessing,
     sessionId,
     availableModels,
+    lastCostUsd,
   };
 }

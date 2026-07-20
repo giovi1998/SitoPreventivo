@@ -16,6 +16,7 @@ import {
   AiPromptLibrary,
 } from '../ai-ui';
 import type { PromptLibraryEntry } from '../../utils/promptLibrary';
+import { AI_IMAGE_MODELS, getAiImageModelDefault, setAiImageModelDefault } from '../../utils/uiPrefs';
 
 const SUGGESTED_PROMPTS: string[] = [
   'Sagra del paese, 15-17 agosto, ingresso gratis, musica dal vivo, cucina tipica',
@@ -54,7 +55,7 @@ interface FlyerAiPanelProps {
    * `bare` li nasconde per evitare duplicati.
    */
   bare?: boolean;
-  onGenerateHero?: () => void;
+  onGenerateHero?: (imageModel?: string) => void;
   onRemoveHero?: () => void;
   onResetHero?: () => void;
   isGeneratingHero?: boolean;
@@ -82,8 +83,14 @@ export function FlyerAiPanel({
   showHeroPromptEditor = false, setShowHeroPromptEditor,
   heroLibrary = [], onSaveHeroPrompt, onApplyHeroPrompt, onDeleteHeroPrompt,
 }: FlyerAiPanelProps): React.ReactElement {
-  const modelOptions = ai.availableModels.length > 0 
-    ? ai.availableModels.map(m => ({ value: m.id, label: m.name }))
+  const [imageModel, setImageModel] = React.useState(getAiImageModelDefault());
+  const handleImageModelChange = (id: string) => {
+    setImageModel(id);
+    setAiImageModelDefault(id);
+  };
+
+  const modelOptions = ai.availableModels.length > 0
+    ? ai.availableModels.map(m => ({ value: m.id, label: `${m.name}, ${m.model}` }))
     : [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }];
 
   const toneOptions = [
@@ -136,6 +143,13 @@ export function FlyerAiPanel({
                   />
                 )}
               </div>
+              <AiSelect
+                label="Modello immagine"
+                value={imageModel}
+                onChange={(e) => handleImageModelChange(e.target.value)}
+                options={AI_IMAGE_MODELS.map((m) => ({ value: m.id, label: m.name }))}
+                hint={AI_IMAGE_MODELS.find((m) => m.id === imageModel)?.description}
+              />
               {setShowHeroPromptEditor && (
                 <button
                   type="button"
@@ -171,7 +185,7 @@ export function FlyerAiPanel({
               <AiGenerateButton
                 isProcessing={isGeneratingHero}
                 loadingText="Generazione…"
-                onClick={onGenerateHero}
+                onClick={() => onGenerateHero?.(imageModel)}
               >
                 Genera hero AI
               </AiGenerateButton>

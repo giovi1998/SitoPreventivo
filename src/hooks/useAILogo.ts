@@ -6,6 +6,8 @@ import { mapAiError } from '../utils/ai/mapAiError';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
 import { newRequestId } from '../utils/ai/requestId';
 import dataService from '../utils/dataService';
+import { resolveProviderId } from '../utils/resolveProviderId';
+import { calculateCostUsd } from '../ai/providerPricing';
 
 export interface UseAILogoReturn {
   generate: (
@@ -21,13 +23,15 @@ export interface UseAILogoReturn {
   logs: ReturnType<typeof useAILogs>['logs'];
   isProcessing: boolean;
   isGeneratingBg: boolean;
-  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
+  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
+  lastCostUsd: number;
 }
 
 
 export function useAILogo(userEmail?: string): UseAILogoReturn {
   const orchestratorRef = useRef<LogoAIOrchestrator | null>(null);
   const [isGeneratingBg, setIsGeneratingBg] = useState(false);
+  const [lastCostUsd, setLastCostUsd] = useState(0);
   const {
     logs,
     isProcessing,
@@ -69,6 +73,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
       try {
         const result = await getOrchestrator().generateLogo(logo, brief, {
           sector: options?.sector,
+          modelId: resolveProviderId(),
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -92,6 +97,12 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
           tokens,
           detail: result.rawResponse?.slice(0, 2048),
         });
+
+        if (userEmail && userEmail !== 'admin@gmail.com' && result.response?.usage) {
+          const cost = calculateCostUsd(resolveProviderId(), result.response.usage);
+          setLastCostUsd(cost);
+          dataService.trackTokens(userEmail, result.response.usage.totalTokens, cost).catch(() => {});
+        }
 
         if (result.applied) {
           const summary = [
@@ -131,6 +142,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
             { requestId }
           );
           trackImage();
+          setLastCostUsd(0);
         } else {
           error(mapAiError(result.error ?? 'Background non generato'), undefined, { requestId });
         }
@@ -151,5 +163,5 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
     clear();
   }, [clear]);
 
-  return { generate, generateBackground, reset, logs, isProcessing, isGeneratingBg, availableModels };
+  return { generate, generateBackground, reset, logs, isProcessing, isGeneratingBg, availableModels, lastCostUsd };
 }

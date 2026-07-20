@@ -126,7 +126,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const previewZoom = useCardPreviewZoom(1);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
-  const { processCardPrompt, generateCover, generatePhoto, resetCardChat, cardAiLogs, isCardProcessing, availableModels } = useAICard(userEmail);
+  const { processCardPrompt, generateCover, generatePhoto, resetCardChat, cardAiLogs, isCardProcessing, availableModels, lastCostUsd } = useAICard(userEmail);
   const [isPhotoGenerating, setIsPhotoGenerating] = useState(false);
   const [photoPrompt, setPhotoPrompt] = useState('');
   const [showPhotoPromptEditor, setShowPhotoPromptEditor] = useState(false);
@@ -528,7 +528,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
   }, [card, aiText, aiModel, processCardPrompt, addToast]);
 
-  const handleGenerateCover = useCallback(async (side: 'front' | 'back' | 'both' = 'front') => {
+  const handleGenerateCover = useCallback(async (side: 'front' | 'back' | 'both' = 'front', imageModel?: string) => {
     if (tier !== 'unlocked') {
       addToast('info', 'Sblocca il piano per generare cover AI.', 4000);
       return;
@@ -538,13 +538,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       if (side === 'both') {
         // Serializziamo fronte e retro: due chiamate Gemini in parallelo
         // possono sovraccaricare il dev proxy / l'upstream e ritornare 502.
-        const frontCover = await generateCover(card, 'front');
-        const backCover = await generateCover(card, 'back');
+        const frontCover = await generateCover(card, 'front', undefined, { imageModel });
+        const backCover = await generateCover(card, 'back', undefined, { imageModel });
         patchFront({ coverImageUrl: frontCover });
         patchBack({ coverImageUrl: backCover });
         addToast('success', 'Cover AI generate per fronte e retro.', 4000);
       } else {
-        const coverDataUrl = await generateCover(card, side);
+        const coverDataUrl = await generateCover(card, side, undefined, { imageModel });
         if (side === 'front') {
           patchFront({ coverImageUrl: coverDataUrl });
         } else {
@@ -559,7 +559,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
   }, [card, tier, generateCover, patchFront, patchBack, addToast]);
 
-  const handleGeneratePhoto = useCallback(async () => {
+  const handleGeneratePhoto = useCallback(async (imageModel?: string) => {
     if (tier !== 'unlocked') {
       addToast('info', 'Sblocca il piano per generare la foto AI.', 4000);
       return;
@@ -568,6 +568,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     try {
       const photoUrl = await generatePhoto(card, {
         promptOverride: photoPrompt.trim() || undefined,
+        imageModel,
       });
       patchFront({ photoUrl });
       addToast('success', 'Foto AI generata e applicata al bigliettino.', 4000);
@@ -805,6 +806,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     tier,
     onGenerateCover: handleGenerateCover,
     onRemoveCover: handleRemoveCover,
+    onGeneratePhoto: handleGeneratePhoto,
     card,
   } as const;
 
@@ -960,6 +962,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
               tier={tier}
               onSubmitPrompt={(text) => setAiText(text)}
               hidePrompt
+              lastCostUsd={lastCostUsd}
               // REQ-AI-003: su card vuota la rail propone un prompt contestuale
               // con focus; l'expanded resta default true (o pq_ui:v1 se persistito).
               suggestedPrompt={!cardHasContent(card) ? 'Descrivi la tua attività, creo il bigliettino.' : undefined}

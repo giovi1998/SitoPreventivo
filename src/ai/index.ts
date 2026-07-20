@@ -470,7 +470,7 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
     };
   }
 
-  getProviderList(): { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[] {
+  getProviderList(): { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[] {
     return providerRegistry.listProviders();
   }
 }

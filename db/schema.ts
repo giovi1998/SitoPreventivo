@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean, numeric } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: serial().primaryKey(),
@@ -9,6 +9,8 @@ export const users = pgTable("users", {
   role: varchar({ length: 20 }).default("user"),
   tokensUsed: bigint("tokens_used", { mode: "number" }).default(0),
   tokenLimit: bigint("token_limit", { mode: "number" }).default(1000000),
+  // TB-023: tracking costi reale per provider (numeric 10,6 USD)
+  tokensCostUsd: numeric("tokens_cost_usd", { precision: 10, scale: 6 }).default("0"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

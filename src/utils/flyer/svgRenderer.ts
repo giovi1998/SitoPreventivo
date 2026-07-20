@@ -4,6 +4,8 @@ import { mm } from './geometry';
 import { safeHex, escapeHtml, escapeXmlAttr, inlineQrSvg } from './qrRenderer';
 import { computeFlyerLayout, magazineColumnCount } from './layoutEngine';
 
+import { renderDecorativePattern } from '../decorations/patterns';
+
 const MM_PER_PT = 0.352777778;
 
 export interface SvgRenderOptions {
@@ -74,7 +76,22 @@ export function renderFlyerSvg(plan: FlyerLayoutPlan, flyer: Flyer, options: Svg
     : '';
 
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${mm(total.w)} ${mm(total.h)}" width="${widthAttr}" height="${heightAttr}"${styleAttr} data-flyer-svg="1">`);
-  parts.push(`<rect x="0" y="0" width="${mm(total.w)}" height="${mm(total.h)}" fill="${bg}"/>`);
+
+  // TB-023: pattern decorativo dietro i contenuti, se configurato
+  if (flyer.decorations?.pattern) {
+    const deco = renderDecorativePattern(
+      flyer.decorations.pattern,
+      Number(mm(total.w)),
+      Number(mm(total.h)),
+      {
+        palette: flyer.decorations.palette || { primary: accent, secondary: text },
+        opacity: flyer.decorations.opacity ?? 0.2,
+      },
+    );
+    if (deco) parts.push(deco);
+  }
+
+  parts.push(`<rect x="0" y="0" width="${mm(total.w)}" height="${mm(total.h)}" fill="${bg}" fill-opacity="0.96"/>`);
 
   // Trim box
   parts.push(`<rect x="${mm(page.trim.x)}" y="${mm(page.trim.y)}" width="${mm(page.trim.w)}" height="${mm(page.trim.h)}" fill="none" stroke="#000000" stroke-opacity="0.12" stroke-width="0.3"/>`);

@@ -1,0 +1,163 @@
+/* TB-023: AIProviderBadge dropdown — estende lo stile base in AIConsole.css */
+
+.ai-provider-badge-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.ai-provider-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--muted, #647086);
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: var(--radius-pill, 999px);
+  padding: 3px 10px 3px 8px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast, 0.15s), background var(--transition-fast, 0.15s), box-shadow var(--transition-fast, 0.15s);
+  white-space: nowrap;
+}
+
+.ai-provider-badge:hover {
+  border-color: var(--muted-line, #cbd5e1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.ai-provider-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #e62020);
+  flex-shrink: 0;
+}
+
+.ai-provider-badge__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-provider-badge__cost {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--muted, #647086);
+  font-size: 0.7rem;
+}
+
+.ai-provider-badge__chevron {
+  font-size: 0.6rem;
+  transition: transform var(--transition-fast, 0.15s);
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.ai-provider-badge__chevron--open {
+  transform: rotate(180deg);
+}
+
+.ai-provider-badge__menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  max-width: 280px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+  z-index: 100;
+  padding: 6px;
+  font-size: 0.78rem;
+}
+
+.ai-provider-badge__menu-header {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted, #647086);
+  padding: 6px 10px 4px;
+  font-weight: var(--weight-bold, 700);
+}
+
+.ai-provider-badge__option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: background var(--transition-fast, 0.15s);
+}
+
+.ai-provider-badge__option:hover {
+  background: var(--accent-soft, rgba(230, 32, 32, 0.08));
+}
+
+.ai-provider-badge__option.is-selected {
+  background: var(--accent-soft, rgba(230, 32, 32, 0.12));
+  font-weight: var(--weight-bold, 700);
+}
+
+.ai-provider-badge__option-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.ai-provider-badge__option-name {
+  color: var(--ink, #1a1a2e);
+  font-weight: var(--weight-semibold, 600);
+}
+
+.ai-provider-badge__option-model {
+  color: var(--muted, #647086);
+  font-weight: var(--weight-normal, 400);
+  font-size: 0.72rem;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+
+.ai-provider-badge__option-tag {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
+  padding: 1px 5px;
+  border-radius: var(--radius-pill, 999px);
+  font-weight: var(--weight-bold, 700);
+  flex-shrink: 0;
+}
+
+.ai-provider-badge__option-price {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted, #647086);
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-provider-badge__menu-footer {
+  font-size: 0.65rem;
+  color: var(--muted, #647086);
+  padding: 6px 10px;
+  border-top: 1px solid var(--line, #e2e8f0);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* Mobile: menu full-width */
+@media (max-width: 768px) {
+  .ai-provider-badge__menu {
+    right: 0;
+    left: auto;
+    min-width: 220px;
+  }
+}

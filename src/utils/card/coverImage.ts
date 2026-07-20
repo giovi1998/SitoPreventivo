@@ -71,6 +71,7 @@ export function buildCardCoverPayload(
   images: CardCoverImages,
   side: 'front' | 'back',
   userEmail?: string,
+  imageModel?: string,
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     prompt,
@@ -80,6 +81,7 @@ export function buildCardCoverPayload(
   };
   if (images.cardImage) payload.cardImage = images.cardImage;
   if (images.logoImage) payload.logoImage = images.logoImage;
+  if (imageModel) payload.imageModel = imageModel;
 
   return pruneImagesForBodyBudget(payload, ['logoImage', 'cardImage'], BODY_BUDGET_BYTES);
 }

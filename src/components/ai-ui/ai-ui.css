@@ -192,6 +192,12 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+.ai-select-hint {
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  line-height: 1.3;
+}
+
 /* --- AiPromptTextarea -------------------------------------------------------- */
 .ai-prompt-textarea {
   width: 100%;

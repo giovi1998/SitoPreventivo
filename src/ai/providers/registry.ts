@@ -1,5 +1,6 @@
 import type { AIProvider } from '../types';
 import { DeepSeekProvider } from './deepseek';
+import { OllamaProProvider } from './ollamaPro';
 
 export class AIProviderRegistry {
   private providers: Map<string, AIProvider> = new Map();
@@ -8,6 +9,10 @@ export class AIProviderRegistry {
   constructor() {
     this.register('deepseek-chat', new DeepSeekProvider('deepseek-chat'));
     this.register('deepseek-v4-pro', new DeepSeekProvider('deepseek-v4-pro'));
+    // TB-023: Ollama Pro Cloud ($20/mo flat, multimodale, zero retention)
+    this.register('ollama-minimax-m3', new OllamaProProvider('minimax-m3:cloud'));
+    this.register('ollama-deepseek-v4-pro', new OllamaProProvider('deepseek-v4-pro:cloud'));
+    this.register('ollama-qwen-3.5', new OllamaProProvider('qwen-3.5'));
   }
 
   register(id: string, provider: AIProvider): void {
@@ -29,18 +34,36 @@ export class AIProviderRegistry {
     this.defaultId = id;
   }
 
-  listProviders(): { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[] {
+  listProviders(): { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[] {
     return Array.from(this.providers.entries()).map(([id, p]) => ({
       id,
       name: p.name,
       model: p.model,
       supportsStreaming: p.supportsStreaming,
       supportsTools: p.supportsTools,
+      supportsVision: (p as { supportsVision?: boolean }).supportsVision ?? false,
     }));
   }
 
   getProviderCount(): number {
     return this.providers.size;
+  }
+
+  /**
+   * TB-023: ritorna il primo provider con vision disponibile (preferito
+   * MiniMax M3). Usato da useAIDesignReview per screenshot feedback.
+   */
+  getVisionProvider(): { id: string; provider: AIProvider & { chatWithImages?: (m: any, imgs: string[], o?: any) => Promise<any> } } | null {
+    const preferred = this.providers.get('ollama-minimax-m3');
+    if (preferred && (preferred as { supportsVision?: boolean }).supportsVision) {
+      return { id: 'ollama-minimax-m3', provider: preferred as any };
+    }
+    for (const [id, p] of this.providers) {
+      if ((p as { supportsVision?: boolean }).supportsVision) {
+        return { id, provider: p as any };
+      }
+    }
+    return null;
   }
 }
 

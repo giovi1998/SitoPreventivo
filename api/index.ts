@@ -1,5 +1,5 @@
 import { eq, and, sql } from 'drizzle-orm';
-import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean, numeric } from 'drizzle-orm/pg-core';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { z } from 'zod';
@@ -32,6 +32,8 @@ const usersTable = pgTable('users', {
   role: varchar({ length: 20 }).default('user'),
   tokensUsed: bigint('tokens_used', { mode: 'number' }).default(0),
   tokenLimit: bigint('token_limit', { mode: 'number' }).default(1000000),
+  // TB-023: tracking costi reale per provider (numeric 10,6 USD)
+  tokensCostUsd: numeric('tokens_cost_usd', { precision: 10, scale: 6 }).default('0'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -143,6 +145,8 @@ interface AILogPayload {
   outcome: 'ok' | 'error';
   errorKind?: string;
   sizeKB?: number;
+  provider?: string;
+  costUsd?: number;
 }
 
 function logAI(payload: AILogPayload): void {
@@ -340,6 +344,8 @@ const TokenLimitSchema = z.object({
 const TrackTokensSchema = z.object({
   email: z.string().email('Email non valida'),
   tokens: z.number().positive('tokens deve essere positivo'),
+  // TB-023: costo USD opzionale (backward compatible)
+  costUsd: z.number().min(0).optional(),
 });
 
 const RedeemCodeSchema = z.object({
@@ -618,13 +624,21 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     }
     const v = validate(TrackTokensSchema, body);
     if (v.error) return json(req, res, 400, { errors: v.errors });
-    const { email, tokens } = v.data;
+    const { email, tokens, costUsd } = v.data;
     if (tokens > 100000) {
       return json(req, res, 400, { error: 'Token count anomalo. Max 100k per richiesta.' });
     }
-    await db.update(usersTable).set({
-      tokensUsed: sql`tokens_used + ${tokens}`,
-    }).where(eq(usersTable.email, email));
+    // TB-023: aggiorna anche tokens_cost_usd se passato
+    if (typeof costUsd === 'number' && costUsd > 0) {
+      await db.update(usersTable).set({
+        tokensUsed: sql`tokens_used + ${tokens}`,
+        tokensCostUsd: sql`COALESCE(tokens_cost_usd, 0) + ${costUsd}`,
+      }).where(eq(usersTable.email, email));
+    } else {
+      await db.update(usersTable).set({
+        tokensUsed: sql`tokens_used + ${tokens}`,
+      }).where(eq(usersTable.email, email));
+    }
     return json(req, res, 200, { success: true });
   }
 
@@ -1079,6 +1093,18 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
               content: z.string(),
               tool_call_id: z.string().optional(),
               name: z.string().optional(),
+              // TB-023: Ollama multimodal messages may include images
+              images: z.array(z.string()).optional(),
+              tool_calls: z
+                .array(
+                  z.object({
+                    function: z.object({
+                      name: z.string(),
+                      arguments: z.string(),
+                    }),
+                  }),
+                )
+                .optional(),
             }),
           )
           .min(1)
@@ -1087,6 +1113,24 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
         temperature: z.number().min(0).max(2).optional(),
         max_tokens: z.number().int().positive().max(8192).optional(),
         userEmail: z.string().email().optional(),
+        // TB-023: provider routing (default deepseek)
+        provider: z.enum(['deepseek', 'ollama']).optional(),
+        // Ollama-only fields
+        tools: z
+          .array(
+            z.object({
+              type: z.literal('function'),
+              function: z.object({
+                name: z.string(),
+                description: z.string().optional(),
+                parameters: z.record(z.string(), z.unknown()).optional(),
+              }),
+            }),
+          )
+          .optional(),
+        format: z.union([z.literal('json'), z.record(z.string(), z.unknown())]).optional(),
+        stream: z.boolean().optional(),
+        options: z.record(z.string(), z.unknown()).optional(),
       }),
       body
     );
@@ -1095,6 +1139,136 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
       return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
     const userEmail = v.data.userEmail;
+    const provider = v.data.provider || 'deepseek';
+
+    // ─── TB-023: Ollama Pro Cloud routing ─────────────────────────
+    if (provider === 'ollama') {
+      const ollamaKey = process.env.OLLAMA_API_KEY;
+      if (!ollamaKey) {
+        logAI({ tag: 'ai_chat', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+        return jsonWithRequestId(req, res, 503, { error: 'Ollama non configurato. Configura OLLAMA_API_KEY su Vercel.' }, requestId);
+      }
+      const { model, messages, temperature, max_tokens, tools, format, options: ollamaOptions } = v.data;
+      const ollamaModel = model || 'minimax-m3:cloud';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000); // Ollama Cloud più lento di DeepSeek
+      const startedAt = Date.now();
+      let apiRes: Response;
+      try {
+        const ollamaBody: Record<string, unknown> = {
+          model: ollamaModel,
+          messages: messages.map((m) => {
+            const msg: Record<string, unknown> = { role: m.role, content: m.content };
+            if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
+            if (m.name) msg.name = m.name;
+            if (m.images && m.images.length > 0) msg.images = m.images;
+            if (m.tool_calls && m.tool_calls.length > 0) {
+              msg.tool_calls = m.tool_calls.map((tc) => ({
+                function: { name: tc.function.name, arguments: tc.function.arguments },
+              }));
+            }
+            return msg;
+          }),
+          stream: false,
+        };
+        if (temperature !== undefined) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), temperature };
+        }
+        if (max_tokens !== undefined) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), num_predict: max_tokens };
+        }
+        if (ollamaOptions) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), ...ollamaOptions };
+        }
+        if (v.data.response_format?.type === 'json_object' || format === 'json') {
+          ollamaBody.format = 'json';
+        } else if (format) {
+          ollamaBody.format = format;
+        }
+        if (tools && tools.length > 0) ollamaBody.tools = tools;
+
+        apiRes = await fetch('https://ollama.com/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${ollamaKey}`,
+            'X-Request-Id': requestId,
+          },
+          body: JSON.stringify(ollamaBody),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        clearTimeout(timeout);
+        if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError') {
+          logAI({ tag: 'ai_chat', requestId, email: userEmail, model: ollamaModel, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'timeout' });
+          return jsonWithRequestId(req, res, 504, { error: 'Ollama non ha risposto entro 60 secondi. Riprova.' }, requestId);
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!apiRes.ok) {
+        const errBody = await apiRes.text().catch(() => 'Unknown error');
+        const errorKind = apiRes.status === 429 ? 'rate_limit' : apiRes.status === 401 ? 'auth' : 'upstream';
+        logAI({ tag: 'ai_chat', requestId, email: userEmail, model: ollamaModel, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+        if (apiRes.status === 429) {
+          return jsonWithRequestId(req, res, 429, { error: 'Quota Ollama Pro superato. Riprova tra qualche ora o passa a DeepSeek.' }, requestId);
+        }
+        if (apiRes.status === 401) {
+          return jsonWithRequestId(req, res, 401, { error: 'Chiave API Ollama non valida' }, requestId);
+        }
+        return jsonWithRequestId(req, res, apiRes.status, { error: `Ollama (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
+      }
+      const raw = await apiRes.json();
+      // Normalizza risposta Ollama → formato DeepSeek-like per il client
+      const ollamaRaw = raw as {
+        message?: { content?: string; tool_calls?: Array<{ function: { name: string; arguments: string | object } }> };
+        prompt_eval_count?: number;
+        eval_count?: number;
+      };
+      const toolCalls = ollamaRaw.message?.tool_calls?.map((tc, i) => ({
+        id: `call_${Date.now()}_${i}`,
+        type: 'function' as const,
+        function: {
+          name: tc.function.name,
+          arguments:
+            typeof tc.function.arguments === 'string'
+              ? tc.function.arguments
+              : JSON.stringify(tc.function.arguments ?? {}),
+        },
+      }));
+      const normalized = {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: ollamaRaw.message?.content || '',
+              ...(toolCalls && toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: ollamaRaw.prompt_eval_count ?? 0,
+          completion_tokens: ollamaRaw.eval_count ?? 0,
+          total_tokens: (ollamaRaw.prompt_eval_count ?? 0) + (ollamaRaw.eval_count ?? 0),
+        },
+        requestId,
+      };
+      logAI({
+        tag: 'ai_chat',
+        requestId,
+        email: userEmail,
+        model: ollamaModel,
+        durationMs: Date.now() - startedAt,
+        outcome: 'ok',
+        tokens: normalized.usage.total_tokens || undefined,
+        provider: 'ollama',
+      });
+      return json(req, res, 200, normalized);
+    }
+
+    // ─── DeepSeek (default, preesistente) ─────────────────────────
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
       logAI({ tag: 'ai_chat', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
@@ -1146,6 +1320,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
       durationMs: Date.now() - startedAt,
       outcome: 'ok',
       tokens: usage?.total_tokens,
+      provider: 'deepseek',
     });
     return json(req, res, 200, { ...data, requestId });
   }
@@ -1294,6 +1469,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
               content: z.string(),
               tool_call_id: z.string().optional(),
               name: z.string().optional(),
+              // TB-023: Ollama multimodal messages may include images
+              images: z.array(z.string()).optional(),
             }),
           )
           .min(1)
@@ -1302,6 +1479,11 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         temperature: z.number().min(0).max(2).optional(),
         max_tokens: z.number().int().positive().max(8192).optional(),
         userEmail: z.string().email().optional(),
+        // TB-023: provider routing (default deepseek)
+        provider: z.enum(['deepseek', 'ollama']).optional(),
+        // Ollama-only options
+        options: z.record(z.string(), z.unknown()).optional(),
+        format: z.union([z.literal('json'), z.record(z.string(), z.unknown())]).optional(),
       }),
       body
     );
@@ -1310,13 +1492,149 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
     const userEmail = v.data.userEmail;
+    const provider = v.data.provider || 'deepseek';
+    const startedAt = Date.now();
+
+    // ─── TB-023: Ollama Pro Cloud streaming ─────────────────────────
+    if (provider === 'ollama') {
+      const ollamaKey = process.env.OLLAMA_API_KEY;
+      if (!ollamaKey) {
+        logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+        return jsonWithRequestId(req, res, 503, { error: 'Ollama non configurato. Configura OLLAMA_API_KEY su Vercel.' }, requestId);
+      }
+      const { model, messages, temperature, max_tokens, tools, options: ollamaOptions, format } = v.data;
+      const ollamaModel = model || 'minimax-m3:cloud';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
+      let apiRes: Response;
+      try {
+        const ollamaBody: Record<string, unknown> = {
+          model: ollamaModel,
+          messages: messages.map((m) => {
+            const msg: Record<string, unknown> = { role: m.role, content: m.content };
+            if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
+            if (m.name) msg.name = m.name;
+            if (m.images && m.images.length > 0) msg.images = m.images;
+            return msg;
+          }),
+          stream: true,
+        };
+        if (temperature !== undefined) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), temperature };
+        }
+        if (max_tokens !== undefined) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), num_predict: max_tokens };
+        }
+        if (ollamaOptions) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), ...ollamaOptions };
+        }
+        if (tools && tools.length > 0) ollamaBody.tools = tools;
+        if (format) ollamaBody.format = format;
+
+        apiRes = await fetch('https://ollama.com/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${ollamaKey}`,
+            'X-Request-Id': requestId,
+            Accept: 'application/x-ndjson',
+          },
+          body: JSON.stringify(ollamaBody),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        clearTimeout(timeout);
+        const errorKind = err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError' ? 'timeout' : 'connection';
+        logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model: model || ollamaModel, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+        if (errorKind === 'timeout') {
+          return jsonWithRequestId(req, res, 504, { error: 'Ollama non ha risposto entro 60 secondi. Riprova.' }, requestId);
+        }
+        return jsonWithRequestId(req, res, 502, { error: `Connessione Ollama fallita: ${(err as Error)?.message || 'unknown'}` }, requestId);
+      }
+      if (!apiRes.ok) {
+        clearTimeout(timeout);
+        const errBody = await apiRes.text().catch(() => 'Unknown error');
+        const errorKind = apiRes.status === 429 ? 'rate_limit' : apiRes.status === 401 ? 'auth' : 'upstream';
+        logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model: ollamaModel, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+        if (apiRes.status === 429) return jsonWithRequestId(req, res, 429, { error: 'Quota Ollama Pro superato. Riprova tra qualche ora o passa a DeepSeek.' }, requestId);
+        if (apiRes.status === 401) return jsonWithRequestId(req, res, 401, { error: 'Chiave API Ollama non valida' }, requestId);
+        return jsonWithRequestId(req, res, apiRes.status, { error: `Ollama (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
+      }
+
+      addCorsHeaders(req, res);
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.setHeader('X-Request-Id', requestId);
+      res.setHeader('X-Provider', 'ollama');
+
+      const reader = apiRes.body?.getReader();
+      if (!reader) {
+        clearTimeout(timeout);
+        logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model: ollamaModel, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_body' });
+        return res.end();
+      }
+      logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model: ollamaModel, durationMs: Date.now() - startedAt, outcome: 'ok', provider: 'ollama' });
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+              const parsed = JSON.parse(trimmed);
+              const content = parsed.message?.content || '';
+              if (parsed.prompt_eval_count !== undefined || parsed.eval_count !== undefined) {
+                finalUsage = {
+                  prompt_tokens: parsed.prompt_eval_count ?? finalUsage?.prompt_tokens ?? 0,
+                  completion_tokens: parsed.eval_count ?? finalUsage?.completion_tokens ?? 0,
+                  total_tokens: (parsed.prompt_eval_count ?? finalUsage?.prompt_tokens ?? 0) + (parsed.eval_count ?? finalUsage?.completion_tokens ?? 0),
+                };
+              }
+              const ssePayload: Record<string, unknown> = {
+                choices: [{ index: 0, delta: { content } }],
+              };
+              if (parsed.message?.tool_calls) {
+                (ssePayload.choices as any)[0].delta.tool_calls = parsed.message.tool_calls.map((tc: any, i: number) => ({
+                  index: i,
+                  function: { name: tc.function?.name, arguments: typeof tc.function?.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function?.arguments ?? {}) },
+                }));
+              }
+              if (parsed.done && finalUsage) {
+                ssePayload.usage = finalUsage;
+              }
+              res.write(`data: ${JSON.stringify(ssePayload)}\n\n`);
+            } catch {
+              // skip malformed NDJSON line
+            }
+          }
+        }
+        res.write('data: [DONE]\n\n');
+      } catch (err) {
+        console.error('[Stream Ollama] Errore durante lo streaming', { msg: (err as Error)?.message, requestId });
+      } finally {
+        clearTimeout(timeout);
+        if (!res.writableEnded) res.end();
+      }
+      return;
+    }
+
+    // ─── DeepSeek streaming (default, preesistente) ─────────────────────────
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
       logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
       return jsonWithRequestId(req, res, 503, { error: 'DeepSeek non configurato.' }, requestId);
     }
     const { model, messages, tools, temperature, max_tokens } = v.data;
-    const startedAt = Date.now();
     const upBody = {
       model: model || 'deepseek-chat',
       messages,
@@ -1461,6 +1779,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         logoImage: z.string().max(150_000).optional(),
         side: z.enum(['front', 'back']).optional(),
         userEmail: z.string().email().optional(),
+        // TB-023: modello immagine Gemini selezionabile
+        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
       }),
       body,
     );
@@ -1494,7 +1814,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       ]);
       const interaction = await ai.interactions.create(
         {
-          model: 'gemini-3.1-flash-image',
+          model: v.data.imageModel || 'gemini-3.1-flash-image',
           input,
           generation_config: {
             image_config: { image_size: '512', aspect_ratio: '1:1' },
@@ -1633,6 +1953,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         flyerImage: z.string().max(600_000).optional(),
         aspectRatio: z.enum(['16:9', '1:1', '3:2', '2:3', '3:4']).optional(),
         userEmail: z.string().email().optional(),
+        // TB-023: modello immagine Gemini selezionabile
+        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
       }),
       body,
     );
@@ -1657,7 +1979,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       ]);
       const interaction = await ai.interactions.create(
         {
-          model: 'gemini-3.1-flash-image',
+          model: v.data.imageModel || 'gemini-3.1-flash-image',
           input,
           generation_config: {
             image_config: { image_size: '512', aspect_ratio: v.data.aspectRatio ?? '3:2' },
@@ -1713,6 +2035,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         prompt: z.string().max(1000),
         context: z.string().max(1500).optional(),
         userEmail: z.string().email().optional(),
+        // TB-023: modello immagine Gemini selezionabile
+        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
       }),
       body,
     );
@@ -1730,10 +2054,10 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         : v.data.prompt;
       const interaction = await ai.interactions.create(
         {
-          model: 'gemini-3.1-flash-image',
+          model: v.data.imageModel || 'gemini-3.1-flash-image',
           input: finalPrompt,
           generation_config: {
-            image_config: { image_size: '512', aspect_ratio: '1:1' },
+            image_config: { image_size: '512', aspect_ratio: '3:4' },
           },
           response_modalities: ['text', 'image'],
         },
@@ -1763,6 +2087,180 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
       if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
       return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
+    }
+  }
+
+  // TB-023: Gemini 2.0 Flash image generation — icone stilizzate ed
+  // hero illustrations per card+flyer. Modello economico (~$0.02/img)
+  // alternativo a Nano Banana 3.1. Stesso pattern degli altri endpoint
+  // Gemini (dynamic import, 500KB clamp, rate limit 10/min).
+  if (path === '/ai/image-flash' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiImageFlash', 10, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni. Attendi un minuto.' }, requestId);
+    }
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      logAI({ tag: 'ai_image_flash', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Gemini Flash non configurato (GEMINI_API_KEY mancante)' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        prompt: z.string().max(1000),
+        aspectRatio: z.enum(['1:1', '16:9', '3:1']).optional(),
+        size: z.enum(['512', '1K']).optional(),
+        kind: z.enum(['icon', 'hero', 'custom']).optional(),
+        primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        style: z.string().max(50).optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_image_flash', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
+    }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const kind = v.data.kind || 'custom';
+      const aspectRatio = v.data.aspectRatio || (kind === 'hero' ? '16:9' : '1:1');
+      const size = v.data.size || '512';
+      // Build prompt based on kind
+      let finalPrompt = v.data.prompt;
+      if (kind === 'icon' && v.data.primaryColor && v.data.secondaryColor) {
+        const styleHint = v.data.style || 'minimalist';
+        finalPrompt = `Stylized flat illustration of ${v.data.prompt}. Two colors only: ${v.data.primaryColor} and ${v.data.secondaryColor}. Transparent background. No text, no border, no gradients, no shadows. Simple geometric shapes. 256x256 px. Style: ${styleHint}.`;
+      } else if (kind === 'hero' && v.data.primaryColor && v.data.secondaryColor) {
+        const styleHint = v.data.style || 'minimalist';
+        finalPrompt = `Stylized flat hero illustration of ${v.data.prompt}. Two colors only: ${v.data.primaryColor} and ${v.data.secondaryColor}. Transparent background. No text, no border. Simple geometric shapes, editorial style. 1024x576 px (16:9). Style: ${styleHint}.`;
+      }
+      const interaction = await ai.interactions.create(
+        {
+          model: 'gemini-2.0-flash-preview-image-generation',
+          input: finalPrompt,
+          generation_config: {
+            image_config: { image_size: size, aspect_ratio: aspectRatio },
+          },
+          response_modalities: ['text', 'image'],
+        },
+        { timeout: 30_000 },
+      );
+      const image = interaction.output_image;
+      if (!image || !image.data) {
+        logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_image' });
+        return jsonWithRequestId(req, res, 502, { error: 'Gemini Flash non ha restituito un\'immagine' }, requestId);
+      }
+      const imageBase64 = image.data;
+      const mimeType = image.mime_type || 'image/png';
+      const sizeBytes = Math.ceil(imageBase64.length * 0.75);
+      if (sizeBytes > 500_000) {
+        logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+      }
+      const sizeKB = sizeBytes / 1024;
+      logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB, provider: 'gemini-flash' });
+      return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      const errorKind = msg.startsWith('GEMINI_401') ? 'auth' : msg.startsWith('GEMINI_429') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation') ? 'copyright' : 'upstream';
+      logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
+      if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini Flash non ha risposto entro 30s.' }, requestId);
+      if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Gemini Flash error: ${msg.slice(0, 200)}` }, requestId);
+    }
+  }
+
+  // TB-023: Design review endpoint — MiniMax M3 (Ollama) analizza uno
+  // screenshot della preview card/flyer + JSON e suggerisce 3 miglioramenti.
+  // Vision-grounded feedback (REQ-MM-004).
+  if (path === '/ai/design-review' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiDesignReview', 10, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste. Attendi un minuto.' }, requestId);
+    }
+    const ollamaKey = process.env.OLLAMA_API_KEY;
+    if (!ollamaKey) {
+      logAI({ tag: 'ai_design_review', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Design review non configurato (OLLAMA_API_KEY mancante)' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        docType: z.enum(['card', 'flyer']),
+        docJson: z.string().max(50_000),
+        screenshotBase64: z.string().max(600_000),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_design_review', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
+    }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
+    try {
+      // Strip data URL prefix if present
+      const b64 = v.data.screenshotBase64.replace(/^data:[^;]+;base64,/, '');
+      const systemPrompt = `Sei un graphic designer AI esperto. Analizza lo screenshot di un ${v.data.docType === 'card' ? 'biglietto da visita' : 'volantino'} e suggerisci 3 miglioramenti concreti. Restituisci SOLO un JSON array di 3 oggetti con shape: {"field": "string (es. style.bgColor, content.headline, decoration.id)", "value": "string (valore suggerito)", "reason": "string (motivazione 1 frase in italiano)"}. Focus su: palette colori, gerarchia visiva, leggibilità, decorazione, allineamento. Evita suggerimenti generici.`;
+      const ollamaBody = {
+        model: 'minimax-m3:cloud',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Analizza questo ${v.data.docType}. JSON attuale:\n${v.data.docJson.slice(0, 8000)}`, images: [b64] },
+        ],
+        stream: false,
+        format: 'json',
+        options: { temperature: 0.6 },
+      };
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000);
+      let apiRes: Response;
+      try {
+        apiRes = await fetch('https://ollama.com/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${ollamaKey}`,
+            'X-Request-Id': requestId,
+          },
+          body: JSON.stringify(ollamaBody),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!apiRes.ok) {
+        const errBody = await apiRes.text().catch(() => 'unknown');
+        const errorKind = apiRes.status === 429 ? 'rate_limit' : apiRes.status === 401 ? 'auth' : 'upstream';
+        logAI({ tag: 'ai_design_review', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind, provider: 'ollama' });
+        if (apiRes.status === 429) {
+          return jsonWithRequestId(req, res, 429, { error: 'Quota Ollama Pro superato. Riprova tra qualche ora.' }, requestId);
+        }
+        return jsonWithRequestId(req, res, apiRes.status, { error: `Ollama (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
+      }
+      const raw = (await apiRes.json()) as { message?: { content?: string }; prompt_eval_count?: number; eval_count?: number };
+      const content = raw.message?.content || '';
+      const tokens = (raw.prompt_eval_count ?? 0) + (raw.eval_count ?? 0);
+      logAI({ tag: 'ai_design_review', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', tokens: tokens || undefined, provider: 'ollama' });
+      return json(req, res, 200, { data: { suggestions: content }, requestId });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      const errorKind = msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('abort') ? 'timeout' : 'upstream';
+      logAI({ tag: 'ai_design_review', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind, provider: 'ollama' });
+      if (errorKind === 'timeout') return jsonWithRequestId(req, res, 504, { error: 'Ollama non ha risposto entro 60s.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Design review error: ${msg.slice(0, 200)}` }, requestId);
     }
   }
 

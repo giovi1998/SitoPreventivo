@@ -44,6 +44,8 @@ export interface AIConsoleProps {
   hidePrompt?: boolean;
   /** Optional className for the host */
   className?: string;
+  /** TB-023: costo USD ultima operazione AI */
+  lastCostUsd?: number;
 }
 
 export default function AIConsole({
@@ -59,6 +61,7 @@ export default function AIConsole({
   suggestedPrompt,
   hidePrompt = false,
   className = '',
+  lastCostUsd,
 }: AIConsoleProps): React.ReactElement {
   const [expanded, setExpanded] = useState<boolean>(() => {
     if (editorKind) {
@@ -163,7 +166,7 @@ export default function AIConsole({
           </div>
 
           <footer className="ai-console__footer">
-            <AIProviderBadge />
+            <AIProviderBadge lastCostUsd={lastCostUsd} />
           </footer>
         </div>
       )}

@@ -23,7 +23,7 @@ const TONES: { value: SocialTone; label: string }[] = [
 ];
 
 export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments }: Props) {
-  const { generate, posts, isProcessing, logs, reset } = useAISocial(userEmail);
+  const { generate, posts, isProcessing, logs, reset, lastCostUsd } = useAISocial(userEmail);
   const { addToast } = useToast();
   const { user } = useContext(AuthContext);
   const [tier, setTier] = useState<'free' | 'unlocked'>('free');
@@ -173,6 +173,7 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
             tier={tier}
             onSubmitPrompt={() => {}}
             hidePrompt
+            lastCostUsd={lastCostUsd}
           >
             <section className="social-editor-form" aria-label="Configurazione post">
               <h2 className="social-form-title">Configura generazione</h2>

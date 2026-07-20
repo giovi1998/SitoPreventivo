@@ -43,7 +43,7 @@ describe('CardAIControls', () => {
   it('calls onGenerateCover with both sides when clicking primary button', () => {
     render(<CardAIControls {...baseProps} tier="unlocked" />);
     fireEvent.click(screen.getByRole('button', { name: /genera entrambi/i }));
-    expect(baseProps.onGenerateCover).toHaveBeenCalledWith('both');
+    expect(baseProps.onGenerateCover).toHaveBeenCalledWith('both', expect.any(String));
   });
 
   it('disables cover buttons while isProcessing is true', () => {

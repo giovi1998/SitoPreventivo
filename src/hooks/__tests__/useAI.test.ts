@@ -63,7 +63,7 @@ describe('useAI', () => {
     await act(async () => {
       await result.current.processPrompt({ quoteId: 'q' } as any, 'ciao');
     });
-    expect(dataService.trackTokens).toHaveBeenCalledWith('user@test.com', expect.any(Number));
+    expect(dataService.trackTokens).toHaveBeenCalledWith('user@test.com', expect.any(Number), expect.any(Number));
   });
 
   it('resetChat clears logs', async () => {

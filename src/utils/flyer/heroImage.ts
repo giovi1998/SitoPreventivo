@@ -46,6 +46,7 @@ export function buildFlyerHeroPayload(
   images: FlyerHeroImages,
   userEmail?: string,
   promptOverride?: string,
+  imageModel?: string,
 ): Record<string, unknown> {
   const prompt = (promptOverride && promptOverride.trim().length > 0) ? promptOverride.trim() : buildHeroPrompt(flyer, sector, tone);
   const context = buildHeroContext(flyer, sector, tone);
@@ -57,6 +58,7 @@ export function buildFlyerHeroPayload(
     userEmail,
   };
   if (images.flyerImage) payload.flyerImage = images.flyerImage;
+  if (imageModel) payload.imageModel = imageModel;
 
   return pruneImagesForBodyBudget(payload, ['flyerImage'], BODY_BUDGET_BYTES);
 }

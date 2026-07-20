@@ -59,6 +59,7 @@ export default function EditorPage() {
       lastSaveTime={ctx.lastSaveTime}
       pdfLoading={ctx.pdfLoading}
       docxLoading={ctx.docxLoading}
+      lastCostUsd={ctx.lastCostUsd}
     />
   );
 }

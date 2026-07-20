@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { Flyer, FlyerSector, FlyerTone } from '../utils/documentSchemas';
 import { FlyerAIOrchestrator, type FlyerRefineAction } from '../ai/flyerOrchestrator';
 import { buildFlyerHeroPayload, getDefaultHeroSector, getDefaultHeroTone, renderFlyerScreenshot } from '../utils/flyer/heroImage';
@@ -9,6 +9,9 @@ import { logger } from '../utils/logger';
 import { mapAiError } from '../utils/ai/mapAiError';
 import { newRequestId } from '../utils/ai/requestId';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
+import { resolveProviderId } from '../utils/resolveProviderId';
+import { calculateCostUsd } from '../ai/providerPricing';
+import { getAiImageModelDefault } from '../utils/uiPrefs';
 
 interface UseAIFlyerReturn {
   generate: (
@@ -24,16 +27,18 @@ interface UseAIFlyerReturn {
   ) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean }>;
   generateHero: (
     flyer: Flyer,
-    options?: { sector?: FlyerSector; tone?: FlyerTone; promptOverride?: string }
+    options?: { sector?: FlyerSector; tone?: FlyerTone; promptOverride?: string; imageModel?: string }
   ) => Promise<{ flyer: Flyer; applied: boolean; error?: string }>;
   reset: () => void;
   logs: ReturnType<typeof useAILogs>['logs'];
   isProcessing: boolean;
-  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
+  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
+  lastCostUsd: number;
 }
 
 export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
   const { logs, isProcessing, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAIFlyer');
+  const [lastCostUsd, setLastCostUsd] = useState(0);
   const availableModels = useRef(new FlyerAIOrchestrator().getProviderList()).current;
   const orchestratorRef = useRef<FlyerAIOrchestrator | null>(null);
 
@@ -58,6 +63,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       run: (onStream: (chunk: any) => void) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean; response?: { usage?: { promptTokens: number; completionTokens: number; totalTokens: number } } }>,
       modelId?: string,
     ) => {
+      const resolvedId = resolveProviderId(modelId);
       const requestId = newRequestId();
       await ensureTokenBudget(requestId);
       info(`📤 ${label}`, undefined, { requestId });
@@ -77,7 +83,9 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
 
         if (userEmail && userEmail !== 'admin@gmail.com') {
           const total = tokens?.total ?? Math.max(1, Math.ceil((result.rawResponse?.length || 0) / 4));
-          dataService.trackTokens(userEmail, total).catch(() => {});
+          const cost = calculateCostUsd(resolvedId, result.response?.usage || { promptTokens: 0, completionTokens: 0, totalTokens: total });
+          setLastCostUsd(cost);
+          dataService.trackTokens(userEmail, total, cost).catch(() => {});
         }
 
         const realChanges = result.changes.filter((c) => !c.startsWith('error:'));
@@ -109,7 +117,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       if (!trimmed) throw new Error('Inserisci un brief per generare il copy.');
       return runWith(
         `Invio richiesta: "${trimmed.length > 60 ? trimmed.slice(0, 57) + '...' : trimmed}" (${tone})`,
-        async (onStream) => getOrchestrator().generateCopy(flyer, trimmed, tone, { modelId: options?.modelId, onStream }),
+        async (onStream) => getOrchestrator().generateCopy(flyer, trimmed, tone, { modelId: resolveProviderId(options?.modelId), onStream }),
         options?.modelId,
       );
     },
@@ -120,7 +128,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
     async (flyer: Flyer, action: FlyerRefineAction, options?: { modelId?: string }) => {
       return runWith(
         `Rifinisci copy: ${action}`,
-        async (onStream) => getOrchestrator().refineCopy(flyer, action, { modelId: options?.modelId, onStream }),
+        async (onStream) => getOrchestrator().refineCopy(flyer, action, { modelId: resolveProviderId(options?.modelId), onStream }),
         options?.modelId,
       );
     },
@@ -128,7 +136,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
   );
 
   const generateHero = useCallback(
-    async (flyer: Flyer, options?: { sector?: FlyerSector; tone?: FlyerTone; promptOverride?: string }) => {
+    async (flyer: Flyer, options?: { sector?: FlyerSector; tone?: FlyerTone; promptOverride?: string; imageModel?: string }) => {
       const requestId = newRequestId();
       const sector = options?.sector || getDefaultHeroSector(flyer);
       const tone = options?.tone || getDefaultHeroTone(flyer);
@@ -139,7 +147,8 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
 
       try {
         const flyerImage = await renderFlyerScreenshot(flyer);
-        const payload = buildFlyerHeroPayload(flyer, sector, tone, { flyerImage }, userEmail, options?.promptOverride);
+        const imageModel = options?.imageModel || getAiImageModelDefault();
+        const payload = buildFlyerHeroPayload(flyer, sector, tone, { flyerImage }, userEmail, options?.promptOverride, imageModel);
         const apiBase = import.meta.env?.VITE_API_BASE || '';
         const res = await fetch(`${apiBase}/api/ai/flyer-hero`, {
           method: 'POST',
@@ -156,6 +165,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
 
         if (userEmail && userEmail !== 'admin@gmail.com') {
           dataService.trackTokens(userEmail, IMAGE_TOKEN_COST).catch(() => {});
+          setLastCostUsd(0);
         }
 
         success('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId });
@@ -175,5 +185,5 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
     clear();
   }, [getOrchestrator, clear]);
 
-  return { generate, refine, generateHero, reset, logs, isProcessing, availableModels };
+  return { generate, refine, generateHero, reset, logs, isProcessing, availableModels, lastCostUsd };
 }

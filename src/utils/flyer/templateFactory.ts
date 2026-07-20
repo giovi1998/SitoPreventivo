@@ -50,6 +50,11 @@ export function createFlyerTemplate(sector: FlyerSector, layout?: FlyerLayout): 
       fontFamily: 'Inter',
       fontScale: 1,
     },
+    decorations: {
+      pattern: null,
+      opacity: 0.2,
+      palette: { primary: tpl.accentColor, secondary: tpl.textColor, accent: null },
+    },
     createdAt: now,
     updatedAt: now,
   };

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { hasElementContent, type GridElementKey } from './card/gridElements';
 import { FLYER_TEMPLATES_BY_SECTOR_LAYOUT, heroBoxMmForLayout } from './flyer/templateCatalog';
+import { DECORATIVE_PATTERN_IDS, type DecorativePatternId } from './decorations/patterns';
 
 export const documentTypeSchema = z.enum(['quote', 'qrCode', 'businessCard', 'flyer', 'logo']);
 export type DocumentType = z.infer<typeof documentTypeSchema>;
@@ -242,6 +243,8 @@ export const cardGridElementSchema = z.object({
   h: z.number().min(0).max(8),
   alignH: gridAlignHSchema,
   alignV: gridAlignVSchema,
+  // TB-023: posizione/scale della foto dentro la cella (drag mouse). x,y ∈ [-1,1], scale ∈ [0.5,2]
+  photoPlacement: z.object({ x: z.number().min(-1).max(1).default(0), y: z.number().min(-1).max(1).default(0), scale: z.number().min(0.5).max(2).default(1) }).optional(),
 });
 export type CardGridElement = z.infer<typeof cardGridElementSchema>;
 
@@ -535,6 +538,16 @@ export const businessCardSchema = z.object({
     // (l'utente può avere grid-mode attivo solo su uno dei due lati).
     useGrid: z.boolean().default(false),
   }),
+  decorations: z.object({
+    // TB-023: pattern decorativo SVG dietro i contenuti della card
+    pattern: z.enum(DECORATIVE_PATTERN_IDS).nullable().default(null),
+    opacity: z.number().min(0).max(1).default(0.2),
+    palette: z.object({
+      primary: hexColorSchema.default('#01696F'),
+      secondary: hexColorSchema.default('#E11D48'),
+      accent: hexColorSchema.nullable().default(null),
+    }),
+  }).default(() => ({ pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null } })),
   style: z.object({
     sizePreset: businessCardSizePresetSchema.default('eu-85x55'),
     bgColor: hexColorSchema.default('#FFFFFF'),
@@ -592,7 +605,12 @@ export function createEmptyCard(): BusinessCard {
       accentColor: '#01696F',
       fontFamily: 'Inter',
       borderStyle: 'accent-strip-left',
-      fontScale: 1,
+      fontScale: FONT_SCALE_DEFAULT,
+    },
+    decorations: {
+      pattern: null,
+      opacity: 0.2,
+      palette: { primary: '#01696F', secondary: '#E11D48', accent: null },
     },
     grid: gridPresetLeft(),
     backGrid: gridPresetBackDefault(),
@@ -1025,6 +1043,16 @@ export const flyerSchema = z.object({
   orientation: flyerOrientationEnumSchema.default('portrait'),
   content: flyerContentSchema,
   style: flyerStyleSchema,
+  // TB-023: pattern decorativo SVG dietro i contenuti del volantino
+  decorations: z.object({
+    pattern: z.enum(DECORATIVE_PATTERN_IDS).nullable().default(null),
+    opacity: z.number().min(0).max(1).default(0.2),
+    palette: z.object({
+      primary: hexColorSchema.default('#01696F'),
+      secondary: hexColorSchema.default('#E11D48'),
+      accent: hexColorSchema.nullable().default(null),
+    }),
+  }).default(() => ({ pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null } })),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1054,6 +1082,11 @@ export function createEmptyFlyer(): Flyer {
       layout: 'classic',
       fontFamily: 'Inter',
       fontScale: FONT_SCALE_DEFAULT,
+    },
+    decorations: {
+      pattern: null,
+      opacity: 0.2,
+      palette: { primary: '#01696F', secondary: '#E11D48', accent: null },
     },
     createdAt: now,
     updatedAt: now,
@@ -1130,6 +1163,11 @@ export function createFlyerTemplate(sector: FlyerSector, layout?: FlyerLayout): 
       layout: tpl.layout,
       fontFamily: 'Inter',
       fontScale: FONT_SCALE_DEFAULT,
+    },
+    decorations: {
+      pattern: null,
+      opacity: 0.2,
+      palette: { primary: tpl.accentColor, secondary: tpl.textColor, accent: null },
     },
     createdAt: now,
     updatedAt: now,

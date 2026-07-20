@@ -143,6 +143,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
   const [showHeroPromptEditor, setShowHeroPromptEditor] = React.useState(false);
   const [heroLibrary, setHeroLibrary] = React.useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.flyerHero));
   const ai = useAIFlyer(userEmail);
+  const lastCostUsd = ai.lastCostUsd;
   const debouncedFlyer = useDebouncedValue(flyer, 300);
 
   // When the URL-driven document changes, reset local state to the new flyer.
@@ -335,7 +336,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
     setHeroLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.flyerHero, id));
   }, []);
 
-  const handleGenerateHero = React.useCallback(async () => {
+  const handleGenerateHero = React.useCallback(async (imageModel?: string) => {
     if (flyer.style.layout === 'centered') { addToast('info', 'Il layout centrato non ha un box hero.'); return; }
     setIsGeneratingHero(true);
     try {
@@ -344,6 +345,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
         sector: heroSector,
         tone: heroTone,
         promptOverride: trimmedPrompt.length > 0 ? trimmedPrompt.slice(0, 1500) : undefined,
+        imageModel,
       });
       if (result.applied && result.flyer) {
         setFlyer(result.flyer);
@@ -427,6 +429,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
       tier={tier}
       onSubmitPrompt={(text) => { setAiPrompt(text); }}
       hidePrompt
+      lastCostUsd={lastCostUsd}
       // REQ-AI-003: su volantino vuoto la rail propone un prompt contestuale
       // con focus; l'expanded resta default true (o pq_ui:v1 se persistito).
       suggestedPrompt={!flyerHasContent(flyer) ? "Descrivi l'evento o la promo: scrivo il copy del volantino." : undefined}

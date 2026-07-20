@@ -32,7 +32,7 @@ describe('POST /api/ai/card-photo', () => {
     expect(res.body.data.imageBase64).toBe('photodata');
     expect(res.body.data.mimeType).toBe('image/jpeg');
     const cfg = createInteraction.mock.calls[0][0].generation_config.image_config;
-    expect(cfg).toEqual({ image_size: '512', aspect_ratio: '1:1' });
+    expect(cfg).toEqual({ image_size: '512', aspect_ratio: '3:4' });
   });
 
   it('concatenates context into prompt', async () => {

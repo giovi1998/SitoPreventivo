@@ -10,6 +10,7 @@ import {
   AiActionChip,
   AiActionGrid,
 } from '../ai-ui';
+import { AI_IMAGE_MODELS, getAiImageModelDefault, setAiImageModelDefault } from '../../utils/uiPrefs';
 
 export interface CardAIModel {
   id: string;
@@ -34,8 +35,9 @@ export interface CardAIControlsProps {
    * dalla console — `bare` lo nasconde per evitare duplicati.
    */
   bare?: boolean;
-  onGenerateCover?: (side: 'front' | 'back' | 'both') => void;
+  onGenerateCover?: (side: 'front' | 'back' | 'both', imageModel?: string) => void;
   onRemoveCover?: (side: 'front' | 'back') => void;
+  onGeneratePhoto?: (imageModel?: string) => void;
   card?: BusinessCard;
 }
 
@@ -103,16 +105,25 @@ export default function CardAIControls({
   bare = false,
   onGenerateCover,
   onRemoveCover,
+  onGeneratePhoto,
   card,
 }: CardAIControlsProps) {
   const isDesktop = variant === 'desktop';
   const coverLocked = tier !== 'unlocked';
   const hasFrontCover = !!card?.front.coverImageUrl;
   const hasBackCover = !!card?.back.coverImageUrl;
+  const [imageModel, setImageModel] = React.useState(getAiImageModelDefault());
 
   const modelOptions = availableModels.length > 0 
     ? availableModels.map(m => ({ value: m.id, label: `${m.name}, ${m.model}` }))
     : [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }];
+
+  const imageModelOptions = AI_IMAGE_MODELS.map(m => ({ value: m.id, label: m.name }));
+
+  const handleImageModelChange = (id: string) => {
+    setImageModel(id);
+    setAiImageModelDefault(id);
+  };
 
   const modelSelect = (
     <AiSelect
@@ -124,12 +135,24 @@ export default function CardAIControls({
     />
   );
 
+  const imageModelSelect = onGenerateCover ? (
+    <AiSelect
+      label="Modello immagine"
+      value={imageModel}
+      onChange={(e) => handleImageModelChange(e.target.value)}
+      options={imageModelOptions}
+      className="card-ai-image-model-select"
+      hint={AI_IMAGE_MODELS.find(m => m.id === imageModel)?.description}
+    />
+  ) : null;
+
   const backgroundSection = onGenerateCover ? (
     <AiSection 
       title="Sfondo AI" 
       id="card-ai-section-bg" 
       hint="Texture con i colori della card. Nessun testo, nessun logo."
     >
+      {imageModelSelect}
       <div className="card-ai-cover-grid">
         <div className="card-ai-cover-item">
           <span className="card-ai-cover-item__label">Fronte</span>
@@ -142,7 +165,7 @@ export default function CardAIControls({
           <button
             type="button"
             className="card-ai-cover-item__btn"
-            onClick={() => onGenerateCover('front')}
+            onClick={() => onGenerateCover('front', imageModel)}
             disabled={isProcessing || coverLocked}
           >
             {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca' : 'Genera fronte'}
@@ -159,7 +182,7 @@ export default function CardAIControls({
           <button
             type="button"
             className="card-ai-cover-item__btn"
-            onClick={() => onGenerateCover('back')}
+            onClick={() => onGenerateCover('back', imageModel)}
             disabled={isProcessing || coverLocked}
           >
             {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca' : 'Genera retro'}
@@ -169,7 +192,7 @@ export default function CardAIControls({
       <button
         type="button"
         className="card-action-primary card-ai-both-btn"
-        onClick={() => onGenerateCover('both')}
+        onClick={() => onGenerateCover('both', imageModel)}
         disabled={isProcessing || coverLocked}
         title="Genera sfondo AI per fronte e retro (fronte → retro)"
       >

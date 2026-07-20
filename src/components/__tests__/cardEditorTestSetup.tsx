@@ -39,7 +39,7 @@ vi.mock('../../hooks/useAICard', () => ({
     resetCardChat: vi.fn(),
     cardAiLogs: [],
     isCardProcessing: false,
-    availableModels: [{ id: 'deepseek-chat', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true }],
+    availableModels: [{ id: 'deepseek-chat', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true, supportsVision: false }],
   }),
 }));
 

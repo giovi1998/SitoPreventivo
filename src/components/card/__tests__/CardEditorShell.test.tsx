@@ -177,8 +177,8 @@ describe('CardEditorShell', () => {
     fireEvent.click(bothBtn);
 
     await waitFor(() => expect(mockGenerateCover).toHaveBeenCalledTimes(2), { timeout: 3000 });
-    expect(mockGenerateCover).toHaveBeenNthCalledWith(1, expect.anything(), 'front');
-    expect(mockGenerateCover).toHaveBeenNthCalledWith(2, expect.anything(), 'back');
+    expect(mockGenerateCover).toHaveBeenNthCalledWith(1, expect.anything(), 'front', undefined, expect.any(Object));
+    expect(mockGenerateCover).toHaveBeenNthCalledWith(2, expect.anything(), 'back', undefined, expect.any(Object));
 
     await waitFor(() => expect(container.querySelector('img[alt="Cover fronte"]')).toBeInTheDocument(), { timeout: 3000 });
     expect(container.querySelector('img[alt="Cover retro"]')).toBeInTheDocument();

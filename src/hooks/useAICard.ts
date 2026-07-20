@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import type { BusinessCard } from '../utils/documentSchemas';
 import type { AIStreamChunk } from '../ai/types';
 import { CardAIOrchestrator } from '../ai/cardOrchestrator';
@@ -16,6 +16,9 @@ import { mapAiError } from '../utils/ai/mapAiError';
 import { buildCardPhotoBrief } from '../utils/card/photoBrief';
 import { newRequestId } from '../utils/ai/requestId';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
+import { resolveProviderId } from '../utils/resolveProviderId';
+import { calculateCostUsd } from '../ai/providerPricing';
+import { getAiImageModelDefault } from '../utils/uiPrefs';
 
 interface UseAICardReturn {
   processCardPrompt: (
@@ -35,20 +38,22 @@ interface UseAICardReturn {
     card: BusinessCard,
     side?: 'front' | 'back',
     prompt?: string,
-    options?: { onProgress?: (msg: string) => void }
+    options?: { onProgress?: (msg: string) => void; imageModel?: string }
   ) => Promise<string>;
   generatePhoto: (
     card: BusinessCard,
-    options?: { promptOverride?: string; onProgress?: (msg: string) => void }
+    options?: { promptOverride?: string; onProgress?: (msg: string) => void; imageModel?: string }
   ) => Promise<string>;
   resetCardChat: () => void;
   cardAiLogs: ReturnType<typeof useAILogs>['logs'];
   isCardProcessing: boolean;
-  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
+  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
+  lastCostUsd: number;
 }
 
 export function useAICard(userEmail?: string): UseAICardReturn {
   const { logs: cardAiLogs, isProcessing: isCardProcessing, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAICard');
+  const [lastCostUsd, setLastCostUsd] = useState(0);
   const availableModels = useRef(new CardAIOrchestrator().getProviderList()).current;
   const orchestratorRef = useRef<CardAIOrchestrator | null>(null);
 
@@ -96,7 +101,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         options?.onProgress?.('🤖 Chiamata AI in corso...');
 
         const result = await orchestrator.processPrompt(card, prompt, {
-          modelId: options?.modelId,
+          modelId: resolveProviderId(options?.modelId),
           requestId,
           onStream: (chunk: AIStreamChunk) => {
             if (chunk.type === 'content' && chunk.content) {
@@ -107,7 +112,9 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         });
 
         if (userEmail && userEmail !== 'admin@gmail.com' && result.response.usage?.totalTokens) {
-          Promise.resolve(dataService.trackTokens(userEmail, result.response.usage.totalTokens) as unknown as Promise<unknown>).catch(() => {});
+          const cost = calculateCostUsd(resolveProviderId(options?.modelId), result.response.usage);
+          setLastCostUsd(cost);
+          Promise.resolve(dataService.trackTokens(userEmail, result.response.usage.totalTokens, cost) as unknown as Promise<unknown>).catch(() => {});
         }
 
         const tokens = result.response.usage
@@ -152,7 +159,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
   }, [getOrchestrator, clear]);
 
   const generateCover = useCallback(
-    async (card: BusinessCard, side: 'front' | 'back' = 'front', promptOverride?: string, options?: { onProgress?: (msg: string) => void }) => {
+    async (card: BusinessCard, side: 'front' | 'back' = 'front', promptOverride?: string, options?: { onProgress?: (msg: string) => void; imageModel?: string }) => {
       const requestId = newRequestId();
       await ensureTokenBudget();
 
@@ -168,7 +175,8 @@ export function useAICard(userEmail?: string): UseAICardReturn {
           side === 'front' ? resolveCardCoverLogo(card) : Promise.resolve(undefined),
         ]);
 
-        const payload = buildCardCoverPayload(coverPrompt, coverContext, { cardImage, logoImage }, side, userEmail);
+        const imageModel = options?.imageModel || getAiImageModelDefault();
+        const payload = buildCardCoverPayload(coverPrompt, coverContext, { cardImage, logoImage }, side, userEmail, imageModel);
 
         const apiBase = import.meta.env?.VITE_API_BASE || '';
         const res = await fetch(`${apiBase}/api/ai/card-cover`, {
@@ -197,7 +205,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
   );
 
   const generatePhoto = useCallback(
-    async (card: BusinessCard, options?: { promptOverride?: string; onProgress?: (msg: string) => void }) => {
+    async (card: BusinessCard, options?: { promptOverride?: string; onProgress?: (msg: string) => void; imageModel?: string }) => {
       const requestId = newRequestId();
       await ensureTokenBudget();
 
@@ -210,6 +218,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
 
       try {
         const apiBase = import.meta.env?.VITE_API_BASE || '';
+        const imageModel = options?.imageModel || getAiImageModelDefault();
         const res = await fetch(`${apiBase}/api/ai/card-photo`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
@@ -217,6 +226,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
             prompt,
             context: context || undefined,
             userEmail: userEmail || undefined,
+            imageModel,
           }),
         });
 
@@ -247,5 +257,6 @@ export function useAICard(userEmail?: string): UseAICardReturn {
     cardAiLogs,
     isCardProcessing,
     availableModels,
+    lastCostUsd,
   };
 }

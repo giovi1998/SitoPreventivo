@@ -6,6 +6,9 @@ import {
 } from '../ai/onboardingOrchestrator';
 import { useAILogs } from './useAILogs';
 import { newRequestId } from '../utils/ai/requestId';
+import dataService from '../utils/dataService';
+import { resolveProviderId } from '../utils/resolveProviderId';
+import { calculateCostUsd } from '../ai/providerPricing';
 
 export interface UseAIOnboardingReturn {
   suggest: (
@@ -17,11 +20,14 @@ export interface UseAIOnboardingReturn {
   logs: ReturnType<typeof useAILogs>['logs'];
   suggestions: OnboardingSuggestions | null;
   isProcessing: boolean;
+  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
+  lastCostUsd: number;
 }
 
 export function useAIOnboarding(userEmail?: string): UseAIOnboardingReturn {
   const orchestratorRef = useRef<OnboardingAIOrchestrator | null>(null);
   const [suggestions, setSuggestions] = useState<OnboardingSuggestions | null>(null);
+  const [lastCostUsd, setLastCostUsd] = useState(0);
   const { logs, isProcessing, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAIOnboarding');
 
   const getOrchestrator = (): OnboardingAIOrchestrator => {
@@ -37,6 +43,7 @@ export function useAIOnboarding(userEmail?: string): UseAIOnboardingReturn {
 
       try {
         const result = await getOrchestrator().suggest(name, sector, {
+          modelId: resolveProviderId(),
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -52,6 +59,12 @@ export function useAIOnboarding(userEmail?: string): UseAIOnboardingReturn {
           ? { prompt: result.response.usage.promptTokens, completion: result.response.usage.completionTokens, total: result.response.usage.totalTokens }
           : undefined;
         finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
+
+        if (userEmail && userEmail !== 'admin@gmail.com' && result.response?.usage) {
+          const cost = calculateCostUsd(resolveProviderId(), result.response.usage);
+          setLastCostUsd(cost);
+          dataService.trackTokens(userEmail, result.response.usage.totalTokens, cost).catch(() => {});
+        }
 
         if (result.applied) {
           setSuggestions(result.suggestions);
@@ -75,5 +88,7 @@ export function useAIOnboarding(userEmail?: string): UseAIOnboardingReturn {
     clear();
   }, [clear]);
 
-  return { suggest, reset, logs, suggestions, isProcessing };
+  const availableModels = getOrchestrator().getProviderList();
+
+  return { suggest, reset, logs, suggestions, isProcessing, availableModels, lastCostUsd };
 }

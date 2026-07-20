@@ -37,6 +37,7 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 | 12 | `spec-tool-ai-card-flyer-tools.md` | **DONE** | `ToolAwareOrchestrator` wired end-to-end in `AIOrchestrator`, `CardAIOrchestrator`, `FlyerAIOrchestrator`; test tool path e fallback verdi. Gap residuo UI: callback `onToolStart/Complete` non passati da `useAICard` → assorbito in REQ-LOG-001 spec #14 |
 | 13 | `spec-api-saas-monetization.md` | **NOT-STARTED** | Zero Stripe/api-key in `api/` (verificato 2026-07-18). Track futuro separato, mantenuto in `spec/` |
 | 14 | `spec-design-ai-first-ux-redesign.md` | **DONE** | Fase 12 ✅ (useAILogs, 6 hook migrati, AILogEntry v2, trackUsage ESM, IMAGE_TOKEN_COST, X-Request-Id, ghost rate limit fix). Fase 13 ✅ (ToastProvider, token The Classic + purge teal/blu, ai-ui.css, ActionBar logo/QR, sidebar gruppi + pq_ui:v1, breakpoint canonici, font lazy, copy AI-first, HomePage AIDA + motion). Fase 14 ✅ (AIConsole rail in social/flyer/card/quote, logo tab AI-first, AIProviderBadge, suggestedPrompt doc vuoto, onboarding AI-first). Deviazioni documentate in AGENTS.md §13-14. Spec cancellato dopo verifica (185 file, 2177 test verdi). |
+| 15 | `spec-design-ai-harness-upgrade.md` | **NOT-STARTED** | TB-023. Multi-provider (Ollama Pro $20/mo flat + MiniMax M3 multimodale + Gemini 2.0 Flash), tracking costi reale, 5 pattern decorativi SVG, drag foto card grid-mode, icone stilizzate AI, RAG clienti (pgvector), A/B provider, vision feedback screenshot. ~45h, sprint 2-3. |
 
 ---
 
@@ -173,12 +174,17 @@ Sprint 1 ✅ done:    TB-001 wiring ToolAwareOrchestrator
                     TB-003 rimuove bottone hero da manual panel
                     TB-002 test 4 endpoint Gemini (regression gratis)
 
-Sprint 2 (next):    TB-023 migliorare harness AI (provider multipli)
+Sprint 2 (next):    TB-023a multi-provider (Ollama Pro + MiniMax M3 +
+                    Gemini Flash) + selector UI + pricing (~12h)
+                    TB-023b pattern decorativi lib + picker (~10h)
+
+Sprint 3:           TB-023c export pattern + AI v2 prompt + drag foto
+                    card + icone AI + RAG clienti + test (~23h)
                     TB-024 più formati export logo (PDF vettoriale, favicon)
                     TB-004 + TB-005 test helper mancanti
                     TB-006 audit-ui-components.md (doc-only)
 
-Sprint 3 (opz):     TB-007 test flyer refactor (6 file)
+Sprint 4 (opz):     TB-007 test flyer refactor (6 file)
                     TB-008 README privacy
                     TB-009 verifica costi
 ```
@@ -214,7 +220,7 @@ monetizzazione automatizzata per ultima. L'intake pipeline (TB-019)
 è infrastruttura che serve quando hai volume — non prima.
 
 **Effort rimanente**: ~2-3 giorni tecnici (P1+P2) + qualità prodotto
-(TB-023/024, ~37h) + business fasi 1-2 (~35h).
+(TB-023 ~45h con spec scritta, TB-024 ~12h) + business fasi 1-2 (~35h).
 
 **Quick win già fatti**: TB-003 + 4 file test Gemini.
 
@@ -288,17 +294,51 @@ primi clienti paganti.
 
 ### Qualità prodotto (PRIORITÀ ALTA — prima delle infra)
 
-#### TB-023 Migliorare harness AI 🟡 P1
+#### TB-023 Migliorare harness AI 🟡 P1 — spec scritta
+- **Spec**: `spec/spec-design-ai-harness-upgrade.md` (2026-07-20)
 - **Perché**: oggi DeepSeek + Gemini soli. Qualità AI è il differenziale
-  vs Durable/Canva. Provider multipli + tracking costi reale.
-- **Scope**:
-  - GPT-4o mini come fallback (costo simile, qualità diversa)
-  - Claude Haiku per copy lungo (flyer) — migliore di DeepSeek su italiano
-  - Gemini 2.0 Flash per immagini (più economico di Nano Banana 3.1)
-  - Logging token cost reale (oggi stimato, non tracciato per provider)
-  - A/B provider su stesso prompt (qualità confrontata)
-- **Effort**: ~25h (provider registry già esiste, basta estendere)
-- **Prereq**: nessuno, puro miglioramento qualità
+  vs Durable/Canva. Le 4 foto biglietti reali (Alice Cinofila onda blu,
+  Money360 header editoriale, ASMS sfondo full) mostrano pattern
+  decorativi che l'app oggi non sa generare né esporre.
+- **Provider scelti** (post-analisi costi 2026-07-20):
+  - **DeepSeek V4 Pro** (già integrato, pay-per-token ~$0.55/1M input,
+    $2.19/1M output) — resta per copy breve + fallback
+  - **Ollama Pro Cloud** ($20/mo flat, 50x free usage, 3 modelli
+    concorrenti, zero data retention) — nuovo, API `https://ollama.com/api`,
+    env `OLLAMA_API_KEY`. Modelli: `minimax-m3:cloud` (default, multimodale
+    Text+Image, 512K ctx, sostituto ufficiale gemini-3-flash-preview
+    ritirato 15 luglio 2026), `deepseek-v4-pro:cloud`, `qwen-3.5`
+  - **Gemini 2.0 Flash immagini** (`gemini-2.0-flash-preview-image-
+    generation`, ~$0.02/immagine, alternativa economica a Nano Banana 3.1
+    per icone/illustrazioni piccole)
+- **Scope completo** (vedi spec per REQ dettagliati):
+  - Multi-provider + selector UI in `AIProviderBadge` (REQ-MP-001..006)
+  - MiniMax M3 multimodale: screenshot preview → AI vision feedback
+    (REQ-MM-001..005) + `useAIDesignReview` hook
+  - Tracking costi reale: `providerPricing.ts`, colonna DB
+    `tokens_cost_usd`, endpoint admin cost-breakdown (REQ-TC-001..006)
+  - Pattern decorativi (5): wave-bottom, wave-split, blob-corner,
+    splash-corners, full-overlay — SVG programmatici, selezionabili
+    manualmente + via AI (REQ-PD-001..008)
+  - Drag mouse foto in card grid-mode: `photoPlacement {x,y,scale}`
+    normalizzato -1..+1, pointer events, export coerente (REQ-DF-001..006)
+  - Icone stilizzate AI: `iconOrchestrator` per card.builder.iconUrl +
+    flyer.style.heroIllustration (es. frutta/oggetti/animali flat 2-colori)
+    (REQ-IS-001..007)
+  - RAG clienti: tabella `client_kb` + pgvector embeddings, l'AI consulta
+    storico clienti prima di generare (coerenza brand nel tempo),
+    integrazione con TB-019 intake pipeline (REQ-RG-001..006)
+  - A/B provider: confronto side-by-side in modal (REQ-AB-001..003)
+- **Effort**: ~45h (sprint 2-3)
+  - Sprint 2 (~22h): provider Ollama+MiniMax, Gemini Flash, selector UI,
+    pricing, pattern lib + picker
+  - Sprint 3 (~23h): export pattern, AI v2 prompt, drag foto, icone AI,
+    RAG clienti, test
+- **Prereq**: nessuno tecnico. Business:订阅 Ollama Pro $20/mo +
+  `OLLAMA_API_KEY` in Vercel env. Neon pgvector (gratis, già supportato).
+- **Costi ricorrenti**: $20/mo Ollama Pro (flat) + DeepSeek pay-per-token
+  esistente + Gemini per-image. Atteso ~$25-30/mo total a volume 100
+  clienti/mese (vs $80+ con solo DeepSeek pay-per-token).
 
 #### TB-024 Più formati export logo 🟡 P1
 - **Perché**: oggi SVG + PNG 512/1024/2048. Tipografie e siti web

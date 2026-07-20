@@ -8,9 +8,10 @@ export interface AiSelectOption {
 export interface AiSelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   options: AiSelectOption[];
+  hint?: string;
 }
 
-export function AiSelect({ label, options, className = '', ...props }: AiSelectProps) {
+export function AiSelect({ label, options, hint, className = '', ...props }: AiSelectProps) {
   const selectElement = (
       <select className={`ai-select ${className}`} {...props} aria-label={label ? `${label}` : undefined}>
         {options.map((opt) => (
@@ -29,6 +30,7 @@ export function AiSelect({ label, options, className = '', ...props }: AiSelectP
     <label className="ai-select-wrapper">
       <span className="ai-select-label">{label}</span>
       {selectElement}
+      {hint ? <span className="ai-select-hint">{hint}</span> : null}
     </label>
   );
 }

@@ -96,7 +96,7 @@ describe('useAICard', () => {
     await act(async () => {
       await result.current.processCardPrompt(createEmptyCard(), 'test');
     });
-    expect(dataService.trackTokens).toHaveBeenCalledWith('user@test.com', 15);
+    expect(dataService.trackTokens).toHaveBeenCalledWith('user@test.com', 15, expect.any(Number));
   });
 
   describe('generateCover', () => {

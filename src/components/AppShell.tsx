@@ -103,6 +103,7 @@ export default function AppShell() {
     aiLogs,
     isProcessing,
     availableModels,
+    lastCostUsd,
   } = useAI(user?.email);
   const previewRef = useRef<HTMLElement>(null);
 

@@ -95,7 +95,7 @@ interface EditorViewProps {
   previewRef: React.Ref<HTMLElement>;
   aiLogs: any[];
   isProcessing: boolean;
-  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
+  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
   onResetChat: () => void;
   onReset?: () => void;
   isDirty: boolean;
@@ -109,6 +109,7 @@ interface EditorViewProps {
   lastSaveTime: Date | null;
   pdfLoading: boolean;
   docxLoading?: boolean;
+  lastCostUsd?: number;
 }
 
 export default function EditorView({
@@ -117,7 +118,7 @@ export default function EditorView({
   previewRef, aiLogs, isProcessing, availableModels, onResetChat, onReset,
   isDirty, saveQuote, documentTheme = 'corporate',
   onSave, onExportPDF, onExportDOCX, onImportPDF, onSaveAsTemplate,
-  lastSaveTime, pdfLoading, docxLoading,
+  lastSaveTime, pdfLoading, docxLoading, lastCostUsd,
 }: EditorViewProps) {
   const [showAi, setShowAi] = React.useState(true);
   const [showManual, setShowManual] = React.useState(true);
@@ -276,6 +277,7 @@ export default function EditorView({
       tier="unlocked"
       onSubmitPrompt={(text) => setAiText(text)}
       hidePrompt
+      lastCostUsd={lastCostUsd}
       quickActions={
         <button type="button" className="card-ai-reset" onClick={onResetChat} disabled={isProcessing}>
           Nuova conversazione

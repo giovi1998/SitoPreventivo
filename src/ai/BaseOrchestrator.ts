@@ -3,6 +3,7 @@ import { chatStore } from './chat/store';
 import { providerRegistry } from './providers/registry';
 import { ToolRegistry } from './tools/registry';
 import dataService from '../utils/dataService';
+import { calculateCostUsd } from './providerPricing';
 import type { ChatMessage, AIResponse, AIStreamChunk, AIProvider, AIToolCall, ToolExecutor, ToolResult } from './types';
 
 type AIUsage = NonNullable<AIResponse['usage']>;
@@ -186,20 +187,32 @@ export abstract class BaseOrchestrator {
    * charged. Defers the actual call to dataService so the same
    * accounting happens regardless of which orchestrator produced the
    * usage. Silent on errors to avoid breaking the user-facing flow.
+   *
+   * TB-023: calcola costUsd tramite providerPricing e lo passa a
+   * dataService.trackTokens (backward compatible: se providerId
+   * non passato, costUsd=0 e il behavior è invariato).
    */
-  protected trackUsage(usage: AIUsage | undefined, userEmail?: string): void {
+  protected trackUsage(
+    usage: AIUsage | undefined,
+    userEmail?: string,
+    providerId?: string,
+  ): void {
     if (!usage) return;
     if (!userEmail || userEmail === 'admin@gmail.com') return;
     const totalTokens = usage.totalTokens ?? (usage.promptTokens + usage.completionTokens);
     if (!totalTokens) return;
+    let costUsd = 0;
+    if (providerId) {
+      costUsd = calculateCostUsd(providerId, usage);
+    }
     try {
-      dataService.trackTokens(userEmail, totalTokens);
+      dataService.trackTokens(userEmail, totalTokens, costUsd);
     } catch {
       // Silent on errors to avoid breaking the user-facing flow.
     }
   }
 
-  getProviderList(): { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[] {
+  getProviderList(): { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[] {
     return providerRegistry.listProviders();
   }
 }
