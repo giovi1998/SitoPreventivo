@@ -1,6 +1,14 @@
 import React from 'react';
 import type { BusinessCard } from '../../../utils/documentSchemas';
-import { AiSection, AiPromptTextarea } from '../../ai-ui';
+import { AiSection, AiSelect, AiPromptTextarea, AiPromptLibrary } from '../../ai-ui';
+import { AI_IMAGE_MODELS, getAiImageModelDefault, setAiImageModelDefault } from '../../../utils/uiPrefs';
+import type { PromptLibraryEntry } from '../../../utils/promptLibrary';
+import type { IconBackground } from '../../../hooks/useAIIconHero';
+
+const BACKGROUND_OPTIONS = [
+  { value: 'white', label: 'Bianco (default)' },
+  { value: 'card', label: 'Colore accento card' },
+];
 
 export interface CardAIIconHeroSectionProps {
   card: BusinessCard;
@@ -8,7 +16,14 @@ export interface CardAIIconHeroSectionProps {
   isProcessing: boolean;
   iconPrompt: string;
   onIconPromptChange: (v: string) => void;
-  onGenerateIcon: () => void;
+  showPromptEditor: boolean;
+  onTogglePromptEditor: () => void;
+  onGenerateIcon: (opts: { imageModel: string; background: IconBackground }) => void;
+  onFillAutoPrompt: () => void;
+  library: PromptLibraryEntry[];
+  onSavePrompt: () => void;
+  onApplyPrompt: (entry: PromptLibraryEntry) => void;
+  onDeletePrompt: (id: string) => void;
 }
 
 export default function CardAIIconHeroSection({
@@ -16,37 +31,91 @@ export default function CardAIIconHeroSection({
   isProcessing,
   iconPrompt,
   onIconPromptChange,
+  showPromptEditor,
+  onTogglePromptEditor,
   onGenerateIcon,
+  onFillAutoPrompt,
+  library,
+  onSavePrompt,
+  onApplyPrompt,
+  onDeletePrompt,
 }: CardAIIconHeroSectionProps) {
   const locked = tier !== 'unlocked';
+  const [imageModel, setImageModel] = React.useState(getAiImageModelDefault());
+  const [background, setBackground] = React.useState<IconBackground>('white');
+
+  const handleImageModelChange = (id: string) => {
+    setImageModel(id);
+    setAiImageModelDefault(id);
+  };
 
   return (
     <AiSection
       title="Icona AI"
       id="card-ai-section-icon"
-      hint="Genera un'icona stilizzata 2-colori dal settore o dai servizi."
+      hint="Icona stilizzata 2-colori dal ruolo o dai servizi. Applicata come logo (o foto se il logo c'è già)."
       collapsible
       defaultOpen={false}
     >
-      <AiPromptTextarea
-        label="Descrizione icona"
-        value={iconPrompt}
-        onChange={(e) => onIconPromptChange(e.target.value.slice(0, 1000))}
-        rows={2}
-        maxLength={1000}
-        placeholder="Es. mela stilizzata per nutrizionista, casa per agente immobiliare..."
-        aria-label="Descrizione icona AI"
+      <AiSelect
+        label="Modello immagine"
+        value={imageModel}
+        onChange={(e) => handleImageModelChange(e.target.value)}
+        options={AI_IMAGE_MODELS.map((m) => ({ value: m.id, label: m.name }))}
+        hint={AI_IMAGE_MODELS.find((m) => m.id === imageModel)?.description}
+        className="card-ai-image-model-select"
+      />
+      <AiSelect
+        label="Sfondo icona"
+        value={background}
+        onChange={(e) => setBackground(e.target.value as IconBackground)}
+        options={BACKGROUND_OPTIONS}
       />
       <button
         type="button"
         className="card-action-primary"
-        onClick={onGenerateIcon}
-        disabled={isProcessing || locked || !iconPrompt.trim()}
+        onClick={() => onGenerateIcon({ imageModel, background })}
+        disabled={isProcessing || locked}
         title={locked ? 'Disponibile nella versione Pro' : 'Genera icona stilizzata 2-colori'}
         data-testid="card-generate-icon-ai"
       >
         {isProcessing ? 'Generazione…' : locked ? '🔒 Icona AI (Pro)' : '✨ Genera icona AI'}
       </button>
+
+      <button
+        type="button"
+        className="btn-secondary card-ai-photo-prompt-toggle"
+        onClick={onTogglePromptEditor}
+        disabled={isProcessing}
+        aria-expanded={showPromptEditor}
+      >
+        {showPromptEditor ? 'Nascondi prompt' : 'Modifica prompt'}
+      </button>
+
+      {showPromptEditor && (
+        <div className="card-photo-prompt-editor" data-testid="card-icon-prompt-editor">
+          <AiPromptTextarea
+            label="Prompt icona AI"
+            value={iconPrompt}
+            onChange={(e) => onIconPromptChange(e.target.value.slice(0, 1000))}
+            rows={3}
+            maxLength={1000}
+            placeholder="Vuoto = prompt automatico dal ruolo. Es. mela stilizzata per nutrizionista, casa per agente immobiliare…"
+            aria-label="Prompt icona AI"
+          />
+          <button type="button" className="btn-secondary" onClick={onFillAutoPrompt} disabled={isProcessing}>
+            Usa prompt automatico
+          </button>
+          <AiPromptLibrary
+            items={library}
+            onSave={onSavePrompt}
+            onApply={onApplyPrompt}
+            onDelete={onDeletePrompt}
+            saveDisabled={!iconPrompt.trim()}
+            title="I miei prompt icona"
+          />
+        </div>
+      )}
     </AiSection>
   );
 }

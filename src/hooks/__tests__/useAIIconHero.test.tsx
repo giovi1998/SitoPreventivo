@@ -30,6 +30,27 @@ describe('useAIIconHero', () => {
     );
   });
 
+  it('forwards imageModel and background options to the API', async () => {
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { imageBase64: 'x', mimeType: 'image/png' } }),
+    });
+
+    const { result } = renderHook(() => useAIIconHero('user@test.com'));
+    await act(async () => {
+      await result.current.generate('casa', 'icon', {
+        primaryColor: '#01696F',
+        secondaryColor: '#1A1A1A',
+        imageModel: 'gemini-3.1-flash-image',
+        background: 'card',
+      });
+    });
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.imageModel).toBe('gemini-3.1-flash-image');
+    expect(body.background).toBe('card');
+  });
+
   it('throws on non-ok response', async () => {
     const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({ error: 'Troppe generazioni' }) });

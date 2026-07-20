@@ -131,6 +131,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const { generate: generateIconHero, isProcessing: isIconHeroProcessing, logs: iconHeroLogs } = useAIIconHero(userEmail);
   const [isPhotoGenerating, setIsPhotoGenerating] = useState(false);
   const [iconPrompt, setIconPrompt] = useState('');
+  const [showIconPromptEditor, setShowIconPromptEditor] = useState(false);
+  const [iconLibrary, setIconLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardIcon));
   const [photoPrompt, setPhotoPrompt] = useState('');
   const [showPhotoPromptEditor, setShowPhotoPromptEditor] = useState(false);
   const [photoLibrary, setPhotoLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardPhoto));
@@ -627,15 +629,22 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     setPhotoLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.cardPhoto, id));
   }, []);
 
-  const handleGenerateIcon = useCallback(async () => {
+  const buildAutoIconPrompt = useCallback(() => {
+    const subject = card.front.title?.trim() || card.front.company?.trim() || 'professional business';
+    return `minimal geometric icon representing ${subject}`;
+  }, [card]);
+
+  const handleGenerateIcon = useCallback(async (opts: { imageModel: string; background: 'white' | 'card' | 'accent' }) => {
     if (tier !== 'unlocked') {
       addToast('info', 'Sblocca il piano per generare icone AI.', 4000);
       return;
     }
     try {
-      const dataUrl = await generateIconHero(iconPrompt, 'icon', {
+      const dataUrl = await generateIconHero(iconPrompt.trim() || buildAutoIconPrompt(), 'icon', {
         primaryColor: card.style.accentColor,
         secondaryColor: card.style.textColor,
+        imageModel: opts.imageModel,
+        background: opts.background,
       });
       // Apply as logo if no logo is set; otherwise store as photo for visual flair.
       if (!card.front.logoUrl) {
@@ -648,7 +657,39 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     } catch (err: any) {
       addToast('error', err.message || 'Errore generazione icona AI', 5000);
     }
-  }, [card, tier, generateIconHero, iconPrompt, patchFront, addToast]);
+  }, [card, tier, generateIconHero, iconPrompt, buildAutoIconPrompt, patchFront, addToast]);
+
+  const handleFillAutoIconPrompt = useCallback(() => {
+    setIconPrompt(buildAutoIconPrompt());
+    setShowIconPromptEditor(true);
+  }, [buildAutoIconPrompt]);
+
+  const handleSaveIconPrompt = useCallback(() => {
+    const text = iconPrompt.trim();
+    if (!text) {
+      addToast('info', 'Scrivi un prompt prima di salvarlo.');
+      return;
+    }
+    const label = window.prompt('Nome del prompt', text.slice(0, 40)) || text.slice(0, 40);
+    setIconLibrary(addPromptEntry(PROMPT_LIBRARY_KEYS.cardIcon, {
+      label: label.trim() || 'Prompt icona',
+      prompt: text,
+      module: 'card-icon',
+    }));
+    addToast('success', 'Prompt salvato nella libreria.');
+  }, [iconPrompt, addToast]);
+
+  const handleApplyIconPrompt = useCallback((entry: PromptLibraryEntry) => {
+    if (entry.prompt) {
+      setIconPrompt(entry.prompt);
+      setShowIconPromptEditor(true);
+      addToast('info', `Prompt «${entry.label}» applicato.`);
+    }
+  }, [addToast]);
+
+  const handleDeleteIconPrompt = useCallback((id: string) => {
+    setIconLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.cardIcon, id));
+  }, []);
 
   const handleRemoveCover = useCallback(
     (side: 'front' | 'back') => {
@@ -770,6 +811,15 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }));
   }, []);
 
+  const patchDecorations = useCallback((patch: Partial<BusinessCard['decorations']>) => {
+    pushLayoutEvent({ type: 'card.edit', element: 'decorations', result: 'ok', payload: { fields: Object.keys(patch) } });
+    setCard((prev) => ({
+      ...prev,
+      decorations: { ...(prev.decorations ?? { pattern: null, opacity: 0.2 }), ...patch },
+      updatedAt: new Date().toISOString(),
+    }));
+  }, []);
+
   const websiteValid = useMemo(() => !card.back.website || isHttpUrl(card.back.website), [card.back.website]);
 
   const formContent = useMemo(() => (
@@ -817,9 +867,9 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         />
       </fieldset>
       <CardQrAdvanced card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
-      <CardStyleFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
+      <CardStyleFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} onPatchDecorations={patchDecorations} />
     </>
-  ), [card, patchFront, patchBack, patchStyle, handleUpload, removePhoto, removeLogo, removeCoverImage, removeBackCoverImage, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial, tier]);
+  ), [card, patchFront, patchBack, patchStyle, patchDecorations, handleUpload, removePhoto, removeLogo, removeCoverImage, removeBackCoverImage, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial, tier]);
 
   const aiPanelProps = {
     aiModel,
@@ -847,15 +897,16 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     onFillAutoPhotoPrompt: handleFillAutoPhotoPrompt,
     iconPrompt,
     setIconPrompt,
+    showIconPromptEditor,
+    setShowIconPromptEditor,
     onGenerateIcon: handleGenerateIcon,
+    onFillAutoIconPrompt: handleFillAutoIconPrompt,
+    iconLibrary,
+    onSaveIconPrompt: handleSaveIconPrompt,
+    onApplyIconPrompt: handleApplyIconPrompt,
+    onDeleteIconPrompt: handleDeleteIconPrompt,
     iconHeroLogs,
-    onPatchDecorations: useCallback((patch: Partial<BusinessCard['decorations']>) => {
-      setCard((prev) => ({
-        ...prev,
-        decorations: { ...(prev.decorations ?? { pattern: null, opacity: 0.2 }), ...patch },
-        updatedAt: new Date().toISOString(),
-      }));
-    }, []),
+    onPatchDecorations: patchDecorations,
   } as const;
 
   const aiPanel = useMemo(() => (
@@ -863,12 +914,12 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       variant={isMobile ? 'mobile' : 'desktop'}
       {...aiPanelProps}
     />
-  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, aiPanelProps.onPatchDecorations]);
+  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, patchDecorations]);
 
   // Phase 14: variante bare per la AIConsole rail (niente AILogPanel doppio)
   const aiPanelBare = useMemo(() => (
     <CardAIControls variant="desktop" bare {...aiPanelProps} />
-  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, aiPanelProps.onPatchDecorations]);
+  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, patchDecorations]);
 
   const previewPanel = useMemo(() => (
     <CardPreviewSurface

@@ -145,6 +145,38 @@ describe('CardPreview', () => {
       render(<CardPreview side="front" card={card} />);
       expect(screen.queryByTestId('card-accent-divider')).toBeNull();
     });
+
+    it('renders decorations.pattern as an inline SVG, not a bare <g> in a <span> (TB-023 regression)', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        decorations: {
+          pattern: 'wave-bottom',
+          opacity: 0.3,
+          palette: { primary: '#01696F', secondary: '#E11D48', accent: null },
+        },
+      };
+      const { container } = render(<CardPreview side="front" card={card} />);
+      const svg = container.querySelector('svg.card-decorative-pattern');
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute('viewBox')).toBe('0 0 100 100');
+      // Il contenuto deve essere dentro l'<svg>, altrimenti il browser non
+      // renderizza nulla (bug: <g> iniettato in uno <span> HTML).
+      expect(svg!.querySelector('[data-decorative-pattern="wave-bottom"]')).not.toBeNull();
+      // Con un pattern attivo, il corner accent di default NON deve apparire.
+      expect(container.querySelector('.card-corner-accent')).toBeNull();
+    });
+
+    it('renders decorations.pattern on the back side too', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        back: { ...createEmptyCard().back, phone: '333' },
+        decorations: { pattern: 'blob-corner', opacity: 0.2, palette: { primary: '#01696F', secondary: '#1A1A1A', accent: null } },
+      };
+      const { container } = render(<CardPreview side="back" card={card} />);
+      const svg = container.querySelector('svg.card-decorative-pattern--back');
+      expect(svg).not.toBeNull();
+      expect(svg!.querySelector('[data-decorative-pattern="blob-corner"]')).not.toBeNull();
+    });
   });
 
   describe('Back side', () => {

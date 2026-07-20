@@ -370,15 +370,18 @@ describe('CardEditor', () => {
     expect(screen.getByRole('button', { name: /^Suggerisci$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Palette$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Stampa$/i })).toBeInTheDocument();
+    // Sfondo AI è collassata di default: espando prima di cercare i bottoni.
+    fireEvent.click(screen.getByRole('button', { name: /Sfondo AI/i }));
     expect(screen.getByRole('button', { name: /Genera fronte/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Genera retro/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /entrambi i lati/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Applica prompt/i })).toBeInTheDocument();
   });
 
-  it('renders AI model selector and custom prompt textarea', () => {
+  it('renders AI provider badge and custom prompt textarea', () => {
     renderEditor();
-    expect(screen.getByLabelText(/Modello AI/i)).toBeInTheDocument();
+    // TB-023: il selettore modello è il badge provider nella console header.
+    expect(screen.getByTestId('ai-provider-badge')).toBeInTheDocument();
     expect(screen.getByLabelText(/Prompt AI personalizzato/i)).toBeInTheDocument();
   });
 

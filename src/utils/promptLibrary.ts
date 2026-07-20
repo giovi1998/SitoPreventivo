@@ -68,5 +68,6 @@ export function removePromptEntry(key: string, id: string): PromptLibraryEntry[]
 export const PROMPT_LIBRARY_KEYS = {
   logo: 'logoPromptLibrary:v1',
   cardPhoto: 'cardPhotoPromptLibrary:v1',
+  cardIcon: 'cardIconPromptLibrary:v1',
   flyerHero: 'flyerHeroPromptLibrary:v1',
 } as const;

@@ -61,7 +61,8 @@ describe('Responsive (mobile <900px) + AI always-accessible', () => {
     fireEvent.click(screen.getByRole('button', { name: /Apri pannello AI/i }));
     const dialog = screen.getByRole('dialog', { name: /Pannello AI/i });
     expect(dialog).toBeInTheDocument();
-    expect(dialog.querySelector('[aria-label="Modello AI attivo"]')).not.toBeNull();
+    // Mobile: il bottom sheet espone il badge provider (cambio modello).
+    expect(dialog.querySelector('[data-testid="ai-provider-badge"]')).not.toBeNull();
   });
 
   it('on mobile: AI "Suggerisci" chip is present and uses correct key (Phase 2.2 REQ-A05)', () => {

@@ -8,11 +8,23 @@ import dataService from '../utils/dataService';
 
 export type IconHeroKind = 'icon' | 'hero';
 
+export type IconBackground = 'white' | 'card' | 'accent';
+
+export interface IconHeroOptions {
+  primaryColor?: string;
+  secondaryColor?: string;
+  style?: string;
+  /** TB-023: modello immagine (gemini-2.0 flash / nano banana) */
+  imageModel?: string;
+  /** TB-023: sfondo dell'icona. 'card' usa primaryColor come tinta di sfondo. */
+  background?: IconBackground;
+}
+
 export interface UseAIIconHeroReturn {
   generate: (
     prompt: string,
     kind: IconHeroKind,
-    options?: { primaryColor?: string; secondaryColor?: string; style?: string }
+    options?: IconHeroOptions
   ) => Promise<string>;
   isProcessing: boolean;
   logs: ReturnType<typeof useAILogs>['logs'];
@@ -23,7 +35,7 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const generate = useCallback(
-    async (prompt: string, kind: IconHeroKind, options?: { primaryColor?: string; secondaryColor?: string; style?: string }) => {
+    async (prompt: string, kind: IconHeroKind, options?: IconHeroOptions) => {
       const requestId = newRequestId();
       setIsProcessing(true);
       info(kind === 'icon' ? '🎨 Generazione icona AI...' : '🖼️ Generazione hero AI...', prompt.slice(0, 120), { requestId });
@@ -41,6 +53,8 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
             primaryColor: options?.primaryColor,
             secondaryColor: options?.secondaryColor,
             style: options?.style || 'minimalist',
+            imageModel: options?.imageModel,
+            background: options?.background,
             userEmail: userEmail || undefined,
           }),
         });

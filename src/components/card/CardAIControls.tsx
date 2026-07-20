@@ -1,5 +1,6 @@
 import React from 'react';
 import AILogPanel from '../AILogPanel';
+import AIProviderBadge from '../ai/AIProviderBadge';
 import type { AILogEntry } from '../../ai/types';
 import type { BusinessCard } from '../../utils/documentSchemas';
 import {
@@ -11,6 +12,7 @@ import {
   CardAIIconHeroSection,
 } from './ai';
 import type { PromptLibraryEntry } from '../../utils/promptLibrary';
+import type { IconBackground } from '../../hooks/useAIIconHero';
 
 export interface CardAIModel {
   id: string;
@@ -45,7 +47,14 @@ export interface CardAIControlsProps {
   // Icon AI state
   iconPrompt?: string;
   setIconPrompt?: (v: string) => void;
-  onGenerateIcon?: () => void;
+  showIconPromptEditor?: boolean;
+  setShowIconPromptEditor?: (v: boolean) => void;
+  onGenerateIcon?: (opts: { imageModel: string; background: IconBackground }) => void;
+  onFillAutoIconPrompt?: () => void;
+  iconLibrary?: PromptLibraryEntry[];
+  onSaveIconPrompt?: () => void;
+  onApplyIconPrompt?: (entry: PromptLibraryEntry) => void;
+  onDeleteIconPrompt?: (id: string) => void;
   iconHeroLogs?: AILogEntry[];
   // Photo prompt library state
   photoPrompt?: string;
@@ -61,6 +70,7 @@ export interface CardAIControlsProps {
 
 export default function CardAIControls({
   aiModel,
+  onModelChange,
   aiText,
   onTextChange,
   availableModels,
@@ -78,7 +88,14 @@ export default function CardAIControls({
   onPatchDecorations,
   iconPrompt = '',
   setIconPrompt,
+  showIconPromptEditor = false,
+  setShowIconPromptEditor,
   onGenerateIcon,
+  onFillAutoIconPrompt,
+  iconLibrary = [],
+  onSaveIconPrompt,
+  onApplyIconPrompt,
+  onDeleteIconPrompt,
   iconHeroLogs,
   photoPrompt = '',
   setPhotoPrompt,
@@ -90,15 +107,17 @@ export default function CardAIControls({
   onDeletePhotoPrompt,
   onFillAutoPhotoPrompt,
 }: CardAIControlsProps) {
-  const activeProviderLabel = availableModels.find((o) => o.id === aiModel)?.name ?? aiModel;
-
   return (
     <div className="card-ai-panel" data-testid="card-ai-panel">
-      <div className="card-ai-model-readout" aria-label="Modello AI attivo">
-        <span className="card-ai-model-readout__label">Modello</span>
-        <span className="card-ai-model-readout__value">{activeProviderLabel}</span>
-      </div>
+      {/* Mobile: il bottom sheet non ha la AIConsole header, quindi il badge
+       * provider va dentro il pannello. Su desktop è la console a mostrarlo. */}
+      {variant === 'mobile' && (
+        <div className="card-ai-mobile-provider">
+          <AIProviderBadge onProviderChange={(id) => onModelChange?.(id)} />
+        </div>
+      )}
 
+      {/* ─── Immagini AI: foto, icona, sfondo (in quest'ordine) ─── */}
       {card && onGeneratePhoto && setPhotoPrompt && setShowPhotoPromptEditor && onSavePhotoPrompt && onApplyPhotoPrompt && onDeletePhotoPrompt && onFillAutoPhotoPrompt && (
         <CardAIPhotoSection
           card={card}
@@ -117,6 +136,24 @@ export default function CardAIControls({
         />
       )}
 
+      {card && onGenerateIcon && setIconPrompt && setShowIconPromptEditor && onFillAutoIconPrompt && onSaveIconPrompt && onApplyIconPrompt && onDeleteIconPrompt && (
+        <CardAIIconHeroSection
+          card={card}
+          tier={tier}
+          isProcessing={isProcessing}
+          iconPrompt={iconPrompt}
+          onIconPromptChange={setIconPrompt}
+          showPromptEditor={showIconPromptEditor}
+          onTogglePromptEditor={() => setShowIconPromptEditor(!showIconPromptEditor)}
+          onGenerateIcon={onGenerateIcon}
+          onFillAutoPrompt={onFillAutoIconPrompt}
+          library={iconLibrary}
+          onSavePrompt={onSaveIconPrompt}
+          onApplyPrompt={onApplyIconPrompt}
+          onDeletePrompt={onDeleteIconPrompt}
+        />
+      )}
+
       {card && onGenerateCover && (
         <CardAICoverSection
           card={card}
@@ -127,6 +164,15 @@ export default function CardAIControls({
         />
       )}
 
+      {card && onPatchDecorations && (
+        <CardAIDecorationSection
+          card={card}
+          isProcessing={isProcessing}
+          onPatchDecorations={onPatchDecorations}
+        />
+      )}
+
+      {/* ─── Testo AI: azioni rapide + prompt libero ─── */}
       <CardAIQuickActions isProcessing={isProcessing} onRun={onRun} />
 
       <CardAIPromptSection
@@ -138,25 +184,6 @@ export default function CardAIControls({
         onReset={onReset}
         variant={variant}
       />
-
-      {card && onGenerateIcon && setIconPrompt && (
-        <CardAIIconHeroSection
-          card={card}
-          tier={tier}
-          isProcessing={isProcessing}
-          iconPrompt={iconPrompt}
-          onIconPromptChange={setIconPrompt}
-          onGenerateIcon={onGenerateIcon}
-        />
-      )}
-
-      {card && onPatchDecorations && (
-        <CardAIDecorationSection
-          card={card}
-          isProcessing={isProcessing}
-          onPatchDecorations={onPatchDecorations}
-        />
-      )}
 
       {!bare && <AILogPanel logs={logs} isProcessing={isProcessing} />}
     </div>

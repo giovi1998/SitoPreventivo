@@ -268,8 +268,10 @@ const FrontPreview = React.memo(function FrontPreview({
       {card.front.coverImageUrl && <div style={coverWashFlatStyle} aria-hidden="true" />}
       {card.front.coverImageUrl && <div style={coverWashGradStyle} aria-hidden="true" />}
       {card.decorations?.pattern && (
-        <span
+        <svg
           className="card-decorative-pattern"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
           aria-hidden="true"
           dangerouslySetInnerHTML={{
             __html: renderDecorativePattern(card.decorations.pattern, 100, 100, {
@@ -491,8 +493,10 @@ const BackPreview = React.memo(function BackPreview({
       {card.back.coverImageUrl && <div style={backCoverWashFlatStyle} aria-hidden="true" />}
       {card.back.coverImageUrl && <div style={backCoverWashGradStyle} aria-hidden="true" />}
       {card.decorations?.pattern && (
-        <span
+        <svg
           className="card-decorative-pattern card-decorative-pattern--back"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
           aria-hidden="true"
           dangerouslySetInnerHTML={{
             __html: renderDecorativePattern(card.decorations.pattern, 100, 100, {

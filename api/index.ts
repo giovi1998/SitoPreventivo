@@ -2116,6 +2116,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         style: z.string().max(50).optional(),
+        imageModel: z.string().max(80).optional(),
+        background: z.enum(['white', 'card', 'accent']).optional(),
         userEmail: z.string().email().optional(),
       }),
       body,
@@ -2132,18 +2134,29 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const kind = v.data.kind || 'custom';
       const aspectRatio = v.data.aspectRatio || (kind === 'hero' ? '16:9' : '1:1');
       const size = v.data.size || '512';
+      // TB-023: sfondo icona configurabile. Gemini non produce alpha reale,
+      // quindi "white" è il default prevedibile (l'icona viene poi mostrata
+      // su card chiare). 'card'/'accent' usano i colori brand come tinta piena.
+      const bg = v.data.background || 'white';
+      const bgPrompt =
+        bg === 'card' && v.data.primaryColor
+          ? `Solid flat background color ${v.data.primaryColor}, icon in ${v.data.secondaryColor || '#FFFFFF'}.`
+          : bg === 'accent' && v.data.primaryColor
+            ? `Solid flat background color ${v.data.primaryColor}.`
+            : 'Isolated on a plain solid white background (#FFFFFF).';
       // Build prompt based on kind
       let finalPrompt = v.data.prompt;
       if (kind === 'icon' && v.data.primaryColor && v.data.secondaryColor) {
         const styleHint = v.data.style || 'minimalist';
-        finalPrompt = `Stylized flat illustration of ${v.data.prompt}. Two colors only: ${v.data.primaryColor} and ${v.data.secondaryColor}. Transparent background. No text, no border, no gradients, no shadows. Simple geometric shapes. 256x256 px. Style: ${styleHint}.`;
+        finalPrompt = `Stylized flat vector icon of ${v.data.prompt}. Two colors only: ${v.data.primaryColor} and ${v.data.secondaryColor}. ${bgPrompt} No text, no border, no gradients, no shadows. Simple geometric shapes. Style: ${styleHint}.`;
       } else if (kind === 'hero' && v.data.primaryColor && v.data.secondaryColor) {
         const styleHint = v.data.style || 'minimalist';
-        finalPrompt = `Stylized flat hero illustration of ${v.data.prompt}. Two colors only: ${v.data.primaryColor} and ${v.data.secondaryColor}. Transparent background. No text, no border. Simple geometric shapes, editorial style. 1024x576 px (16:9). Style: ${styleHint}.`;
+        finalPrompt = `Stylized flat hero illustration of ${v.data.prompt}. Two colors only: ${v.data.primaryColor} and ${v.data.secondaryColor}. ${bgPrompt} No text, no border. Simple geometric shapes, editorial style. 16:9 composition. Style: ${styleHint}.`;
       }
+      const modelId = v.data.imageModel || 'gemini-2.0-flash-preview-image-generation';
       const interaction = await ai.interactions.create(
         {
-          model: 'gemini-2.0-flash-preview-image-generation',
+          model: modelId,
           input: finalPrompt,
           generation_config: {
             image_config: { image_size: size, aspect_ratio: aspectRatio },

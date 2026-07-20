@@ -1,4 +1,5 @@
 import type { CardSectionProps, BusinessCardBorderStyle, BusinessCardSizePreset } from './types';
+import type { BusinessCard } from '../../../utils/documentSchemas';
 import {
   FONT_SCALE_MIN,
   FONT_SCALE_MAX,
@@ -6,9 +7,25 @@ import {
 } from '../../../utils/documentSchemas';
 import { SIZE_PRESET_LABELS, BORDER_LABELS } from './labels';
 import { AiFontPicker } from '../../ai-ui';
+import { DECORATIVE_PATTERN_IDS, type DecorativePatternId } from '../../../utils/decorations/patterns';
 
-export function CardStyleFields({ card, patchStyle }: CardSectionProps) {
+const PATTERN_LABELS: Record<DecorativePatternId, string> = {
+  'wave-bottom': 'Onda in basso',
+  'wave-split': 'Onda divisa',
+  'blob-corner': 'Blob ad angolo',
+  'splash-corners': 'Splash agli angoli',
+  'full-overlay': 'Overlay pieno',
+};
+
+export interface CardStyleFieldsProps extends CardSectionProps {
+  onPatchDecorations?: (patch: Partial<BusinessCard['decorations']>) => void;
+}
+
+export function CardStyleFields({ card, patchStyle, onPatchDecorations }: CardStyleFieldsProps) {
   const fontScale = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, card.style.fontScale ?? 1));
+  const decorations = card.decorations;
+  const pattern = decorations?.pattern ?? null;
+  const opacity = decorations?.opacity ?? 0.2;
   return (
     <fieldset className="card-fieldset">
       <legend>Stile</legend>
@@ -83,6 +100,41 @@ export function CardStyleFields({ card, patchStyle }: CardSectionProps) {
         aria-label="Font del bigliettino"
         data-testid="card-font-family"
       />
+      {onPatchDecorations && (
+        <div className="card-field" data-testid="card-decoration-field">
+          <span>Decorazione</span>
+          <select
+            value={pattern ?? ''}
+            onChange={(e) => {
+              const id = e.target.value as DecorativePatternId | '';
+              onPatchDecorations({ pattern: id || null });
+            }}
+            aria-label="Pattern decorazione"
+          >
+            <option value="">Nessuno (decorazione classica)</option>
+            {DECORATIVE_PATTERN_IDS.map((id) => (
+              <option key={id} value={id}>{PATTERN_LABELS[id]}</option>
+            ))}
+          </select>
+          {pattern && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--muted, #647086)' }}>
+                Opacità ({Math.round(opacity * 100)}%)
+              </span>
+              <input
+                type="range"
+                min={0.05}
+                max={0.8}
+                step={0.05}
+                value={opacity}
+                onChange={(e) => onPatchDecorations({ opacity: Number(e.target.value) })}
+                aria-label="Opacità decorazione"
+                style={{ flex: 1 }}
+              />
+            </div>
+          )}
+        </div>
+      )}
       <div className="card-field" data-testid="card-font-scale">
         <span>Dimensione testo ({Math.round(fontScale * 100)}%)</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

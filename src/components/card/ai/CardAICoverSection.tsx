@@ -69,7 +69,7 @@ export default function CardAICoverSection({
       id="card-ai-section-bg"
       hint="Texture con i colori della card. Nessun testo, nessun logo."
       collapsible
-      defaultOpen
+      defaultOpen={false}
     >
       <AiSelect
         label="Modello immagine"

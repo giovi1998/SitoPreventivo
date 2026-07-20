@@ -75,7 +75,9 @@
 
 .ai-provider-badge__menu {
   position: absolute;
-  bottom: calc(100% + 8px);
+  /* Si apre SOTTO il badge: il pannello console ha overflow-y:auto,
+   * un menu verso l'alto verrebbe clippato e risulta "non cliccabile". */
+  top: calc(100% + 8px);
   right: 0;
   min-width: 240px;
   max-width: 300px;

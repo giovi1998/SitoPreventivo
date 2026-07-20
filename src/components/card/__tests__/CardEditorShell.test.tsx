@@ -160,9 +160,10 @@ describe('CardEditorShell', () => {
     expect((screen.getByLabelText(/Nome \(fronte\)/i) as HTMLInputElement).value).toBe('GIOVANNI CIDU');
   });
 
-  it('renders AI controls and model selector', () => {
+  it('renders AI controls and provider badge', () => {
     render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
-    expect(screen.getByLabelText(/Modello AI/i)).toBeInTheDocument();
+    // TB-023: il selettore modello è il badge provider nella console header.
+    expect(screen.getByTestId('ai-provider-badge')).toBeInTheDocument();
     expect(screen.getByLabelText(/Prompt AI personalizzato/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Applica prompt$/i })).toBeInTheDocument();
   });
@@ -180,6 +181,8 @@ describe('CardEditorShell', () => {
     });
 
     const { container } = render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
+    // TB-023: "Sfondo AI" è collapsed di default — espando prima.
+    fireEvent.click(screen.getByRole('button', { name: /Sfondo AI/i }));
     const bothBtn = container.querySelector('.card-ai-both-btn') as HTMLButtonElement;
     expect(bothBtn).not.toBeNull();
     fireEvent.click(bothBtn);
