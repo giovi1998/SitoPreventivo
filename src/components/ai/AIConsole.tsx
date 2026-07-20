@@ -5,6 +5,8 @@ import type { AILogEntry } from '../../ai/types';
 import { getAiConsoleExpanded, setAiConsoleExpanded, type EditorKind } from '../../utils/uiPrefs';
 import './AIConsole.css';
 
+export type { AILogEntry };
+
 export interface AIConsoleProps {
   /** Header title. Defaults to "AI Assist" */
   title?: string;
@@ -46,6 +48,8 @@ export interface AIConsoleProps {
   className?: string;
   /** TB-023: costo USD ultima operazione AI */
   lastCostUsd?: number;
+  /** TB-023: callback when provider changes via the badge */
+  onProviderChange?: (providerId: string) => void;
 }
 
 export default function AIConsole({
@@ -62,6 +66,7 @@ export default function AIConsole({
   hidePrompt = false,
   className = '',
   lastCostUsd,
+  onProviderChange,
 }: AIConsoleProps): React.ReactElement {
   const [expanded, setExpanded] = useState<boolean>(() => {
     if (editorKind) {
@@ -71,6 +76,7 @@ export default function AIConsole({
     return defaultExpanded;
   });
   const [prompt, setPrompt] = useState(suggestedPrompt ?? '');
+  const [logOpen, setLogOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // AI-first entry (REQ-AI-003): prompt suggerito + focus quando espansa.
@@ -122,8 +128,11 @@ export default function AIConsole({
       {expanded && (
         <div className="ai-console__panel">
           <header className="ai-console__header">
-            <span className="ai-console__title">{title}</span>
-            {isProcessing && <span className="ai-console__status">AI in elaborazione…</span>}
+            <div className="ai-console__header-left">
+              <span className="ai-console__title">{title}</span>
+              {isProcessing && <span className="ai-console__status">AI in elaborazione…</span>}
+            </div>
+            <AIProviderBadge lastCostUsd={lastCostUsd} onProviderChange={onProviderChange} />
           </header>
 
           {!hidePrompt && (
@@ -159,15 +168,21 @@ export default function AIConsole({
 
           {quickActions && <div className="ai-console__quick">{quickActions}</div>}
 
-          {children}
+          {children && <div className="ai-console__children">{children}</div>}
 
-          <div className="ai-console__log">
-            <AILogPanel logs={logs} isProcessing={isProcessing} />
+          <div className={`ai-console__log ${logOpen ? 'ai-console__log--open' : ''}`}>
+            <button
+              type="button"
+              className="ai-console__log-toggle"
+              onClick={() => setLogOpen((v) => !v)}
+              aria-expanded={logOpen}
+            >
+              <span>Log AI</span>
+              <span className="ai-console__log-count">{logs.length}</span>
+              <span className={`ai-console__log-chevron ${logOpen ? 'ai-console__log-chevron--open' : ''}`}>▾</span>
+            </button>
+            {logOpen && <AILogPanel logs={logs} isProcessing={isProcessing} />}
           </div>
-
-          <footer className="ai-console__footer">
-            <AIProviderBadge lastCostUsd={lastCostUsd} />
-          </footer>
         </div>
       )}
     </div>

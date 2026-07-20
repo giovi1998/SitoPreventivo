@@ -3,14 +3,14 @@ import AILogPanel from '../AILogPanel';
 import type { AILogEntry } from '../../ai/types';
 import type { BusinessCard } from '../../utils/documentSchemas';
 import {
-  AiSection,
-  AiPromptTextarea,
-  AiSelect,
-  AiGenerateButton,
-  AiActionChip,
-  AiActionGrid,
-} from '../ai-ui';
-import { AI_IMAGE_MODELS, getAiImageModelDefault, setAiImageModelDefault } from '../../utils/uiPrefs';
+  CardAICoverSection,
+  CardAIPhotoSection,
+  CardAIQuickActions,
+  CardAIPromptSection,
+  CardAIDecorationSection,
+  CardAIIconHeroSection,
+} from './ai';
+import type { PromptLibraryEntry } from '../../utils/promptLibrary';
 
 export interface CardAIModel {
   id: string;
@@ -19,8 +19,10 @@ export interface CardAIModel {
 }
 
 export interface CardAIControlsProps {
+  /** Active model ID (read-only; selection happens in AIProviderBadge). */
   aiModel: string;
-  onModelChange: (m: string) => void;
+  /** Kept for API compatibility; no-op in bare panel. */
+  onModelChange?: (m: string) => void;
   aiText: string;
   onTextChange: (t: string) => void;
   availableModels: CardAIModel[];
@@ -39,60 +41,26 @@ export interface CardAIControlsProps {
   onRemoveCover?: (side: 'front' | 'back') => void;
   onGeneratePhoto?: (imageModel?: string) => void;
   card?: BusinessCard;
-}
-
-const QUICK_GROUP_CLEAN: { mode: string; label: string; title: string }[] = [
-  { mode: 'minimal', label: 'Pulisci', title: 'Rimuovi campi vuoti e placeholder, layout essenziale' },
-  { mode: 'print', label: 'Stampa', title: 'Verifica contrasto e leggibilità per la stampa fisica' },
-];
-
-const QUICK_GROUP_PERSONALIZE: { mode: string; label: string; title: string }[] = [
-  { mode: 'premium', label: 'Premium', title: 'Rendi più elegante e professionale' },
-  { mode: 'fill', label: 'Suggerisci', title: 'Genera titolo e social plausibili dal nome' },
-  { mode: 'palette', label: 'Palette', title: 'Cambia i colori (teal, navy, bordeaux, mono)' },
-  { mode: 'moveQr', label: 'Sposta QR', title: 'Sposta il QR a sinistra' },
-  { mode: 'growPhoto', label: 'Allarga foto', title: 'Aumenta la larghezza della foto' },
-];
-
-function CoverThumb({
-  url,
-  alt,
-  onRemove,
-  busy,
-}: {
-  url: string | null;
-  alt: string;
-  onRemove?: () => void;
-  busy?: boolean;
-}) {
-  if (!url) {
-    return (
-      <div className="card-ai-cover-thumb card-ai-cover-thumb--empty" aria-label={`${alt} (nessuna immagine)`}>
-        <span aria-hidden="true">＋</span>
-      </div>
-    );
-  }
-  return (
-    <div className="card-ai-cover-thumb">
-      <img src={url} alt={alt} />
-      {onRemove && !busy && (
-        <button
-          type="button"
-          className="card-ai-cover-thumb__remove"
-          onClick={onRemove}
-          aria-label={`Rimuovi ${alt.toLowerCase()}`}
-          title="Rimuovi immagine"
-        >
-          ×
-        </button>
-      )}
-    </div>
-  );
+  onPatchDecorations?: (patch: Partial<BusinessCard['decorations']>) => void;
+  // Icon AI state
+  iconPrompt?: string;
+  setIconPrompt?: (v: string) => void;
+  onGenerateIcon?: () => void;
+  iconHeroLogs?: AILogEntry[];
+  // Photo prompt library state
+  photoPrompt?: string;
+  setPhotoPrompt?: (v: string) => void;
+  showPhotoPromptEditor?: boolean;
+  setShowPhotoPromptEditor?: (v: boolean) => void;
+  photoLibrary?: PromptLibraryEntry[];
+  onSavePhotoPrompt?: () => void;
+  onApplyPhotoPrompt?: (entry: PromptLibraryEntry) => void;
+  onDeletePhotoPrompt?: (id: string) => void;
+  onFillAutoPhotoPrompt?: () => void;
 }
 
 export default function CardAIControls({
   aiModel,
-  onModelChange,
   aiText,
   onTextChange,
   availableModels,
@@ -107,170 +75,89 @@ export default function CardAIControls({
   onRemoveCover,
   onGeneratePhoto,
   card,
+  onPatchDecorations,
+  iconPrompt = '',
+  setIconPrompt,
+  onGenerateIcon,
+  iconHeroLogs,
+  photoPrompt = '',
+  setPhotoPrompt,
+  showPhotoPromptEditor = false,
+  setShowPhotoPromptEditor,
+  photoLibrary = [],
+  onSavePhotoPrompt,
+  onApplyPhotoPrompt,
+  onDeletePhotoPrompt,
+  onFillAutoPhotoPrompt,
 }: CardAIControlsProps) {
-  const isDesktop = variant === 'desktop';
-  const coverLocked = tier !== 'unlocked';
-  const hasFrontCover = !!card?.front.coverImageUrl;
-  const hasBackCover = !!card?.back.coverImageUrl;
-  const [imageModel, setImageModel] = React.useState(getAiImageModelDefault());
-
-  const modelOptions = availableModels.length > 0 
-    ? availableModels.map(m => ({ value: m.id, label: `${m.name}, ${m.model}` }))
-    : [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }];
-
-  const imageModelOptions = AI_IMAGE_MODELS.map(m => ({ value: m.id, label: m.name }));
-
-  const handleImageModelChange = (id: string) => {
-    setImageModel(id);
-    setAiImageModelDefault(id);
-  };
-
-  const modelSelect = (
-    <AiSelect
-      label="Modello AI"
-      value={aiModel}
-      onChange={(e) => onModelChange(e.target.value)}
-      options={modelOptions}
-      className="card-ai-model-select"
-    />
-  );
-
-  const imageModelSelect = onGenerateCover ? (
-    <AiSelect
-      label="Modello immagine"
-      value={imageModel}
-      onChange={(e) => handleImageModelChange(e.target.value)}
-      options={imageModelOptions}
-      className="card-ai-image-model-select"
-      hint={AI_IMAGE_MODELS.find(m => m.id === imageModel)?.description}
-    />
-  ) : null;
-
-  const backgroundSection = onGenerateCover ? (
-    <AiSection 
-      title="Sfondo AI" 
-      id="card-ai-section-bg" 
-      hint="Texture con i colori della card. Nessun testo, nessun logo."
-    >
-      {imageModelSelect}
-      <div className="card-ai-cover-grid">
-        <div className="card-ai-cover-item">
-          <span className="card-ai-cover-item__label">Fronte</span>
-          <CoverThumb
-            url={card?.front.coverImageUrl ?? null}
-            alt="Cover fronte"
-            onRemove={hasFrontCover && onRemoveCover ? () => onRemoveCover('front') : undefined}
-            busy={isProcessing}
-          />
-          <button
-            type="button"
-            className="card-ai-cover-item__btn"
-            onClick={() => onGenerateCover('front', imageModel)}
-            disabled={isProcessing || coverLocked}
-          >
-            {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca' : 'Genera fronte'}
-          </button>
-        </div>
-        <div className="card-ai-cover-item">
-          <span className="card-ai-cover-item__label">Retro</span>
-          <CoverThumb
-            url={card?.back.coverImageUrl ?? null}
-            alt="Cover retro"
-            onRemove={hasBackCover && onRemoveCover ? () => onRemoveCover('back') : undefined}
-            busy={isProcessing}
-          />
-          <button
-            type="button"
-            className="card-ai-cover-item__btn"
-            onClick={() => onGenerateCover('back', imageModel)}
-            disabled={isProcessing || coverLocked}
-          >
-            {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca' : 'Genera retro'}
-          </button>
-        </div>
-      </div>
-      <button
-        type="button"
-        className="card-action-primary card-ai-both-btn"
-        onClick={() => onGenerateCover('both', imageModel)}
-        disabled={isProcessing || coverLocked}
-        title="Genera sfondo AI per fronte e retro (fronte → retro)"
-      >
-        {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca per generare entrambi' : '✨ Genera entrambi i lati'}
-      </button>
-    </AiSection>
-  ) : null;
-
-  const quickGroup = (items: { mode: string; label: string; title: string }[], label: string) => (
-    <AiActionGrid groupLabel={label}>
-      {items.map((a) => (
-        <AiActionChip
-          key={a.mode}
-          label={a.label}
-          onClick={() => onRun(a.mode)}
-          disabled={isProcessing}
-          title={a.title}
-        />
-      ))}
-    </AiActionGrid>
-  );
-
-  const quickSection = (
-    <AiSection 
-      title="Stile veloce" 
-      id="card-ai-section-style" 
-      hint="Modifiche rapide con un click. Cambiano solo i campi della card."
-    >
-      {quickGroup(QUICK_GROUP_CLEAN, 'Pulisci')}
-      {quickGroup(QUICK_GROUP_PERSONALIZE, 'Personalizza')}
-    </AiSection>
-  );
-
-  const promptSection = (
-    <AiSection 
-      title="Prompt libero" 
-      id="card-ai-section-prompt" 
-      hint='Descrivi cosa vuoi cambiare. Es. "titolo in inglese, accent bordeaux".'
-    >
-      <AiPromptTextarea
-        label="Prompt AI personalizzato"
-        value={aiText}
-        onChange={(e) => onTextChange(e.target.value)}
-        placeholder='Es. "titolo in inglese, accent bordeaux, niente social"'
-        rows={isDesktop ? 2 : 4}
-      />
-      <div className="card-ai-prompt-row">
-        <AiGenerateButton
-          isProcessing={isProcessing}
-          onClick={() => onRun('custom')}
-          disabled={!aiText.trim()}
-          className="card-action-primary"
-        >
-          Applica prompt
-        </AiGenerateButton>
-        <button
-          type="button"
-          className="card-ai-reset"
-          onClick={onReset}
-          disabled={isProcessing}
-        >
-          Nuova conversazione
-        </button>
-      </div>
-    </AiSection>
-  );
+  const activeProviderLabel = availableModels.find((o) => o.id === aiModel)?.name ?? aiModel;
 
   return (
     <div className="card-ai-panel" data-testid="card-ai-panel">
-      <div className="card-ai-model-row" style={!isDesktop ? { display: 'flex', flexDirection: 'column', gap: '4px' } : undefined}>
-        <label className="card-ai-model-label">
-          <span>Modello</span>
-          {modelSelect}
-        </label>
+      <div className="card-ai-model-readout" aria-label="Modello AI attivo">
+        <span className="card-ai-model-readout__label">Modello</span>
+        <span className="card-ai-model-readout__value">{activeProviderLabel}</span>
       </div>
-      {backgroundSection}
-      {quickSection}
-      {promptSection}
+
+      {card && onGeneratePhoto && setPhotoPrompt && setShowPhotoPromptEditor && onSavePhotoPrompt && onApplyPhotoPrompt && onDeletePhotoPrompt && onFillAutoPhotoPrompt && (
+        <CardAIPhotoSection
+          card={card}
+          tier={tier}
+          isProcessing={isProcessing}
+          prompt={photoPrompt}
+          onPromptChange={setPhotoPrompt}
+          showPromptEditor={showPhotoPromptEditor}
+          onTogglePromptEditor={() => setShowPhotoPromptEditor(!showPhotoPromptEditor)}
+          onGenerate={onGeneratePhoto}
+          library={photoLibrary}
+          onSavePrompt={onSavePhotoPrompt}
+          onApplyPrompt={onApplyPhotoPrompt}
+          onDeletePrompt={onDeletePhotoPrompt}
+          onFillAutoPrompt={onFillAutoPhotoPrompt}
+        />
+      )}
+
+      {card && onGenerateCover && (
+        <CardAICoverSection
+          card={card}
+          tier={tier}
+          isProcessing={isProcessing}
+          onGenerate={onGenerateCover}
+          onRemove={onRemoveCover}
+        />
+      )}
+
+      <CardAIQuickActions isProcessing={isProcessing} onRun={onRun} />
+
+      <CardAIPromptSection
+        aiText={aiText}
+        onTextChange={onTextChange}
+        isProcessing={isProcessing}
+        tier={tier}
+        onRun={() => onRun('custom')}
+        onReset={onReset}
+        variant={variant}
+      />
+
+      {card && onGenerateIcon && setIconPrompt && (
+        <CardAIIconHeroSection
+          card={card}
+          tier={tier}
+          isProcessing={isProcessing}
+          iconPrompt={iconPrompt}
+          onIconPromptChange={setIconPrompt}
+          onGenerateIcon={onGenerateIcon}
+        />
+      )}
+
+      {card && onPatchDecorations && (
+        <CardAIDecorationSection
+          card={card}
+          isProcessing={isProcessing}
+          onPatchDecorations={onPatchDecorations}
+        />
+      )}
+
       {!bare && <AILogPanel logs={logs} isProcessing={isProcessing} />}
     </div>
   );

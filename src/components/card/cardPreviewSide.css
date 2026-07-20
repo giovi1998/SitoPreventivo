@@ -71,6 +71,8 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: cover;
+  /* TB-023: apply drag-photo nudge/scale inside the cell */
+  transform: var(--card-photo-transform, none);
 }
 
 /* Logo cell: img is capped below 100% so flex justify/align from

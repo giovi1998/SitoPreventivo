@@ -23,12 +23,13 @@ import {
   CardSocialsFields,
   CardQrAdvanced,
   CardStyleFields,
-} from './CardFormFields';
+} from './form';
 import { compressImage } from '../../utils/cardGenerator';
 import { useCardExport } from '../../hooks/useCardExport';
 import { isAllowedLogoMime, isHttpUrl } from '../../utils/qrGenerator';
 import { useToast } from '../../hooks/useToast';
 import { useAICard } from '../../hooks/useAICard';
+import { useAIIconHero } from '../../hooks/useAIIconHero';
 import { findCardQuickAction } from '../../ai/prompts/cardQuickActions';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useCardPreviewZoom } from '../../hooks/useCardPreviewZoom';
@@ -127,7 +128,9 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
   const { processCardPrompt, generateCover, generatePhoto, resetCardChat, cardAiLogs, isCardProcessing, availableModels, lastCostUsd } = useAICard(userEmail);
+  const { generate: generateIconHero, isProcessing: isIconHeroProcessing, logs: iconHeroLogs } = useAIIconHero(userEmail);
   const [isPhotoGenerating, setIsPhotoGenerating] = useState(false);
+  const [iconPrompt, setIconPrompt] = useState('');
   const [photoPrompt, setPhotoPrompt] = useState('');
   const [showPhotoPromptEditor, setShowPhotoPromptEditor] = useState(false);
   const [photoLibrary, setPhotoLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardPhoto));
@@ -262,6 +265,19 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       updatedAt: new Date().toISOString(),
     }));
   }, [gridEditorSide, card]);
+
+  const patchPhotoPlacement = useCallback((patch: { x?: number; y?: number; scale?: number }) => {
+    const targetGrid = gridEditorSide === 'back' ? (card.backGrid ?? deriveGridFromLayout(card, 'back')) : (card.grid ?? deriveGridFromLayout(card, 'front'));
+    const photoEl = targetGrid.elements.photo;
+    if (!photoEl) return;
+    const prevPlacement = photoEl.photoPlacement ?? { x: 0, y: 0, scale: 1 };
+    const next: typeof prevPlacement = {
+      x: patch.x ?? prevPlacement.x,
+      y: patch.y ?? prevPlacement.y,
+      scale: patch.scale ?? prevPlacement.scale,
+    };
+    patchGrid({ ...targetGrid, elements: { ...targetGrid.elements, photo: { ...photoEl, photoPlacement: next } } });
+  }, [card, gridEditorSide, patchGrid]);
 
   const handleAfterMove = useCallback((info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => {
     logGridChange('move', { element: info.element, applied: info.applied, reason: info.reason, payload: { dx: info.dx, dy: info.dy } });
@@ -611,6 +627,29 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     setPhotoLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.cardPhoto, id));
   }, []);
 
+  const handleGenerateIcon = useCallback(async () => {
+    if (tier !== 'unlocked') {
+      addToast('info', 'Sblocca il piano per generare icone AI.', 4000);
+      return;
+    }
+    try {
+      const dataUrl = await generateIconHero(iconPrompt, 'icon', {
+        primaryColor: card.style.accentColor,
+        secondaryColor: card.style.textColor,
+      });
+      // Apply as logo if no logo is set; otherwise store as photo for visual flair.
+      if (!card.front.logoUrl) {
+        patchFront({ logoUrl: dataUrl });
+        addToast('success', 'Icona AI generata e applicata come logo.', 4000);
+      } else {
+        patchFront({ photoUrl: dataUrl });
+        addToast('success', 'Icona AI generata e applicata come foto.', 4000);
+      }
+    } catch (err: any) {
+      addToast('error', err.message || 'Errore generazione icona AI', 5000);
+    }
+  }, [card, tier, generateIconHero, iconPrompt, patchFront, addToast]);
+
   const handleRemoveCover = useCallback(
     (side: 'front' | 'back') => {
       if (side === 'front') {
@@ -748,17 +787,6 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         onRemoveBackCover={removeBackCoverImage}
         uploadError={uploadError}
         tier={tier}
-        onGeneratePhoto={handleGeneratePhoto}
-        isGeneratingPhoto={isPhotoGenerating}
-        photoPrompt={photoPrompt}
-        setPhotoPrompt={setPhotoPrompt}
-        showPhotoPromptEditor={showPhotoPromptEditor}
-        setShowPhotoPromptEditor={setShowPhotoPromptEditor}
-        photoLibrary={photoLibrary}
-        onSavePhotoPrompt={handleSavePhotoPrompt}
-        onApplyPhotoPrompt={handleApplyPhotoPrompt}
-        onDeletePhotoPrompt={handleDeletePhotoPrompt}
-        onFillAutoPhotoPrompt={handleFillAutoPhotoPrompt}
       />
       <CardBackFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
       <fieldset className="card-fieldset">
@@ -791,7 +819,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       <CardQrAdvanced card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
       <CardStyleFields card={card} patchFront={patchFront} patchBack={patchBack} patchStyle={patchStyle} />
     </>
-  ), [card, patchFront, patchBack, patchStyle, handleUpload, removePhoto, removeLogo, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial, tier, handleGeneratePhoto, isPhotoGenerating, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt]);
+  ), [card, patchFront, patchBack, patchStyle, handleUpload, removePhoto, removeLogo, removeCoverImage, removeBackCoverImage, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial, tier]);
 
   const aiPanelProps = {
     aiModel,
@@ -799,7 +827,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     aiText,
     onTextChange: setAiText,
     availableModels,
-    isProcessing: isCardProcessing || isCoverGenerating,
+    isProcessing: isCardProcessing || isCoverGenerating || isPhotoGenerating || isIconHeroProcessing,
     onRun: runCardAI,
     onReset: resetCardChat,
     logs: cardAiLogs,
@@ -808,6 +836,26 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     onRemoveCover: handleRemoveCover,
     onGeneratePhoto: handleGeneratePhoto,
     card,
+    photoPrompt,
+    setPhotoPrompt,
+    showPhotoPromptEditor,
+    setShowPhotoPromptEditor,
+    photoLibrary,
+    onSavePhotoPrompt: handleSavePhotoPrompt,
+    onApplyPhotoPrompt: handleApplyPhotoPrompt,
+    onDeletePhotoPrompt: handleDeletePhotoPrompt,
+    onFillAutoPhotoPrompt: handleFillAutoPhotoPrompt,
+    iconPrompt,
+    setIconPrompt,
+    onGenerateIcon: handleGenerateIcon,
+    iconHeroLogs,
+    onPatchDecorations: useCallback((patch: Partial<BusinessCard['decorations']>) => {
+      setCard((prev) => ({
+        ...prev,
+        decorations: { ...(prev.decorations ?? { pattern: null, opacity: 0.2 }), ...patch },
+        updatedAt: new Date().toISOString(),
+      }));
+    }, []),
   } as const;
 
   const aiPanel = useMemo(() => (
@@ -815,12 +863,12 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       variant={isMobile ? 'mobile' : 'desktop'}
       {...aiPanelProps}
     />
-  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, card]);
+  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, aiPanelProps.onPatchDecorations]);
 
   // Phase 14: variante bare per la AIConsole rail (niente AILogPanel doppio)
   const aiPanelBare = useMemo(() => (
     <CardAIControls variant="desktop" bare {...aiPanelProps} />
-  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, card]);
+  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, aiPanelProps.onPatchDecorations]);
 
   const previewPanel = useMemo(() => (
     <CardPreviewSurface
@@ -849,6 +897,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       onAfterMove={handleAfterMove}
       onAfterResize={handleAfterResize}
       onAfterAlign={handleAfterAlign}
+      onPatchPhotoPlacement={patchPhotoPlacement}
     />
   ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize, handleAfterAlign, setGridEditorSideLogged, setSelectedGridElementLogged]);
 
@@ -963,6 +1012,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
               onSubmitPrompt={(text) => setAiText(text)}
               hidePrompt
               lastCostUsd={lastCostUsd}
+              onProviderChange={setAiModel}
               // REQ-AI-003: su card vuota la rail propone un prompt contestuale
               // con focus; l'expanded resta default true (o pq_ui:v1 se persistito).
               suggestedPrompt={!cardHasContent(card) ? 'Descrivi la tua attività, creo il bigliettino.' : undefined}

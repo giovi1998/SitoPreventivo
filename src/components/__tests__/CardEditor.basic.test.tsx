@@ -41,7 +41,7 @@ describe('CardEditor', () => {
     expect(nameInput.value).toBe('GIOVANNI CIDU');
     const webInput = screen.getByLabelText(/Sito web/i) as HTMLInputElement;
     expect(webInput.value).toBe('https://giovannicidu.vercel.app');
-    const phoneInput = screen.getByLabelText(/Telefono \(retro\)/i) as HTMLInputElement;
+    const phoneInput = screen.getByLabelText(/Telefono/i) as HTMLInputElement;
     expect(phoneInput.value).toBe('35180008042');
   });
 
@@ -242,11 +242,11 @@ describe('CardEditor', () => {
     expect(screen.getByLabelText(/Nome \(fronte\)/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Ruolo \(fronte\)/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Azienda \(fronte\)/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Telefono \(retro\)/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Email \(retro\)/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Telefono$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Email$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Sito web/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Indirizzo/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/P\.IVA/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Partita IVA/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Formato bigliettino/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Colore sfondo/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Colore testo/i)).toBeInTheDocument();

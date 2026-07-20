@@ -72,6 +72,36 @@ describe('svgRenderer', () => {
         expect(svg).toContain('PHOTO');
       }
     });
+
+    it('renders photo with placement offset and scale (TB-023)', () => {
+      const card = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, name: 'MARIO', photoUrl: 'data:image/png;base64,PHOTO', layout: 'left' as const, useGrid: true },
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            photo: { x: 0, y: 0, w: 2, h: 4, photoPlacement: { x: 0.5, y: -0.5, scale: 1.2 } },
+            name: { x: 2, y: 0, w: 2, h: 1 },
+            title: { x: 2, y: 1, w: 2, h: 1 },
+            company: { x: 2, y: 2, w: 2, h: 1 },
+            logo: { x: 2, y: 3, w: 2, h: 1 },
+          },
+        },
+      };
+      const svg = buildFrontSvg(card, 1024, 663);
+      const imgMatch = svg.match(/<image[^>]*href="[^"]*PHOTO[^"]*"[^>]*>/);
+      expect(imgMatch).not.toBeNull();
+      const img = imgMatch![0];
+      const x = Number(img.match(/x="([^"]+)"/)?.[1] ?? NaN);
+      const y = Number(img.match(/y="([^"]+)"/)?.[1] ?? NaN);
+      const width = Number(img.match(/width="([^"]+)"/)?.[1] ?? NaN);
+      const height = Number(img.match(/height="([^"]+)"/)?.[1] ?? NaN);
+      expect(width).toBe(2 * 256 * 1.2);
+      expect(height).toBe(4 * 165.75 * 1.2);
+      expect(x).toBeGreaterThan(0); // original cell x=0 + nudge right
+      expect(y).toBeLessThan(0); // original cell y=0 + nudge up
+    });
   });
 
   describe('hostname deduplication', () => {

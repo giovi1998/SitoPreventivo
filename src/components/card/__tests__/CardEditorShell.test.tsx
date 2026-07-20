@@ -40,6 +40,14 @@ vi.mock('../../../hooks/useAICard', () => ({
   }),
 }));
 
+vi.mock('../../../hooks/useAIIconHero', () => ({
+  useAIIconHero: () => ({
+    generate: vi.fn().mockResolvedValue('data:image/png;base64,ICON'),
+    isProcessing: false,
+    logs: [],
+  }),
+}));
+
 vi.mock('../../../utils/cardGenerator', async () => {
   const actual = await vi.importActual<any>('../../../utils/cardGenerator');
   return {

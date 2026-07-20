@@ -139,6 +139,7 @@ export default defineConfig(({ mode }) => {
               '/api/ai/card-cover',
               '/api/ai/flyer-hero',
               '/api/ai/card-photo',
+              '/api/ai/image-flash',
               '/api/ai/chat',
               '/api/ai/chat/stream',
             ];
@@ -305,6 +306,44 @@ export default defineConfig(({ mode }) => {
                   return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
                 }
               }
+              // TB-023: Gemini 2.0 Flash image-flash (icon/hero/custom)
+              if (url === '/api/ai/image-flash' && req.method === 'POST') {
+                if (!apiKey) {
+                  return json(503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                }
+                const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+                if (!prompt || prompt.length > 1000) {
+                  return json(400, { error: 'prompt mancante o troppo lungo' });
+                }
+                const kind = typeof body.kind === 'string' ? body.kind : 'custom';
+                const aspectRatio = typeof body.aspectRatio === 'string' ? body.aspectRatio : (kind === 'hero' ? '16:9' : '1:1');
+                const size = typeof body.size === 'string' ? body.size : '512';
+                const primaryColor = typeof body.primaryColor === 'string' ? body.primaryColor : undefined;
+                const secondaryColor = typeof body.secondaryColor === 'string' ? body.secondaryColor : undefined;
+                const style = typeof body.style === 'string' ? body.style : 'minimalist';
+                const finalPrompt = (kind === 'icon' && primaryColor && secondaryColor)
+                  ? `Stylized flat illustration of ${prompt}. Two colors only: ${primaryColor} and ${secondaryColor}. Transparent background. No text, no border, no gradients, no shadows. Simple geometric shapes. 256x256 px. Style: ${style}.`
+                  : (kind === 'hero' && primaryColor && secondaryColor)
+                    ? `Stylized flat hero illustration of ${prompt}. Two colors only: ${primaryColor} and ${secondaryColor}. Transparent background. No text, no border. Simple geometric shapes, editorial style. 1024x576 px (16:9). Style: ${style}.`
+                    : prompt;
+                const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
+                const provider = new mod.GeminiImageProvider(apiKey);
+                try {
+                  const result = await provider.generateImage(finalPrompt, { image_size: size, aspect_ratio: aspectRatio }, 30_000, []);
+                  const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
+                  if (sizeBytes > 500_000) {
+                    return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                  }
+                  return json(200, { data: result });
+                } catch (err) {
+                  const msg = err?.message || 'unknown';
+                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(401, { error: 'Chiave Gemini non valida' });
+                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(504, { error: 'Gemini non ha risposto entro 30s.' });
+                  return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+                }
+              }
+
               // ─── /api/ai/chat and /api/ai/chat/stream proxy ───────
               if (url === '/api/ai/chat' || url === '/api/ai/chat/stream') {
                 const isStream = url === '/api/ai/chat/stream';

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { providerRegistry } from '../../ai/providers/registry';
 import {
   getAiProviderDefault,
@@ -63,6 +63,16 @@ export default function AIProviderBadge({
     [onProviderChange]
   );
 
+  const groupedProviders = useMemo(() => {
+    const groups: Record<string, typeof providers> = {};
+    for (const p of providers) {
+      const family = providerShortName(p.id).toLowerCase();
+      groups[family] = groups[family] || [];
+      groups[family].push(p);
+    }
+    return groups;
+  }, [providers]);
+
   // Click-outside chiude
   useEffect(() => {
     if (!open) return;
@@ -86,6 +96,7 @@ export default function AIProviderBadge({
   }, [open]);
 
   const shortLabel = selected ? providerShortName(selected.id) : 'AI';
+  const modelLabel = selected ? providerModelShort(selected.model) : '';
 
   return (
     <div className="ai-provider-badge-wrapper" ref={ref}>
@@ -100,10 +111,9 @@ export default function AIProviderBadge({
       >
         <span className="ai-provider-badge__dot" aria-hidden="true" />
         <span className="ai-provider-badge__label">
-          {shortLabel}
+          <span className="ai-provider-badge__provider">{shortLabel}</span>
           {lastCostUsd !== undefined && lastCostUsd > 0 && (
             <span className="ai-provider-badge__cost" aria-label={`Costo ultima operazione ${formatCostUsd(lastCostUsd)}`}>
-              {' · '}
               {formatCostUsd(lastCostUsd)}
             </span>
           )}
@@ -116,30 +126,36 @@ export default function AIProviderBadge({
       {open && (
         <div className="ai-provider-badge__menu" role="listbox" data-testid="ai-provider-menu">
           <div className="ai-provider-badge__menu-header">Provider AI</div>
-          {providers.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={`ai-provider-badge__option ${p.id === selectedId ? 'is-selected' : ''}`}
-            role="option"
-            aria-selected={p.id === selectedId}
-            onClick={() => handleSelect(p.id)}
-          >
-            <div className="ai-provider-badge__option-main">
-              <span className="ai-provider-badge__option-name">
-                {providerShortName(p.id)}
-              </span>
-              <span className="ai-provider-badge__option-model">
-                {providerModelShort(p.model)}
-              </span>
-              {p.supportsVision && (
-                <span className="ai-provider-badge__option-tag" title="Multimodale (vision)">
-                  vision
-                </span>
-              )}
+          {Object.entries(groupedProviders).map(([family, group]) => (
+            <div key={family} className="ai-provider-badge__family">
+              {group.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`ai-provider-badge__option ${p.id === selectedId ? 'is-selected' : ''}`}
+                  role="option"
+                  aria-selected={p.id === selectedId}
+                  onClick={() => handleSelect(p.id)}
+                >
+                  <div className="ai-provider-badge__option-left">
+                    <span className="ai-provider-badge__option-name">
+                      {providerShortName(p.id)}
+                    </span>
+                    <span className="ai-provider-badge__option-model">
+                      {providerModelShort(p.model)}
+                    </span>
+                  </div>
+                  <div className="ai-provider-badge__option-right">
+                    {p.supportsVision && (
+                      <span className="ai-provider-badge__option-tag" title="Multimodale (vision)">
+                        vision
+                      </span>
+                    )}
+                    <span className="ai-provider-badge__option-price">{getPricingLabel(p.id)}</span>
+                  </div>
+                </button>
+              ))}
             </div>
-            <span className="ai-provider-badge__option-price">{getPricingLabel(p.id)}</span>
-          </button>
           ))}
           <div className="ai-provider-badge__menu-footer">
             Ollama Pro: ${OLLAMA_PRO_FLAT_MONTHLY}/mese flat · 50x free usage

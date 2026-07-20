@@ -14,6 +14,7 @@ import {
 } from '../utils/card/previewHelpers';
 import { effectiveBackGridForRender } from '../utils/card/backLayout';
 import { deriveHandle, deriveHostname } from '../utils/card/textDerivation';
+import { renderDecorativePattern } from '../utils/decorations/patterns';
 import PreviewWatermark from './PreviewWatermark';
 
 interface CardPreviewProps {
@@ -266,7 +267,19 @@ const FrontPreview = React.memo(function FrontPreview({
       {card.front.coverImageUrl && <img src={card.front.coverImageUrl} alt="" style={coverImageStyle} />}
       {card.front.coverImageUrl && <div style={coverWashFlatStyle} aria-hidden="true" />}
       {card.front.coverImageUrl && <div style={coverWashGradStyle} aria-hidden="true" />}
-      <span className="card-corner-accent" aria-hidden="true" />
+      {card.decorations?.pattern && (
+        <span
+          className="card-decorative-pattern"
+          aria-hidden="true"
+          dangerouslySetInnerHTML={{
+            __html: renderDecorativePattern(card.decorations.pattern, 100, 100, {
+              palette: card.decorations.palette || { primary: card.style.accentColor, secondary: card.style.textColor },
+              opacity: card.decorations.opacity ?? 0.2,
+            }),
+          }}
+        />
+      )}
+      {!card.decorations?.pattern && <span className="card-corner-accent" aria-hidden="true" />}
       {gridOverlay}
       {gridDebug}
 
@@ -477,7 +490,19 @@ const BackPreview = React.memo(function BackPreview({
       {card.back.coverImageUrl && <img src={card.back.coverImageUrl} alt="" style={coverImageStyle} />}
       {card.back.coverImageUrl && <div style={backCoverWashFlatStyle} aria-hidden="true" />}
       {card.back.coverImageUrl && <div style={backCoverWashGradStyle} aria-hidden="true" />}
-      <span className="card-corner-accent" aria-hidden="true" />
+      {card.decorations?.pattern && (
+        <span
+          className="card-decorative-pattern card-decorative-pattern--back"
+          aria-hidden="true"
+          dangerouslySetInnerHTML={{
+            __html: renderDecorativePattern(card.decorations.pattern, 100, 100, {
+              palette: card.decorations.palette || { primary: card.style.accentColor, secondary: card.style.textColor },
+              opacity: card.decorations.opacity ?? 0.2,
+            }),
+          }}
+        />
+      )}
+      {!card.decorations?.pattern && <span className="card-corner-accent" aria-hidden="true" />}
 
       {card.style.borderStyle === 'accent-strip-left' && (
         <span className="card-accent-strip-left" style={{ backgroundColor: card.style.accentColor }} aria-hidden="true" />

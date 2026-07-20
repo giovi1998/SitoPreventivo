@@ -102,6 +102,8 @@ describe('FlyerEditor (phase 3, preventivo layout)', () => {
     // "Genera copy" appears both as a Section title AND as a button.
     // Disambiguate by looking for the actual <button> with the emoji.
     expect(screen.getByText('✨ Genera copy')).toBeInTheDocument();
+    // Phase 14: il log AI vive nella AIConsole rail ed è inizialmente collassato.
+    fireEvent.click(screen.getByRole('button', { name: /Log AI/i }));
     expect(screen.getByRole('log', { name: /Log attività AI/i })).toBeInTheDocument();
   });
 

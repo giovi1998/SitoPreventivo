@@ -12,6 +12,7 @@ import {
   backQrSizePx,
   effectiveBackGridForRender,
 } from './backLayout';
+import { renderDecorativePattern } from '../decorations/patterns';
 
 // Phase 2.2 REQ-D04: helper per scalare la dimensione del testo in base
 // a `card.style.fontScale` (clamp 0.7-1.5, default 1). Da usare in tutti
@@ -222,13 +223,22 @@ export function buildFrontSvg(
     out += `<rect width="${pxW}" height="${pxH}" fill="url(#frontReadGrad)"/>`;
   }
 
-  // 2. Corner radial gradient (matches CSS .card-corner-accent)
-  const cornerSize = Math.round(Math.min(pxW, pxH) * 0.28);
-  out += `<defs><radialGradient id="cornerGrad" cx="100%" cy="0%" r="80%">
-    <stop offset="0%" stop-color="${accent}" stop-opacity="0.22"/>
-    <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
-  </radialGradient></defs>`;
-  out += `<rect x="${pxW - cornerSize}" y="0" width="${cornerSize}" height="${cornerSize}" fill="url(#cornerGrad)"/>`;
+  // 2. Decorative pattern: user-selected pattern overrides the legacy
+  // corner radial gradient and diagonal accent pattern when present.
+  if (card.decorations?.pattern) {
+    out += renderDecorativePattern(card.decorations.pattern, pxW, pxH, {
+      palette: card.decorations.palette || { primary: accent, secondary: text },
+      opacity: card.decorations.opacity ?? 0.2,
+    });
+  } else {
+    // Corner radial gradient (matches CSS .card-corner-accent)
+    const cornerSize = Math.round(Math.min(pxW, pxH) * 0.28);
+    out += `<defs><radialGradient id="cornerGrad" cx="100%" cy="0%" r="80%">
+      <stop offset="0%" stop-color="${accent}" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
+    </radialGradient></defs>`;
+    out += `<rect x="${pxW - cornerSize}" y="0" width="${cornerSize}" height="${cornerSize}" fill="url(#cornerGrad)"/>`;
+  }
 
   // 3. Accent strip left
   if (card.style.borderStyle === 'accent-strip-left') {
@@ -240,12 +250,14 @@ export function buildFrontSvg(
     out += `<rect x="0" y="${pxH - stripH}" width="${pxW}" height="${stripH}" fill="${accent}"/>`;
   }
 
-  // 5. Decorative diagonal pattern (top-right corner)
-  const patternSize = Math.max(8, Math.round(pxW * 0.02));
-  out += `<defs><pattern id="diag" patternUnits="userSpaceOnUse" width="${patternSize}" height="${patternSize}" patternTransform="rotate(45)">
-    <line x1="0" y1="0" x2="0" y2="${patternSize}" stroke="${accent}" stroke-width="0.6" opacity="0.06"/>
-  </pattern></defs>`;
-  out += `<rect x="${Math.round(pxW * 0.6)}" y="0" width="${Math.round(pxW * 0.4)}" height="${Math.round(pxH * 0.35)}" fill="url(#diag)"/>`;
+  // 5. Diagonal fallback pattern (only when no user pattern)
+  if (!card.decorations?.pattern) {
+    const patternSize = Math.max(8, Math.round(pxW * 0.02));
+    out += `<defs><pattern id="diag" patternUnits="userSpaceOnUse" width="${patternSize}" height="${patternSize}" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="${patternSize}" stroke="${accent}" stroke-width="0.6" opacity="0.06"/>
+    </pattern></defs>`;
+    out += `<rect x="${Math.round(pxW * 0.6)}" y="0" width="${Math.round(pxW * 0.4)}" height="${Math.round(pxH * 0.35)}" fill="url(#diag)"/>`;
+  }
 
   // 6. Render front from card.grid (single source of truth)
   // v2.8: when front.useGrid is false OR the grid has no elements, derive
@@ -263,14 +275,23 @@ export function buildFrontSvg(
       const w = photoEl.w * cellW;
       const h = photoEl.h * cellH;
       const isPhotoCircle = card.front.layout === 'photo-circle';
+      const pp = photoEl.photoPlacement;
+      const scale = pp?.scale ?? 1;
+      const dx = ((pp?.x ?? 0) * w) / 2;
+      const dy = ((pp?.y ?? 0) * h) / 2;
+      // scaled image rect centered on cell, then nudged by placement.
+      const imgW = w * scale;
+      const imgH = h * scale;
+      const imgX = x + (w - imgW) / 2 + dx;
+      const imgY = y + (h - imgH) / 2 + dy;
       if (isPhotoCircle) {
         const cx = x + w / 2;
         const cy = y + h / 2;
         const r = Math.min(w, h) / 2;
         out += `<defs><clipPath id="photoCircle"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>`;
-        out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#photoCircle)"/>`;
+        out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#photoCircle)"/>`;
       } else {
-        out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 6)"/>`;
+        out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 6)"/>`;
       }
     }
 
@@ -409,13 +430,21 @@ export function buildBackSvg(
     </linearGradient></defs>`;
     out += `<rect width="${pxW}" height="${pxH}" fill="url(#backReadGrad)"/>`;
   }
-  // Corner radial gradient
-  const cornerSize = Math.round(Math.min(pxW, pxH) * 0.28);
-  out += `<defs><radialGradient id="backCornerGrad" cx="100%" cy="0%" r="80%">
-    <stop offset="0%" stop-color="${accent}" stop-opacity="0.18"/>
-    <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
-  </radialGradient></defs>`;
-  out += `<rect x="${pxW - cornerSize}" y="0" width="${cornerSize}" height="${cornerSize}" fill="url(#backCornerGrad)"/>`;
+  // Decorative pattern (back)
+  if (card.decorations?.pattern) {
+    out += renderDecorativePattern(card.decorations.pattern, pxW, pxH, {
+      palette: card.decorations.palette || { primary: accent, secondary: text },
+      opacity: card.decorations.opacity ?? 0.2,
+    });
+  } else {
+    // Corner radial gradient
+    const cornerSize = Math.round(Math.min(pxW, pxH) * 0.28);
+    out += `<defs><radialGradient id="backCornerGrad" cx="100%" cy="0%" r="80%">
+      <stop offset="0%" stop-color="${accent}" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
+    </radialGradient></defs>`;
+    out += `<rect x="${pxW - cornerSize}" y="0" width="${cornerSize}" height="${cornerSize}" fill="url(#backCornerGrad)"/>`;
+  }
   // Accent strip
   if (card.style.borderStyle === 'accent-strip-left') {
     out += `<rect x="0" y="0" width="${stripW}" height="${pxH}" fill="${accent}"/>`;

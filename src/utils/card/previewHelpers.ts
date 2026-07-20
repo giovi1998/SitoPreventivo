@@ -20,7 +20,7 @@ export function isGridModeFor(side: GridSide, card: BusinessCard): boolean {
 }
 
 export function gridPlacement(
-  el: { x: number; y: number; w: number; h: number; alignH?: 'left' | 'center' | 'right' | null; alignV?: 'top' | 'center' | 'bottom' | null } | undefined,
+  el: { x: number; y: number; w: number; h: number; alignH?: 'left' | 'center' | 'right' | null; alignV?: 'top' | 'center' | 'bottom' | null; photoPlacement?: { x: number; y: number; scale: number } } | undefined,
 ): CSSProperties | undefined {
   if (!el) return undefined;
   const alignH = el.alignH ?? 'center';
@@ -35,12 +35,15 @@ export function gridPlacement(
     center: 'center',
     bottom: 'flex-end',
   };
+  const pp = el.photoPlacement;
+  const transform = pp ? `translate(${(pp.x ?? 0) * 50}%, ${(pp.y ?? 0) * 50}%) scale(${pp.scale ?? 1})` : undefined;
   return {
     gridColumn: `${el.x + 1} / span ${el.w}`,
     gridRow: `${el.y + 1} / span ${el.h}`,
     justifyContent: justifyMap[alignH] ?? 'center',
     alignItems: alignMap[alignV] ?? 'center',
     textAlign: alignH,
+    ...(transform ? { ['--card-photo-transform' as any]: transform } : {}),
   };
 }
 
