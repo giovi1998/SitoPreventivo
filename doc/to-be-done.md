@@ -257,6 +257,46 @@ primi clienti paganti.
   fatti con l'app stessa (logo+card+flyer per ciascuno).
 - **Effort**: ~8-10h con gli strumenti AI esistenti.
 
+#### TB-019 Intake pipeline (Google Form → Quickbrand) 🔴 P0 business
+- **Spec**: `spec/spec-intake-pipeline.md` (nuova, Architettura A ibrida)
+- **Perché**: sostituisce l'intake manuale (email/WhatsApp) con form
+  strutturato. Brief → Postgres → badge Collection → admin apre editor
+  pre-compilato → 1 click "Genera" per modulo → export. Match con BP
+  "consegna in 3 giorni con quality check".
+- **Scope**: tabella `intakes`, `/api/intake` (pubblico, rate-limitato),
+  `/api/intakes` admin, IntakeList in Collection, pre-compilazione
+  editor, Apps Script snippet (gratis). ~880 righe, ~20h.
+- **Out of scope**: full-auto (Architettura B, Puppeteer + backend
+  esterno €15-30/mo — valutare dopo 10+ clienti), sito publish
+  (TB-012), email/WhatsApp notifica (badge basta in v1).
+- **Costo ricorrente**: €0 (Google Form + Apps Script + Neon free).
+- **Effort**: ~20h.
+
+### Compliance / fiscale (non-codice)
+
+#### TB-020 Partita IVA — quando aprire
+- **Trigger**: 2 clienti paganti che chiedono fattura, o superati
+  €5.000/anno di ricavi. Sotto: prestazione occasionale (forfettaria
+  5%, fino a €30k/anno) o ritenuta d'arte.
+- **Regime**: forfettaria 5% (costo ~€1.500/anno INPS fissa + commercialista).
+  Ha senso sopra €5-8k/anno fatturati regolarmente.
+- **Setup**: P.IVA si somma al lavoro dipendente, non sostituisce.
+  Aprire quando il flusso è stabile, non per il primo cliente.
+- **Azione**: niente codice, solo decisione. Fare dopo validazione
+  (dopo 2 clienti paganti reali).
+
+#### TB-021 Fatturazione elettronica (post-P.IVA)
+- **Trigger**: quando P.IVA attiva e fatturato > €30k/anno.
+- **Scope**: integrazione Fatture in Cloud o Aruba API per emissione
+  automatica fattura allo sblocco codice (Stripe webhook → fattura).
+- **Effort**: ~15h (post-validazione).
+
+#### TB-022 Privacy policy + cookie banner
+- **Perché**: GDPR Italia. Form intake raccoglie PII (nome, email, telefono).
+- **Scope**: pagina `/privacy` con policy, cookie banner iubenda o custom,
+  link dal form Google e dalla HomePage.
+- **Effort**: ~3h (doc + 1 componente).
+
 ### Esclusi deliberatamente (con motivazione)
 
 - **Marketplace template community**: niente domanda, complessità alta.
