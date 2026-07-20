@@ -136,15 +136,15 @@ Il piano **Pro a €9/mese** include 1.000 prompt AI con margine enorme (costo D
 | Voce | Costo |
 |---|---|
 | Hosting + database (Vercel Hobby + Neon free tier) | €0 |
-| AI per uso proprio: Minimax M3 + GPT Image 2 (pay-per-use) | ~€10 |
+| AI uso proprio (DeepSeek + Gemini + modelli migliori + harness dev) | €100 |
 | OpenCode Go (assistente coding) | €9 |
-| **Totale fisso** | **~€19/mese** |
+| **Totale fisso** | **~€109/mese** |
 
 ### Costi variabili per cliente in retainer (manutenzione mensile)
 
 | Voce | Costo stimato |
 |---|---|
-| AI per contenuti cliente (Minimax M3 + immagini) | €5–15 |
+| AI per contenuti cliente (DeepSeek + Gemini) | €5–15 |
 | Quota hosting (se si scala a Vercel Pro) | €3–5 |
 | **Totale per cliente** | **€8–20/mese** |
 
@@ -187,9 +187,9 @@ A €690 (Presenza), su 7-8 ore = **€86-99/ora** — margine eccellente.
 | 3 progetti "Apertura" (€349) | €1.047 | €90 (stampe) | €957 | 14h |
 | 2 progetti "Presenza" (€690) | €1.380 | €50 (stampe) | €1.330 | 16h |
 | 8 clienti in manutenzione (€49) | €392 | €96 (AI) | €296 | 12h |
-| Costi fissi | — | –€19 | –€19 | — |
-| **Totale** | **€2.819** | | **€2.564** | **42h** |
-| **Tariffa effettiva** | | | **€61/ora** ✅ | |
+| Costi fissi | — | –€109 | –€109 | — |
+| **Totale** | **€2.819** | | **€2.474** | **42h** |
+| **Tariffa effettiva** | | | **€59/ora** ✅ | |
 
 Il modello è sostenibile già con 3-5 progetti nuovi al mese e 8 clienti in manutenzione — un target raggiungibile entro 4-6 mesi di attività. La parte manutenzione (€49/mese) ha margine più basso ma garantisce cash flow ricorrente e relazione continuativa col cliente.
 
