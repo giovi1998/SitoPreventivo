@@ -1,335 +1,536 @@
-# Spec: Intake Pipeline (Google Form → Quickbrand)
-
-**Stato**: NOT-STARTED
-**Effort stimato**: ~20h
-**Modello**: Architettura A (ibrida) — intake automatico, generazione semi-manuale con quality check
-**Out of scope**: full-auto (Architettura B), sito web publish (TB-012 separato)
-
+---
+title: Intake Pipeline — Google Form to Quickbrand Brief
+version: 1.0
+date_created: 2026-07-20
+owner: Founder
+tags: [infrastructure, process, backend, frontend]
 ---
 
-## 1. Obiettivo
+# Introduction
 
-Permettere a un cliente di compilare un Google Form con i dati della
-sua attività. Il brief arriva in Quickbrand come documento pre-compilato.
-L'admin (founder) apre il brief, click "Genera" per modulo (logo, card,
-flyer, social), controlla qualità, export, consegna.
+Specifica la pipeline di intake che permette a un cliente (senza account)
+di compilare un Google Form con i dati della sua attività. Il brief arriva
+in Quickbrand come documento pre-compilato. L'admin (founder) apre il
+brief, genera i moduli del brand (logo, card, flyer, social) con un click,
+controlla qualità, esporta e consegna. L'automazione è ibrida: intake
+automatico, generazione semi-manuale con quality check obbligatorio.
 
-**Non** è un SaaS self-service: l'admin review rimane obbligatorio
-(match con BP "consegna in 3 giorni con quality check").
+## 1. Purpose & Scope
 
-## 2. Architettura
+**Purpose**: sostituire l'intake manuale (email/WhatsApp) con un form
+strutturato che produce brief pre-compilati nell'app Quickbrand.
 
+**Scope**: 
+- Form pubblico (Google Form o Tally.so) → Google Sheet → webhook
+- Endpoint `/api/intake` (pubblico, rate-limitato, Zod-validato)
+- Tabella Postgres `intakes`
+- Frontend admin: lista brief in Collection, badge count, editor pre-compilato
+- Pre-compilazione documenti (logo, card, flyer, social) dai campi brief
+
+**Out of scope**:
+- Full-auto generation (server genera SVG+PDF da solo, email al cliente)
+- Sito web publish (TB-012, spec separata)
+- Self-service portal cliente (stato brief)
+- Email/WhatsApp notifica admin (badge Collection basta in v1)
+- Upload file nel form (link esterno per v1)
+
+**Intended audience**: founder (admin unico in v1), eventuali collaboratori
+futuri (admin aggiuntivi creati manualmente). Quickbrand non è un SaaS
+pubblico: la registrazione utente è disabilitata (o admin-only),
+l'admin accede all'app per lavorare i brief, i clienti compilano il
+form pubblico senza account.
+
+**Assumptions**:
+- L'app Quickbrand esiste e funziona (14 fasi, 2100+ test)
+- Gli orchestratori AI (logo, card, flyer, social) sono già costruiti
+- L'admin ha già accesso via auth esistente
+- Vercel Hobby + Neon free tier (costo €0)
+
+## 2. Definitions
+
+- **Intake**: il primo contatto strutturato con un cliente (brief dati)
+- **Brief**: insieme di dati che descrivono l'attività del cliente
+- **Admin**: utente con ruolo admin (default `admin@gmail.com`)
+- **Source ref**: identificativo della riga Google Sheet (idempotenza)
+- **Pre-compilazione**: riempimento automatico dei campi documento dai
+  dati brief, pronto per click "Genera"
+- **Modulo**: tipo di documento (logo, card, flyer, social, quote)
+- **Quality check**: revisione umana obbligatoria dell'output AI prima
+  della consegna (non self-service)
+- **Apps Script**: JavaScript runtime ospitato da Google, gira sui
+  server Google, gratis, si attiva su trigger (form submit)
+- **Webhook**: HTTP POST inviato da Apps Script al endpoint `/api/intake`
+- **Idempotenza**: lo stesso brief inviato 2 volte non duplica il record
+
+## 3. Requirements, Constraints & Guidelines
+
+### Functional Requirements
+
+- **REQ-001**: Il sistema deve accettare un POST HTTP pubblico a
+  `/api/intake` con body JSON contenente i campi brief (businessName,
+  ownerName, sector, activity, mood, target, preferredColors, contacts,
+  package, sourceRef).
+- **REQ-002**: Il sistema deve validare il body con Zod schema. Campi
+  invalidi → 400 Bad Request con messaggio esplicito.
+- **REQ-003**: Il sistema deve salvare il brief in tabella `intakes`
+  con status default `new`.
+- **REQ-004**: Il sistema deve garantire idempotenza tramite `sourceRef`
+  unique: retry webhook non duplica (409 Conflict se sourceRef esiste).
+- **REQ-005**: L'admin deve poter listare i brief con `GET /api/intakes?status=new`
+  filtrati per status.
+- **REQ-006**: L'admin deve poter aprire un brief e vedere i dettagli con
+  `GET /api/intakes/:id`.
+- **REQ-007**: L'admin deve poter aggiornare status/notes/assignedTo con
+  `PATCH /api/intakes/:id`.
+- **REQ-008**: Il frontend deve mostrare un badge count di brief `new`
+  nella sidebar, accanto a "Collection".
+- **REQ-009**: Il frontend deve mostrare una sezione "Brief da lavorare"
+  in CollectionView, sopra la griglia documenti, con lista brief (nome,
+  settore, pacchetto, tempo relativo, bottone "Apri").
+- **REQ-010**: Click "Apri" deve creare documenti draft (logo, card,
+  flyer, social) con `data` pre-compilato dai campi brief e aprire
+  l'editor sul primo modulo (default logo).
+- **REQ-011**: La pre-compilazione deve popolare i campi AI-ready:
+  logo (primaryText=businessName, activity, mood, target), card
+  (name=ownerName, company=businessName, contacts), flyer (title, body,
+  sector), social (derivato post-brand).
+- **REQ-012**: Click "Apri" deve aggiornare status intake a `in_progress`
+  e `assignedTo` all'email admin corrente.
+- **REQ-013**: Il sistema deve supportare 3 form provider intercambiabili:
+  Google Form (con Apps Script), Tally.so (webhook nativo), Typeform
+  (webhook nativo). Il endpoint `/api/intake` accetta lo stesso JSON
+  da tutti e 3.
+
+### Security Requirements
+
+- **SEC-001**: Rate limit 5 intake / ora / IP su POST /api/intake
+  (anti-spam form pubblico).
+- **SEC-002**: Nessun PII (email, telefono) in log server. Logger
+  filtra `contacts.email` e `contacts.phone` come già fa per unlock codes.
+- **SEC-003**: Zod validation su tutti i campi (anti-injection).
+- **SEC-004**: Body size limit 1MB (già globale, enforce esistente).
+- **SEC-005**: CORS aperto su POST /api/intake (form non ha auth).
+- **SEC-006**: GET/PATCH /api/intakes richiedono `adminEmail=admin@gmail.com`
+  come query param (pattern esistente).
+- **SEC-007**: Non-admin che tenta GET/PATCH /api/intakes → 403.
+- **SEC-008**: `sourceRef` è unique constraint a livello DB.
+
+### Constraints
+
+- **CON-001**: Vercel Hobby plan: niente Puppeteer, niente Chrome binary.
+  La generazione PDF/PNG resta client-side (browser admin), come oggi.
+- **CON-002**: L'endpoint `/api/intake` deve essere inline in `api/index.ts`
+  (monolith intenzionale, vedi AGENTS.md "Vercel Routing").
+- **CON-003**: La tabella `intakes` deve essere mirror-ata in `api/index.ts`
+  (schema duplication requirement, vedi AGENTS.md).
+- **CON-004**: L'admin review è obbligatorio: nessuna generazione
+  automatica senza click esplicito "Genera" per modulo. Match con BP
+  "consegna in 3 giorni con quality check".
+- **CON-005**: Google Form + Apps Script + Google Sheet sono gratis ma
+  con limite 20k righe Sheet e 6h/giorno Apps Script. Per 100
+  clienti/mese si è largamente sotto.
+
+### Guidelines
+
+- **GUD-001**: Privilegiare Tally.so su Google Form per branding migliore
+  (gratis, 1000 risposte/mese, webhook nativo, niente Apps Script).
+  Google Form come fallback se Tally limiti raggiunti.
+- **GUD-002**: Niente email notifica admin in v1. Badge Collection basta.
+  Aggiungere email solo se brief persi (dopo 2 settimane di uso reale).
+- **GUD-003**: Pre-compilazione non è generazione. I documenti draft
+  hanno i campi testo popolati, ma l'AI va attivata manualmente per ogni
+  modulo (logo, card, flyer, social). L'admin vede sempre l'output
+  prima di appliclo.
+- **GUD-004**: Status flow: `new` → `in_progress` (admin apre) →
+  `done` (export consegnato) | `rejected` (brief non valido). Nessuno
+  stato intermedio complesso in v1.
+
+### Patterns
+
+- **PAT-001**: Endpoint inline in `api/index.ts` con pattern
+  `if (path === '/intake' && method === 'POST')` (come tutti gli altri).
+- **PAT-002**: Zod schema definito a livello modulo, non inline, per
+  riutilizzo test.
+- **PAT-003**: `consumeRateLimit(ip, 'intake', 5, 60 * 60 * 1000)` per
+  rate limiting (funzione esistente).
+- **PAT-004**: `json(req, res, status, data)` per response (funzione
+  esistente, gestisce CORS).
+- **PAT-005**: Admin guard `if (adminEmail !== ADMIN_EMAIL) return 403`
+  (pattern esistente).
+
+## 4. Interfaces & Data Contracts
+
+### POST /api/intake (pubblico)
+
+```json
+Request body:
+{
+  "businessName": "Ristorante Da Mario",
+  "ownerName": "Mario Rossi",
+  "sector": "ristorante",
+  "activity": "Ristorante di cucina sarda tradizionale, 40 coperti...",
+  "mood": "moderno",
+  "target": "Famiglie e turisti 30-60 anni",
+  "preferredColors": "rosso, bianco, legno",
+  "contacts": {
+    "email": "mario@example.com",
+    "phone": "+39 333 1234567",
+    "address": "Via Roma 1, Cagliari",
+    "website": ""
+  },
+  "package": "apertura",
+  "sourceRef": "sheet_row_42"
+}
+
+Response 201:
+{ "data": { "id": "intake_abc123", "status": "new" } }
+
+Response 400 (validation):
+{ "error": "Settore non valido" }
+
+Response 409 (idempotency):
+{ "error": "Brief già ricevuto" }
+
+Response 429 (rate limit):
+{ "error": "Troppi brief, riprova tra un'ora" }
 ```
-[Google Form] → onFormSubmit (Apps Script, 6 righe)
-   ↓ POST JSON
-[/api/intake] (nuovo endpoint, validazione Zod, rate-limit)
-   ↓ INSERT
-[tabella intakes] (Postgres)
-   ↓ trigger notifica
-[email admin + badge Collection "Brief da lavorare"]
-   ↓ admin click
-[Editor pre-compilato: logo/card/flyer/social con dati brief]
-   ↓ admin click "Genera" per modulo
-[Orchestratori AI esistenti: DeepSeek + Gemini]
-   ↓ admin review + export
-[Consegna cliente]
+
+### GET /api/intakes?status=new&adminEmail=admin@gmail.com (admin)
+
+```json
+Response 200:
+{
+  "data": [
+    {
+      "id": "intake_abc123",
+      "status": "new",
+      "businessName": "Ristorante Da Mario",
+      "sector": "ristorante",
+      "package": "apertura",
+      "createdAt": "2026-07-20T10:00:00Z",
+      "assignedTo": null
+    }
+  ]
+}
+
+Response 403 (non-admin):
+{ "error": "Admin only" }
 ```
 
-## 3. Schema DB
+### GET /api/intakes/:id?adminEmail=admin@gmail.com (admin)
 
-Nuova tabella `intakes` in `db/schema.ts` + mirror in `api/index.ts`
-(richiesto da Vercel monolith, vedi AGENTS.md "API Schema Duplication"):
-
-```ts
-export const intakes = pgTable('intakes', {
-  id: varchar({ length: 50 }).primaryKey(),           // UUID
-  status: varchar({ length: 20 }).default('new'),     // new | in_progress | done | rejected
-  // Dati brief dal Google Form
-  businessName: varchar({ length: 255 }).notNull(),
-  ownerName: varchar({ length: 255 }),
-  sector: varchar({ length: 100 }),                  // ristorante | b&b | bar | negozio | studio | altro
-  activity: text(),                                  // descrizione libera
-  mood: varchar({ length: 100 }),                    // moderno | classico | minimal | vivace
-  target: text(),                                     // target cliente
-  preferredColors: text(),                           // CSV liberi
-  contacts: jsonb(),                                  // { email, phone, address, website }
-  package: varchar({ length: 50 }).default('apertura'), // starter | apertura | presenza | custom
-  // Tracking
-  sourceRef: varchar({ length: 100 }),               // id riga Google Sheet (idempotenza)
-  notes: text(),                                      // note admin interne
-  assignedTo: varchar({ length: 255 }),              // email admin che sta lavorando
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
+```json
+Response 200:
+{
+  "data": {
+    "id": "intake_abc123",
+    "status": "new",
+    "businessName": "Ristorante Da Mario",
+    "ownerName": "Mario Rossi",
+    "sector": "ristorante",
+    "activity": "Ristorante di cucina sarda...",
+    "mood": "moderno",
+    "target": "Famiglie e turisti 30-60 anni",
+    "preferredColors": "rosso, bianco, legno",
+    "contacts": { "email": "...", "phone": "..." },
+    "package": "apertura",
+    "sourceRef": "sheet_row_42",
+    "notes": null,
+    "assignedTo": null,
+    "createdAt": "2026-07-20T10:00:00Z",
+    "updatedAt": "2026-07-20T10:00:00Z"
+  }
+}
 ```
 
-**Idempotenza**: `sourceRef` = id riga Sheet. Se lo stesso brief arriva
-2 volte (retry webhook), non duplica. `INSERT ... ON CONFLICT (sourceRef)
-DO NOTHING` oppure check pre-insert.
+### PATCH /api/intakes/:id (admin)
 
-**Status flow**: `new` → `in_progress` (admin apre) → `done` (export
-consegnato) | `rejected` (brief non valido).
+```json
+Request body:
+{ "adminEmail": "admin@gmail.com", "status": "in_progress", "notes": "Contattato via WhatsApp" }
 
-**Migrazione**: `npm run db:generate` + `npm run db:migrate`. Costa
-€0 (Neon free tier).
-
-## 4. Endpoint `/api/intake`
-
-**POST /api/intake** — pubblico (no auth, il cliente non ha account),
-rate-limitato per IP.
-
-```ts
-// Zod schema validazione
-const intakeSchema = z.object({
-  businessName: z.string().min(2).max(255),
-  ownerName: z.string().max(255).optional(),
-  sector: z.enum(['ristorante', 'b&b', 'bar', 'negozio', 'studio', 'altro']),
-  activity: z.string().max(2000).optional(),
-  mood: z.enum(['moderno', 'classico', 'minimal', 'vivace', 'altro']).optional(),
-  target: z.string().max(500).optional(),
-  preferredColors: z.string().max(200).optional(),
-  contacts: z.object({
-    email: z.string().email().optional(),
-    phone: z.string().max(50).optional(),
-    address: z.string().max(500).optional(),
-    website: z.string().max(255).optional(),
-  }).optional(),
-  package: z.enum(['starter', 'apertura', 'presenza', 'custom']).default('apertura'),
-  sourceRef: z.string().max(100).optional(),          // id riga Sheet
-});
+Response 200:
+{ "data": { "id": "intake_abc123", "status": "in_progress" } }
 ```
 
-**Rate limit**: 5 intake / ora / IP (anti-spam). Usa `consumeRateLimit`
-esistente con scope `'intake'`.
+### Tabella `intakes` (schema)
 
-**Response 201**: `{ data: { id, status: 'new' } }`
-**Response 409**: `{ error: 'Brief già ricevuto' }` (sourceRef duplicato)
-**Response 429**: `{ error: 'Troppi brief, riprova tra un'ora' }`
+```sql
+CREATE TABLE intakes (
+  id VARCHAR(50) PRIMARY KEY,
+  status VARCHAR(20) DEFAULT 'new',
+  businessName VARCHAR(255) NOT NULL,
+  ownerName VARCHAR(255),
+  sector VARCHAR(100),
+  activity TEXT,
+  mood VARCHAR(100),
+  target TEXT,
+  preferredColors TEXT,
+  contacts JSONB,
+  package VARCHAR(50) DEFAULT 'apertura',
+  sourceRef VARCHAR(100) UNIQUE,
+  notes TEXT,
+  assignedTo VARCHAR(255),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
 
-**Sicurezza**:
-- No PII in log server (email/telefono filtrati come già fa per
-  unlock codes)
-- Zod su tutti i campi
-- Body size limit 1MB (già globale)
-- CORS: endpoint pubblico, CORS aperto ma rate-limitato
-
-**Log**: solo `businessName`, `sector`, `package`, `sourceRef`. Mai
-`contacts.email` o `contacts.phone`.
-
-## 5. Google Form + Apps Script
-
-### Form campi (mappa 1:1 con Zod)
-- Nome attività * (text)
-- Nome proprietario (text)
-- Settore * (select: ristorante/b&b/bar/negozio/studio/altro)
-- Descrivi la tua attività (textarea, max 2000 char)
-- Mood (select: moderno/classico/minimal/vivace/altro)
-- Target cliente (text)
-- Colori preferiti (text)
-- Email (email)
-- Telefono (text)
-- Indirizzo (text)
-- Sito web se esiste (text)
-- Pacchetto (select: starter/apertura/presenza/custom, default apertura)
-
-### Apps Script (da incollare in Sheet → Estensioni → Apps Script)
+### Apps Script snippet (Google Sheet)
 
 ```javascript
 function onFormSubmit(e) {
   const WEBHOOK_URL = 'https://TUO-DOMINIO.vercel.app/api/intake';
   const row = e.range.getRow();
-  const values = e.values;
-  const payload = {
-    businessName: values[1],
-    ownerName: values[2] || undefined,
-    sector: values[3],
-    activity: values[4] || undefined,
-    mood: values[5] || undefined,
-    target: values[6] || undefined,
-    preferredColors: values[7] || undefined,
-    contacts: {
-      email: values[8] || undefined,
-      phone: values[9] || undefined,
-      address: values[10] || undefined,
-      website: values[11] || undefined,
-    },
-    package: values[12] || 'apertura',
-    sourceRef: 'sheet_row_' + row,
-  };
+  const v = e.values;
   UrlFetchApp.fetch(WEBHOOK_URL, {
     method: 'post',
     contentType: 'application/json',
-    payload: JSON.stringify(payload),
+    payload: JSON.stringify({
+      businessName: v[1],
+      ownerName: v[2] || undefined,
+      sector: v[3],
+      activity: v[4] || undefined,
+      mood: v[5] || undefined,
+      target: v[6] || undefined,
+      preferredColors: v[7] || undefined,
+      contacts: {
+        email: v[8] || undefined,
+        phone: v[9] || undefined,
+        address: v[10] || undefined,
+        website: v[11] || undefined,
+      },
+      package: v[12] || 'apertura',
+      sourceRef: 'sheet_row_' + row,
+    }),
     muteHttpExceptions: true,
   });
 }
 ```
 
-**Setup**: Sheet → Estensioni → Apps Script → incolla → salva →
-Trigger (icona orologio) → onFormSubmit → da foglio di lavoro →
-all'invio del modulo. Gratis, niente server.
+## 5. Acceptance Criteria
 
-## 6. Frontend: Collection "Brief da lavorare"
+- **AC-001**: Given un form compilato con tutti i campi validi, When
+  Apps Script manda POST a `/api/intake`, Then il server risponde 201
+  e il brief è salvato in `intakes` con status `new`.
+- **AC-002**: Given lo stesso sourceRef inviato 2 volte, When il
+  secondo POST arriva, Then il server risponde 409 e non duplica il record.
+- **AC-003**: Given un body con sector non valido (es. "fabbrica"),
+  When POST /api/intake, Then 400 con messaggio "Settore non valido".
+- **AC-004**: Given 6 POST /api/intake dalla stessa IP entro 1 ora,
+  When il 6° arriva, Then 429 "Troppi brief, riprova tra un'ora".
+- **AC-005**: Given admin autenticato, When GET /api/intakes?status=new,
+  Then 200 con lista di brief con status new.
+- **AC-006**: Given non-admin, When GET /api/intakes, Then 403.
+- **AC-007**: Given admin con 3 brief new, When apre Collection, Then
+  vede badge "3" accanto a "Collection" nella sidebar.
+- **AC-008**: Given admin click "Apri" su un brief, When l'editor si
+  apre, Then i documenti draft (logo, card, flyer, social) hanno i
+  campi popolati dai dati brief (primaryText=businessName, ecc.).
+- **AC-009**: Given admin click "Apri", When l'azione completa, Then
+  status intake passa a `in_progress` e assignedTo = admin.email.
+- **AC-010**: Given un brief con contacts.email valorizzato, When il
+  server logga l'evento, Then il log NON contiene l'email (filtrato).
+- **AC-011**: Given admin PATCH /api/intakes/:id con status `done`,
+  When il brief viene aggiornato, Then sparisce dalla lista "new" e
+  resta nello storico.
+- **AC-012**: Given Tally.so webhook con stesso formato JSON, When
+  POST /api/intake, Then il sistema lo accetta come Google Form
+  (provider-agnostic).
 
-### Badge count in Layout sidebar
+## 6. Test Automation Strategy
 
-`AppShell` legge count intakes `status='new'` via `GET /api/intakes?status=new`.
-Mostra badge rosso accanto a "Collection" nella sidebar se count > 0.
+- **Test Levels**: Unit (backend Zod + endpoint), Integration (DB),
+  E2E (form → badge → editor → done)
+- **Frameworks**: Vitest (backend + frontend), React Testing Library
+  (componenti), Playwright (e2e)
+- **Test Data Management**: mock Drizzle in backend test (pattern
+  esistente `api/__tests__/helpers/apiTest.ts`), fixture JSON per
+  payload intake, localStorage reset in frontend test
+- **CI/CD Integration**: `npm run test` deve passare prima di push
+  (AGENTS.md Pre-push Checklist)
+- **Coverage Requirements**: minimo 60% su nuovi file (target progetto)
+- **Performance Testing**: out of scope v1 (volume < 100/mese)
 
-### Sezione "Brief" in CollectionView
+### Test file richiesti
 
-Nuova tab/section sopra la griglia documenti:
+- `api/__tests__/intake.test.ts`: 9 casi (POST valido, idempotenza,
+  validation, rate limit, GET admin, GET non-admin, PATCH admin, PATCH
+  non-admin, no PII in log)
+- `src/components/__tests__/IntakeList.test.tsx`: 3 casi (render lista,
+  click Apri, badge count)
+- `src/utils/__tests__/intakeToDocument.test.ts`: 4 casi (mapping
+  logo, card, flyer, social)
+- `e2e/intake-pipeline.spec.ts`: 1 caso end-to-end (mock webhook →
+  badge → editor → done)
 
+## 7. Rationale & Context
+
+**Perché Architettura A (ibrida) e non B (full-auto)**:
+
+1. **Costo/effort**: A è 20h + €0/mo, B è 100h + €15-30/mo (headless
+   browser su Render/Fly.io). Vercel Hobby non fa Puppeteer.
+2. **Qualità**: A mantiene admin review (match BP "consegna 3 giorni
+   con quality check"). B diventa SaaS self-service, modello che il
+   founder ha esplicitamente escluso.
+3. **Rischio**: B è fragile su Vercel (Puppeteer > 50MB, limite
+   funzione). A riusa tutta infrastruttura esistente.
+4. **Vantaggio competitivo**: il differenziale vs Durable è la qualità
+   controllata. Toglierla = valere meno di Durable (loro $20M funding).
+
+**Perché Google Form/Tally e non form interno**:
+
+1. **Gratis**: Google Form + Apps Script €0, Tally.so €0 (1000/mese).
+   Form interno richiede pagina pubblica, CAPTCHA, anti-spam, hosting
+   file.
+2. **Tempo**: Google Form si crea in 5 min. Form interno è 8-10h.
+3. **Branding**: Tally.so è bello e personalizzabile. Google Form è
+   funzionale. Per v1 basta. Branding totale sul form quando 50+
+   clienti/mese.
+4. **Idempotenza**: sourceRef (id riga Sheet) garantisce che retry
+   webhook non duplica. Tally ha id evento nativo.
+
+**Perché niente email notifica in v1**:
+
+Badge Collection basta. L'admin apre Quickbrand 1-2 volte al giorno.
+Aggiungere email (Resend, 3000/mese gratis) è 3h, ma risolve un problema
+che non si è ancora manifestato. YAGNI.
+
+## 8. Dependencies & External Integrations
+
+### External Systems
+
+- **EXT-001**: Google Forms — form pubblico per raccolta brief.
+  Integrazione: Apps Script webhook → /api/intake.
+- **EXT-002**: Google Sheets — storage risposte form, trigger Apps
+  Script. Gratis, 20k righe.
+- **EXT-003**: Tally.so (alternativa) — form pubblico con webhook
+  nativo. Gratis 1000 risposte/mese.
+- **EXT-004**: Google Apps Script — JavaScript runtime su server Google.
+  Gratis, 6h/giorno esecuzione. Trigger onFormSubmit.
+
+### Third-Party Services
+
+- **SVC-001**: Neon Postgres — database `intakes` table. Free tier,
+  0.5GB storage, sufficiente per 10k+ brief.
+- **SVC-002**: Vercel Hobby — hosting endpoint `/api/intake`. Free,
+  100k invocations/mese.
+
+### Infrastructure Dependencies
+
+- **INF-001**: `api/index.ts` esistente (monolith Vercel) — deve
+  accettare nuovo endpoint inline.
+- **INF-002**: `db/schema.ts` + mirror in `api/index.ts` — deve
+  aggiungere tabella `intakes` (constraint schema duplication).
+- **INF-003**: `src/utils/dataService.js` — deve aggiungere funzioni
+  `getIntakes`, `updateIntake`, `createIntake` (pattern esistente).
+
+### Data Dependencies
+
+- **DAT-001**: Schema Drizzle `intakes` — source of truth, mirror in
+  `api/index.ts`.
+- **DAT-002**: Mappa `intakeToDocument.ts` — trasforma brief in `data`
+  per ogni tipo documento (logo, card, flyer, social). Riusa schemi
+  Zod esistenti in `documentSchemas.ts`.
+
+### Technology Platform Dependencies
+
+- **PLT-001**: Vercel Hobby — runtime Node.js serverless, no Puppeteer.
+- **PLT-002**: Drizzle ORM — query builder, migrazione via
+  `npm run db:generate` + `db:migrate`.
+- **PLT-003**: React 18 + react-router-dom v6 — frontend, riusa
+  CollectionView e editor esistenti.
+
+### Compliance Dependencies
+
+- **COM-001**: GDPR — form raccoglie PII (nome, email, telefono).
+  Richiede privacy policy linkata nel form (TB-022) e diritto
+  cancellazione. Dati in Postgres Neon (EU region).
+- **COM-002**: Log filtering — server non logga PII (SEC-002),
+  pattern esistente per unlock codes.
+
+## 9. Examples & Edge Cases
+
+### Esempio: payload valido da Google Form
+
+```json
+{
+  "businessName": "B&B Costa Serena",
+  "ownerName": "Lucia Ferraris",
+  "sector": "b&b",
+  "activity": "B&B 3 camere con vista mare, colazione inclusa, apertura aprile",
+  "mood": "minimal",
+  "target": "Coppie adulte, turisti nord europei",
+  "preferredColors": "blu, sabbia, bianco",
+  "contacts": {
+    "email": "lucia@example.com",
+    "phone": "+39 333 9876543",
+    "address": "Via Costa 5, Villasimius",
+    "website": ""
+  },
+  "package": "presenza",
+  "sourceRef": "sheet_row_15"
+}
 ```
-┌──────────────────────────────────────────────┐
-│ Brief da lavorare (3)                          │
-├──────────────────────────────────────────────┤
-│ [Ristorante Da Mario]  aperitura  2h fa [Apri] │
-│ [B&B Costa Serena]     presenza  1g fa [Apri] │
-│ [Bar Il Faro]         starter   3g fa [Apri] │
-└──────────────────────────────────────────────┘
-```
 
-Click "Apri" → apre l'editor pre-compilato (vedi §7).
+### Edge case: sourceRef mancante (Tally senza riga Sheet)
 
-### Endpoint admin
+Il campo `sourceRef` è optional nello Zod. Se mancante, il server
+genera `sourceRef = 'auto_' + nanoid()` per garantire idempotenza
+anche senza Sheet. Ma raccomandato: Tally passa sempre event_id nativo.
 
-- `GET /api/intakes?status=new` — lista brief nuovi (admin only)
-- `GET /api/intakes/:id` — dettaglio brief (admin only)
-- `PATCH /api/intakes/:id` — aggiorna status / notes / assignedTo (admin only)
+### Edge case: brief con campi vuoti
 
-Admin guard: `adminEmail=admin@gmail.com` query param (pattern esistente).
+L'utente compila solo businessName e sector (minimi richiesti). Gli
+altri campi sono optional. La pre-compilazione popola solo i campi
+presenti. L'admin completa a mano o rigenera.
 
-## 7. Pre-compilazione editor
+### Edge case: form compilato 2 volte dallo stesso cliente
 
-Quando admin click "Apri" su un brief:
+sourceRef (id riga) è diverso per ogni risposta. Il server salva 2
+intakes distinti. L'admin vede 2 brief e può mergerli o rifiutarne uno
+(status `rejected`).
 
-1. **Crea documento draft** per ogni modulo rilevante (logo, card, flyer,
-   social) con `data` pre-compilato dai campi brief:
-   - Logo: `builder.primaryText = businessName`, `activity`, `mood`,
-     `target` → tab AI pronto per "Genera concept"
-   - Card: `front.name = ownerName`, `front.company = businessName`,
-     `front.sector`, `back.contacts = contacts` → AI pronto
-   - Flyer: `content.title = businessName`, `content.body = activity`,
-     `sector` → AI copy pronto
-   - Social: derivato dal brand generato (post-AI logo/card)
+### Edge case: webhook fallito (Apps Script timeout)
 
-2. **Apre l'editor** con il primo modulo (logo di default)
+Apps Script ha retry nativo (3 tentativi). Se tutti falliscono, il
+brief resta solo in Sheet (non in Quickbrand). L'admin controlla il
+Sheet manualmente 1 volta/settimana come fallback. Per Tally, webhook
+retry nativo + log errori.
 
-3. **Status intake** → `in_progress`, `assignedTo = admin.email`
+### Edge case: payload con sector valore enum non standard
 
-4. **Workflow admin**:
-   - Tab AI → click "Genera concept" (logo) → seleziona → applica
-   - Cambia modulo (card) → tab AI → click "Genera" → applica
-   - Stesso per flyer, social
-   - Export PDF/PNG/SVG per ciascuno
-   - Status intake → `done`, note opzionali
+Zod rifiuta con 400. Apps Script non retry (4xx = non transient). Il
+brief resta in Sheet. L'admin vede il mismatch nel Sheet e corregge a
+mano, poi re-invia via curl/script admin.
 
-**Non** è auto-generazione: ogni click "Genera" è un'azione esplicita
-dell'admin, che vede il risultato prima di appliclo. Match con BP
-"consegna in 3 giorni con quality check".
+## 10. Validation Criteria
 
-## 8. Notifiche admin
+Per considerare la spec implementata:
 
-### Email (gratis, via Vercel o servizio esterno)
+1. Tutti gli AC-001..AC-012 passano (test automatici).
+2. `npm run typecheck` verde.
+3. `npm run test` verde (nuovi test + esistenti).
+4. Migrazione DB applicata: `npm run db:migrate` senza errori.
+5. Endpoint `/api/intake` risponde 201 a un curl con payload valido.
+6. Idempotenza verificata: stesso sourceRef inviato 2 volte → 201 poi 409.
+7. Rate limit verificato: 6 POST in 1 ora → 6° 429.
+8. Badge count appare in sidebar con 3 brief new in DB.
+9. Click "Apri" apre editor con campi pre-compilati (verifica manuale).
+10. No PII in log server (verifica `console.error` output).
+11. Apps Script snippet testato con Sheet reale (verifica manuale).
+12. Privacy policy linkata nel form (TB-022 prereq).
 
-Opzione semplice: endpoint `/api/intake` manda email a
-`admin@gmail.com` usando un servizio transazionale gratuito:
-- **Resend** (3.000 email/mese gratis, SDK Node)
-- **EmailJS** (200 email/mese gratis, client-side)
-- O semplicemente: **nessuna email**, solo badge in Collection. L'admin
-  apre Quickbrand 1-2 volte al giorno e vede il badge.
+## 11. Related Specifications / Further Reading
 
-**Raccomandato**: niente email in v1. Badge Collection basta. Aggiungi
-email solo se perdi brief (dopo 2 settimane di uso reale).
-
-### WhatsApp (opzionale, post-validazione)
-
-Twilio free trial: €15 crediti, ~500 messaggi. Alert su nuovo brief
-`status='new'`. Setup ~3h. **Solo se** il volume lo giustifica (>10
-brief/mese).
-
-## 9. Sicurezza
-
-- **Rate limit**: 5 intake / ora / IP (anti-spam form)
-- **Zod** su tutti i campi (anti-injection)
-- **No PII in log**: email/telefono filtrati come unlock codes
-- **Idempotenza**: `sourceRef` unique, retry webhook non duplica
-- **Admin guard** su GET/PATCH intakes
-- **CORS pubblico** su POST /api/intake (il form non ha auth)
-- **Body 1MB** (globale, già enforced)
-- **GDPR**: form ha link privacy policy, dati conservati in Postgres
-  (Neon EU), cliente può chiedere cancellazione via email
-
-## 10. Test richiesti
-
-### Backend (`api/__tests__/intake.test.ts`)
-
-- POST /api/intake: payload valido → 201, intake salvato
-- POST /api/intake: sourceRef duplicato → 409
-- POST /api/intake: payload invalido (sector non enum) → 400
-- POST /api/intake: rate limit > 5/h → 429
-- GET /api/intakes?status=new: admin → 200, lista
-- GET /api/intakes: non-admin → 403
-- PATCH /api/intakes/:id: admin → 200, status aggiornato
-- PATCH /api/intakes/:id: non-admin → 403
-- No PII in log: verify logger non scrive contacts.email
-
-### Frontend (`src/components/__tests__/IntakeList.test.tsx`)
-
-- Render lista brief con status, settore, tempo relativo
-- Click "Apri" → naviga a editor pre-compilato
-- Badge count in sidebar (3 nuovi → badge "3")
-
-### E2E (`e2e/intake-pipeline.spec.ts`)
-
-- Mock webhook POST /api/intake con payload valido
-- Admin login → vede badge in sidebar
-- Click Collection → vede brief in lista
-- Click "Apri" → editor apre con dati pre-compilati
-- Click "Genera concept" (logo AI, mock DeepSeek) → concept appare
-- PATCH intake status done → sparisce dalla lista new
-
-## 11. File da creare/modificare
-
-| File | Azione | Scope |
-|------|--------|-------|
-| `db/schema.ts` | modifica: aggiungi `intakes` table | ~15 righe |
-| `api/index.ts` | modifica: `intakesTable` mirror + 4 endpoint | ~150 righe |
-| `src/utils/dataService.js` | modifica: `getIntakes`, `updateIntake`, `createIntake` | ~60 righe |
-| `src/components/IntakeList.tsx` | nuovo: lista brief in Collection | ~120 righe |
-| `src/components/CollectionView.tsx` | modifica: render IntakeList sopra griglia | ~20 righe |
-| `src/components/Layout.tsx` | modifica: badge count intakes in sidebar | ~15 righe |
-| `src/hooks/useIntakes.ts` | nuovo: fetch + polling intakes | ~60 righe |
-| `src/utils/intakeToDocument.ts` | nuovo: mappa brief → document data per modulo | ~80 righe |
-| `docs/apps-script-snippet.js` | nuovo: snippet da incollare in Sheet | ~30 righe |
-| `api/__tests__/intake.test.ts` | nuovo: test backend | ~150 righe |
-| `src/components/__tests__/IntakeList.test.tsx` | nuovo: test frontend | ~100 righe |
-| `e2e/intake-pipeline.spec.ts` | nuovo: e2e | ~80 righe |
-
-**Totale**: ~880 righe, ~20h lavoro.
-
-## 12. Out of scope
-
-- **Full-auto (Architettura B)**: server genera SVG+PDF da solo, email
-  al cliente. Richiede Puppeteer + backend separato (Render/Fly.io
-  €15-30/mo). Valutare dopo 10+ clienti reali.
-- **Sito web publish**: TB-012 (landing generator), spec separata.
-  Intake pipeline produce documenti, non siti.
-- **Self-service portal cliente**: il cliente vede lo stato del suo
-  brief. Futuro, non v1.
-- **Email notifica admin**: badge Collection basta in v1.
-- **WhatsApp alert**: post-validazione, solo se volume giustifica.
-
-## 13. Roadmap
-
-1. **Spec approvata** (questo documento)
-2. **Migrazione DB** (30 min): `db:generate` + `db:migrate`
-3. **Backend** (4h): endpoint + test
-4. **Frontend** (8h): IntakeList + pre-compilazione + test
-5. **Apps Script** (30 min): snippet + setup Form
-6. **E2E** (3h): test end-to-end
-7. **Doc** (1h): README sezione intake, AGENTS.md update
-8. **Test verde + typecheck** (1h)
-
-**Totale**: ~18-20h.
+- `spec-api-saas-monetization.md` — Stripe integration (TB-011),
+  trigger 15+ transazioni/mese. L'intake pipeline prepara il terreno
+  per Stripe: quando il cliente paga online, il form può includere
+  pagamento diretto.
+- `doc/business-plan.md` §C (servizio fatto-per-te) — il modello
+  operativo che l'intake pipeline supporta.
+- `doc/to-be-done.md` TB-019 — traccia implementazione.
+- `AGENTS.md` "API Schema Duplication" — constraint sul mirror schema
+  in `api/index.ts`.
+- `AGENTS.md` "Vercel Routing" — constraint monolith, endpoint inline.
+- `AGENTS.md` "Auth Security" — pattern rate limit e admin guard.

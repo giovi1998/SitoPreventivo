@@ -166,12 +166,16 @@ Cleanup eseguito in due ondate (traccia in git history):
 
 ## Roadmap raccomandata
 
+### Sprint tecnici (qualità — prima di tutto)
+
 ```
 Sprint 1 ✅ done:    TB-001 wiring ToolAwareOrchestrator
-                    TB-003 rimuovere bottone hero da manual panel
+                    TB-003 rimuove bottone hero da manual panel
                     TB-002 test 4 endpoint Gemini (regression gratis)
 
-Sprint 2 (next):    TB-004 + TB-005 test helper mancanti
+Sprint 2 (next):    TB-023 migliorare harness AI (provider multipli)
+                    TB-024 più formati export logo (PDF vettoriale, favicon)
+                    TB-004 + TB-005 test helper mancanti
                     TB-006 audit-ui-components.md (doc-only)
 
 Sprint 3 (opz):     TB-007 test flyer refactor (6 file)
@@ -179,7 +183,38 @@ Sprint 3 (opz):     TB-007 test flyer refactor (6 file)
                     TB-009 verifica costi
 ```
 
-**Effort rimanente**: ~2-3 giorni uomo (P1+P2).
+### Sprint business (dopo qualità prodotto)
+
+```
+Fase 1 validazione: TB-018 portfolio 5 esempi settore (8-10h)
+                    TB-022 privacy policy + cookie banner (3h)
+                    TB-017 landing vendita Apertura €349 (4h)
+                    → 30 contatti diretti CCIAA + giro fisico
+                    → Obiettivo: 2 clienti paganti in 60 giorni
+
+Fase 2 semi-auto:   TB-019 intake pipeline Google Form/Tally (20h)
+                    → SOLO dopo 5+ clienti reali (volume giustifica infra)
+
+Fase 3 prodotto+:  TB-012 landing generator (40h, chiude gap vs Durable)
+                    TB-013 QR menu ristoranti (15h)
+                    TB-014 GMB helper (10h)
+                    TB-015 multi-lingua EN/DE (20h)
+
+Fase 4 monetiz:     TB-016 Meta Ads test €300 (dopo 5 consegne)
+                    TB-011 Stripe Checkout (dopo 15+ transazioni/mese)
+                    TB-020 P.IVA (dopo 2 clienti paganti o €5k/anno)
+                    TB-021 Fatturazione elettronica (post-P.IVA, €30k+)
+
+Fase 5 collaboraz:  Tipografie (dopo 3-5 clienti con stampa, no esclusiva)
+                    Collaboratori vendita (rev-share, no equity)
+```
+
+**Principio guida**: qualità prodotto prima, infrastruttura dopo,
+monetizzazione automatizzata per ultima. L'intake pipeline (TB-019)
+è infrastruttura che serve quando hai volume — non prima.
+
+**Effort rimanente**: ~2-3 giorni tecnici (P1+P2) + qualità prodotto
+(TB-023/024, ~37h) + business fasi 1-2 (~35h).
 
 **Quick win già fatti**: TB-003 + 4 file test Gemini.
 
@@ -250,6 +285,32 @@ primi clienti paganti.
   dedicata: offerta Apertura, 3-5 esempi portfolio, form
   contatto/WhatsApp, 3 recensioni.
 - **Effort**: ~4h (no codice nuovo, solo copy/struttura).
+
+### Qualità prodotto (PRIORITÀ ALTA — prima delle infra)
+
+#### TB-023 Migliorare harness AI 🟡 P1
+- **Perché**: oggi DeepSeek + Gemini soli. Qualità AI è il differenziale
+  vs Durable/Canva. Provider multipli + tracking costi reale.
+- **Scope**:
+  - GPT-4o mini come fallback (costo simile, qualità diversa)
+  - Claude Haiku per copy lungo (flyer) — migliore di DeepSeek su italiano
+  - Gemini 2.0 Flash per immagini (più economico di Nano Banana 3.1)
+  - Logging token cost reale (oggi stimato, non tracciato per provider)
+  - A/B provider su stesso prompt (qualità confrontata)
+- **Effort**: ~25h (provider registry già esiste, basta estendere)
+- **Prereq**: nessuno, puro miglioramento qualità
+
+#### TB-024 Più formati export logo 🟡 P1
+- **Perché**: oggi SVG + PNG 512/1024/2048. Tipografie e siti web
+  richiedono più formati.
+- **Scope**:
+  - **PDF vettoriale** (stampa tipografia, non raster) — prioritario
+  - **Favicon set** (16/32/64/180/512) — per siti web
+  - **ICO** (Windows, vecchio ma richiesto)
+  - **SVG ottimizzato** (SVGO, ~40% più piccolo)
+  - **JPG con sfondo colorato** (per social quando serve sfondo)
+  - Verifica: PNG trasparente già c'è?
+- **Effort**: ~12h (logoGenerator.ts + export actions)
 
 #### TB-018 Portfolio 5 esempi settore 🔴 P0 business
 - **Perché**: senza portfolio niente credibilità (BP §G settimana 1-2).
