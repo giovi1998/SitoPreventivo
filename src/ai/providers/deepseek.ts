@@ -3,7 +3,13 @@ import type { ChatMessage, ChatOptions, AIResponse, AIStreamChunk } from '../typ
 import dataService from '../../utils/dataService';
 
 const API_URL = 'https://api.deepseek.com/v1/chat/completions';
-const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+function isLocalhost() {
+  if (typeof window !== 'undefined') {
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  }
+  return false;
+}
+const IS_LOCAL = isLocalhost();
 
 function newRequestId(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();

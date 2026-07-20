@@ -26,9 +26,13 @@ import dataService from '../../utils/dataService';
  * DeepSeek. Ogni chunk è un JSON object con `message.content` parziale.
  */
 const API_URL = 'https://ollama.com/api/chat';
-const IS_LOCAL =
-  typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+function isLocalhost() {
+  if (typeof window !== 'undefined') {
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  }
+  return false;
+}
+const IS_LOCAL = isLocalhost();
 
 function newRequestId(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
