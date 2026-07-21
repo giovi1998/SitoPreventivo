@@ -1,7 +1,8 @@
 import React from 'react';
 import type { BusinessCard } from '../../../utils/documentSchemas';
-import { AiSection, AiSelect } from '../../ai-ui';
+import { AiSection, AiSelect, AiPromptTextarea, AiPromptLibrary } from '../../ai-ui';
 import { AI_IMAGE_MODELS, getAiImageModelDefault, setAiImageModelDefault } from '../../../utils/uiPrefs';
+import type { PromptLibraryEntry } from '../../../utils/promptLibrary';
 
 interface CoverThumbProps {
   url: string | null;
@@ -40,8 +41,17 @@ export interface CardAICoverSectionProps {
   card: BusinessCard;
   tier: 'free' | 'unlocked';
   isProcessing: boolean;
-  onGenerate: (side: 'front' | 'back' | 'both', imageModel?: string) => void;
+  onGenerate: (side: 'front' | 'back' | 'both', imageModel?: string, promptOverride?: string) => void;
   onRemove?: (side: 'front' | 'back') => void;
+  coverPrompt?: string;
+  onCoverPromptChange?: (v: string) => void;
+  showPromptEditor?: boolean;
+  onTogglePromptEditor?: () => void;
+  library?: PromptLibraryEntry[];
+  onSavePrompt?: () => void;
+  onApplyPrompt?: (entry: PromptLibraryEntry) => void;
+  onDeletePrompt?: (id: string) => void;
+  onFillAutoPrompt?: () => void;
 }
 
 export default function CardAICoverSection({
@@ -50,6 +60,15 @@ export default function CardAICoverSection({
   isProcessing,
   onGenerate,
   onRemove,
+  coverPrompt = '',
+  onCoverPromptChange,
+  showPromptEditor = false,
+  onTogglePromptEditor,
+  library = [],
+  onSavePrompt,
+  onApplyPrompt,
+  onDeletePrompt,
+  onFillAutoPrompt,
 }: CardAICoverSectionProps) {
   const coverLocked = tier !== 'unlocked';
   const hasFrontCover = !!card.front.coverImageUrl;
@@ -91,7 +110,7 @@ export default function CardAICoverSection({
           <button
             type="button"
             className="card-ai-cover-item__btn"
-            onClick={() => onGenerate('front', imageModel)}
+            onClick={() => onGenerate('front', imageModel, coverPrompt.trim() || undefined)}
             disabled={isProcessing || coverLocked}
           >
             {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca' : 'Genera fronte'}
@@ -108,7 +127,7 @@ export default function CardAICoverSection({
           <button
             type="button"
             className="card-ai-cover-item__btn"
-            onClick={() => onGenerate('back', imageModel)}
+            onClick={() => onGenerate('back', imageModel, coverPrompt.trim() || undefined)}
             disabled={isProcessing || coverLocked}
           >
             {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca' : 'Genera retro'}
@@ -118,12 +137,55 @@ export default function CardAICoverSection({
       <button
         type="button"
         className="card-action-primary card-ai-both-btn"
-        onClick={() => onGenerate('both', imageModel)}
+        onClick={() => onGenerate('both', imageModel, coverPrompt.trim() || undefined)}
         disabled={isProcessing || coverLocked}
         title="Genera sfondo AI per fronte e retro (fronte → retro)"
       >
         {isProcessing ? '⏳ Generazione…' : coverLocked ? '🔒 Sblocca per generare entrambi' : '✨ Genera entrambi i lati'}
       </button>
+
+      {onTogglePromptEditor && onCoverPromptChange && (
+        <>
+          <button
+            type="button"
+            className="btn-secondary card-ai-photo-prompt-toggle"
+            onClick={onTogglePromptEditor}
+            disabled={isProcessing}
+            aria-expanded={showPromptEditor}
+          >
+            {showPromptEditor ? 'Nascondi prompt' : 'Modifica prompt'}
+          </button>
+
+          {showPromptEditor && (
+            <div className="card-photo-prompt-editor" data-testid="card-cover-prompt-editor">
+              <AiPromptTextarea
+                label="Prompt sfondo AI"
+                value={coverPrompt}
+                onChange={(e) => onCoverPromptChange(e.target.value.slice(0, 1000))}
+                rows={4}
+                maxLength={1000}
+                placeholder="Vuoto = prompt automatico dai colori della card. Es. texture geometrica blu, gradiente morbido..."
+                aria-label="Prompt sfondo AI"
+              />
+              {onFillAutoPrompt && (
+                <button type="button" className="btn-secondary" onClick={onFillAutoPrompt} disabled={isProcessing}>
+                  Usa prompt automatico
+                </button>
+              )}
+              {onSavePrompt && onApplyPrompt && onDeletePrompt && (
+                <AiPromptLibrary
+                  items={library}
+                  onSave={onSavePrompt}
+                  onApply={onApplyPrompt}
+                  onDelete={onDeletePrompt}
+                  saveDisabled={!coverPrompt.trim()}
+                  title="I miei prompt sfondo"
+                />
+              )}
+            </div>
+          )}
+        </>
+      )}
     </AiSection>
   );
 }

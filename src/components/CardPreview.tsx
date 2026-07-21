@@ -303,17 +303,17 @@ const FrontPreview = React.memo(function FrontPreview({
         </div>
       )}
       {grid!.elements.name && card.front.name && (
-        <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-name" style={gridPlacement(grid!.elements.name)}>
+        <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-name" style={gridPlacement(grid!.elements.name, 'column')}>
           <div className="card-name">{card.front.name}</div>
         </div>
       )}
       {grid!.elements.title && card.front.title && (
-        <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-title" style={gridPlacement(grid!.elements.title)}>
+        <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-title" style={gridPlacement(grid!.elements.title, 'column')}>
           <div className="card-title" style={{ color: card.style.accentColor }}>{card.front.title}</div>
         </div>
       )}
       {grid!.elements.company && card.front.company && (
-        <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-company" style={gridPlacement(grid!.elements.company)}>
+        <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-company" style={gridPlacement(grid!.elements.company, 'column')}>
           <div className="card-company">{card.front.company}</div>
         </div>
       )}
@@ -531,7 +531,7 @@ const BackPreview = React.memo(function BackPreview({
         {gridDebug}
 
         {grid!.elements.contacts && (
-          <div className="card-grid-cell card-grid-cell--text card-grid-cell--contacts" data-testid="grid-el-contacts" style={gridPlacement(grid!.elements.contacts)}>
+          <div className="card-grid-cell card-grid-cell--text card-grid-cell--contacts" data-testid="grid-el-contacts" style={gridPlacement(grid!.elements.contacts, 'column')}>
             {contactsContent}
             {!grid!.elements.services && servicesContent}
             {!grid!.elements.socials && socialsContent}
@@ -542,7 +542,7 @@ const BackPreview = React.memo(function BackPreview({
             className="card-grid-cell card-grid-cell--text card-grid-cell--services"
             data-testid="grid-el-services"
             style={(() => {
-              const base = gridPlacement(grid!.elements.services);
+              const base = gridPlacement(grid!.elements.services, 'column');
               if (!base || socials.length > 0) return base;
               // When socials are empty, let services expand into the unused socials row.
               const el = grid!.elements.services;
@@ -559,7 +559,7 @@ const BackPreview = React.memo(function BackPreview({
           </div>
         )}
         {grid!.elements.socials && socialsContent && (
-          <div className="card-grid-cell card-grid-cell--text card-grid-cell--socials" data-testid="grid-el-socials" style={gridPlacement(grid!.elements.socials)}>
+          <div className="card-grid-cell card-grid-cell--text card-grid-cell--socials" data-testid="grid-el-socials" style={gridPlacement(grid!.elements.socials, 'column')}>
             {socialsContent}
           </div>
         )}

@@ -44,22 +44,9 @@ export function CardMediaFields({
           aria-label="Carica logo (fronte)"
         />
         {card.front.logoUrl && (
-          <>
-            <button type="button" className="card-remove-image" onClick={onRemoveLogo}>
-              Rimuovi logo
-            </button>
-            <label className="card-field" style={{ marginTop: 8 }}>
-              <span>Sfondo logo</span>
-              <select
-                value={card.front.logoBackground ?? 'none'}
-                onChange={(e) => patchFront({ logoBackground: e.target.value as 'none' | 'card' })}
-                aria-label="Sfondo del logo"
-              >
-                <option value="none">Nessuno (trasparente)</option>
-                <option value="card">Colore del bigliettino</option>
-              </select>
-            </label>
-          </>
+          <button type="button" className="card-remove-image" onClick={onRemoveLogo}>
+            Rimuovi logo
+          </button>
         )}
       </div>
 

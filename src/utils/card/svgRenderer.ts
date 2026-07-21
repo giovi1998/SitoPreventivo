@@ -265,13 +265,24 @@ export function buildFrontSvg(
   const rawFrontGrid = card.front.useGrid && hasGridElements('front', card) ? card.grid : undefined;
   const grid = rawFrontGrid ?? deriveGridFromLayout(card, 'front');
   if (grid && grid.cols > 0 && grid.rows > 0) {
-    const cellW = pxW / grid.cols;
-    const cellH = pxH / grid.rows;
+    // v2.14: match preview CSS `.card-preview-side.grid-mode { padding: 16px; gap: 4px }`.
+    // Scale 16px padding and 4px gap to export coordinates using the 340px
+    // reference height (same as backPad/PREVIEW_REF_H).
+    const frontGridPad = Math.max(6, Math.round(pxH * (16 / 340)));
+    const frontCellGap = Math.max(2, Math.round(pxH * (4 / 340)));
+    const gridAreaX = frontGridPad;
+    const gridAreaY = frontGridPad;
+    const gridAreaW = pxW - 2 * frontGridPad;
+    const gridAreaH = pxH - 2 * frontGridPad;
+    const cellW = (gridAreaW - (grid.cols - 1) * frontCellGap) / grid.cols;
+    const cellH = (gridAreaH - (grid.rows - 1) * frontCellGap) / grid.rows;
+    const cellX = (col: number) => gridAreaX + col * (cellW + frontCellGap);
+    const cellY = (row: number) => gridAreaY + row * (cellH + frontCellGap);
 
     const photoEl = grid.elements.photo;
     if (hasPhoto && photoEl) {
-      const x = photoEl.x * cellW;
-      const y = photoEl.y * cellH;
+      const x = cellX(photoEl.x);
+      const y = cellY(photoEl.y);
       const w = photoEl.w * cellW;
       const h = photoEl.h * cellH;
       const isPhotoCircle = card.front.layout === 'photo-circle';
@@ -297,8 +308,8 @@ export function buildFrontSvg(
 
     const logoEl = grid.elements.logo;
     if (hasLogo && logoEl) {
-      const x = logoEl.x * cellW;
-      const y = logoEl.y * cellH;
+      const x = cellX(logoEl.x);
+      const y = cellY(logoEl.y);
       const w = logoEl.w * cellW;
       const h = logoEl.h * cellH;
       // v2.12: logo box is 72% of the cell (matches preview CSS max-width/height)
@@ -322,30 +333,43 @@ export function buildFrontSvg(
     }
 
     const textKeys: Array<keyof CardGrid['elements'] & ('name' | 'title' | 'company')> = ['name', 'title', 'company'];
+    // v2.14: font sizes proportional to CARD height (pxH), matching preview
+    // grid-mode rem sizes on a 340px-tall reference card.
+    //   name    1rem    = 16px    → 16/340
+    //   title   0.78rem = 12.48px → 12.48/340
+    //   company 0.72rem = 11.52px → 11.52/340
+    // Before this fix, sizes were relative to CELL height (0.28/0.21/0.18 of
+    // cellH), which made export fonts ~50% larger than the preview at
+    // standard export DPI (1700×1100). Now they scale with the card, not
+    // the cell, so the relative proportions match the preview regardless
+    // of cell dimensions.
     const textValues: Record<
       'name' | 'title' | 'company',
       { text: string; weight: number; color: string; letterSpacing: number; sizePct: number; opacity?: number }
     > = {
-      name: { text: card.front.name.toUpperCase(), weight: 800, color: text, letterSpacing: 0.5, sizePct: 0.28 },
-      title: { text: card.front.title, weight: 600, color: accent, letterSpacing: 0, sizePct: 0.21 },
-      company: { text: card.front.company, weight: 400, color: text, letterSpacing: 0, sizePct: 0.18, opacity: 0.78 },
+      name: { text: card.front.name.toUpperCase(), weight: 800, color: text, letterSpacing: 0.5, sizePct: 16 / 340 },
+      title: { text: card.front.title, weight: 600, color: accent, letterSpacing: 0, sizePct: 12.48 / 340 },
+      company: { text: card.front.company, weight: 400, color: text, letterSpacing: 0, sizePct: 11.52 / 340, opacity: 0.78 },
     };
     for (const key of textKeys) {
       const el = grid.elements[key];
       if (!el || !textValues[key].text) continue;
       const cfg = textValues[key];
-      const x = el.x * cellW;
-      const y = el.y * cellH;
+      const x = cellX(el.x);
+      const y = cellY(el.y);
       const w = el.w * cellW;
       const h = el.h * cellH;
       const alignH = el.alignH ?? 'center';
       const alignV = el.alignV ?? 'center';
-      const fontSize = fs(h * cfg.sizePct, fontScale);
-      const textX = alignH === 'left' ? x + pad * 0.5 : alignH === 'right' ? x + w - pad * 0.5 : x + w / 2;
+      const fontSize = fs(pxH * cfg.sizePct, fontScale);
+      // v2.14: use cell padding (matches CSS 6px 10px scaled to export).
+      const cellPadX = Math.max(4, Math.round(pxH * (10 / 340)));
+      const cellPadY = Math.max(3, Math.round(pxH * (6 / 340)));
+      const textX = alignH === 'left' ? x + cellPadX : alignH === 'right' ? x + w - cellPadX : x + w / 2;
       const textY = alignV === 'top'
-        ? y + pad * 0.25
+        ? y + cellPadY
         : alignV === 'bottom'
-          ? y + h - fontSize - pad * 0.25
+          ? y + h - fontSize - cellPadY
           : y + (h - fontSize) / 2;
       const anchor = alignH === 'left' ? 'start' : alignH === 'right' ? 'end' : 'middle';
       const opacityAttr = cfg.opacity !== undefined ? ` opacity="${cfg.opacity}"` : '';
@@ -505,8 +529,10 @@ export function buildBackSvg(
       // ~340px-tall preview (.card-back-key 0.58rem≈9.3px, .card-back-val
       // 0.78rem≈12.5px). Sizing vs min(cw,ch) blew up at export DPI
       // (cell ~300px → 48px labels). Then shrink-to-fit short cells.
-      let keySize = fs(pxH * (9.3 / 340), fontScale);
-      let valSize = fs(pxH * (12.5 / 340), fontScale);
+      // v2.14: match preview grid-mode rem sizes (0.6rem=9.6px, 0.72rem=11.52px
+      // on 340px reference). Before: 9.3/12.5 (flexbox values, slightly off).
+      let keySize = fs(pxH * (9.6 / 340), fontScale);
+      let valSize = fs(pxH * (11.52 / 340), fontScale);
       const wrappableKeys = new Set(['Email', 'Telefono']);
       // Label column = longest key glyph width + gap (never overlaps value).
       // "TELEFONO" ≈ 8 chars; uppercase sans ≈ 0.62em per char + letter-spacing.
@@ -592,7 +618,7 @@ export function buildBackSvg(
           })
           .join('   ');
         // Size vs card height (same as dedicated socials cell), then wrap.
-        let socialSize = fs(pxH * (10 / 340), fontScale);
+        let socialSize = fs(pxH * (10.88 / 340), fontScale);
         const socialLineH = (s: number) => s * 1.35;
         const remainH = Math.max(8, cy + ch - lineY - pad * 0.25);
         while (socialSize > 6 && wrapTextAtWhitespace(socialsText, cw, socialSize).length * socialLineH(socialSize) > remainH) {
@@ -632,13 +658,13 @@ export function buildBackSvg(
       const servicesLabelText = (card.back.servicesLabel ?? '').trim();
       let labelSize = 0;
       if (servicesLabelText) {
-        // v2.10.1: vs card height (CSS ~0.62rem services label)
-        labelSize = fs(pxH * (10 / 340), fontScale);
+        // v2.14: match preview grid-mode 0.7rem = 11.2px (was 10px).
+        labelSize = fs(pxH * (11.2 / 340), fontScale);
         svcY += labelSize * 1.1;
       }
       const hasLongService = services.some((s) => s.length >= 40);
-      // v2.10.1: vs card height, not min(cell) which explodes at export DPI
-      let svcSize = fs(pxH * (13 / 340), fontScale) * (hasLongService ? 0.85 : 1);
+      // v2.14: match preview grid-mode 0.85rem = 13.6px (was 13px).
+      let svcSize = fs(pxH * (13.6 / 340), fontScale) * (hasLongService ? 0.85 : 1);
       // v2.5.1: tighter line-height (1.2 instead of 1.35) so 2-3
       // services + label fit a 1-row cell without shrinking too much.
       const svcLineH = (s: number) => s * 1.2;
@@ -728,8 +754,8 @@ export function buildBackSvg(
           return `${s.platform} ${value}`;
         })
         .join('   ');
-      // v2.10.1: vs card height (CSS .card-back-socials ~0.62rem ≈ 10px @340)
-      let socialSize = fs(pxH * (10 / 340), fontScale);
+      // v2.14: match preview grid-mode 0.68rem = 10.88px (was 10px).
+      let socialSize = fs(pxH * (10.88 / 340), fontScale);
       const socialLineH = (s: number) => s * 1.35;
       const neededSocialH = (s: number) => {
         const lines = wrapTextAtWhitespace(socialsText, sw, s);

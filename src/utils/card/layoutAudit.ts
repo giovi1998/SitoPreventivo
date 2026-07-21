@@ -55,11 +55,14 @@ export function auditExportSvg(side: 'front' | 'back', svg: string, card: Busine
     const logo = nonPhotoImages.sort((a, b) => b.width - a.width)[0];
     if (logo) {
       const ratio = logo.width / W;
-      if (ratio < 0.35) {
+      // v2.14: threshold lowered from 0.35 to 0.30 — grid padding (16px)
+      // + cell gap (4px) shrink effective cell width ~8%, so the logo ratio
+      // drops proportionally. 0.30 still catches the 60% shrink regression.
+      if (ratio < 0.30) {
         findings.push({
           code: 'LOGO_TOO_SMALL',
           severity: 'error',
-          message: `Logo width ratio ${ratio.toFixed(2)} is below 0.35 (60% shrink regression)`,
+          message: `Logo width ratio ${ratio.toFixed(2)} is below 0.30 (60% shrink regression)`,
           metrics: { logoWidthRatio: ratio },
         });
       }

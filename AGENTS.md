@@ -650,6 +650,66 @@ label `TELEFONO` e valore `35180008042` abbiano lo stesso attributo `y`
 (baseline condivisa). Verificato manualmente disattivando il fix: senza
 `alphabetic` le `y` divergono e il test fallisce.
 
+### ⚠️ Preview/export parity v2.14 (leggi prima di toccare `svgRenderer.ts` o `previewHelpers.ts`)
+
+Quattro bug distinti fixati insieme per allineare preview React e
+export SVG/PNG/PDF. Violare queste regole reintroduce mismatch
+visivi tra editor e file esportato.
+
+1. **`gridPlacement` axis swap per celle text (`flex-direction: column`)**.
+   `gridPlacement()` mappa `alignH→justifyContent` e `alignV→alignItems`.
+   Corretto per celle row (foto/QR/logo), ma **swappato** per celle text
+   che usano `flex-direction: column` (CSS `.card-grid-cell--text`).
+   In column mode il main axis flex è **verticale**: `justifyContent`
+   controlla la posizione verticale, `alignItems` l'orizzontale.
+   Risultato prima del fix: `alignV='top'` non aveva effetto visibile
+   sulle celle testo (mappava su `alignItems` = asse orizzontale),
+   quindi il titolo restava centrato invece di andare in alto.
+   Fix: parametro `flexDirection` in `gridPlacement()`. Quando
+   `'column'`, swap: `justifyContent=vMap[alignV]`,
+   `alignItems=hMap[alignH]`. CardPreview passa `'column'` per tutte
+   le celle text (name/title/company/contacts/services/socials).
+   **Non** rimuovere il parametro o dimenticare `'column'` per nuove
+   celle text: il 3×3 verticale smetterebbe di funzionare.
+2. **Font-size fronte: rem-based (proporzionale a pxH), non
+   cell-relative**. L'export usava `cellH * 0.28` per il nome (77px
+   a 1100px), mentre la preview usa `1rem=16px` su riferimento 340px
+   → proporzionale `16/340*1100 = 52px`. L'export era ~50% troppo
+   grande. Fix: `sizePct` cambiato da cell-relative a card-relative:
+   - name: `16/340` (era `0.28` di cellH)
+   - title: `12.48/340` (era `0.21` di cellH)
+   - company: `11.52/340` (era `0.18` di cellH)
+   `fontSize = fs(pxH * cfg.sizePct, fontScale)` (era `fs(h * ...)`).
+   **Non** tornare a cell-relative: romperebbe la proporzionalità
+   quando la griglia cambia dimensioni.
+3. **Front export grid padding + cell gap**. La preview ha
+   `.card-preview-side.grid-mode { padding: 16px; gap: 4px }`.
+   L'export iniziava le celle a (0,0) full-card → foto/testo shiftati
+   rispetto alla preview. Fix: `frontGridPad = pxH*(16/340)`,
+   `frontCellGap = pxH*(4/340)`, celle offset via `cellX()`/`cellY()`
+   helper. I font-size usano `cellPadX`/`cellPadY` separati (10/340
+   orizzontale, 6/340 verticale) per il padding interno delle celle
+   text (match CSS `padding: 6px 10px`).
+4. **Back export font-size allineate ai rem grid-mode**. I valori
+   flexbox (9.3/12.5/13/10) erano leggermente diversi dai rem grid-mode
+   (9.6/11.52/13.6/11.2/10.88). Fix: tutti i base size nel back export
+   ora usano i valori grid-mode della preview:
+   - contacts key: `9.6/340` (era 9.3)
+   - contacts val: `11.52/340` (era 12.5)
+   - services: `13.6/340` (era 13)
+   - servicesLabel: `11.2/340` (era 10)
+   - socials: `10.88/340` (era 10)
+
+Regression test:
+- `previewHelpers.test.ts` → "column direction swaps
+  justifyContent/alignItems for text cells" verifica che
+  `gridPlacement(el, 'column')` swappi correttamente gli assi.
+- `svgRenderer.test.ts` → describe "v2.14 preview/export parity"
+  con 3 test: font-size fronte rem-based, grid padding offset,
+  font-size retro grid-mode.
+- `layoutAudit.ts` LOGO_TOO_SMALL threshold abbassato da 0.35 a 0.30
+  per compensare lo shrink delle celle causato da padding+gap.
+
 ## Responsive Patterns
 
 - **`useMediaQuery(query)`**: hook React, ritorna `boolean`, listener su `change` event, cleanup su unmount, fallback SSR. **Phase 13b**: breakpoint canonici esportati `BP_SHELL=768`/`BP_WORKSPACE=1024` + `MQ_SHELL`/`MQ_WORKSPACE` + `useIsMobileShell()`/`useIsMobileWorkspace()` — codice nuovo DEVE usare questi (breakpoint storici CSS migrati progressivamente)

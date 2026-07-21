@@ -52,6 +52,7 @@ import {
   type PromptLibraryEntry,
 } from '../../utils/promptLibrary';
 import { buildCardPhotoBrief } from '../../utils/card/photoBrief';
+import { buildCardCoverPromptBrief } from '../../utils/card/coverPrompt';
 import { pruneCardGrids } from '../../utils/card/gridElements';
 import {
   pushLayoutEvent,
@@ -136,6 +137,9 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const [photoPrompt, setPhotoPrompt] = useState('');
   const [showPhotoPromptEditor, setShowPhotoPromptEditor] = useState(false);
   const [photoLibrary, setPhotoLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardPhoto));
+  const [coverPrompt, setCoverPrompt] = useState('');
+  const [showCoverPromptEditor, setShowCoverPromptEditor] = useState(false);
+  const [coverLibrary, setCoverLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardCover));
 
   useEffect(() => {
     const defaultZoom = isMobile ? 0.7 : 1;
@@ -546,7 +550,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
   }, [card, aiText, aiModel, processCardPrompt, addToast]);
 
-  const handleGenerateCover = useCallback(async (side: 'front' | 'back' | 'both' = 'front', imageModel?: string) => {
+  const handleGenerateCover = useCallback(async (side: 'front' | 'back' | 'both' = 'front', imageModel?: string, promptOverride?: string) => {
     if (tier !== 'unlocked') {
       addToast('info', 'Sblocca il piano per generare cover AI.', 4000);
       return;
@@ -556,13 +560,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       if (side === 'both') {
         // Serializziamo fronte e retro: due chiamate Gemini in parallelo
         // possono sovraccaricare il dev proxy / l'upstream e ritornare 502.
-        const frontCover = await generateCover(card, 'front', undefined, { imageModel });
-        const backCover = await generateCover(card, 'back', undefined, { imageModel });
+        const frontCover = await generateCover(card, 'front', promptOverride, { imageModel });
+        const backCover = await generateCover(card, 'back', promptOverride, { imageModel });
         patchFront({ coverImageUrl: frontCover });
         patchBack({ coverImageUrl: backCover });
         addToast('success', 'Cover AI generate per fronte e retro.', 4000);
       } else {
-        const coverDataUrl = await generateCover(card, side, undefined, { imageModel });
+        const coverDataUrl = await generateCover(card, side, promptOverride, { imageModel });
         if (side === 'front') {
           patchFront({ coverImageUrl: coverDataUrl });
         } else {
@@ -689,6 +693,38 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   const handleDeleteIconPrompt = useCallback((id: string) => {
     setIconLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.cardIcon, id));
+  }, []);
+
+  const handleFillAutoCoverPrompt = useCallback(() => {
+    setCoverPrompt(buildCardCoverPromptBrief(card, 'front').prompt);
+    setShowCoverPromptEditor(true);
+  }, [card]);
+
+  const handleSaveCoverPrompt = useCallback(() => {
+    const text = coverPrompt.trim();
+    if (!text) {
+      addToast('info', 'Scrivi un prompt prima di salvarlo.');
+      return;
+    }
+    const label = window.prompt('Nome del prompt', text.slice(0, 40)) || text.slice(0, 40);
+    setCoverLibrary(addPromptEntry(PROMPT_LIBRARY_KEYS.cardCover, {
+      label: label.trim() || 'Prompt sfondo',
+      prompt: text,
+      module: 'card-cover',
+    }));
+    addToast('success', 'Prompt salvato nella libreria.');
+  }, [coverPrompt, addToast]);
+
+  const handleApplyCoverPrompt = useCallback((entry: PromptLibraryEntry) => {
+    if (entry.prompt) {
+      setCoverPrompt(entry.prompt);
+      setShowCoverPromptEditor(true);
+      addToast('info', `Prompt «${entry.label}» applicato.`);
+    }
+  }, [addToast]);
+
+  const handleDeleteCoverPrompt = useCallback((id: string) => {
+    setCoverLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.cardCover, id));
   }, []);
 
   const handleRemoveCover = useCallback(
@@ -906,6 +942,15 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     onApplyIconPrompt: handleApplyIconPrompt,
     onDeleteIconPrompt: handleDeleteIconPrompt,
     iconHeroLogs,
+    coverPrompt,
+    setCoverPrompt,
+    showCoverPromptEditor,
+    setShowCoverPromptEditor,
+    coverLibrary,
+    onSaveCoverPrompt: handleSaveCoverPrompt,
+    onApplyCoverPrompt: handleApplyCoverPrompt,
+    onDeleteCoverPrompt: handleDeleteCoverPrompt,
+    onFillAutoCoverPrompt: handleFillAutoCoverPrompt,
     onPatchDecorations: patchDecorations,
   } as const;
 
@@ -914,12 +959,12 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       variant={isMobile ? 'mobile' : 'desktop'}
       {...aiPanelProps}
     />
-  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, patchDecorations]);
+  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, coverPrompt, showCoverPromptEditor, coverLibrary, handleSaveCoverPrompt, handleApplyCoverPrompt, handleDeleteCoverPrompt, handleFillAutoCoverPrompt, patchDecorations]);
 
   // Phase 14: variante bare per la AIConsole rail (niente AILogPanel doppio)
   const aiPanelBare = useMemo(() => (
     <CardAIControls variant="desktop" bare {...aiPanelProps} />
-  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, patchDecorations]);
+  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, coverPrompt, showCoverPromptEditor, coverLibrary, handleSaveCoverPrompt, handleApplyCoverPrompt, handleDeleteCoverPrompt, handleFillAutoCoverPrompt, patchDecorations]);
 
   const previewPanel = useMemo(() => (
     <CardPreviewSurface

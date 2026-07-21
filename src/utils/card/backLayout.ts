@@ -7,7 +7,7 @@
  * - header: eyebrow 0.7rem + bottom border + 6px margins ≈ 0.10–0.12 of height
  * - cell text padding: 6px 10px
  */
-import { FONT_SCALE_MIN, FONT_SCALE_MAX, QR_SIZE_PX } from '../documentSchemas';
+import { FONT_SCALE_MIN, FONT_SCALE_MAX, QR_SIZE_PX, gridPresetBackDefault } from '../documentSchemas';
 import type { BusinessCard, CardGrid } from '../documentSchemas';
 
 export type AlignH = 'left' | 'center' | 'right';
@@ -162,15 +162,20 @@ export function backQrSizePx(
 }
 
 /**
- * Effective back grid for rendering when services content is empty.
+ * Effective back grid for rendering.
  *
- * v2.12: do NOT move/expand socials. Moving socials made the debug overlay
- * (persisted rect) disagree with the painted content, and 3×3 align acted on
- * a different cell than the red SOCIALS box. Instead:
+ * v2.12: when services content is empty, do NOT move/expand socials. Moving
+ * socials made the debug overlay disagree with the painted content, and 3×3
+ * align acted on a different cell than the red SOCIALS box. Instead:
  * - drop the empty services element
  * - if contacts is adjacent above services in the same columns, expand
  *   contacts into that row (fills the ghost gap without stealing socials)
  * - socials stay at their persisted x/y/w/h so grid editor + 3×3 match preview
+ *
+ * v2.9.1: when services content exists but the persisted backGrid lacks a
+ * services element (legacy card created before services grid support), inject
+ * the default preset services cell so the export does not silently drop them.
+ * Same for socials if they have content but no socials cell.
  *
  * Does not mutate the persisted card; only the render snapshot.
  */
@@ -179,25 +184,35 @@ export function effectiveBackGridForRender(
   card: BusinessCard,
 ): CardGrid {
   const services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
-  if (services.length > 0) return grid;
-
-  const servicesEl = grid.elements.services;
-  if (!servicesEl) return grid;
 
   const elements = { ...grid.elements };
-  delete elements.services;
 
-  const contactsEl = elements.contacts;
-  if (
-    contactsEl
-    && contactsEl.x === servicesEl.x
-    && contactsEl.w === servicesEl.w
-    && contactsEl.y + contactsEl.h === servicesEl.y
-  ) {
-    elements.contacts = {
-      ...contactsEl,
-      h: contactsEl.h + servicesEl.h,
-    };
+  // v2.9.1: inject a missing services cell from the default preset when
+  // services content exists but the element is absent (legacy grids created
+  // before services grid support). This prevents silent data loss in export.
+  const preset = gridPresetBackDefault();
+  if (services.length > 0 && !elements.services && preset.elements.services) {
+    elements.services = preset.elements.services;
+  }
+
+  // Drop empty services cell and optionally expand contacts into the gap.
+  if (services.length === 0) {
+    const servicesEl = elements.services;
+    if (servicesEl) {
+      delete elements.services;
+      const contactsEl = elements.contacts;
+      if (
+        contactsEl
+        && contactsEl.x === servicesEl.x
+        && contactsEl.w === servicesEl.w
+        && contactsEl.y + contactsEl.h === servicesEl.y
+      ) {
+        elements.contacts = {
+          ...contactsEl,
+          h: contactsEl.h + servicesEl.h,
+        };
+      }
+    }
   }
 
   return { ...grid, elements };

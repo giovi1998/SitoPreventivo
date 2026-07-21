@@ -15,10 +15,42 @@ const baseProps = {
   variant: 'desktop' as const,
   onGenerateCover: vi.fn(),
   onRemoveCover: vi.fn(),
+  onGeneratePhoto: vi.fn(),
   card: {
-    front: { coverImageUrl: null },
+    front: { coverImageUrl: null, photoUrl: null, logoUrl: null },
     back: { coverImageUrl: null },
   } as any,
+  // Cover AI prompt-library state required by CardAICoverSection v2.9.1.
+  coverPrompt: '',
+  setCoverPrompt: vi.fn(),
+  showCoverPromptEditor: false,
+  setShowCoverPromptEditor: vi.fn(),
+  coverLibrary: [],
+  onSaveCoverPrompt: vi.fn(),
+  onApplyCoverPrompt: vi.fn(),
+  onDeleteCoverPrompt: vi.fn(),
+  onFillAutoCoverPrompt: vi.fn(),
+  // Photo AI prompt-library state required by CardAIPhotoSection.
+  photoPrompt: '',
+  setPhotoPrompt: vi.fn(),
+  showPhotoPromptEditor: false,
+  setShowPhotoPromptEditor: vi.fn(),
+  photoLibrary: [],
+  onSavePhotoPrompt: vi.fn(),
+  onApplyPhotoPrompt: vi.fn(),
+  onDeletePhotoPrompt: vi.fn(),
+  onFillAutoPhotoPrompt: vi.fn(),
+  // Icon AI prompt-library state required by CardAIIconHeroSection.
+  iconPrompt: '',
+  setIconPrompt: vi.fn(),
+  showIconPromptEditor: false,
+  setShowIconPromptEditor: vi.fn(),
+  onGenerateIcon: vi.fn(),
+  onFillAutoIconPrompt: vi.fn(),
+  iconLibrary: [],
+  onSaveIconPrompt: vi.fn(),
+  onApplyIconPrompt: vi.fn(),
+  onDeleteIconPrompt: vi.fn(),
 };
 
 beforeEach(() => {
@@ -51,7 +83,7 @@ describe('CardAIControls', () => {
     render(<CardAIControls {...baseProps} tier="unlocked" />);
     expandCoverSection();
     fireEvent.click(screen.getByRole('button', { name: /genera entrambi/i }));
-    expect(baseProps.onGenerateCover).toHaveBeenCalledWith('both', expect.any(String));
+    expect(baseProps.onGenerateCover).toHaveBeenCalledWith('both', expect.any(String), expect.toBeOneOf([expect.any(String), undefined]));
   });
 
   it('disables cover buttons while isProcessing is true', () => {

@@ -74,6 +74,27 @@ describe('previewHelpers', () => {
         textAlign: 'left',
       });
     });
+
+    // v2.14 regression: text cells use flex-direction:column. In column mode
+    // the flex main axis is VERTICAL, so justifyContent must map to alignV
+    // and alignItems to alignH. Before this fix, alignV='top' had no effect
+    // on text cells because it was mapped to alignItems (cross axis =
+    // horizontal), making the 3×3 vertical alignment invisible.
+    it('column direction swaps justifyContent/alignItems for text cells', () => {
+      expect(gridPlacement({ x: 0, y: 0, w: 1, h: 1, alignH: 'left', alignV: 'top' }, 'column')).toEqual({
+        gridColumn: '1 / span 1',
+        gridRow: '1 / span 1',
+        justifyContent: 'flex-start', // from alignV='top' (main axis = vertical)
+        alignItems: 'flex-start',     // from alignH='left' (cross axis = horizontal)
+        textAlign: 'left',
+      });
+      // alignV='bottom' should put content at bottom (justifyContent=flex-end)
+      expect(gridPlacement({ x: 0, y: 0, w: 1, h: 1, alignH: 'center', alignV: 'bottom' }, 'column'))
+        .toMatchObject({ justifyContent: 'flex-end', alignItems: 'center' });
+      // alignH='right' should put content at right (alignItems=flex-end)
+      expect(gridPlacement({ x: 0, y: 0, w: 1, h: 1, alignH: 'right', alignV: 'center' }, 'column'))
+        .toMatchObject({ justifyContent: 'center', alignItems: 'flex-end' });
+    });
   });
 
   describe('clampFontScale', () => {

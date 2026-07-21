@@ -56,6 +56,16 @@ export interface CardAIControlsProps {
   onApplyIconPrompt?: (entry: PromptLibraryEntry) => void;
   onDeleteIconPrompt?: (id: string) => void;
   iconHeroLogs?: AILogEntry[];
+  // Cover AI state
+  coverPrompt?: string;
+  setCoverPrompt?: (v: string) => void;
+  showCoverPromptEditor?: boolean;
+  setShowCoverPromptEditor?: (v: boolean) => void;
+  coverLibrary?: PromptLibraryEntry[];
+  onSaveCoverPrompt?: () => void;
+  onApplyCoverPrompt?: (entry: PromptLibraryEntry) => void;
+  onDeleteCoverPrompt?: (id: string) => void;
+  onFillAutoCoverPrompt?: () => void;
   // Photo prompt library state
   photoPrompt?: string;
   setPhotoPrompt?: (v: string) => void;
@@ -97,6 +107,15 @@ export default function CardAIControls({
   onApplyIconPrompt,
   onDeleteIconPrompt,
   iconHeroLogs,
+  coverPrompt = '',
+  setCoverPrompt,
+  showCoverPromptEditor = false,
+  setShowCoverPromptEditor,
+  coverLibrary = [],
+  onSaveCoverPrompt,
+  onApplyCoverPrompt,
+  onDeleteCoverPrompt,
+  onFillAutoCoverPrompt,
   photoPrompt = '',
   setPhotoPrompt,
   showPhotoPromptEditor = false,
@@ -154,13 +173,22 @@ export default function CardAIControls({
         />
       )}
 
-      {card && onGenerateCover && (
+      {card && onGenerateCover && setCoverPrompt && setShowCoverPromptEditor && onSaveCoverPrompt && onApplyCoverPrompt && onDeleteCoverPrompt && onFillAutoCoverPrompt && (
         <CardAICoverSection
           card={card}
           tier={tier}
           isProcessing={isProcessing}
           onGenerate={onGenerateCover}
           onRemove={onRemoveCover}
+          coverPrompt={coverPrompt}
+          onCoverPromptChange={setCoverPrompt}
+          showPromptEditor={showCoverPromptEditor}
+          onTogglePromptEditor={() => setShowCoverPromptEditor(!showCoverPromptEditor)}
+          library={coverLibrary}
+          onSavePrompt={onSaveCoverPrompt}
+          onApplyPrompt={onApplyCoverPrompt}
+          onDeletePrompt={onDeleteCoverPrompt}
+          onFillAutoPrompt={onFillAutoCoverPrompt}
         />
       )}
 

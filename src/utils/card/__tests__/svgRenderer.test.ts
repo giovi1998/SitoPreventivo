@@ -97,8 +97,10 @@ describe('svgRenderer', () => {
       const y = Number(img.match(/y="([^"]+)"/)?.[1] ?? NaN);
       const width = Number(img.match(/width="([^"]+)"/)?.[1] ?? NaN);
       const height = Number(img.match(/height="([^"]+)"/)?.[1] ?? NaN);
-      expect(width).toBe(2 * 256 * 1.2);
-      expect(height).toBe(4 * 165.75 * 1.2);
+      // v2.14: cell size accounts for grid padding (16px/340 ref) + gap (4px/340 ref)
+      // pxW=1024, pxH=663 → pad=31, gap=8 → cellW=(962-24)/4=234.5, cellH=(601-24)/4=144.25
+      expect(width).toBeCloseTo(2 * 234.5 * 1.2, 0);
+      expect(height).toBeCloseTo(4 * 144.25 * 1.2, 0);
       expect(x).toBeGreaterThan(0); // original cell x=0 + nudge right
       expect(y).toBeLessThan(0); // original cell y=0 + nudge up
     });
@@ -648,8 +650,8 @@ describe('svgRenderer', () => {
       const c = attrsOf(center);
       const l = attrsOf(leftTop);
       const r = attrsOf(rightBottom);
-      // cell w = 512 → 72% = 368.64
-      expect(c.w).toBeCloseTo(512 * 0.72, 0);
+      // v2.14: cell w accounts for grid padding+gap → 469 → 72% = 337.68
+      expect(c.w).toBeCloseTo(469 * 0.72, 0);
       // 3×3 must move the logo box, not only the aspect-ratio paint
       expect(l.x).toBeLessThan(c.x);
       expect(r.x).toBeGreaterThan(c.x);
@@ -727,6 +729,38 @@ describe('svgRenderer', () => {
       // (persisted grid cell, not a render-time relocate).
       expect(Math.abs(yEmpty - yWithServices)).toBeLessThan(2);
     });
+
+    it('v2.9.1: services still render when backGrid.services is missing but services content exists (regression)', () => {
+      // Card reale card_1784571073837_hm54u1: backGrid 4×4 con contacts,
+      // socials, qr ma SENZA services. I servizi in card.back.services
+      // spariscono dall'export se non c'è l'elemento dedicato. Fix: inject
+      // la cella services dal preset di default solo per i servizi (i social
+      // restano nel fallback dentro contacts per non rompere i test esistenti).
+      const base = createGiovanniCardTemplate();
+      const card = {
+        ...base,
+        back: {
+          ...base.back,
+          services: ['Consulenza pedagogica', 'Supporto famiglie', 'Formazione docenti'],
+          servicesLabel: 'Servizi',
+          useGrid: true,
+        },
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            contacts: { x: 0, y: 0, w: 2, h: 2 },
+            socials: { x: 0, y: 3, w: 2, h: 1 },
+            qr: { x: 2, y: 0, w: 2, h: 4 },
+          },
+        },
+      };
+      const svg = buildBackSvg(card, 1024, 663);
+      expect(svg).toContain('Consulenza pedagogica');
+      expect(svg).toContain('Supporto famiglie');
+      expect(svg).toContain('Formazione docenti');
+      expect(svg).toContain('SERVIZI');
+    });
   });
 });
 
@@ -754,4 +788,83 @@ function extractTextFontSizes(svg: string, text: string): number[] {
     pos = idx + 1;
   }
   return sizes;
+}
+
+// v2.14 regression: preview/export parity fixes
+describe('v2.14 preview/export parity', () => {
+  it('front font sizes are rem-based (proportional to card height, not cell height)', () => {
+    const card = {
+      ...createEmptyCard(),
+      front: { ...createEmptyCard().front, name: 'MARIO', title: 'Dev', useGrid: true },
+      grid: {
+        cols: 4, rows: 4,
+        elements: {
+          name: { x: 0, y: 0, w: 4, h: 1 },
+          title: { x: 0, y: 1, w: 4, h: 1 },
+        },
+      },
+    };
+    const svg = buildFrontSvg(card, 1024, 663);
+    // name: 663 * (16/340) = 31.2 → ~31 (fontScale=1)
+    // title: 663 * (12.48/340) = 24.3 → ~24
+    const nameSize = fontSizeOfText(svg, 'MARIO');
+    const titleSize = fontSizeOfText(svg, 'Dev');
+    expect(nameSize).toBeCloseTo(663 * (16 / 340), 0);
+    expect(titleSize).toBeCloseTo(663 * (12.48 / 340), 0);
+  });
+
+  it('front grid cells have padding offset (not starting at 0,0)', () => {
+    const card = {
+      ...createEmptyCard(),
+      front: { ...createEmptyCard().front, name: 'MARIO', useGrid: true },
+      grid: {
+        cols: 4, rows: 4,
+        elements: { name: { x: 0, y: 0, w: 4, h: 1, alignV: 'top' as const } },
+      },
+    };
+    const svg = buildFrontSvg(card, 1024, 663);
+    // With grid padding (16/340*663 ≈ 31), the first cell starts at y≈31, not y=0
+    const nameY = yOfText(svg, 'MARIO');
+    expect(nameY).toBeGreaterThan(10); // should be ≈31+3=34, not 0
+  });
+
+  it('back key/val font sizes match grid-mode rem values (9.6/11.52 base)', () => {
+    const card = {
+      ...createEmptyCard(),
+      back: { ...createEmptyCard().back, phone: '123456789', useGrid: true },
+      backGrid: {
+        cols: 4, rows: 4,
+        elements: {
+          contacts: { x: 0, y: 0, w: 4, h: 2 },
+        },
+      },
+    };
+    const svg = buildBackSvg(card, 1024, 663);
+    // key: 663 * (9.6/340) ≈ 18.7
+    // val: 663 * (11.52/340) ≈ 22.5
+    const keySize = fontSizeOfText(svg, 'TELEFONO');
+    const valSize = fontSizeOfText(svg, '123456789');
+    expect(keySize).toBeCloseTo(663 * (9.6 / 340), 0);
+    expect(valSize).toBeCloseTo(663 * (11.52 / 340), 0);
+  });
+});
+
+function fontSizeOfText(svg: string, text: string): number {
+  const idx = svg.indexOf(text);
+  if (idx === -1) return NaN;
+  const before = svg.lastIndexOf('<text', idx);
+  if (before === -1) return NaN;
+  const tag = svg.slice(before, idx);
+  const m = tag.match(/font-size="([^"]+)"/);
+  return m ? parseFloat(m[1]) : NaN;
+}
+
+function yOfText(svg: string, text: string): number {
+  const idx = svg.indexOf(text);
+  if (idx === -1) return NaN;
+  const before = svg.lastIndexOf('<text', idx);
+  if (before === -1) return NaN;
+  const tag = svg.slice(before, idx);
+  const m = tag.match(/y="([^"]+)"/);
+  return m ? parseFloat(m[1]) : NaN;
 }
