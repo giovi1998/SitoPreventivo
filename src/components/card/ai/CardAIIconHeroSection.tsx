@@ -6,7 +6,8 @@ import type { PromptLibraryEntry } from '../../../utils/promptLibrary';
 import type { IconBackground } from '../../../hooks/useAIIconHero';
 
 const BACKGROUND_OPTIONS = [
-  { value: 'white', label: 'Bianco (default)' },
+  { value: 'transparent', label: 'Trasparente (Senza sfondo)' },
+  { value: 'white', label: 'Bianco solido' },
   { value: 'card', label: 'Colore accento card' },
 ];
 
@@ -42,7 +43,7 @@ export default function CardAIIconHeroSection({
 }: CardAIIconHeroSectionProps) {
   const locked = tier !== 'unlocked';
   const [imageModel, setImageModel] = React.useState(getAiImageModelDefault());
-  const [background, setBackground] = React.useState<IconBackground>('white');
+  const [background, setBackground] = React.useState<IconBackground>('transparent');
 
   const handleImageModelChange = (id: string) => {
     setImageModel(id);

@@ -22,6 +22,8 @@ export interface CardProcessResult {
   sessionId: string;
   changes: string[];
   rawResponse?: string;
+  /** TB-023: costo USD calcolato per questa operazione. */
+  costUsd?: number;
 }
 
 const CARD_TOOLS = [
@@ -48,19 +50,25 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
     userPrompt: string,
     options?: {
       modelId?: string;
+      userEmail?: string;
       onStream?: (chunk: AIStreamChunk) => void;
       onToolStart?: (toolCallId: string, name: string) => void;
       onToolComplete?: (toolCallId: string, name: string, result: string) => void;
       requestId?: string;
+      /** TB-023: anteprima base64 screenshot preview per vision/analysis. */
+      imagePreviewBase64?: string;
     },
   ): Promise<CardProcessResult> {
-    const provider = providerRegistry.getProvider(options?.modelId);
+    const providerId = options?.modelId;
+    const provider = providerRegistry.getProvider(providerId);
     const prompt = userPrompt.trim();
     const changes: string[] = [];
 
     if (!this.activeSessionId) {
       this.activeSessionId = chatStore.createSession().id;
     }
+
+    const wantsAnalysis = needsAnalysis(prompt);
 
     const { payload, relevantFields } = buildCardAIContext(card, prompt);
 
@@ -72,15 +80,28 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       });
     }
 
+    const hasImagePreview = !!options?.imagePreviewBase64;
+    const useVision = hasImagePreview && (provider as { supportsVision?: boolean }).supportsVision;
+
+    const userContentParts: string[] = [];
+    if (useVision && options?.imagePreviewBase64) {
+      // L'immagine viene allegata come base64 nella content string. I provider
+      // vision-enabled (Ollama MiniMax M3, Gemini, GPT-4o, ecc.) la ricevono
+      // nel prompt; DeepSeek la ignora ma non rompe. Il log a parte mostra
+      // l'anteprima con `hasImage` + `imagePreviewBase64`.
+      userContentParts.push(`Anteprima bigliettino allegata (base64 JPEG): ${options.imagePreviewBase64}`);
+    }
+    userContentParts.push(`Bigliettino (campi: ${relevantFields.join(', ')}):\n${JSON.stringify(payload)}\n\nRichiesta: ${prompt}`);
+
     const userMsg: ChatMessage = {
       role: 'user',
-      content: `Bigliettino (campi: ${relevantFields.join(', ')}):\n${JSON.stringify(payload)}\n\nRichiesta: ${prompt}`,
+      content: userContentParts.join('\n\n'),
     };
     chatStore.addMessage(this.activeSessionId, userMsg);
 
-    const wantsAnalysis = needsAnalysis(prompt);
     const wantsTools = !wantsAnalysis && provider.supportsTools && needsCardTools(prompt);
     const toolsDefs = wantsTools ? this.toolRegistry.getDefinitions() : undefined;
+
 
     let aiResponse: AIResponse;
     let streamedContent = '';
@@ -131,12 +152,14 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         role: 'assistant',
         content: aiResponse.content || '',
       });
+      const costUsd = this.trackUsage(aiResponse.usage, options?.userEmail, providerId);
       return {
         card: currentCard,
         response: aiResponse,
         sessionId: this.activeSessionId!,
         changes: [],
         rawResponse: aiResponse.content || undefined,
+        costUsd,
       };
     }
 
@@ -209,12 +232,14 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         changes.push(`error:followup_failed:${(err as Error).message?.slice(0, 100) || 'unknown'}`);
       }
 
+      const costUsd = this.trackUsage(aiResponse.usage, options?.userEmail, providerId);
       return {
         card: currentCard,
         response: aiResponse,
         sessionId: this.activeSessionId!,
         changes,
         rawResponse: aiResponse.content || undefined,
+        costUsd,
       };
     }
 
@@ -243,12 +268,14 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       changes.push('error:empty');
     }
 
+    const costUsd = this.trackUsage(aiResponse.usage, options?.userEmail, providerId);
     return {
       card: currentCard,
       response: aiResponse,
       sessionId: this.activeSessionId!,
       changes,
       rawResponse: aiResponse.content || undefined,
+      costUsd,
     };
   }
 }

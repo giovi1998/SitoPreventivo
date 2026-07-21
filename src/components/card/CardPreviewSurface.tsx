@@ -75,7 +75,7 @@ export default function CardPreviewSurface({
           </button>
         </div>
       </div>
-      <div className="card-previews" style={previewsStyle}>
+      <div className="card-previews" style={previewsStyle} data-card-preview="true">
         <div className="card-preview-wrap">
           <h3>Fronte</h3>
           <CardPreview side="front" card={card} showGrid={showGrid} tier={tier} />

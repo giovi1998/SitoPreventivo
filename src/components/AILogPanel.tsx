@@ -1,5 +1,6 @@
 import React from 'react';
 import type { AILogEntry } from '../ai/types';
+import { formatCostUsd } from '../ai/providerPricing';
 import './AILogPanel.css';
 
 interface AILogPanelProps {
@@ -11,6 +12,8 @@ interface AILogPanelProps {
    * 'themed' = segue il tema globale (surface/ink/line), per usi fuori rail.
    */
   theme?: 'dark' | 'themed';
+  /** TB-023: costo USD totale cumulato (mostrato nell'header). */
+  totalCostUsd?: number;
 }
 
 const TYPE_ICONS: Record<AILogEntry['type'], string> = {
@@ -29,7 +32,7 @@ const TYPE_LABELS: Record<AILogEntry['type'], string> = {
   stream: 'Stream',
 };
 
-export default function AILogPanel({ logs, isProcessing, theme = 'dark' }: AILogPanelProps): React.ReactElement {
+export default function AILogPanel({ logs, isProcessing, theme = 'dark', totalCostUsd }: AILogPanelProps): React.ReactElement {
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [fullscreenOpen, setFullscreenOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -67,6 +70,11 @@ export default function AILogPanel({ logs, isProcessing, theme = 'dark' }: AILog
           <span className="ai-log-count">
             {logs.length === 0 ? 'Nessuna attività' : `${logs.length} eventi`}
             {isProcessing && <span className="ai-log-pulse" aria-label="In elaborazione" />}
+            {totalCostUsd !== undefined && totalCostUsd >= 0 && (
+              <span className="ai-log-cost" aria-label={`Costo totale ${formatCostUsd(totalCostUsd)}`}>
+                {formatCostUsd(totalCostUsd)}
+              </span>
+            )}
           </span>
           <div className="ai-log-actions">
             <button
@@ -117,15 +125,37 @@ export default function AILogPanel({ logs, isProcessing, theme = 'dark' }: AILog
                   {log.durationMs !== undefined && (
                     <span className="ai-log-duration">{log.durationMs}ms</span>
                   )}
-                  {log.detail && (
+                  {log.tokens !== undefined && (
+                    <span className="ai-log-tokens">{log.tokens.total} tk</span>
+                  )}
+                  {log.costUsd !== undefined && log.costUsd >= 0 && (
+                    <span className="ai-log-cost-inline">{formatCostUsd(log.costUsd)}</span>
+                  )}
+                  {log.hasImage && <span className="ai-log-image" aria-label="include immagine">🖼️</span>}
+                  {(log.detail || log.imagePreviewBase64) && (
                     <span className="ai-log-expand" aria-hidden="true">
                       {isOpen ? '▾' : '▸'}
                     </span>
                   )}
                 </button>
-                {isOpen && log.detail && (
-                  <pre className="ai-log-detail">{log.detail}</pre>
-                )}
+                  {isOpen && (log.detail || log.imagePreviewBase64) && (
+                    <pre className="ai-log-detail">
+                      {log.modelId && <div className="ai-log-detail-meta">Model: {log.modelId}</div>}
+                      {log.costUsd !== undefined && log.costUsd >= 0 && <div className='ai-log-detail-meta'>Cost: {formatCostUsd(log.costUsd)}</div>}
+                      {log.requestId && <div className="ai-log-detail-meta">Request: {log.requestId}</div>}
+                      {log.imagePreviewBase64 && (
+                        <div className="ai-log-preview">
+                          <img
+                            src={log.imagePreviewBase64}
+                            alt="Anteprima allegata al prompt"
+                            className="ai-log-preview-img"
+                            loading="lazy"
+                          />
+                        </div>
+                      )}
+                      {log.detail}
+                    </pre>
+                  )}
               </div>
             );
           })}
@@ -191,14 +221,29 @@ export default function AILogPanel({ logs, isProcessing, theme = 'dark' }: AILog
                       {log.durationMs !== undefined && (
                         <span className="ai-log-duration">{log.durationMs}ms</span>
                       )}
-                      {log.detail && (
+                      {(log.detail || log.imagePreviewBase64) && (
                         <span className="ai-log-expand" aria-hidden="true">
                           {isOpen ? '▾' : '▸'}
                         </span>
                       )}
                     </button>
-                    {isOpen && log.detail && (
-                      <pre className="ai-log-detail">{log.detail}</pre>
+                    {isOpen && (log.detail || log.imagePreviewBase64) && (
+                      <pre className="ai-log-detail">
+                        {log.modelId && <div className="ai-log-detail-meta">Model: {log.modelId}</div>}
+                      {log.costUsd !== undefined && log.costUsd >= 0 && <div className='ai-log-detail-meta'>Cost: {formatCostUsd(log.costUsd)}</div>}
+                        {log.requestId && <div className="ai-log-detail-meta">Request: {log.requestId}</div>}
+                        {log.imagePreviewBase64 && (
+                          <div className="ai-log-preview">
+                            <img
+                              src={log.imagePreviewBase64}
+                              alt="Anteprima allegata al prompt"
+                              className="ai-log-preview-img"
+                              loading="lazy"
+                            />
+                          </div>
+                        )}
+                        {log.detail}
+                      </pre>
                     )}
                   </div>
                 );

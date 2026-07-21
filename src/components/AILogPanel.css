@@ -184,9 +184,20 @@
   text-overflow: ellipsis;
 }
 
-.ai-log-duration {
+.ai-log-duration,
+.ai-log-tokens,
+.ai-log-cost-inline {
   color: #64748B;
   font-size: 10px;
+  flex-shrink: 0;
+}
+
+.ai-log-cost-inline {
+  color: #10B981;
+}
+
+.ai-log-image {
+  font-size: 11px;
   flex-shrink: 0;
 }
 
@@ -211,6 +222,28 @@
   overflow-y: auto;
   font-family: inherit;
   line-height: 1.5;
+}
+
+.ai-log-detail-meta {
+  color: #64748B;
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+
+.ai-log-preview {
+  margin: 6px 0 10px;
+}
+
+.ai-log-preview-img {
+  max-width: 100%;
+  max-height: 220px;
+  border: 1px solid #1E293B;
+  border-radius: 4px;
+  display: block;
+}
+
+.ai-log-list-fullscreen .ai-log-preview-img {
+  max-height: 360px;
 }
 
 /* Fullscreen modal */

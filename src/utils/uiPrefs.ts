@@ -22,6 +22,7 @@ export interface UiPrefs {
   aiVisionEnabled?: boolean;
   aiRagClientsEnabled?: boolean;
   aiAutoFallback?: boolean;
+  aiABTestingEnabled?: boolean;
 }
 
 const KEY = 'pq_ui:v1';
@@ -46,6 +47,7 @@ export function getUiPrefs(): UiPrefs {
     aiVisionEnabled: parsed.aiVisionEnabled,
     aiRagClientsEnabled: parsed.aiRagClientsEnabled,
     aiAutoFallback: parsed.aiAutoFallback,
+    aiABTestingEnabled: parsed.aiABTestingEnabled,
   };
   } catch {
     return { ...DEFAULTS, aiConsoleExpanded: {} };
@@ -138,5 +140,15 @@ export function getAiAutoFallback(): boolean {
 export function setAiAutoFallback(enabled: boolean): void {
   const prefs = getUiPrefs();
   prefs.aiAutoFallback = enabled;
+  save(prefs);
+}
+
+export function getAiABTestingEnabled(): boolean {
+  return getUiPrefs().aiABTestingEnabled ?? false;
+}
+
+export function setAiABTestingEnabled(enabled: boolean): void {
+  const prefs = getUiPrefs();
+  prefs.aiABTestingEnabled = enabled;
   save(prefs);
 }

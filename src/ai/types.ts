@@ -97,6 +97,12 @@ export interface AILogEntry {
     completion: number;
     total: number;
   };
+  /** TB-023: costo USD dell'operazione loggata (somma testo + immagini). */
+  costUsd?: number;
+  /** TB-023: flag operazione con immagine (vision, cover, hero, background). */
+  hasImage?: boolean;
+  /** TB-023: anteprima base64 dell'immagine allegata (screenshot cover/photo/cardImage/logoImage). */
+  imagePreviewBase64?: string;
 }
 
 export interface ProcessResult {

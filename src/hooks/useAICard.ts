@@ -48,12 +48,18 @@ interface UseAICardReturn {
   cardAiLogs: ReturnType<typeof useAILogs>['logs'];
   isCardProcessing: boolean;
   availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
+  /** TB-023: costo USD totale cumulato nella sessione card AI. */
+  totalCostUsd: number;
+  /** TB-023: costo USD dell'ultima operazione card AI. */
   lastCostUsd: number;
 }
 
 export function useAICard(userEmail?: string): UseAICardReturn {
-  const { logs: cardAiLogs, isProcessing: isCardProcessing, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAICard');
-  const [lastCostUsd, setLastCostUsd] = useState(0);
+  const { logs: cardAiLogs, isProcessing: isCardProcessing, totalCostUsd, lastCostUsd, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAICard');
+  const setLastCostUsd = useCallback((value: number) => {
+    // no-op: lastCostUsd viene gestito internamente da useAILogs tramite meta.costUsd
+    void value;
+  }, []);
   const availableModels = useRef(new CardAIOrchestrator().getProviderList()).current;
   const orchestratorRef = useRef<CardAIOrchestrator | null>(null);
 
@@ -92,17 +98,53 @@ export function useAICard(userEmail?: string): UseAICardReturn {
       const requestId = newRequestId();
       await ensureTokenBudget();
 
-      const promptPreview = prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt;
-      info(`📤 Invio richiesta: "${promptPreview}"`, prompt, { requestId });
-      const streamId = startStream('Generazione in corso…', { requestId });
+        const promptPreview = prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt;
 
-      try {
-        const orchestrator = getOrchestrator();
-        options?.onProgress?.('🤖 Chiamata AI in corso...');
+        // TB-023: cattura screenshot preview per vision/analysis mode.
+        let previewBase64: string | undefined;
+        try {
+          const { renderCardSideDataUrl } = await import('../utils/card/pngExport');
+          const [frontUrl, backUrl] = await Promise.all([
+            renderCardSideDataUrl(card, 'front', 800, 450),
+            renderCardSideDataUrl(card, 'back', 800, 450)
+          ]);
+          const canvas = document.createElement('canvas');
+          canvas.width = 800;
+          canvas.height = 940; // 450 + 40 gap + 450
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const loadImg = (src: string) => new Promise<HTMLImageElement>((resolve) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.src = src;
+            });
+            
+            const [frontImg, backImg] = await Promise.all([loadImg(frontUrl), loadImg(backUrl)]);
+            ctx.drawImage(frontImg, 0, 0, 800, 450);
+            ctx.drawImage(backImg, 0, 490, 800, 450);
+            
+            previewBase64 = canvas.toDataURL('image/jpeg', 0.85);
+          }
+        } catch (e) {
+          console.warn('Failed to capture card preview:', e);
+        }
 
+        info(`📤 Invio richiesta: "${promptPreview}"`, prompt, { requestId, hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });
+        const streamId = startStream('Generazione in corso…', { requestId });
+
+        try {
+          const orchestrator = getOrchestrator();
+          options?.onProgress?.('🤖 Chiamata AI in corso...');
+
+        const resolvedModelId = resolveProviderId(options?.modelId);
         const result = await orchestrator.processPrompt(card, prompt, {
-          modelId: resolveProviderId(options?.modelId),
+          modelId: resolvedModelId,
+          userEmail,
           requestId,
+          imagePreviewBase64: previewBase64,
           onStream: (chunk: AIStreamChunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -111,16 +153,17 @@ export function useAICard(userEmail?: string): UseAICardReturn {
           },
         });
 
-        if (userEmail && userEmail !== 'admin@gmail.com' && result.response.usage?.totalTokens) {
-          const cost = calculateCostUsd(resolveProviderId(options?.modelId), result.response.usage);
-          setLastCostUsd(cost);
-          Promise.resolve(dataService.trackTokens(userEmail, result.response.usage.totalTokens, cost) as unknown as Promise<unknown>).catch(() => {});
+        const textCost = result.costUsd ?? calculateCostUsd(resolvedModelId, result.response.usage);
+        setLastCostUsd(textCost);
+        // Fallback tracking per orchestratori mock/legacy che non ritornano costUsd.
+        if (result.costUsd == null && userEmail && userEmail !== 'admin@gmail.com' && result.response.usage?.totalTokens) {
+          Promise.resolve(dataService.trackTokens(userEmail, result.response.usage.totalTokens, textCost) as unknown as Promise<unknown>).catch(() => {});
         }
 
         const tokens = result.response.usage
           ? { prompt: result.response.usage.promptTokens, completion: result.response.usage.completionTokens, total: result.response.usage.totalTokens }
           : undefined;
-        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
+        finalizeStream(streamId, true, { tokens, costUsd: textCost, detail: result.rawResponse?.slice(0, 2048), modelId: resolvedModelId, requestId, hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });
 
         const realChanges = result.changes.filter((c: string) => !c.startsWith('error:'));
         const errorChanges = result.changes.filter((c: string) => c.startsWith('error:'));
@@ -137,8 +180,9 @@ export function useAICard(userEmail?: string): UseAICardReturn {
           error('Alcune modifiche non sono state applicate (formato non valido)', errorChanges.join('; '), { requestId });
         }
         if (realChanges.length === 0 && errorChanges.length === 0) {
-          const aiText = (result.rawResponse || '').trim();
-          info(aiText || 'Nessuna modifica applicata', undefined, { requestId });
+          // In modalita' analisi il testo completo e' gia' nel log stream (dettaglio).
+          // Evitiamo di duplicarlo come info separato; mostriamo solo una riga sintetica.
+          info('Risposta AI ricevuta (vedi dettaglio sopra)', undefined, { requestId });
         }
 
         return { card: result.card, changes: result.changes, rawResponse: result.rawResponse };
@@ -191,8 +235,10 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         }
 
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
+        const imageCost = calculateCostUsd('gemini-nano-banana', undefined, 1);
+        setLastCostUsd(imageCost);
         trackImageTokens();
-        success(`Cover AI (${side}) generata`, `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId });
+        success(`Cover AI (${side}) generata`, `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd: imageCost, hasImage: true, modelId: imageModel });
         return `data:${data.mimeType};base64,${data.imageBase64}`;
       } catch (err: any) {
         const hint = mapAiError(err);
@@ -236,8 +282,10 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         }
 
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
+        const imageCost = calculateCostUsd('gemini-nano-banana', undefined, 1);
+        setLastCostUsd(imageCost);
         trackImageTokens();
-        success('Foto AI generata', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId });
+        success('Foto AI generata', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd: imageCost, hasImage: true, modelId: imageModel });
         return `data:${data.mimeType};base64,${data.imageBase64}`;
       } catch (err: any) {
         const hint = mapAiError(err);
@@ -257,6 +305,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
     cardAiLogs,
     isCardProcessing,
     availableModels,
+    totalCostUsd,
     lastCostUsd,
   };
 }

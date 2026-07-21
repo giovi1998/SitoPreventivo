@@ -225,7 +225,7 @@ sono stati cancellati dopo verifica (traccia in git history +
 | 12, AI Observability | ✅ done | `spec-design-ai-first-ux-redesign.md` §3.1: `useAILogs` condiviso, fix `trackUsage` (require→ESM), `IMAGE_TOKEN_COST`, `X-Request-Id` end-to-end (client→proxy→log server), log server JSON, rate limit ghost fix logs/tokens/aistream, persistenza `pq_ai_logs:v1`. Tutti i 6 hook AI migrati: `useAI`, `useAICard`, `useAIFlyer`, `useAILogo`, `useAISocial`, `useAIOnboarding`. |
 | 13, Design System & UX | ✅ done | Token "The Classic" + ghost token definiti in `GlobalStyles` `:root` (light+dark), purge teal/blu chrome (test grep `designTokens.test.ts`), tipografia Outfit/Inter/JetBrains Mono, font picker lazy (`fontLoader.ts` + `AiFontPicker`), kit `ai-ui/ai-ui.css` (solo `.ai-generate-btn` primary), ToastProvider context, sidebar gruppi Crea/Archivio/Sistema + collapsed in `pq_ui:v1` (`uiPrefs.ts`), breakpoint canonici `BP_SHELL=768`/`BP_WORKSPACE=1024` in `useMediaQuery.ts`, `AILogPanel` prop `theme`, fix orfano QREditor.css, copy AI-first (Login/Onboarding/HomePage), unlock code `QB-` (PQ- legacy validi), HomePage AIDA + bento 6 strumenti + motion reveal, `ActionBar` (logo+QR). Deviazioni: valori token esistenti non rimappati (solo aggiunte/alias); breakpoint storici CSS migrati progressivamente (costanti per codice nuovo); card/flyer/quote mantengono i loro cluster azioni (ActionBar applicato a logo+QR). |
 | 14, AI Console & AI-first | ✅ done | `AIConsole` rail (collapse persistito `pq_ui:v1` per `editorKind`, `suggestedPrompt`+focus su doc vuoto, `hidePrompt`, quickActions, `AIProviderBadge`). Migrati: social (rail + form children), flyer (col sx → rail dx, grid `"manual preview ai"`, `FlyerAiPanel bare`), card (col dx, `CardAIControls bare`, `showAi` rimosso), quote (ai-col dopo preview, sezioni condivise). Onboarding AI-first (BrandNameGenerator default, toggle "Preferisco scrivere io"). Deviazioni: **logo** mantiene tab Builder/AI top-level (chat 3-step + concept card non comprimibili in rail 320px) con tab default `ai` su logo vuoto; **QR** resta manuale (eccezione documentata); mobile card/flyer/quote mantengono bottom sheet/overlay esistenti. |
-| 15, AI Harness Upgrade (TB-023) | ⚠️ parziale | Spec: `spec/spec-design-ai-harness-upgrade.md`. Fatto: multi-provider (Ollama Pro + DeepSeek), badge provider con menu (apertura verso il basso, fix clipping), tracking costi (`lastCostUsd`), 5 pattern decorativi SVG in preview+export (preview usa `<svg viewBox="0 0 100 100">` wrapper, **mai** `<g>` in `<span>`), `photoPlacement {x,y,scale}` grid-mode con frecce+zoom, Icona AI card (modello+sfondo+prompt library), dev-proxy `/api/ai/chat(/stream)` + `/api/ai/image-flash`. v2.15: generic `placement` per qualsiasi elemento grid, controlli QR nudge+zoom, QR label export parity, short-contacts collapse. Mancano: RAG clienti (`client_kb` + pgvector), A/B provider, vision feedback screenshot preview. |
+| 15, AI Harness Upgrade (TB-023) | ✅ done | Spec: `spec/spec-design-ai-harness-upgrade.md`. Completato: multi-provider (Ollama Pro + DeepSeek), badge provider con menu (apertura verso il basso, fix clipping), tracking costi (`totalCostUsd`/`lastCostUsd` in `useAILogs`, `AILogPanel`, `AIConsole`, `AIProviderBadge`, `CardAIControls`), 5 pattern decorativi SVG in preview+export, generic `placement {x,y,scale}` per qualsiasi elemento grid con controlli nudge+zoom per foto e QR, Icona AI card (modello+sfondo+prompt library), dev-proxy `/api/ai/chat(/stream)` + `/api/ai/image-flash`. v2.15: QR label export parity, short-contacts collapse. **Completati i 3 sotto-moduli rimasti**: (1) **A/B provider** via `resolveProviderId(modelId?, salt?)` con `aiABTestingEnabled` in `pq_ui:v1`; (2) **Vision feedback screenshot preview** con `useAIDesignReview` + `captureElementAsBase64` + endpoint `/api/ai/design-review` (MiniMax M3); (3) **RAG clienti** con tabella `client_kb` (pgvector `embedding VECTOR(768)`), migration `drizzle/20260721083508_chemical_solo`, endpoint REST `/api/clients` (GET/POST/PATCH/DELETE) con embedding via Ollama `nomic-embed-text` e fallback testo semplice. **Feedback post-TB-023 fixati**: costi visibili inline in `AILogPanel` (token/costo/immagine) e nei dettagli espansi (model/request), `lastCostUsd` reattivo via calcolo live sui log, flag `hasImage` e `modelId` per operazioni immagine, test `useAILogs`/`AILogPanel`, componente riutilizzabile `ClientRagPanel` in `src/components/rag/`, metodi `dataService.searchClients/createClient/updateClient/deleteClient`, rimossa occorrenza UTF8 problematica in `promptUtils.ts`. **v2.16 feedback**: screenshot preview allegato ai log e inviato al modello vision-enabled per card/quote/flyer/logo tramite `data-*-preview` + `captureElementAsBase64`; `useAILogs`/`AILogPanel` mostrano `imagePreviewBase64` nel dettaglio espanso; `useAI`/`useAICard`/`useAIFlyer`/`useAILogo` loggano `hasImage`/`imagePreviewBase64` e propagano `costUsd`/`modelId` nello stream finale; rimossa riga "Risposta AI ricevuta (vedi dettaglio sopra)" duplicata in modalità analisi. **Issue aperti**: vedi `docs/post-tb023-known-issues.md` (cover export, icona 512px, log preview). |
 
 ### ⚠️ Volantino rendering gotchas (leggi prima di toccare il rendering)
 
@@ -718,6 +718,31 @@ Regression test:
 - `layoutAudit.ts` LOGO_TOO_SMALL threshold abbassato da 0.35 a 0.30
   per compensare lo shrink delle celle causato da padding+gap.
 
+### ⚠️ Post-TB-023 known issues (leggi prima di toccare cover/icon/log)
+
+Issue aperti dopo il completamento di TB-023 (AI Harness Upgrade).
+Dettagli completi in `docs/post-tb023-known-issues.md`.
+
+1. **`coverImageUrl` non risolto in PNG export**. `pngExport.ts` risolve
+   `photoUrl`/`logoUrl` in base64 via `resolveToBase64DataUrl()` ma NON
+   `coverImageUrl`. Se la cover è un URL esterno/blob URL (non data:),
+   il canvas non riesce a caricarla (CORS) → cover mancante nel PNG.
+   Fix: aggiungere `resolveToBase64DataUrl` per `coverImageUrl` come
+   già fatto per `photoUrl`/`logoUrl`.
+2. **Back cover wash opacity mismatch**. Preview React: `opacity: 0.35`.
+   SVG export: `opacity="0.6"`. Differenza visibile su card retro
+   con cover. Fix: allineare `svgRenderer.ts` a `0.35`.
+3. **Icona AI 512px pixelata in export HD**. Gemini Flash riceve
+   `size: '512'` → 512×512px. In export a 1700×1100 (300 DPI), una
+   cella foto 2×2 può essere ~700px → upscaling da 512px = pixelazione.
+   Fix: aumentare a `size: '1K'` (attenzione al clamp 500KB server).
+4. **Log image preview persa al refresh**. `stripPreview()` in
+   `useAILogs.ts` rimuove `imagePreviewBase64` prima di sessionStorage.
+   Flag `hasImage` persiste come badge 🖼️ ma l'immagine è visibile
+   solo nella sessione corrente. By design per evitare
+   `QuotaExceededError`. Miglioramento futuro: salvare ultime N
+   immagini a risoluzione ridotta, oppure usare IndexedDB.
+
 ## Responsive Patterns
 
 - **`useMediaQuery(query)`**: hook React, ritorna `boolean`, listener su `change` event, cleanup su unmount, fallback SSR. **Phase 13b**: breakpoint canonici esportati `BP_SHELL=768`/`BP_WORKSPACE=1024` + `MQ_SHELL`/`MQ_WORKSPACE` + `useIsMobileShell()`/`useIsMobileWorkspace()` — codice nuovo DEVE usare questi (breakpoint storici CSS migrati progressivamente)
@@ -743,7 +768,7 @@ Regression test:
 | `VITE_ADMIN_PASSWORD` | .env (local only) | Admin login in dev |
 | `ALLOWED_ORIGIN` | Vercel (Production+Preview) | CORS origin (es. `https://tuodominio.vercel.app`). Se vuoto accetta solo `*.vercel.app`. |
 | `REPLICATE_API_TOKEN` | Vercel (opzionale, deprecato) | Fallback per Logo AI background. Se `GEMINI_API_KEY` è presente, ha priorità. Mantenuto per retrocompatibilità. |
-| `OLLAMA_API_KEY` | Vercel (Production+Preview) + .env (locale) | **TB-023 (NOT-STARTED, vedi `spec/spec-design-ai-harness-upgrade.md`)**: Ollama Pro Cloud API key per `minimax-m3:cloud` (multimodale Text+Image, sostituto `gemini-3-flash-preview` ritirato 15 luglio 2026), `deepseek-v4-pro:cloud`, `qwen-3.5`. Piano $20/mo flat, 50x free usage, 3 modelli concorrenti, zero data retention. API `https://ollama.com/api/chat`, auth `Bearer`. Proxy server-side `/api/ai/chat` con `provider: 'ollama'` (stesso pattern DeepSeek/Gemini, mai key nel bundle). Senza la key, provider Ollama restituisce 503 "Configura OLLAMA_API_KEY" ma gli altri provider funzionano. |
+| `OLLAMA_API_KEY` | Vercel (Production+Preview) + .env (locale) | **TB-023**: Ollama Pro Cloud API key per `minimax-m3:cloud` (multimodale Text+Image, sostituto `gemini-3-flash-preview` ritirato 15 luglio 2026), `deepseek-v4-pro:cloud`, `qwen-3.5`. Piano $20/mo flat, 50x free usage, 3 modelli concorrenti, zero data retention. API `https://ollama.com/api/chat` (proxy server-side `/api/ai/chat` con `provider: 'ollama'`, mai key nel bundle) e `https://ollama.com/api/embeddings` per RAG clienti (`nomic-embed-text`). Senza la key, provider Ollama restituisce 503 "Configura OLLAMA_API_KEY" ma gli altri provider funzionano. |
 
 **Setup locale**:
 1. Copia `.env.example` in `.env` (server) o in `.env.local` (Vite).

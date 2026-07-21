@@ -102,6 +102,11 @@ export function createEntry(type: AILogEntry['type'], msg: string, opts: Partial
   };
 }
 
+/** TB-023: costo totale di una lista di log entry. */
+export function totalCostUsd(entries: AILogEntry[]): number {
+  return entries.reduce((sum, e) => sum + (e.costUsd ?? 0), 0);
+}
+
 export function createErrorEntry(msg: string, detail?: string): AILogEntry {
   return createEntry('error', msg, { detail });
 }

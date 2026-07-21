@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean, numeric, vector } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: serial().primaryKey(),
@@ -68,4 +68,16 @@ export const unlockCodes = pgTable("unlock_codes", {
   usedAt: timestamp("used_at"),
   createdBy: varchar("created_by", { length: 255 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const clientKb = pgTable("client_kb", {
+  id: serial().primaryKey(),
+  userEmail: varchar("user_email", { length: 255 }).notNull(),
+  title: varchar({ length: 255 }).notNull(),
+  content: text().notNull(),
+  source: varchar({ length: 50 }).notNull(),
+  sourceId: varchar("source_id", { length: 100 }),
+  embedding: vector({ dimensions: 768 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -63,16 +63,25 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       modelId?: string;
       onStream?: (chunk: AIStreamChunk) => void;
       userEmail?: string;
+      imagePreviewBase64?: string;
     } = {},
   ): Promise<LogoProcessResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
     const systemPrompt = promptRegistry.getPrompt('logo-system');
     const userPrompt = buildLogoGeneratePrompt(brief, options.sector);
-    const messages = this.buildMessages(systemPrompt, userPrompt);
+    const provider = await import('./providers/registry').then((m) => m.providerRegistry.getProvider(options.modelId));
+    const hasImagePreview = !!options.imagePreviewBase64;
+    const useVision = hasImagePreview && (provider as { supportsVision?: boolean }).supportsVision;
+    const userContentParts: string[] = [];
+    if (useVision && options.imagePreviewBase64) {
+      userContentParts.push(`Anteprima logo allegata (base64 JPEG): ${options.imagePreviewBase64}`);
+    }
+    userContentParts.push(userPrompt);
+    const messages = this.buildMessages(systemPrompt, userContentParts.join('\n\n'));
 
     const response = await this.handleStream(
-      await import('./providers/registry').then((m) => m.providerRegistry.getProvider(options.modelId)),
+      provider,
       messages,
       { temperature: 0.7, responseFormat: { type: 'json_object' } },
       { onStream: options.onStream },

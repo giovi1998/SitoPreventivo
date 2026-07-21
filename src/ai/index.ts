@@ -212,6 +212,8 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
       onToolStart?: (toolCallId: string, name: string) => void;
       onToolComplete?: (toolCallId: string, name: string, result: string) => void;
       requestId?: string;
+      /** TB-023: anteprima base64 screenshot preview per vision/analysis. */
+      imagePreviewBase64?: string;
     }
   ): Promise<ProcessResult> {
     const provider = providerRegistry.getProvider(options?.modelId);
@@ -232,9 +234,18 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
       });
     }
 
+    const hasImagePreview = !!options?.imagePreviewBase64;
+    const useVision = hasImagePreview && (provider as { supportsVision?: boolean }).supportsVision;
+
+    const userContentParts: string[] = [];
+    if (useVision && options?.imagePreviewBase64) {
+      userContentParts.push(`Anteprima preventivo allegata (base64 JPEG): ${options.imagePreviewBase64}`);
+    }
+    userContentParts.push(`Preventivo (campi: ${relevantFields.join(', ')}):\n${JSON.stringify(payload)}\n\nRichiesta: ${prompt}`);
+
     const userMsg: ChatMessage = {
       role: 'user',
-      content: `Preventivo (campi: ${relevantFields.join(', ')}):\n${JSON.stringify(payload)}\n\nRichiesta: ${prompt}`,
+      content: userContentParts.join('\n\n'),
     };
     chatStore.addMessage(this.activeSessionId, userMsg);
 

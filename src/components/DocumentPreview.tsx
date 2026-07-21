@@ -44,7 +44,7 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
     } as React.CSSProperties;
 
     return (
-      <article ref={ref} className={`document ${themeClass}`} style={style}>
+      <article ref={ref} className={`document ${themeClass}`} style={style} data-quote-preview="true">
 
         <div className="doc-title-section">
           <h1 className="doc-main-title" style={{ color: accent }}>

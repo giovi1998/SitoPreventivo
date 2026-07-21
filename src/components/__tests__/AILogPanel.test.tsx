@@ -22,6 +22,16 @@ describe('AILogPanel', () => {
     expect(screen.getByText(/ancora\.\.\./i)).toBeInTheDocument();
   });
 
+  it('shows total cost in header when provided', () => {
+    render(<AILogPanel logs={[makeEntry({ costUsd: 0.005 })]} isProcessing={false} totalCostUsd={0.005} />);
+    expect(screen.getByLabelText(/Costo totale/i)).toHaveTextContent('$0.005');
+  });
+
+  it('does not show cost when zero', () => {
+    render(<AILogPanel logs={[]} isProcessing={false} totalCostUsd={0} />);
+    expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+  });
+
   it('renders log entries with time and message', () => {
     const logs = [
       makeEntry({ msg: 'Primo evento', time: '10:00:00' }),
@@ -144,5 +154,31 @@ describe('AILogPanel', () => {
     await new Promise((r) => setTimeout(r, 0));
     const copied = writeText.mock.calls[0][0] as string;
     expect(copied).toContain('no detail');
+  });
+
+  it('shows inline tokens, cost and image indicator', () => {
+    const logs = [
+      makeEntry({
+        type: 'success',
+        msg: 'cover generated',
+        tokens: { prompt: 10, completion: 20, total: 30 },
+        costUsd: 0.0042,
+        hasImage: true,
+        modelId: 'gemini-3.1-flash-image',
+      }),
+    ];
+    render(<AILogPanel logs={logs} isProcessing={false} />);
+    expect(screen.getByText('30 tk')).toBeInTheDocument();
+    expect(screen.getByText(/\$0\.004/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('include immagine')).toBeInTheDocument();
+  });
+
+  it('shows model/request metadata inside expanded detail', () => {
+    const logs = [makeEntry({ msg: 'con meta', detail: 'raw body', modelId: 'deepseek-v4', requestId: 'req-42' })];
+    render(<AILogPanel logs={logs} isProcessing={false} />);
+    fireEvent.click(screen.getByText('con meta'));
+    expect(screen.getByText(/Model: deepseek-v4/)).toBeInTheDocument();
+    expect(screen.getByText(/Request: req-42/)).toBeInTheDocument();
+    expect(screen.getByText('raw body')).toBeInTheDocument();
   });
 });

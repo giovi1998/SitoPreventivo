@@ -48,6 +48,8 @@ export interface AIConsoleProps {
   className?: string;
   /** TB-023: costo USD ultima operazione AI */
   lastCostUsd?: number;
+  /** TB-023: costo USD totale cumulato AI */
+  totalCostUsd?: number;
   /** TB-023: callback when provider changes via the badge */
   onProviderChange?: (providerId: string) => void;
 }
@@ -66,6 +68,7 @@ export default function AIConsole({
   hidePrompt = false,
   className = '',
   lastCostUsd,
+  totalCostUsd,
   onProviderChange,
 }: AIConsoleProps): React.ReactElement {
   const [expanded, setExpanded] = useState<boolean>(() => {
@@ -181,7 +184,7 @@ export default function AIConsole({
               <span className="ai-console__log-count">{logs.length}</span>
               <span className={`ai-console__log-chevron ${logOpen ? 'ai-console__log-chevron--open' : ''}`}>▾</span>
             </button>
-            {logOpen && <AILogPanel logs={logs} isProcessing={isProcessing} />}
+            {logOpen && <AILogPanel logs={logs} isProcessing={isProcessing} totalCostUsd={totalCostUsd} />}
           </div>
         </div>
       )}

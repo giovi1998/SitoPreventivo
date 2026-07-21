@@ -64,16 +64,29 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
     async (logo: Logo, brief: string, options?: { sector?: string; onProgress?: (msg: string) => void }) => {
       const requestId = newRequestId();
       const promptPreview = brief.length > 60 ? brief.slice(0, 57) + '...' : brief;
-      info(`Invio richiesta: "${promptPreview}"`, brief, { requestId });
+
+      let imagePreviewBase64: string | undefined;
+      try {
+        const previewEl = document.querySelector<HTMLElement>('[data-logo-preview]');
+        if (previewEl) {
+          const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+          imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+        }
+      } catch {
+        imagePreviewBase64 = undefined;
+      }
+
+      info(`Invio richiesta: "${promptPreview}"`, brief, { requestId, hasImage: !!imagePreviewBase64, imagePreviewBase64 });
       const streamId = startStream('Generazione in corso…', {
         requestId,
         sessionId: getOrchestrator().getCurrentSessionId() ?? undefined,
       });
 
       try {
+        const resolvedModelId = resolveProviderId();
         const result = await getOrchestrator().generateLogo(logo, brief, {
           sector: options?.sector,
-          modelId: resolveProviderId(),
+          modelId: resolvedModelId,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -83,6 +96,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
             }
           },
           userEmail,
+          imagePreviewBase64,
         });
 
         const tokens = result.response?.usage
@@ -93,16 +107,20 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
             }
           : undefined;
 
-        finalizeStream(streamId, true, {
-          tokens,
-          detail: result.rawResponse?.slice(0, 2048),
-        });
-
+        const cost = result.response?.usage ? calculateCostUsd(resolvedModelId, result.response.usage) : 0;
         if (userEmail && userEmail !== 'admin@gmail.com' && result.response?.usage) {
-          const cost = calculateCostUsd(resolveProviderId(), result.response.usage);
-          setLastCostUsd(cost);
           dataService.trackTokens(userEmail, result.response.usage.totalTokens, cost).catch(() => {});
         }
+        setLastCostUsd(cost);
+        finalizeStream(streamId, true, {
+          tokens,
+          costUsd: cost,
+          modelId: resolvedModelId,
+          requestId,
+          detail: result.rawResponse?.slice(0, 2048),
+          hasImage: !!imagePreviewBase64,
+          imagePreviewBase64,
+        });
 
         if (result.applied) {
           const summary = [
@@ -139,10 +157,9 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
           success(
             'Background generato',
             `${result.logo.builder.backgroundImage?.length ?? 0} char base64`,
-            { requestId }
+            { requestId, modelId: 'gemini-3.1-flash-image', costUsd: 0, hasImage: true }
           );
           trackImage();
-          setLastCostUsd(0);
         } else {
           error(mapAiError(result.error ?? 'Background non generato'), undefined, { requestId });
         }

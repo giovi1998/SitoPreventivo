@@ -189,27 +189,25 @@ export abstract class BaseOrchestrator {
    * usage. Silent on errors to avoid breaking the user-facing flow.
    *
    * TB-023: calcola costUsd tramite providerPricing e lo passa a
-   * dataService.trackTokens (backward compatible: se providerId
-   * non passato, costUsd=0 e il behavior è invariato).
+   * dataService.trackTokens. Ritorna il costo calcolato così i chiamanti
+   * possono loggarlo inline nelle AILogEntry.
    */
   protected trackUsage(
     usage: AIUsage | undefined,
     userEmail?: string,
     providerId?: string,
-  ): void {
-    if (!usage) return;
-    if (!userEmail || userEmail === 'admin@gmail.com') return;
+  ): number {
+    if (!usage) return 0;
+    if (!userEmail || userEmail === 'admin@gmail.com') return 0;
     const totalTokens = usage.totalTokens ?? (usage.promptTokens + usage.completionTokens);
-    if (!totalTokens) return;
-    let costUsd = 0;
-    if (providerId) {
-      costUsd = calculateCostUsd(providerId, usage);
-    }
+    if (!totalTokens) return 0;
+    const costUsd = providerId ? calculateCostUsd(providerId, usage) : 0;
     try {
       dataService.trackTokens(userEmail, totalTokens, costUsd);
     } catch {
       // Silent on errors to avoid breaking the user-facing flow.
     }
+    return costUsd;
   }
 
   getProviderList(): { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[] {

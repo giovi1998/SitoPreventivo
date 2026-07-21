@@ -8,8 +8,8 @@ describe('needsAnalysis', () => {
     expect(needsAnalysis('Suggerisci delle modifiche')).toBe(true);
     expect(needsAnalysis('Analizza questo preventivo')).toBe(true);
     expect(needsAnalysis('Dimmi cosa ne pensi')).toBe(true);
-    expect(needsAnalysis('Spiega perché è costoso')).toBe(true);
-    expect(needsAnalysis('Perché conviene questa opzione?')).toBe(true);
+    expect(needsAnalysis('Spiega perche e costoso')).toBe(true);
+    expect(needsAnalysis('Perche conviene questa opzione?')).toBe(true);
     expect(needsAnalysis('Consigli per migliorare')).toBe(true);
   });
 

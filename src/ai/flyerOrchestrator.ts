@@ -89,7 +89,7 @@ export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
     flyer: Flyer,
     brief: string,
     tone: FlyerTone,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string }
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string }
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
       const budget = getFlyerCopyBudget(flyer);
@@ -115,7 +115,7 @@ export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
   async refineCopy(
     flyer: Flyer,
     action: FlyerRefineAction,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string }
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string }
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
       const currentJson = JSON.stringify({
@@ -141,10 +141,12 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
   private async runPrompt(
     flyer: Flyer,
     buildPrompt: () => string,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string },
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string },
     changeLabel?: string
   ): Promise<FlyerProcessResult> {
     const provider: AIProvider = providerRegistry.getProvider(options?.modelId);
+    const hasImagePreview = !!options?.imagePreviewBase64;
+    const useVision = hasImagePreview && (provider as { supportsVision?: boolean }).supportsVision;
     const prompt = buildPrompt();
     const changes: string[] = [];
 
@@ -158,7 +160,12 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
         content: buildFlyerSystemPrompt(),
       });
     }
-    chatStore.addMessage(this.activeSessionId, { role: 'user', content: prompt });
+    const userContentParts: string[] = [];
+    if (useVision && options?.imagePreviewBase64) {
+      userContentParts.push(`Anteprima volantino allegata (base64 JPEG): ${options.imagePreviewBase64}`);
+    }
+    userContentParts.push(prompt);
+    chatStore.addMessage(this.activeSessionId, { role: 'user', content: userContentParts.join('\n\n') });
 
     const wantsTools = provider.supportsTools && needsFlyerTools(prompt);
     const toolsDefs = wantsTools ? this.toolRegistry.getDefinitions() : undefined;

@@ -2143,7 +2143,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
           ? `Solid flat background color ${v.data.primaryColor}, icon in ${v.data.secondaryColor || '#FFFFFF'}.`
           : bg === 'accent' && v.data.primaryColor
             ? `Solid flat background color ${v.data.primaryColor}.`
-            : 'Isolated on a plain solid white background (#FFFFFF).';
+            : 'Isolated on a plain solid white background (#FFFFFF). DO NOT draw a checkerboard or transparency grid. MUST use a solid #FFFFFF white background.';
       // Build prompt based on kind
       let finalPrompt = v.data.prompt;
       if (kind === 'icon' && v.data.primaryColor && v.data.secondaryColor) {

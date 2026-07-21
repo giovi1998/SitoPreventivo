@@ -594,6 +594,7 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
           className="builder-preview-svg"
           aria-label="Anteprima logo SVG"
           role="img"
+          data-logo-preview="true"
           // SECURITY: previewSvg è già passato per sanitizeSvg + builderToSvg
           // che escape caratteri XML pericolosi prima dell'output.
           dangerouslySetInnerHTML={{ __html: previewSvg }}

@@ -42,6 +42,10 @@ export interface CardAIControlsProps {
   onRemoveCover?: (side: 'front' | 'back') => void;
   onGeneratePhoto?: (imageModel?: string) => void;
   card?: BusinessCard;
+  /** TB-023: costo USD ultima operazione per il badge provider. */
+  lastCostUsd?: number;
+  /** TB-023: costo USD totale cumulato per il log panel. */
+  totalCostUsd?: number;
   // Icon AI state
   iconPrompt?: string;
   setIconPrompt?: (v: string) => void;
@@ -122,6 +126,8 @@ export default function CardAIControls({
   onApplyPhotoPrompt,
   onDeletePhotoPrompt,
   onFillAutoPhotoPrompt,
+  lastCostUsd,
+  totalCostUsd,
 }: CardAIControlsProps) {
   return (
     <div className="card-ai-panel" data-testid="card-ai-panel">
@@ -129,7 +135,7 @@ export default function CardAIControls({
        * provider va dentro il pannello. Su desktop è la console a mostrarlo. */}
       {variant === 'mobile' && (
         <div className="card-ai-mobile-provider">
-          <AIProviderBadge onProviderChange={(id) => onModelChange?.(id)} />
+          <AIProviderBadge lastCostUsd={lastCostUsd} onProviderChange={(id) => onModelChange?.(id)} />
         </div>
       )}
 
@@ -202,7 +208,7 @@ export default function CardAIControls({
         variant={variant}
       />
 
-      {!bare && <AILogPanel logs={logs} isProcessing={isProcessing} />}
+      {!bare && <AILogPanel logs={logs} isProcessing={isProcessing} totalCostUsd={totalCostUsd} />}
     </div>
   );
 }

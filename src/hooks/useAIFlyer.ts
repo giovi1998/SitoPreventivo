@@ -62,11 +62,12 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       label: string,
       run: (onStream: (chunk: any) => void) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean; response?: { usage?: { promptTokens: number; completionTokens: number; totalTokens: number } } }>,
       modelId?: string,
+      imagePreviewBase64?: string,
     ) => {
       const resolvedId = resolveProviderId(modelId);
       const requestId = newRequestId();
       await ensureTokenBudget(requestId);
-      info(`📤 ${label}`, undefined, { requestId });
+      info(`📤 ${label}`, undefined, { requestId, hasImage: !!imagePreviewBase64, imagePreviewBase64 });
       const streamId = startStream('Generazione in corso…', { requestId });
 
       try {
@@ -79,14 +80,13 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         const tokens = result.response?.usage
           ? { prompt: result.response.usage.promptTokens, completion: result.response.usage.completionTokens, total: result.response.usage.totalTokens }
           : undefined;
-        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
-
+        const total = tokens?.total ?? Math.max(1, Math.ceil((result.rawResponse?.length || 0) / 4));
+        const cost = calculateCostUsd(resolvedId, result.response?.usage || { promptTokens: 0, completionTokens: 0, totalTokens: total });
         if (userEmail && userEmail !== 'admin@gmail.com') {
-          const total = tokens?.total ?? Math.max(1, Math.ceil((result.rawResponse?.length || 0) / 4));
-          const cost = calculateCostUsd(resolvedId, result.response?.usage || { promptTokens: 0, completionTokens: 0, totalTokens: total });
-          setLastCostUsd(cost);
           dataService.trackTokens(userEmail, total, cost).catch(() => {});
         }
+        setLastCostUsd(cost);
+        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048), costUsd: cost, modelId: resolvedId, requestId, hasImage: !!imagePreviewBase64, imagePreviewBase64 });
 
         const realChanges = result.changes.filter((c) => !c.startsWith('error:'));
         const errorChanges = result.changes.filter((c) => c.startsWith('error:'));
@@ -115,10 +115,21 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
     async (flyer: Flyer, brief: string, tone: FlyerTone, options?: { modelId?: string }) => {
       const trimmed = brief.trim();
       if (!trimmed) throw new Error('Inserisci un brief per generare il copy.');
+      let imagePreviewBase64: string | undefined;
+      try {
+        const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
+        if (previewEl) {
+          const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+          imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+        }
+      } catch {
+        imagePreviewBase64 = undefined;
+      }
       return runWith(
         `Invio richiesta: "${trimmed.length > 60 ? trimmed.slice(0, 57) + '...' : trimmed}" (${tone})`,
-        async (onStream) => getOrchestrator().generateCopy(flyer, trimmed, tone, { modelId: resolveProviderId(options?.modelId), onStream }),
+        async (onStream) => getOrchestrator().generateCopy(flyer, trimmed, tone, { modelId: resolveProviderId(options?.modelId), onStream, imagePreviewBase64 }),
         options?.modelId,
+        imagePreviewBase64,
       );
     },
     [getOrchestrator, runWith]
@@ -126,10 +137,21 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
 
   const refine = useCallback(
     async (flyer: Flyer, action: FlyerRefineAction, options?: { modelId?: string }) => {
+      let imagePreviewBase64: string | undefined;
+      try {
+        const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
+        if (previewEl) {
+          const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+          imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+        }
+      } catch {
+        imagePreviewBase64 = undefined;
+      }
       return runWith(
         `Rifinisci copy: ${action}`,
-        async (onStream) => getOrchestrator().refineCopy(flyer, action, { modelId: resolveProviderId(options?.modelId), onStream }),
+        async (onStream) => getOrchestrator().refineCopy(flyer, action, { modelId: resolveProviderId(options?.modelId), onStream, imagePreviewBase64 }),
         options?.modelId,
+        imagePreviewBase64,
       );
     },
     [getOrchestrator, runWith]
@@ -168,7 +190,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
           setLastCostUsd(0);
         }
 
-        success('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId });
+        success('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, modelId: imageModel, costUsd: 0, hasImage: true });
         return { flyer: updated, applied: true };
       } catch (err) {
         const hint = mapAiError(err);

@@ -16,6 +16,10 @@ import { CardGridControls, type GridSide } from './CardGridControls';
 import CardAIControls from './CardAIControls';
 import AIConsole from '../ai/AIConsole';
 import {
+  useAIIconHero,
+  type IconBackground,
+} from '../../hooks/useAIIconHero';
+import {
   CardFrontFields,
   CardBackFields,
   CardMediaFields,
@@ -29,7 +33,7 @@ import { useCardExport } from '../../hooks/useCardExport';
 import { isAllowedLogoMime, isHttpUrl } from '../../utils/qrGenerator';
 import { useToast } from '../../hooks/useToast';
 import { useAICard } from '../../hooks/useAICard';
-import { useAIIconHero } from '../../hooks/useAIIconHero';
+
 import { findCardQuickAction } from '../../ai/prompts/cardQuickActions';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useCardPreviewZoom } from '../../hooks/useCardPreviewZoom';
@@ -128,7 +132,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const previewZoom = useCardPreviewZoom(1);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
-  const { processCardPrompt, generateCover, generatePhoto, resetCardChat, cardAiLogs, isCardProcessing, availableModels, lastCostUsd } = useAICard(userEmail);
+  const { processCardPrompt, generateCover, generatePhoto, resetCardChat, cardAiLogs, isCardProcessing, availableModels, totalCostUsd, lastCostUsd } = useAICard(userEmail);
   const { generate: generateIconHero, isProcessing: isIconHeroProcessing, logs: iconHeroLogs } = useAIIconHero(userEmail);
   const [isPhotoGenerating, setIsPhotoGenerating] = useState(false);
   const [iconPrompt, setIconPrompt] = useState('');
@@ -638,7 +642,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     return `minimal geometric icon representing ${subject}`;
   }, [card]);
 
-  const handleGenerateIcon = useCallback(async (opts: { imageModel: string; background: 'white' | 'card' | 'accent' }) => {
+  const handleGenerateIcon = useCallback(async (opts: { imageModel: string; background: IconBackground }) => {
     if (tier !== 'unlocked') {
       addToast('info', 'Sblocca il piano per generare icone AI.', 4000);
       return;
@@ -907,6 +911,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     </>
   ), [card, patchFront, patchBack, patchStyle, patchDecorations, handleUpload, removePhoto, removeLogo, removeCoverImage, removeBackCoverImage, uploadError, updateService, addService, removeService, updateSocial, addSocial, removeSocial, tier]);
 
+  // Merge logs di tutte le sorgenti immagine in ordine cronologico
+  const mergedLogs = React.useMemo(() => {
+    const combined = [...cardAiLogs, ...iconHeroLogs];
+    combined.sort((a, b) => a.time.localeCompare(b.time));
+    return combined;
+  }, [cardAiLogs, iconHeroLogs]);
+
   const aiPanelProps = {
     aiModel,
     onModelChange: setAiModel,
@@ -916,7 +927,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     isProcessing: isCardProcessing || isCoverGenerating || isPhotoGenerating || isIconHeroProcessing,
     onRun: runCardAI,
     onReset: resetCardChat,
-    logs: cardAiLogs,
+    logs: mergedLogs,
     tier,
     onGenerateCover: handleGenerateCover,
     onRemoveCover: handleRemoveCover,
@@ -952,6 +963,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     onDeleteCoverPrompt: handleDeleteCoverPrompt,
     onFillAutoCoverPrompt: handleFillAutoCoverPrompt,
     onPatchDecorations: patchDecorations,
+    lastCostUsd,
+    totalCostUsd,
   } as const;
 
   const aiPanel = useMemo(() => (
@@ -959,12 +972,12 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       variant={isMobile ? 'mobile' : 'desktop'}
       {...aiPanelProps}
     />
-  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, coverPrompt, showCoverPromptEditor, coverLibrary, handleSaveCoverPrompt, handleApplyCoverPrompt, handleDeleteCoverPrompt, handleFillAutoCoverPrompt, patchDecorations]);
+  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, isIconHeroProcessing, runCardAI, resetCardChat, mergedLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, coverPrompt, showCoverPromptEditor, coverLibrary, handleSaveCoverPrompt, handleApplyCoverPrompt, handleDeleteCoverPrompt, handleFillAutoCoverPrompt, patchDecorations, lastCostUsd, totalCostUsd]);
 
   // Phase 14: variante bare per la AIConsole rail (niente AILogPanel doppio)
   const aiPanelBare = useMemo(() => (
     <CardAIControls variant="desktop" bare {...aiPanelProps} />
-  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, runCardAI, resetCardChat, cardAiLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, coverPrompt, showCoverPromptEditor, coverLibrary, handleSaveCoverPrompt, handleApplyCoverPrompt, handleDeleteCoverPrompt, handleFillAutoCoverPrompt, patchDecorations]);
+  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, isIconHeroProcessing, runCardAI, resetCardChat, mergedLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, coverPrompt, showCoverPromptEditor, coverLibrary, handleSaveCoverPrompt, handleApplyCoverPrompt, handleDeleteCoverPrompt, handleFillAutoCoverPrompt, patchDecorations, lastCostUsd, totalCostUsd]);
 
   const previewPanel = useMemo(() => (
     <CardPreviewSurface
@@ -1102,12 +1115,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
           <section className="card-editor-ai" aria-label="AI che modifica il bigliettino">
             <AIConsole
               editorKind="card"
-              isProcessing={isCardProcessing || isCoverGenerating}
-              logs={cardAiLogs}
+              isProcessing={isCardProcessing || isCoverGenerating || isPhotoGenerating || isIconHeroProcessing}
+              logs={mergedLogs}
               tier={tier}
               onSubmitPrompt={(text) => setAiText(text)}
               hidePrompt
               lastCostUsd={lastCostUsd}
+              totalCostUsd={totalCostUsd}
               onProviderChange={setAiModel}
               // REQ-AI-003: su card vuota la rail propone un prompt contestuale
               // con focus; l'expanded resta default true (o pq_ui:v1 se persistito).

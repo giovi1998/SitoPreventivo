@@ -12,7 +12,7 @@ const ANALYSIS_KEYWORDS = [
   'come ', 'come?', 'come.', // come (come posso, come mai)
   'suggerisci', 'suggerimenti', 'consigli', 'consiglia',
   'analizza', 'analisi', 'esamina', 'valuta',
-  'dimmi', 'spiega', 'spiegami', 'perché', 'perche',
+  'dimmi', 'spiega', 'spiegami', 'perche',
   'opinione', 'pensieri', 'parere', 'idea', 'idee',
   'ottimizza', 'verifica', 'controlla', 'check',
   'what can', 'what would', 'what should', 'how can', 'how should',

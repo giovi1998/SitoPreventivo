@@ -8,7 +8,7 @@ import dataService from '../utils/dataService';
 
 export type IconHeroKind = 'icon' | 'hero';
 
-export type IconBackground = 'white' | 'card' | 'accent';
+export type IconBackground = 'transparent' | 'white' | 'card' | 'accent';
 
 export interface IconHeroOptions {
   primaryColor?: string;
@@ -38,9 +38,10 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
     async (prompt: string, kind: IconHeroKind, options?: IconHeroOptions) => {
       const requestId = newRequestId();
       setIsProcessing(true);
-      info(kind === 'icon' ? '🎨 Generazione icona AI...' : '🖼️ Generazione hero AI...', prompt.slice(0, 120), { requestId });
+      info(kind === 'icon' ? '🎨 Generazione icona AI...' : '🖼️ Generazione hero AI...', prompt.slice(0, 300), { requestId });
 
       try {
+        const { removeWhiteBackground } = await import('../utils/ai/removeBackground');
         const apiBase = import.meta.env?.VITE_API_BASE || '';
         const res = await fetch(`${apiBase}/api/ai/image-flash`, {
           method: 'POST',
@@ -54,7 +55,7 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
             secondaryColor: options?.secondaryColor,
             style: options?.style || 'minimalist',
             imageModel: options?.imageModel,
-            background: options?.background,
+            background: options?.background === 'transparent' ? 'white' : options?.background,
             userEmail: userEmail || undefined,
           }),
         });
@@ -70,8 +71,28 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
           Promise.resolve(dataService.trackTokens(userEmail, IMAGE_TOKEN_COST) as unknown as Promise<unknown>).catch(() => {});
         }
 
-        success(kind === 'icon' ? 'Icona AI generata' : 'Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId });
-        return `data:${data.mimeType};base64,${data.imageBase64}`;
+        // Stima costo: ~$0.02 per immagine Gemini Flash
+        const costUsd = 0.02;
+        const sizeKB = Math.round(data.imageBase64.length * 0.75 / 1024);
+        let finalDataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
+        if (options?.background === 'transparent') {
+          try {
+            finalDataUrl = await removeWhiteBackground(finalDataUrl);
+          } catch (e) {
+            console.warn('Failed to remove white background', e);
+          }
+        }
+        success(
+          kind === 'icon' ? 'Icona AI generata' : 'Hero AI generato',
+          `${data.mimeType}, ${sizeKB}KB`,
+          {
+            requestId,
+            costUsd,
+            hasImage: true,
+            imagePreviewBase64: finalDataUrl,
+          },
+        );
+        return finalDataUrl;
       } catch (err: any) {
         const hint = mapAiError(err);
         logger.error(`IconHero AI ${kind} failed`, { route: 'useAIIconHero.generate', err: err?.message });

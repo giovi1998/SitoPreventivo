@@ -126,16 +126,31 @@ export function useAI(userEmail?: string): UseAIReturn {
       }
 
       const promptPreview = prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt;
-      info(`Invio richiesta: "${promptPreview}"`, prompt, { requestId });
+
+      // TB-023: cattura screenshot preview per vision/analysis mode quando presente un elemento quote.
+      let previewBase64: string | undefined;
+      try {
+        const previewEl = document.querySelector<HTMLElement>('[data-quote-preview]');
+        if (previewEl) {
+          const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+          previewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+        }
+      } catch {
+        previewBase64 = undefined;
+      }
+
+      info(`Invio richiesta: "${promptPreview}"`, prompt, { requestId, hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });
       const streamId = startStream('Generazione in corso…', { requestId });
 
       try {
         const orchestrator = getOrchestrator();
         options?.onProgress?.('🤖 Chiamata AI in corso...');
 
+        const resolvedModelId = resolveProviderId(options?.modelId);
         const run = async (onStream?: (chunk: AIStreamChunk) => void) => orchestrator.processPrompt(quote, prompt, {
-          modelId: resolveProviderId(options?.modelId),
+          modelId: resolvedModelId,
           requestId,
+          imagePreviewBase64: previewBase64,
           onStream,
           onToolStart: (toolCallId, name) => {
             tool(`⚙ ${name}, avviato`);
@@ -167,13 +182,13 @@ export function useAI(userEmail?: string): UseAIReturn {
         const tokens = result.response.usage
           ? { prompt: result.response.usage.promptTokens, completion: result.response.usage.completionTokens, total: result.response.usage.totalTokens }
           : undefined;
+        const costUsd = tokens ? calculateCostUsd(resolvedModelId, result.response.usage) : 0;
         updateSessionId();
-        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
+        finalizeStream(streamId, true, { tokens, costUsd, modelId: resolvedModelId, requestId, detail: result.rawResponse?.slice(0, 2048), hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });
 
         if (userEmail && userEmail !== 'admin@gmail.com' && result.response.usage?.totalTokens) {
-          const cost = calculateCostUsd(resolveProviderId(options?.modelId), result.response.usage);
-          setLastCostUsd(cost);
-          dataService.trackTokens(userEmail, result.response.usage.totalTokens, cost);
+          setLastCostUsd(costUsd);
+          dataService.trackTokens(userEmail, result.response.usage.totalTokens, costUsd);
         }
 
         const { toolCount, mergeChanges, errorKind } = parseResultChanges(result.changes);
@@ -186,8 +201,8 @@ export function useAI(userEmail?: string): UseAIReturn {
           const changeList = mergeChanges.map((c) => `• ${c}`).join('\n');
           success(`${mergeChanges.length} modifica${mergeChanges.length > 1 ? 'e' : ''} applicata${mergeChanges.length > 1 ? 'e' : ''}`, changeList, { requestId });
         } else if (toolCount === 0 && !errorKind) {
-          const aiText = (result.rawResponse || '').trim();
-          info(aiText || 'Nessuna modifica applicata', undefined, { requestId });
+          // Modalita' analisi: il testo completo e' gia' nel dettaglio dello stream.
+          info('Risposta AI ricevuta (vedi dettaglio sopra)', undefined, { requestId });
         }
 
         return result;

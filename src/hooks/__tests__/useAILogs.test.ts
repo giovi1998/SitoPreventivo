@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useAILogs } from '../useAILogs';
 
 const STORAGE_KEY = 'pq_ai_logs:v1';
@@ -75,12 +75,37 @@ describe('useAILogs', () => {
     expect(result.current.logs[0].msg).toBe('restored');
   });
 
-  it('truncates detail to 2KB before persistence', () => {
+  it('truncates detail to 8KB before persistence', () => {
     const { result } = renderHook(() => useAILogs('test'));
     act(() => {
-      result.current.success('ok', 'x'.repeat(3000));
+      result.current.success('ok', 'x'.repeat(9000));
     });
     const stored = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');
-    expect(stored.entries[0].detail.length).toBeLessThanOrEqual(2048 + 1); // +1 for ellipsis
+    expect(stored.entries[0].detail.length).toBeLessThanOrEqual(8192 + 1); // +1 for ellipsis
+  });
+
+  it('tracks total and last cost USD from finalization', async () => {
+    const { result, rerender } = renderHook(() => useAILogs('test'));
+    let id: string;
+    act(() => {
+      id = result.current.startStream('s', { requestId: 'r-cost' });
+    });
+    act(() => {
+      result.current.finalizeStream(id, true, { tokens: { prompt: 100, completion: 50, total: 150 }, costUsd: 0.0123, modelId: 'deepseek-v4' });
+    });
+    rerender();
+    expect(result.current.logs[0].costUsd).toBeCloseTo(0.0123, 4);
+    expect(result.current.logs[0].modelId).toBe('deepseek-v4');
+    expect(result.current.totalCostUsd).toBeCloseTo(0.0123, 4);
+    expect(result.current.lastCostUsd).toBeCloseTo(0.0123, 4);
+  });
+
+  it('marks image operations with hasImage flag', () => {
+    const { result } = renderHook(() => useAILogs('test'));
+    act(() => {
+      result.current.success('cover', 'img', { requestId: 'r-img', hasImage: true, modelId: 'gemini-3.1-flash-image' });
+    });
+    expect(result.current.logs[0].hasImage).toBe(true);
+    expect(result.current.logs[0].modelId).toBe('gemini-3.1-flash-image');
   });
 });

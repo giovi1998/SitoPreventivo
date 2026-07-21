@@ -746,6 +746,37 @@ const dataService = {
     }
     return api('POST', '/admin/unlock-user', { adminEmail: 'admin@gmail.com', userEmail });
   },
+
+  // ─── CLIENT RAG ─────────────────────────────────
+  async searchClients(userEmail, q, limit = 5) {
+    if (IS_LOCAL) {
+      // In locale la tabella client_kb non esiste; simuliamo una knowledge
+      // base vuota cosi' il componente mostra lo stato "nessun risultato".
+      return { data: [] };
+    }
+    return api('GET', `/clients?userEmail=${encodeURIComponent(userEmail)}&q=${encodeURIComponent(q)}&limit=${limit}`);
+  },
+
+  async createClient(userEmail, client) {
+    if (IS_LOCAL) {
+      return { error: 'Knowledge base clienti disponibile solo in produzione.' };
+    }
+    return api('POST', `/clients?userEmail=${encodeURIComponent(userEmail)}`, client);
+  },
+
+  async updateClient(userEmail, id, client) {
+    if (IS_LOCAL) {
+      return { error: 'Knowledge base clienti disponibile solo in produzione.' };
+    }
+    return api('PATCH', `/clients/${id}?userEmail=${encodeURIComponent(userEmail)}`, client);
+  },
+
+  async deleteClient(userEmail, id) {
+    if (IS_LOCAL) {
+      return { error: 'Knowledge base clienti disponibile solo in produzione.' };
+    }
+    return api('DELETE', `/clients/${id}?userEmail=${encodeURIComponent(userEmail)}`);
+  },
 };
 
 // ─── HELPERS ─────────────────────────────────────────
