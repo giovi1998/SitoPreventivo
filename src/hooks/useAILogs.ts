@@ -13,7 +13,12 @@ import { logger } from '../utils/logger';
 const MAX_LOG_ENTRIES = 40;
 const STREAM_UPDATE_THRESHOLD = 80;
 const MAX_DETAIL_CHARS = 8192;
-const STORAGE_KEY = 'pq_ai_logs:v1';
+
+function getStorageKey(route?: string): string {
+  // Scope logs per source so switching pages doesn't leak AI logs between editors.
+  if (!route) return 'pq_ai_logs:default:v1';
+  return `pq_ai_logs:${route}:v1`;
+}
 
 interface PersistedLogs {
   version: 1;
@@ -28,9 +33,10 @@ function truncateForStorage(detail?: string): string | undefined {
   return `${detail.slice(0, STORAGE_MAX_CHARS)}…`;
 }
 
-function safeRestore(): AILogEntry[] {
+function safeRestore(route?: string): AILogEntry[] {
+  const storageKey = getStorageKey(route);
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = sessionStorage.getItem(storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as PersistedLogs;
     if (parsed.version !== 1 || !Array.isArray(parsed.entries)) return [];
@@ -45,7 +51,6 @@ function safeRestore(): AILogEntry[] {
   }
 }
 
-
 // Per le anteprime base64 non passiamo mai attraverso sessionStorage.
 function stripPreview(entry: AILogEntry): AILogEntry {
   if (entry.imagePreviewBase64) {
@@ -54,20 +59,21 @@ function stripPreview(entry: AILogEntry): AILogEntry {
   return entry;
 }
 
-function safePersist(entries: AILogEntry[]): void {
-    try {
-      const payload: PersistedLogs = {
-        version: 1,
-        entries: entries.slice(-100).map((e) => stripPreview({
-          ...e,
-          detail: truncateForStorage(e.detail),
-        })),
-      };
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      // sessionStorage disabled/full → silently drop persistence.
-    }
+function safePersist(entries: AILogEntry[], route?: string): void {
+  const storageKey = getStorageKey(route);
+  try {
+    const payload: PersistedLogs = {
+      version: 1,
+      entries: entries.slice(-100).map((e) => stripPreview({
+        ...e,
+        detail: truncateForStorage(e.detail),
+      })),
+    };
+    sessionStorage.setItem(storageKey, JSON.stringify(payload));
+  } catch {
+    // sessionStorage disabled/full → silently drop persistence.
   }
+}
 
 export interface UseAILogsReturn {
   logs: AILogEntry[];
@@ -78,24 +84,24 @@ export interface UseAILogsReturn {
   lastCostUsd: number;
   startStream(msg: string, meta?: Partial<AILogEntry>): string;
   appendStream(entryId: string, chunk: string): void;
-        finalizeStream(
-      entryId: string,
-      ok: boolean,
-      meta?: {
-        tokens?: AILogEntry['tokens'];
-        durationMs?: number;
-        detail?: string;
-        errorMsg?: string;
-        /** TB-023: costo dell'operazione loggata. */
-        costUsd?: number;
-        modelId?: string;
-        requestId?: string;
-        /** TB-023: anteprima base64 immagine allegata. */
-        imagePreviewBase64?: string;
-        /** TB-023: flag operazione con immagine. */
-        hasImage?: boolean;
-      }
-    ): void;
+  finalizeStream(
+    entryId: string,
+    ok: boolean,
+    meta?: {
+      tokens?: AILogEntry['tokens'];
+      durationMs?: number;
+      detail?: string;
+      errorMsg?: string;
+      /** TB-023: costo dell'operazione loggata. */
+      costUsd?: number;
+      modelId?: string;
+      requestId?: string;
+      /** TB-023: anteprima base64 immagine allegata. */
+      imagePreviewBase64?: string;
+      /** TB-023: flag operazione con immagine. */
+      hasImage?: boolean;
+    }
+  ): void;
   /** Add or update a log entry with image preview metadata. */
   updateLogImagePreview(id: string, imagePreviewBase64?: string): void;
   info(msg: string, detail?: string, meta?: Partial<AILogEntry>): string;
@@ -106,7 +112,7 @@ export interface UseAILogsReturn {
 }
 
 export function useAILogs(route?: string): UseAILogsReturn {
-  const [logs, setLogs] = useState<AILogEntry[]>(safeRestore);
+  const [logs, setLogs] = useState<AILogEntry[]>(() => safeRestore(route));
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastCostUsd, setLastCostUsd] = useState(0);
 
@@ -117,8 +123,8 @@ export function useAILogs(route?: string): UseAILogsReturn {
   const lastCharCountRef = useRef<number>(0);
 
   useEffect(() => {
-    safePersist(logs);
-  }, [logs]);
+    safePersist(logs, route);
+  }, [logs, route]);
 
   const addLog = useCallback((entry: AILogEntry): string => {
     const safe: AILogEntry = { ...entry };

@@ -18,6 +18,7 @@ import { newRequestId } from '../utils/ai/requestId';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
 import { resolveProviderId } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
+import { getAiVisionEnabled } from '../utils/uiPrefs';
 import { getAiImageModelDefault } from '../utils/uiPrefs';
 
 interface UseAICardReturn {
@@ -102,34 +103,37 @@ export function useAICard(userEmail?: string): UseAICardReturn {
 
         // TB-023: cattura screenshot preview per vision/analysis mode.
         let previewBase64: string | undefined;
-        try {
-          const { renderCardSideDataUrl } = await import('../utils/card/pngExport');
-          const [frontUrl, backUrl] = await Promise.all([
-            renderCardSideDataUrl(card, 'front', 800, 450),
-            renderCardSideDataUrl(card, 'back', 800, 450)
-          ]);
-          const canvas = document.createElement('canvas');
-          canvas.width = 800;
-          canvas.height = 940; // 450 + 40 gap + 450
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.fillStyle = '#f8fafc';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            const loadImg = (src: string) => new Promise<HTMLImageElement>((resolve) => {
-              const img = new Image();
-              img.onload = () => resolve(img);
-              img.src = src;
-            });
-            
-            const [frontImg, backImg] = await Promise.all([loadImg(frontUrl), loadImg(backUrl)]);
-            ctx.drawImage(frontImg, 0, 0, 800, 450);
-            ctx.drawImage(backImg, 0, 490, 800, 450);
-            
-            previewBase64 = canvas.toDataURL('image/jpeg', 0.85);
+        const visionEnabled = getAiVisionEnabled();
+        if (visionEnabled) {
+          try {
+            const { renderCardSideDataUrl } = await import('../utils/card/pngExport');
+            const [frontUrl, backUrl] = await Promise.all([
+              renderCardSideDataUrl(card, 'front', 800, 450),
+              renderCardSideDataUrl(card, 'back', 800, 450)
+            ]);
+            const canvas = document.createElement('canvas');
+            canvas.width = 800;
+            canvas.height = 940; // 450 + 40 gap + 450
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.fillStyle = '#f8fafc';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              
+              const loadImg = (src: string) => new Promise<HTMLImageElement>((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.src = src;
+              });
+              
+              const [frontImg, backImg] = await Promise.all([loadImg(frontUrl), loadImg(backUrl)]);
+              ctx.drawImage(frontImg, 0, 0, 800, 450);
+              ctx.drawImage(backImg, 0, 490, 800, 450);
+              
+              previewBase64 = canvas.toDataURL('image/jpeg', 0.85);
+            }
+          } catch (e) {
+            console.warn('Failed to capture card preview:', e);
           }
-        } catch (e) {
-          console.warn('Failed to capture card preview:', e);
         }
 
         info(`📤 Invio richiesta: "${promptPreview}"`, prompt, { requestId, hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });

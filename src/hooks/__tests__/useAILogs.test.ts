@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useAILogs } from '../useAILogs';
 
-const STORAGE_KEY = 'pq_ai_logs:v1';
+const STORAGE_KEY = 'pq_ai_logs:test:v1';
 
 describe('useAILogs', () => {
   beforeEach(() => {

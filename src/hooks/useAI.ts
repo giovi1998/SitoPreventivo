@@ -10,6 +10,7 @@ import { mapAiError } from '../utils/ai/mapAiError';
 import { newRequestId } from '../utils/ai/requestId';
 import { resolveProviderId } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
+import { getAiVisionEnabled } from '../utils/uiPrefs';
 
 interface UseAIReturn {
   processPrompt: (
@@ -129,14 +130,17 @@ export function useAI(userEmail?: string): UseAIReturn {
 
       // TB-023: cattura screenshot preview per vision/analysis mode quando presente un elemento quote.
       let previewBase64: string | undefined;
-      try {
-        const previewEl = document.querySelector<HTMLElement>('[data-quote-preview]');
-        if (previewEl) {
-          const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
-          previewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+      const visionEnabled = getAiVisionEnabled();
+      if (visionEnabled) {
+        try {
+          const previewEl = document.querySelector<HTMLElement>('[data-quote-preview]');
+          if (previewEl) {
+            const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+            previewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+          }
+        } catch {
+          previewBase64 = undefined;
         }
-      } catch {
-        previewBase64 = undefined;
       }
 
       info(`Invio richiesta: "${promptPreview}"`, prompt, { requestId, hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });

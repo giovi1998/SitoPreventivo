@@ -70,7 +70,7 @@ export default function AILogPanel({ logs, isProcessing, theme = 'dark', totalCo
           <span className="ai-log-count">
             {logs.length === 0 ? 'Nessuna attività' : `${logs.length} eventi`}
             {isProcessing && <span className="ai-log-pulse" aria-label="In elaborazione" />}
-            {totalCostUsd !== undefined && totalCostUsd >= 0 && (
+            {totalCostUsd !== undefined && totalCostUsd > 0 && (
               <span className="ai-log-cost" aria-label={`Costo totale ${formatCostUsd(totalCostUsd)}`}>
                 {formatCostUsd(totalCostUsd)}
               </span>

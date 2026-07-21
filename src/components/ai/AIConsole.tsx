@@ -52,6 +52,16 @@ export interface AIConsoleProps {
   totalCostUsd?: number;
   /** TB-023: callback when provider changes via the badge */
   onProviderChange?: (providerId: string) => void;
+  /** TB-023: vision toggle state */
+  visionEnabled?: boolean;
+  /** TB-023: selected provider/model id; used to decide if vision is available */
+  providerId?: string;
+  /** TB-023: toggle vision callback */
+  onVisionToggle?: () => void;
+  /** TB-023: auto-fallback toggle state */
+  autoFallbackEnabled?: boolean;
+  /** TB-023: toggle auto-fallback callback */
+  onAutoFallbackToggle?: () => void;
 }
 
 export default function AIConsole({
@@ -70,6 +80,11 @@ export default function AIConsole({
   lastCostUsd,
   totalCostUsd,
   onProviderChange,
+  visionEnabled,
+  providerId,
+  onVisionToggle,
+  onAutoFallbackToggle,
+  autoFallbackEnabled,
 }: AIConsoleProps): React.ReactElement {
   const [expanded, setExpanded] = useState<boolean>(() => {
     if (editorKind) {
@@ -135,8 +150,37 @@ export default function AIConsole({
               <span className="ai-console__title">{title}</span>
               {isProcessing && <span className="ai-console__status">AI in elaborazione…</span>}
             </div>
-            <AIProviderBadge lastCostUsd={lastCostUsd} onProviderChange={onProviderChange} />
+            <div className="ai-console__header-right">
+              {onVisionToggle != null && providerIdSupportsVision(providerId) && (
+                <button
+                  type="button"
+                  className={`ai-console__header-btn ${visionEnabled ? 'is-active' : ''}`}
+                  onClick={onVisionToggle}
+                  title={visionEnabled ? 'Vision AI attiva: screenshot inviato al modello' : 'Vision AI spenta'}
+                  aria-pressed={visionEnabled}
+                >
+                  {visionEnabled ? 'Vision ✓' : 'Vision ✕'}
+                </button>
+              )}
+              <AIProviderBadge lastCostUsd={lastCostUsd} onProviderChange={onProviderChange} />
+            </div>
           </header>
+
+          {quickActions && <div className="ai-console__quick">{quickActions}</div>}
+
+          {onAutoFallbackToggle != null && (
+            <div className="ai-console__toggles">
+              <label className="ai-console__toggle-row" title="Se Ollama fallisce, riprova automaticamente con DeepSeek">
+                <input
+                  type="checkbox"
+                  checked={autoFallbackEnabled}
+                  onChange={onAutoFallbackToggle}
+                  aria-label="Fallback automatico"
+                />
+                <span>Auto-fallback</span>
+              </label>
+            </div>
+          )}
 
           {!hidePrompt && (
             <form className="ai-console__prompt" onSubmit={handleSubmit}>
@@ -190,4 +234,9 @@ export default function AIConsole({
       )}
     </div>
   );
+}
+
+function providerIdSupportsVision(providerId?: string): boolean {
+  if (!providerId) return false;
+  return providerId === 'ollama-minimax-m3' || providerId.startsWith('gemini-');
 }

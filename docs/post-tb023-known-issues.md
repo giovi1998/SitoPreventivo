@@ -1,156 +1,147 @@
-# Post-TB-023 Known Issues & Limitazioni
+# Post-TB-023 Known Issues & Stato Implementazione
 
 > Ultimo aggiornamento: 2026-07-21
 
 ---
 
-## ~~1. Preview vs Export — Differenze visive (cover AI, wash opacity)~~ ✅ FIXATO
+## ✅ FIXATI (verificati in codebase)
 
-**Fix applicato** (commit non ancora pushato):
-
-| Fix | Dettaglio | File |
-|-----|-----------|------|
-| `coverImageUrl` risolto in PNG export | Aggiunto `resolveToBase64DataUrl` per `coverImageUrl` front e back in entrambe le funzioni | `src/utils/card/pngExport.ts` |
-| Back cover wash opacity allineato | `opacity="0.6"` → `opacity="0.35"` + gradient semplificato 2-stop (0%→45%) | `src/utils/card/svgRenderer.ts:449` |
-| Test aggiornato | Verifica `opacity="0.35"` per back cover wash | `src/utils/card/__tests__/svgRenderer.test.ts:547` |
-
-**Nota residua**: il front cover wash gradient ha stop leggermente diversi tra preview (`40%` hex) e export (`0.4` a `55%`). Differenza minima, non visibile nella maggior parte dei casi.
-
----
-
-## ~~2. Card Icona AI — Pixelata / Non si carica in preview/export~~ ✅ FIXATO
-
-**Fix applicato**:
-
-| Fix | Dettaglio | File |
-|-----|-----------|------|
-| Risoluzione aumentata | `size: '512'` → `size: '1K'` (1024×1024px) | `src/hooks/useAIIconHero.ts:53` |
-
-**Nota**: il clamp server 500KB resta attivo. Se un'immagine 1K lo supera, l'utente riceve 413 "Immagine troppo grande". In quel caso può riprovare con un prompt più semplice.
+| # | Issue | Fix | File coinvolti |
+|---|-------|-----|----------------|
+| 1 | `coverImageUrl` non risolto in PNG export | `resolveToBase64DataUrl` per `coverImageUrl` front/back in `pngExport.ts` | `src/utils/card/pngExport.ts` |
+| 2 | Back cover wash opacity mismatch | `opacity="0.35"` + gradient 2-stop (0%→45%) | `src/utils/card/svgRenderer.ts` |
+| 3 | Icona AI 512px pixelata | `size: '1K'` (1024×1024) | `src/hooks/useAIIconHero.ts` |
+| 4 | CONTATTI header retro nascosto | `position: relative; z-index: 2` su `.card-back-header` | `src/components/card/cardPreviewSide.css` |
+| 5 | Costi immagini Gemini / log `modelId` | `calculateCostUsd` per logo background e flyer hero; `modelId` e `costUsd` passati al log | `src/hooks/useAILogo.ts`, `src/hooks/useAIFlyer.ts`, `src/utils/logo/backgroundImage.ts`, `src/ai/logoOrchestrator.ts` |
+| 6 | Badge provider mostrava costo per-call su Ollama flat | `isFlat` check in `AIProviderBadge` nasconde `lastCostUsd` per provider `unit: 'flat_monthly'` | `src/components/ai/AIProviderBadge.tsx` |
 
 ---
 
-## 3. AI Log Image Preview — Comportamento attuale
+## ⚠️ APERTI / DA VERIFICARE
 
-**Sintomo**: le immagini dei log AI non sopravvivono al refresh della pagina.
+### 2b. Icona AI non si carica (CORS / removeBackground / clamp 500KB)
 
-### Comportamento attuale (by design)
+- **Stato**: fix 1K applicato; indagine aggiuntiva su rendering quadrato vuoto in corso.
+- **Possibili cause**:
+  - CORS su URL immagine generata.
+  - `removeBackground.ts` canvas pixel manipulation fallisce in browser reale.
+  - Immagine 1K > 500KB → 413 dal clamp server.
+  - Card preview container non scalava l'immagine; il CSS `img` della grid cell usava `max-width:100%;max-height:100%`, ma in alcune celle la dimensione calcolata poteva collassare a 0 se la cella non aveva altezza esplicita.
+- **File**: `src/hooks/useAIIconHero.ts`, `src/utils/ai/removeBackground.ts`, `api/index.ts`, `src/components/card/CardPreview.tsx`.
+- **Test manuale**: generare icona AI su card con sfondo chiaro e scuro, esportare PNG, verificare che l'icona appaia e non sia un quadrato vuoto.
 
-| Campo | Comportamento | File |
-|-------|---------------|------|
-| `imagePreviewBase64` | Salvato in React state, **strippato** prima di sessionStorage | `useAILogs.ts:49-55` (`stripPreview()`) |
-| `hasImage` | Flag booleano, **persiste** in sessionStorage | `useAILogs.ts:103` |
-| `detail` | Truncato a 8192 chars per storage | `useAILogs.ts:25-29` |
-| `costUsd`, `modelId` | Persistono normalmente | `useAILogs.ts:225-226` |
+### 3. AI Log Image Preview — persa al refresh
 
-### Perché le immagini vengono strippate
-
-- `localStorage`/`sessionStorage` ha quota 5-10MB/origin condivisa con altri dati dell'app.
-- 40 log × 150KB (JPEG 1024px) = ~6MB → supera la quota → crash `QuotaExceededError`.
-- Il crash nella cleanup sincrona di `useEffect` propagava l'eccezione all'`ErrorBoundary` → schermata rossa (bug già fixato in fase v2.3 del logo, documentato in AGENTS.md gotcha #12).
-
-### Workaround attuale
-
-- `hasImage` resta visibile come badge 🖼️ anche dopo refresh (ma il click non mostra l'immagine).
-- Le immagini sono disponibili solo nella sessione corrente (fino al cambio tab o refresh).
-- `captureElementAsBase64` produce JPEG 1024px × 0.85 quality (~50-150KB per entry).
-
-### Possibili miglioramenti futuri
-
-| Opzione | Pro | Contra |
-|---------|-----|--------|
-| **A) Salva solo le ultime N immagini** (es. 5) | Riduce storage a ~750KB | L'utente perde preview dei log più vecchi |
-| **B) Salva a risoluzione ridotta** (256px, quality 0.5) | ~10-20KB per entry | Qualità molto bassa |
-| **C) Salva su IndexedDB** | Quota dedicata, non condivisa | Complessità aggiuntiva, necessita cleanup |
-| **D) Non cambiare** (status quo) | Zero rischio, zero complessità | Preview persa al refresh |
+- **Stato**: by design. `imagePreviewBase64` strippato prima di `sessionStorage` per evitare `QuotaExceededError`.
+- **Decisione**: non cambiare finché non serve debug produzione.
+- **File**: `src/hooks/useAILogs.ts` (`stripPreview`).
 
 ---
 
-## 4. Modulo AI Unificato — Architettura da definire
+## 🔧 IMPLEMENTATO: Modulo AI Unificato
 
-**Sintomo**: le feature AI TB-023 (provider, A/B, vision, fallback) sono
-implementate nel codice ma frammentate: ogni toggle è un silo, nessun modulo
-trasversale. Attaccarle in una tab "AI" di SettingsPage sarebbe un cerotto.
+### Cosa è stato fatto
 
-### Direzione architetturale
+1. **Nuovo `useAIHarness` hook** (`src/utils/ai/aiModule.ts`):
+   - Risolve provider (default, A/B salt, fallback).
+   - Espone preferenze AI: `visionEnabled`, provider, image model.
+   - Cattura screenshot preview tramite `capturePreview(selector)`.
+   - Cattura screenshot preview tramite `capturePreview(selector)` (usato solo dai singoli hook AI quando vision è attiva).
+   - Tracking costi live (`totalCostUsd`, `lastCostUsd`).
 
-AI non è una preferenza utente — è **infrastruttura trasversale**.
-Deve vivere in un modulo unico che ogni editor (card, flyer, logo, social,
-quote) può interrogare.
+2. **Nuovo `AIHarnessConsole` component** (`src/components/ai/AIHarnessConsole.tsx`):
+   - Wrapper pre-wired di `AIConsole`.
+   - Legge costi e provider da `useAIHarness`.
+   - Sostituisce `AIConsole` in tutti gli editor per uniformare il wiring.
 
-```
-┌─────────────────────────────────────┐
-│           AI Module (core)          │
-│  provider selection · A/B split     │
-│  vision · fallback · cost tracking  │
-│  rate limiting · retry logic        │
-├─────────────────────────────────────┤
-│  Observability (logs · metrics)     │
-│  useAILogs · AIConsole · AIProvider │
-│  Badge · cost breakdown per call    │
-└─────────────────────────────────────┘
-         ↕               ↕
-   ┌──────────┐   ┌──────────┐
-   │ Card Ed. │   │ Logo Ed. │  ...flyer, social, quote
-   └──────────┘   └──────────┘
-```
+3. **Wiring negli editor**:
+   - `EditorView.tsx` (quote)
+   - `CardEditorShell.tsx` (card)
+   - `FlyerEditorShell.tsx` (flyer)
+   - `SocialEditor.tsx` (social)
 
-### Stato attuale (audit)
+### Cosa ancora NON è cablato (richiede UI esplicita)
 
-| Preferenza | Getter | Consumer | Stato |
-|------------|--------|----------|-------|
-| `aiProviderDefault` | `getAiProviderDefault()` | `resolveProviderId.ts` | ✅ Wired |
-| `aiImageModelDefault` | `getAiImageModelDefault()` | Logo orchestrator | ⚠️ Parziale |
-| `aiVisionEnabled` | `getAiVisionEnabled()` | Nessun consumer | ❌ Dead code |
-| `aiAutoFallback` | `getAiAutoFallback()` | Nessun consumer | ❌ Dead code |
-| `aiABTestingEnabled` | `getAiABTestingEnabled()` | `resolveProviderId.ts` (always false) | ❌ Irraggiungibile |
-
-### Componenti orfani
-
-| Componente | File | Stato |
-|------------|------|-------|
-| `useAIDesignReview` | `src/hooks/useAIDesignReview.ts` | Hook implementato, mai importato |
-
-### Cosa serve (non un toggle in Settings)
-
-1. **AI Module** — classe/servizio unico che wrappa provider selection, A/B
-   split, vision feedback, auto-fallback, cost tracking. Tutti gli editor
-   lo usano, nessuno configura i provider direttamente.
-2. **Observability** — `useAILogs` + `AILogPanel` + `AIProviderBadge` già
-   funzionano. Servono solo wiring nei punti giusti (screenshot capture
-   via `useAIDesignReview`, cost breakdown live).
-3. **SettingsPage** resta per preferenze utente (theme, doc type default,
-   non la config AI).
-
-### Priorità
-
-| # | Issue | Severità | Stato |
-|---|-------|----------|-------|
-| ~~1a~~ | ~~`coverImageUrl` non risolto in PNG export~~ | ~~Alta~~ | ✅ Fixato |
-| ~~1b~~ | ~~Back cover wash opacity mismatch~~ | ~~Media~~ | ✅ Fixato |
-| ~~2a~~ | ~~Icona AI 512px pixelata in export HD~~ | ~~Media~~ | ✅ Fixato |
-| ~~CONTATTI~~ | ~~Header retro nascosto da stacking context~~ | ~~Media~~ | ✅ Fixato |
-| 2b | Icona AI non si carica (errori CORS/removeBackground) | Alta | ⚠️ Da verificare con 1K |
-| 3  | Log image preview persa al refresh | Bassa (by design) | — |
-| 4  | Modulo AI unificato | Alta | **Da progettare** |
-| 4b | `useAIDesignReview` wiring screenshot | Media | **Dopo modulo AI** |
+| Feature | Stato | Nota |
+|---------|-------|------|
+| `aiVisionEnabled` toggle | ✅ mostrato in `AIConsole` solo per provider vision-enabled (MiniMax/Gemini) | Off di default; i singoli hook catturano screenshot solo se attiva |
+| `aiAutoFallback` toggle | ✅ mostrato in `AIConsole` | Logica di fallback da implementare nel provider layer quando serve |
+| `aiABTestingEnabled` toggle | ❌ rimossa dalla UI | Logica `resolveProviderId` resta ma non esposto; ritenuta non necessaria |
+| `useAIDesignReview` wiring UI | ❌ rimossa | Bottone "Analizza preview" tolto: non funzionava e non serviva nel flusso attuale |
 
 ---
 
-## 5. File coinvolti (mappa rapida)
+## 📋 Checklist Prossimi Passi
+
+### Prossima sessione (priorità alta)
+
+1. **Verificare icona AI 1K end-to-end**
+   - Apri `/app/card`, genera icona AI.
+   - Controlla preview + export PNG/SVG.
+   - Se 413, abbassare quality/compressione o tornare a 512 con upscaling.
+
+2. **Aggiungere toggle "Vision AI" nella UI**
+   - Posizione consigliata: AIConsole header (icona occhio) o Settings.
+   - Quando attivo, `useAI`/`useAICard`/`useAIFlyer`/`useAILogo` continuano a inviare screenshot preview (già fanno).
+   - Quando spento, saltare capture per risparmiare token.
+
+3. **Aggiungere bottone "Analizza preview"**
+   - Usa `useAIHarness().runDesignReview(docType, docJson, previewSelector)`.
+   - Mostrare i suggerimenti in AIConsole children.
+   - `docType` supportati: `'card' | 'flyer'`.
+
+### Media priorità
+
+4. **A/B testing toggle**
+   - Aggiungere switch "A/B provider" (default OFF).
+   - Quando ON, `resolveProviderId` sceglie random tra challenger pairs.
+
+5. **Auto-fallback**
+   - Implementare retry in `useAIHarness` o in hook AI: se provider Ollama restituisce 429/503 e `aiAutoFallback` è ON, riprova con `deepseek-chat`.
+
+6. **Costi immagini Gemini**
+   - Verificare che `calculateCostUsd('gemini-nano-banana', undefined, 1)` venga propagato nei log dei cover/photo/hero.
+   - Oggi è hardcoded `$0.04`/`$0.02`, da confermare in dashboard.
+
+### Bassa priorità / backlog
+
+7. **AI Module test coverage**
+   - `src/utils/ai/__tests__/aiModule.test.ts` — provider resolution, capture fallback, design review mock.
+
+8. **Dev proxy `/api/ai/design-review`**
+   - Aggiungere in `vite.config.js` se si vuole testare in locale senza chiamare Ollama diretto.
+   - Attuale: `useAIDesignReview` chiama `/api/ai/design-review` che in dev passa a Vercel monolith.
+
+---
+
+## 🗺️ Mappa File
 
 ```
-FIXATI:
-src/utils/card/pngExport.ts          ← coverImageUrl resolve (1a) ✅
-src/utils/card/svgRenderer.ts        ← back cover opacity 0.35 (1b) ✅
-src/hooks/useAIIconHero.ts           ← size 1K (2a) ✅
-src/components/card/cardPreviewSide.css ← CONTATTI header z-index ✅
+NUOVO:
+src/utils/ai/aiModule.ts              ← AI Module core (useAIHarness)
+src/components/ai/AIHarnessConsole.tsx  ← AIConsole pre-wired
 
-RIMANENTI (da progettare come modulo):
-src/utils/resolveProviderId.ts       ← A/B branching unreachable
-src/hooks/useAIDesignReview.ts       ← hook orfano, da wiring
-src/utils/uiPrefs.ts                 ← 4 preferenze AI orfane
-api/index.ts                         ← clamp 500KB (2b)
-src/utils/ai/removeBackground.ts     ← verifica CORS/fallback con 1K
-src/hooks/useAILogs.ts               ← stripPreview, MAX_DETAIL_CHARS (3)
+MODIFICATI:
+src/components/EditorView.tsx         ← usa AIHarnessConsole
+src/components/card/CardEditorShell.tsx  ← usa AIHarnessConsole
+src/components/flyer/FlyerEditorShell.tsx ← usa AIHarnessConsole
+src/components/SocialEditor.tsx       ← usa AIHarnessConsole
+
+RIMANGONO:
+src/utils/resolveProviderId.ts         ← A/B branch unreachable
+src/hooks/useAIDesignReview.ts         ← sostituito da aiModule.ts (legacy, non importato)
+src/utils/uiPrefs.ts                  ← preferenze AI orfane (vision/fallback/A/B)
+src/utils/ai/removeBackground.ts       ← verificare con icona 1K
+src/hooks/useAILogs.ts                 ← stripPreview (by design)
+api/index.ts                           ← clamp 500KB
 ```
+
+---
+
+## Test manuali consigliati
+
+1. **Icona AI end-to-end**: `/app/card` → tab AI → "Genera icona" → preview + export PNG.
+2. **Provider switch**: apri AIConsole in qualsiasi editor, cambia provider dal badge, genera → verifica log modelId.
+3. **Vision toggle**: se aggiunto, verificare che screenshot non venga inviato quando OFF.
+4. **Design review**: quando aggiunto il bottone, cliccare su card/flyer e verificare che arrivino suggerimenti.
+5. **Costi**: generare copy e immagine, controllare che `AILogPanel` mostri costo > 0.

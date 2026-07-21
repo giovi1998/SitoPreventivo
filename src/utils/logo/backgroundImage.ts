@@ -61,10 +61,12 @@ export function buildLogoBackgroundPayload(
   prompt: string,
   images: LogoBackgroundImages,
   userEmail?: string,
+  imageModel?: string,
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     prompt,
     userEmail,
+    imageModel,
   };
   if (images.logoImage) payload.logoImage = images.logoImage;
   if (images.previousBackground) payload.previousBackground = images.previousBackground;

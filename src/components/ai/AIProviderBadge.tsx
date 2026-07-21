@@ -4,7 +4,7 @@ import {
   getAiProviderDefault,
   setAiProviderDefault,
 } from '../../utils/uiPrefs';
-import { formatCostUsd, getPricingLabel, OLLAMA_PRO_FLAT_MONTHLY } from '../../ai/providerPricing';
+import { formatCostUsd, getPricingLabel, OLLAMA_PRO_FLAT_MONTHLY, PRICING } from '../../ai/providerPricing';
 import './AIProviderBadge.css';
 
 /**
@@ -98,6 +98,13 @@ export default function AIProviderBadge({
   const shortLabel = selected ? providerShortName(selected.id) : 'AI';
   const modelLabel = selected ? providerModelShort(selected.model) : '';
 
+  // Per provider flat (Ollama Pro) non mostriamo il costo dell'ultima
+  // operazione: quella potrebbe essere di un altro provider. Mostriamo
+  // invece "flat" o $0 a seconda del contesto.
+  const pricing = selected ? PRICING[selected.id] : undefined;
+  const isFlat = pricing?.unit === 'flat_monthly';
+  const showCost = lastCostUsd !== undefined && lastCostUsd >= 0 && !isFlat;
+
   return (
     <div className="ai-provider-badge-wrapper" ref={ref}>
       <button
@@ -112,7 +119,7 @@ export default function AIProviderBadge({
         <span className="ai-provider-badge__dot" aria-hidden="true" />
         <span className="ai-provider-badge__label">
           <span className="ai-provider-badge__provider">{shortLabel}</span>
-          {lastCostUsd !== undefined && lastCostUsd > 0 && (
+          {showCost && (
             <span className="ai-provider-badge__cost" aria-label={`Costo ultima operazione ${formatCostUsd(lastCostUsd)}`}>
               {formatCostUsd(lastCostUsd)}
             </span>

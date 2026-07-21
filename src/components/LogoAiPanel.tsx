@@ -6,6 +6,11 @@ import { useToast } from '../hooks/useToast';
 import AILogPanel from './AILogPanel';
 import AIProviderBadge from './ai/AIProviderBadge';
 import {
+  AI_IMAGE_MODELS,
+  getAiImageModelDefault,
+  setAiImageModelDefault,
+} from '../utils/uiPrefs';
+import {
   AiTierGuard,
   AiPromptTextarea,
   AiSelect,
@@ -165,6 +170,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
   const [config, setConfig] = useState<LogoConfig | null>(null);
   const [library, setLibrary] = useState<PromptLibraryEntry[]>(() => loadSharedPromptLibrary(PROMPT_LIBRARY_KEYS.logo));
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
+  const [imageModel, setImageModel] = useState<string>(() => getAiImageModelDefault());
 
   // Load persisted state on mount — SOLO se il genitore non ha già
   // fornito uno stato più fresco via `initialState` (vedi sopra).
@@ -300,7 +306,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
               target: answers.target,
               imagePrompt: (concept as any).imagePrompt as string | undefined,
             };
-            return generateBackground({ ...logo, builder: concept }, ctxBase).then((r) => ({ idx: i, r }));
+            return generateBackground({ ...logo, builder: concept }, ctxBase, { imageModel }).then((r) => ({ idx: i, r }));
           }),
         );
         const imgs: (string | null)[] = [null, null, null];
@@ -423,7 +429,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
         target: answers.target,
         imagePrompt: promptText,
       };
-      const r = await generateBackground({ ...logo, builder: concept }, ctx);
+      const r = await generateBackground({ ...logo, builder: concept }, ctx, { imageModel });
       if (r.applied && r.logo?.builder.backgroundImage) {
         setBgImages((prev) => {
           const next = [...prev];
@@ -455,6 +461,23 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
       {/* Phase 14 (REQ-AI-006): dicitura ad-hoc sostituita dal badge uniforme */}
       {config?.provider === 'gemini' && (
         <p className="logo-ai-provider"><AIProviderBadge /></p>
+      )}
+      {config?.provider === 'gemini' && (
+        <div className="logo-ai-image-model">
+          <label htmlFor="logo-image-model">Modello immagine</label>
+          <select
+            id="logo-image-model"
+            value={imageModel}
+            onChange={(e) => {
+              setImageModel(e.target.value);
+              setAiImageModelDefault(e.target.value);
+            }}
+          >
+            {AI_IMAGE_MODELS.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+        </div>
       )}
       <p className="logo-ai-hint">
         Rispondi a 3 domande. L'AI propone 3 concept di logo + background artistico. Il testo resta

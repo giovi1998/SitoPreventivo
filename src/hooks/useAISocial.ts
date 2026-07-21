@@ -10,6 +10,7 @@ import { newRequestId } from '../utils/ai/requestId';
 import dataService from '../utils/dataService';
 import { resolveProviderId } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
+import { getAiVisionEnabled } from '../utils/uiPrefs';
 
 export interface UseAISocialReturn {
   generate: (
@@ -49,6 +50,8 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
       });
 
       try {
+        const visionEnabled = getAiVisionEnabled();
+        const imagePreviewBase64 = visionEnabled ? await captureSocialPreview(source) : undefined;
         const result = await getOrchestrator().generatePosts(source, tone, {
           modelId: resolveProviderId(),
           onStream: (chunk) => {
@@ -60,6 +63,7 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
             }
           },
           userEmail,
+          imagePreviewBase64,
         });
 
         const tokens = result.response?.usage
@@ -70,7 +74,7 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
             }
           : undefined;
 
-        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
+        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048), hasImage: !!imagePreviewBase64, imagePreviewBase64 });
 
         if (userEmail && userEmail !== 'admin@gmail.com' && result.response?.usage) {
           const cost = calculateCostUsd(resolveProviderId(), result.response.usage);
@@ -104,4 +108,16 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
   const availableModels = getOrchestrator().getProviderList();
 
   return { generate, reset, logs, posts, isProcessing, availableModels, lastCostUsd };
+}
+
+async function captureSocialPreview(source: SocialSource): Promise<string | undefined> {
+  try {
+    const selector = source.type === 'card' ? '[data-card-preview]' : '[data-flyer-preview]';
+    const previewEl = document.querySelector<HTMLElement>(selector);
+    if (!previewEl) return undefined;
+    const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+    return (await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' })) ?? undefined;
+  } catch {
+    return undefined;
+  }
 }

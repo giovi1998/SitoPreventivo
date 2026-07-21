@@ -4,7 +4,7 @@ import type { BusinessCard, Flyer } from '../utils/documentSchemas';
 import { useAISocial } from '../hooks/useAISocial';
 import type { SocialSource, SocialTone } from '../ai/prompts/socialSystem';
 import { useToast } from '../hooks/useToast';
-import AIConsole from './ai/AIConsole';
+import AIConsole from './ai/AIHarnessConsole';
 import { AiSelect, AiGenerateButton } from './ai-ui';
 import { AuthContext } from '../contexts';
 import dataService from '../utils/dataService';
@@ -173,7 +173,6 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
             tier={tier}
             onSubmitPrompt={() => {}}
             hidePrompt
-            lastCostUsd={lastCostUsd}
           >
             <section className="social-editor-form" aria-label="Configurazione post">
               <h2 className="social-form-title">Configura generazione</h2>

@@ -55,6 +55,11 @@ interface FlyerAiPanelProps {
    * `bare` li nasconde per evitare duplicati.
    */
   bare?: boolean;
+  /**
+   * Se false, nasconde il bottone "Nuova sessione" nel pannello AI
+   * perché la console rail lo fornisce già come quick action.
+   */
+  showResetInRail?: boolean;
   onGenerateHero?: (imageModel?: string) => void;
   onRemoveHero?: () => void;
   onResetHero?: () => void;
@@ -75,8 +80,8 @@ interface FlyerAiPanelProps {
 
 export function FlyerAiPanel({
   aiPrompt, setAiPrompt, aiModel, setAiModel, aiTone, setAiTone, ai,
-  flyer, onGenerate, onRefine, onReset, hasCopy, onCollapse,
-  tier = 'free', bare = false,
+  flyer,   onGenerate, onRefine, onReset, hasCopy, onCollapse,
+  tier = 'free', bare = false, showResetInRail = true,
   onGenerateHero, onRemoveHero, onResetHero, isGeneratingHero = false,
   heroPrompt = '', setHeroPrompt, heroSector, setHeroSector,
   heroTone = 'formale', setHeroTone,
@@ -272,7 +277,7 @@ export function FlyerAiPanel({
           title="Log AI"
           collapsible
           defaultOpen
-          extra={<button type="button" className="card-ai-reset" onClick={onReset} disabled={ai.isProcessing}>↻ Nuova sessione</button>}
+          extra={showResetInRail ? <button type="button" className="card-ai-reset" onClick={onReset} disabled={ai.isProcessing}>↻ Nuova sessione</button> : null}
         >
           <AILogPanel logs={ai.logs} isProcessing={ai.isProcessing} />
         </AiSection>

@@ -58,9 +58,23 @@ describe('AIConsole (REQ-AI-001/003/006)', () => {
     expect((textarea as HTMLTextAreaElement).value).toBe('');
   });
 
-  it('tier free: textarea disabilitata e guard visibile', () => {
-    render(<AIConsole {...baseProps} tier="free" />);
-    expect(screen.getByRole('textbox')).toBeDisabled();
-    expect(screen.getByText(/richiede il piano Pro/i)).toBeInTheDocument();
+  it('mostra toggles vision e auto-fallback quando passati', () => {
+    render(
+      <AIConsole
+        {...baseProps}
+        providerId="ollama-minimax-m3"
+        visionEnabled={true}
+        onVisionToggle={vi.fn()}
+        autoFallbackEnabled={true}
+        onAutoFallbackToggle={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('button', { name: /Vision ✓/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Fallback automatico/i)).toBeChecked();
+  });
+
+  it('non mostra il bottone Analizza preview (design review rimossa)', () => {
+    render(<AIConsole {...baseProps} />);
+    expect(screen.queryByRole('button', { name: /Analizza preview con AI/i })).not.toBeInTheDocument();
   });
 });

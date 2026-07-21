@@ -11,7 +11,7 @@ import { newRequestId } from '../utils/ai/requestId';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
 import { resolveProviderId } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
-import { getAiImageModelDefault } from '../utils/uiPrefs';
+import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
 
 interface UseAIFlyerReturn {
   generate: (
@@ -116,14 +116,17 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       const trimmed = brief.trim();
       if (!trimmed) throw new Error('Inserisci un brief per generare il copy.');
       let imagePreviewBase64: string | undefined;
-      try {
-        const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
-        if (previewEl) {
-          const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
-          imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+      const visionEnabled = getAiVisionEnabled();
+      if (visionEnabled) {
+        try {
+          const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
+          if (previewEl) {
+            const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+            imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+          }
+        } catch {
+          imagePreviewBase64 = undefined;
         }
-      } catch {
-        imagePreviewBase64 = undefined;
       }
       return runWith(
         `Invio richiesta: "${trimmed.length > 60 ? trimmed.slice(0, 57) + '...' : trimmed}" (${tone})`,
@@ -138,14 +141,17 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
   const refine = useCallback(
     async (flyer: Flyer, action: FlyerRefineAction, options?: { modelId?: string }) => {
       let imagePreviewBase64: string | undefined;
-      try {
-        const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
-        if (previewEl) {
-          const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
-          imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+      const visionEnabled = getAiVisionEnabled();
+      if (visionEnabled) {
+        try {
+          const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
+          if (previewEl) {
+            const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+            imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+          }
+        } catch {
+          imagePreviewBase64 = undefined;
         }
-      } catch {
-        imagePreviewBase64 = undefined;
       }
       return runWith(
         `Rifinisci copy: ${action}`,
@@ -185,12 +191,15 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         const heroImage = `data:${data.mimeType};base64,${data.imageBase64}`;
         const updated: Flyer = { ...flyer, content: { ...flyer.content, heroImage }, updatedAt: new Date().toISOString() };
 
+        // TB-023: costo reale dell'immagine usando providerPricing
+        const pricingId = imageModel === 'gemini-2.0-flash-preview-image-generation' ? 'gemini-flash-image' : 'gemini-nano-banana';
+        const imageCost = calculateCostUsd(pricingId, undefined, 1);
         if (userEmail && userEmail !== 'admin@gmail.com') {
-          dataService.trackTokens(userEmail, IMAGE_TOKEN_COST).catch(() => {});
-          setLastCostUsd(0);
+          dataService.trackTokens(userEmail, IMAGE_TOKEN_COST, imageCost).catch(() => {});
         }
+        setLastCostUsd(imageCost);
 
-        success('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, modelId: imageModel, costUsd: 0, hasImage: true });
+        success('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, modelId: imageModel, costUsd: imageCost, hasImage: true });
         return { flyer: updated, applied: true };
       } catch (err) {
         const hint = mapAiError(err);

@@ -44,15 +44,24 @@ export class SocialAIOrchestrator extends BaseOrchestrator {
       modelId?: string;
       onStream?: (chunk: AIStreamChunk) => void;
       userEmail?: string;
+      imagePreviewBase64?: string;
     } = {},
   ): Promise<SocialProcessResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
     const systemPrompt = promptRegistry.getPrompt('social-system');
     const userPrompt = buildSocialGenerateAllPrompt(source, tone);
-    const messages = this.buildMessages(systemPrompt, userPrompt);
 
     const provider = (await import('./providers/registry')).providerRegistry.getProvider(options.modelId);
+    const hasImagePreview = !!options.imagePreviewBase64;
+    const useVision = hasImagePreview && (provider as { supportsVision?: boolean }).supportsVision;
+    const userContentParts: string[] = [];
+    if (useVision && options.imagePreviewBase64) {
+      userContentParts.push(`Anteprima documento allegata (base64 JPEG): ${options.imagePreviewBase64}`);
+    }
+    userContentParts.push(userPrompt);
+    const messages = this.buildMessages(systemPrompt, userContentParts.join('\n\n'));
+
     const response = await this.handleStream(
       provider,
       messages,

@@ -170,7 +170,9 @@ describe('FlyerEditor (phase 3, preventivo layout)', () => {
   it('reset AI session calls ai.reset', () => {
     const { reset } = setupAIMock();
     renderEditor();
-    fireEvent.click(screen.getByText(/Nuova sessione/i));
+    const resetButtons = screen.getAllByText(/Nuova sessione/i);
+    expect(resetButtons.length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(resetButtons[0]);
     expect(reset).toHaveBeenCalled();
   });
 

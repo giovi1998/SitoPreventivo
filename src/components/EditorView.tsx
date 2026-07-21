@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DocumentPreview from './DocumentPreview';
 import AILogPanel from './AILogPanel';
-import AIConsole from './ai/AIConsole';
+import AIHarnessConsole from './ai/AIHarnessConsole';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -270,14 +270,13 @@ export default function EditorView({
   // Phase 14 (REQ-AI-002): rail AIConsole a destra (un solo modello
   // mentale). Quote è admin-only → tier unlocked.
   const aiConsoleRail = (
-    <AIConsole
+    <AIHarnessConsole
       editorKind="editor"
       isProcessing={isProcessing}
       logs={aiLogs}
       tier="unlocked"
-      onSubmitPrompt={(text) => setAiText(text)}
+      onSubmitPrompt={(text: string) => setAiText(text)}
       hidePrompt
-      lastCostUsd={lastCostUsd}
       quickActions={
         <button type="button" className="card-ai-reset" onClick={onResetChat} disabled={isProcessing}>
           Nuova conversazione
@@ -287,7 +286,7 @@ export default function EditorView({
       <section className="panel ai-panel" aria-label="AI del preventivo">
         {aiPanelSections}
       </section>
-    </AIConsole>
+    </AIHarnessConsole>
   );
 
   const manualPanel = (

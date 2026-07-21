@@ -1,6 +1,6 @@
 import React from 'react';
 import FlyerAiPanel from './FlyerAiPanel';
-import AIConsole from '../ai/AIConsole';
+import AIConsole from '../ai/AIHarnessConsole';
 import FlyerManualPanel from './FlyerManualPanel';
 import FlyerPreviewPanel from './FlyerPreviewPanel';
 import type { Flyer, FlyerSize, FlyerOrientation, FlyerLayout, FlyerContent, FlyerTone } from '../../utils/documentSchemas';
@@ -427,9 +427,8 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
       isProcessing={ai.isProcessing || isGeneratingHero}
       logs={ai.logs}
       tier={tier}
-      onSubmitPrompt={(text) => { setAiPrompt(text); }}
+      onSubmitPrompt={(text: string) => { setAiPrompt(text); }}
       hidePrompt
-      lastCostUsd={lastCostUsd}
       // REQ-AI-003: su volantino vuoto la rail propone un prompt contestuale
       // con focus; l'expanded resta default true (o pq_ui:v1 se persistito).
       suggestedPrompt={!flyerHasContent(flyer) ? "Descrivi l'evento o la promo: scrivo il copy del volantino." : undefined}
@@ -439,7 +438,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
         </button>
       }
     >
-      <FlyerAiPanel {...aiPanelProps} bare onCollapse={() => {}} />
+      <FlyerAiPanel {...aiPanelProps} bare onCollapse={() => {}} showResetInRail={false} />
     </AIConsole>
   );
 

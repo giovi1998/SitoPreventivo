@@ -126,7 +126,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
   async generateBackground(
     logo: Logo,
     context: { activity: string; mood: string; target: string; imagePrompt?: string },
-    options: { userEmail?: string } = {},
+    options: { userEmail?: string; imageModel?: string } = {},
   ): Promise<{ logo: Logo; applied: boolean; error?: string }> {
     const prompt = context.imagePrompt && context.imagePrompt.trim().length > 10
       ? `${context.imagePrompt.trim()}\nNO text, NO letters, NO words, NO readable typography. 1024x340 px, 3:1 aspect ratio.`
@@ -143,7 +143,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       renderLogoScreenshot(logo),
       compressPreviousBackground(logo),
     ]);
-    const payload = buildLogoBackgroundPayload(prompt, { logoImage, previousBackground }, options.userEmail);
+    const payload = buildLogoBackgroundPayload(prompt, { logoImage, previousBackground }, options.userEmail, options.imageModel);
 
     try {
       const res = await fetch(`${apiBase}/ai/logo-background`, {

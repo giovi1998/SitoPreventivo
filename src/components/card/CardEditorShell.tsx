@@ -14,7 +14,7 @@ import {
 } from '../../utils/documentSchemas';
 import { CardGridControls, type GridSide } from './CardGridControls';
 import CardAIControls from './CardAIControls';
-import AIConsole from '../ai/AIConsole';
+import AIConsole from '../ai/AIHarnessConsole';
 import {
   useAIIconHero,
   type IconBackground,
@@ -1118,11 +1118,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
               isProcessing={isCardProcessing || isCoverGenerating || isPhotoGenerating || isIconHeroProcessing}
               logs={mergedLogs}
               tier={tier}
-              onSubmitPrompt={(text) => setAiText(text)}
+              onSubmitPrompt={(text: string) => setAiText(text)}
               hidePrompt
-              lastCostUsd={lastCostUsd}
-              totalCostUsd={totalCostUsd}
-              onProviderChange={setAiModel}
               // REQ-AI-003: su card vuota la rail propone un prompt contestuale
               // con focus; l'expanded resta default true (o pq_ui:v1 se persistito).
               suggestedPrompt={!cardHasContent(card) ? 'Descrivi la tua attività, creo il bigliettino.' : undefined}

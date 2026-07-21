@@ -37,7 +37,7 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 | 12 | `spec-tool-ai-card-flyer-tools.md` | **DONE** | `ToolAwareOrchestrator` wired end-to-end in `AIOrchestrator`, `CardAIOrchestrator`, `FlyerAIOrchestrator`; test tool path e fallback verdi. Gap residuo UI: callback `onToolStart/Complete` non passati da `useAICard` → assorbito in REQ-LOG-001 spec #14 |
 | 13 | `spec-api-saas-monetization.md` | **NOT-STARTED** | Zero Stripe/api-key in `api/` (verificato 2026-07-18). Track futuro separato, mantenuto in `spec/` |
 | 14 | `spec-design-ai-first-ux-redesign.md` | **DONE** | Fase 12 ✅ (useAILogs, 6 hook migrati, AILogEntry v2, trackUsage ESM, IMAGE_TOKEN_COST, X-Request-Id, ghost rate limit fix). Fase 13 ✅ (ToastProvider, token The Classic + purge teal/blu, ai-ui.css, ActionBar logo/QR, sidebar gruppi + pq_ui:v1, breakpoint canonici, font lazy, copy AI-first, HomePage AIDA + motion). Fase 14 ✅ (AIConsole rail in social/flyer/card/quote, logo tab AI-first, AIProviderBadge, suggestedPrompt doc vuoto, onboarding AI-first). Deviazioni documentate in AGENTS.md §13-14. Spec cancellato dopo verifica (185 file, 2177 test verdi). |
-| 15 | `spec-design-ai-harness-upgrade.md` | **NOT-STARTED** | TB-023. Multi-provider (Ollama Pro $20/mo flat + MiniMax M3 multimodale + Gemini 2.0 Flash), tracking costi reale, 5 pattern decorativi SVG, drag foto card grid-mode, icone stilizzate AI, RAG clienti (pgvector), A/B provider, vision feedback screenshot. ~45h, sprint 2-3. |
+| 15 | `spec-design-ai-harness-upgrade.md` | **PARTIAL** | TB-023. Modulo AI unificato (`useAIHarness` + `AIHarnessConsole`) implementato e cablato in 4 editor. Multi-provider registry esiste. RAG rimosso (deferred). Manca: toggle UI per vision/A/B/auto-fallback, wiring bottone design review, verifica icona AI 1K end-to-end. ~20h rimanenti. Vedi `docs/post-tb023-known-issues.md`. |
 
 ---
 
@@ -179,7 +179,7 @@ Sprint 2 (next):    TB-023a multi-provider (Ollama Pro + MiniMax M3 +
                     TB-023b pattern decorativi lib + picker (~10h)
 
 Sprint 3:           TB-023c export pattern + AI v2 prompt + drag foto
-                    card + icone AI + RAG clienti + test (~23h)
+                    card + icone AI + test (~23h)
                     TB-024 più formati export logo (PDF vettoriale, favicon)
                     TB-004 + TB-005 test helper mancanti
                     TB-006 audit-ui-components.md (doc-only)
@@ -312,11 +312,11 @@ primi clienti paganti.
     generation`, ~$0.02/immagine, alternativa economica a Nano Banana 3.1
     per icone/illustrazioni piccole)
 - **Scope completo** (vedi spec per REQ dettagliati):
-  - Multi-provider + selector UI in `AIProviderBadge` (REQ-MP-001..006)
+  - Multi-provider + selector UI in `AIProviderBadge` (REQ-MP-001..006) — parziale: registry e badge esistono, `AIHarnessConsole` centralizza il wiring
   - MiniMax M3 multimodale: screenshot preview → AI vision feedback
-    (REQ-MM-001..005) + `useAIDesignReview` hook
+    (REQ-MM-001..005) + `useAIDesignReview` hook — rimandato: UI "Analizza preview" tolta, non funzionava e non serviva nel flusso attuale
   - Tracking costi reale: `providerPricing.ts`, colonna DB
-    `tokens_cost_usd`, endpoint admin cost-breakdown (REQ-TC-001..006)
+    `tokens_cost_usd`, endpoint admin cost-breakdown (REQ-TC-001..006) — parziale: costi testo funzionano, immagini da confermare dashboard
   - Pattern decorativi (5): wave-bottom, wave-split, blob-corner,
     splash-corners, full-overlay — SVG programmatici, selezionabili
     manualmente + via AI (REQ-PD-001..008)
@@ -325,12 +325,11 @@ primi clienti paganti.
   - Icone stilizzate AI: `iconOrchestrator` per card.builder.iconUrl +
     flyer.style.heroIllustration (es. frutta/oggetti/animali flat 2-colori)
     (REQ-IS-001..007)
-  - A/B provider: confronto side-by-side in modal (REQ-AB-001..003)
-- **Effort**: ~45h (sprint 2-3)
-  - Sprint 2 (~22h): provider Ollama+MiniMax, Gemini Flash, selector UI,
-    pricing, pattern lib + picker
-  - Sprint 3 (~23h): export pattern, AI v2 prompt, drag foto, icone AI,
-    test
+  - A/B provider: confronto side-by-side in modal (REQ-AB-001..003) — logica in `resolveProviderId`, manca toggle UI e modal
+  - RAG clienti: **rimosso dal codebase** — deferred a quando il backend embeddings/vector search sarà pronto
+- **Effort**: ~45h totali, ~20h rimanenti dopo modulo AI unificato
+  - Sprint 2 (~12h rimanenti): pattern decorativi lib + picker + drag foto
+  - Sprint 3 (~8h): icona AI end-to-end, verifica costi, test
 - **Prereq**: nessuno tecnico. Business:订阅 Ollama Pro $20/mo +
   `OLLAMA_API_KEY` in Vercel env.
 - **Costi ricorrenti**: $20/mo Ollama Pro (flat) + DeepSeek pay-per-token

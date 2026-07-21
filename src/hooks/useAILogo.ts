@@ -8,6 +8,7 @@ import { newRequestId } from '../utils/ai/requestId';
 import dataService from '../utils/dataService';
 import { resolveProviderId } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
+import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
 
 export interface UseAILogoReturn {
   generate: (
@@ -18,6 +19,7 @@ export interface UseAILogoReturn {
   generateBackground: (
     logo: Logo,
     context: { activity: string; mood: string; target: string; imagePrompt?: string },
+    options?: { imageModel?: string },
   ) => Promise<{ logo: Logo; applied: boolean; error?: string }>;
   reset: () => void;
   logs: ReturnType<typeof useAILogs>['logs'];
@@ -66,14 +68,17 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
       const promptPreview = brief.length > 60 ? brief.slice(0, 57) + '...' : brief;
 
       let imagePreviewBase64: string | undefined;
-      try {
-        const previewEl = document.querySelector<HTMLElement>('[data-logo-preview]');
-        if (previewEl) {
-          const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
-          imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+      const visionEnabled = getAiVisionEnabled();
+      if (visionEnabled) {
+        try {
+          const previewEl = document.querySelector<HTMLElement>('[data-logo-preview]');
+          if (previewEl) {
+            const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+            imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+          }
+        } catch {
+          imagePreviewBase64 = undefined;
         }
-      } catch {
-        imagePreviewBase64 = undefined;
       }
 
       info(`Invio richiesta: "${promptPreview}"`, brief, { requestId, hasImage: !!imagePreviewBase64, imagePreviewBase64 });
@@ -144,7 +149,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
   );
 
   const generateBackground = useCallback(
-    async (logo: Logo, context: { activity: string; mood: string; target: string; imagePrompt?: string }) => {
+    async (logo: Logo, context: { activity: string; mood: string; target: string; imagePrompt?: string }, options?: { imageModel?: string }) => {
       const requestId = newRequestId();
       const promptPreview = context.imagePrompt
         ? context.imagePrompt.slice(0, 50) + '...'
@@ -152,12 +157,16 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
       info(`Background AI: ${promptPreview}`, undefined, { requestId });
       setIsGeneratingBg(true);
       try {
-        const result = await getOrchestrator().generateBackground(logo, context, { userEmail });
+        const imageModel = options?.imageModel || getAiImageModelDefault();
+        const result = await getOrchestrator().generateBackground(logo, context, { userEmail, imageModel });
         if (result.applied) {
+          const pricingId = imageModel === 'gemini-2.0-flash-preview-image-generation' ? 'gemini-flash-image' : 'gemini-nano-banana';
+          const imageCost = calculateCostUsd(pricingId, undefined, 1);
+          setLastCostUsd(imageCost);
           success(
             'Background generato',
             `${result.logo.builder.backgroundImage?.length ?? 0} char base64`,
-            { requestId, modelId: 'gemini-3.1-flash-image', costUsd: 0, hasImage: true }
+            { requestId, modelId: imageModel, costUsd: imageCost, hasImage: true }
           );
           trackImage();
         } else {
