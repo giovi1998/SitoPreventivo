@@ -30,9 +30,13 @@ export async function generateCardPng(
   // PNG export, relative URLs resolve against the data/blob URI of the SVG
   // and fail (or are blocked by CORS), so photos/logos disappear. PDF export
   // already uses renderCardSideDataUrl which does this; we mirror it here.
-  const [resolvedPhotoUrl, resolvedLogoUrl] = await Promise.all([
+  const [resolvedPhotoUrl, resolvedLogoUrl, resolvedCoverUrl] = await Promise.all([
     card.front.photoUrl ? resolveToBase64DataUrl(card.front.photoUrl) : Promise.resolve(null),
     card.front.logoUrl ? resolveToBase64DataUrl(card.front.logoUrl) : Promise.resolve(null),
+    card.front.coverImageUrl ? resolveToBase64DataUrl(card.front.coverImageUrl) : Promise.resolve(null),
+  ]);
+  const [resolvedBackCoverUrl] = await Promise.all([
+    card.back.coverImageUrl ? resolveToBase64DataUrl(card.back.coverImageUrl) : Promise.resolve(null),
   ]);
   const cardForSvg: BusinessCard = {
     ...card,
@@ -40,6 +44,11 @@ export async function generateCardPng(
       ...card.front,
       photoUrl: resolvedPhotoUrl,
       logoUrl: resolvedLogoUrl,
+      coverImageUrl: resolvedCoverUrl,
+    },
+    back: {
+      ...card.back,
+      coverImageUrl: resolvedBackCoverUrl,
     },
   };
 
@@ -79,9 +88,13 @@ export async function renderCardSideDataUrl(
   }
   const embeddedFontCss = await buildEmbeddedFontImport(card.style.fontFamily || 'Inter');
 
-  const [resolvedPhotoUrl, resolvedLogoUrl] = await Promise.all([
+  const [resolvedPhotoUrl, resolvedLogoUrl, resolvedCoverUrl] = await Promise.all([
     card.front.photoUrl ? resolveToBase64DataUrl(card.front.photoUrl) : Promise.resolve(null),
     card.front.logoUrl ? resolveToBase64DataUrl(card.front.logoUrl) : Promise.resolve(null),
+    card.front.coverImageUrl ? resolveToBase64DataUrl(card.front.coverImageUrl) : Promise.resolve(null),
+  ]);
+  const [resolvedBackCoverUrl] = await Promise.all([
+    card.back.coverImageUrl ? resolveToBase64DataUrl(card.back.coverImageUrl) : Promise.resolve(null),
   ]);
   const cardForSvg: BusinessCard = {
     ...card,
@@ -89,6 +102,11 @@ export async function renderCardSideDataUrl(
       ...card.front,
       photoUrl: resolvedPhotoUrl,
       logoUrl: resolvedLogoUrl,
+      coverImageUrl: resolvedCoverUrl,
+    },
+    back: {
+      ...card.back,
+      coverImageUrl: resolvedBackCoverUrl,
     },
   };
   const svg = buildCardSvg(cardForSvg, side, pxW, pxH, { rotate, embeddedFontCss });

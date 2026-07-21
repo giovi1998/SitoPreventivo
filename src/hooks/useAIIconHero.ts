@@ -50,7 +50,7 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
             prompt: prompt.slice(0, 1000),
             kind,
             aspectRatio: kind === 'hero' ? '16:9' : '1:1',
-            size: '512',
+            size: '1K',
             primaryColor: options?.primaryColor,
             secondaryColor: options?.secondaryColor,
             style: options?.style || 'minimalist',

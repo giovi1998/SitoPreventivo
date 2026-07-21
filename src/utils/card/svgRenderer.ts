@@ -446,11 +446,10 @@ export function buildBackSvg(
   // Back cover image (full-bleed) with same readability wash as the front.
   if (card.back.coverImageUrl) {
     out += `<image href="${escapeXml(card.back.coverImageUrl)}" x="0" y="0" width="${pxW}" height="${pxH}" preserveAspectRatio="xMidYMid slice"/>`;
-    out += `<rect width="${pxW}" height="${pxH}" fill="${bg}" opacity="0.6"/>`;
+    out += `<rect width="${pxW}" height="${pxH}" fill="${bg}" opacity="0.35"/>`;
     out += `<defs><linearGradient id="backReadGrad" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="${bg}" stop-opacity="0"/>
-      <stop offset="55%" stop-color="${bg}" stop-opacity="0.4"/>
-      <stop offset="100%" stop-color="${bg}" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="${bg}" stop-opacity="0.45"/>
     </linearGradient></defs>`;
     out += `<rect width="${pxW}" height="${pxH}" fill="url(#backReadGrad)"/>`;
   }

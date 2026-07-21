@@ -541,10 +541,9 @@ describe('svgRenderer', () => {
       };
       const svg = buildBackSvg(card, 1024, 663);
       expect(svg).toContain('data:image/png;base64,BACKCOVER');
-      // Same readability wash on the back (flat + vertical gradient).
-      // v2.4: stronger wash, same as the front.
+      // Back cover wash: flat 35% (lighter than front's 60%) + gradient.
       expect(svg).toContain('id="backReadGrad"');
-      expect(svg).toContain(`fill="${card.style.bgColor}" opacity="0.6"`);
+      expect(svg).toContain(`fill="${card.style.bgColor}" opacity="0.35"`);
     });
   });
 

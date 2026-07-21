@@ -723,19 +723,13 @@ Regression test:
 Issue aperti dopo il completamento di TB-023 (AI Harness Upgrade).
 Dettagli completi in `docs/post-tb023-known-issues.md`.
 
-1. **`coverImageUrl` non risolto in PNG export**. `pngExport.ts` risolve
-   `photoUrl`/`logoUrl` in base64 via `resolveToBase64DataUrl()` ma NON
-   `coverImageUrl`. Se la cover è un URL esterno/blob URL (non data:),
-   il canvas non riesce a caricarla (CORS) → cover mancante nel PNG.
-   Fix: aggiungere `resolveToBase64DataUrl` per `coverImageUrl` come
-   già fatto per `photoUrl`/`logoUrl`.
-2. **Back cover wash opacity mismatch**. Preview React: `opacity: 0.35`.
-   SVG export: `opacity="0.6"`. Differenza visibile su card retro
-   con cover. Fix: allineare `svgRenderer.ts` a `0.35`.
-3. **Icona AI 512px pixelata in export HD**. Gemini Flash riceve
-   `size: '512'` → 512×512px. In export a 1700×1100 (300 DPI), una
-   cella foto 2×2 può essere ~700px → upscaling da 512px = pixelazione.
-   Fix: aumentare a `size: '1K'` (attenzione al clamp 500KB server).
+1. ~~**`coverImageUrl` non risolto in PNG export**~~. ✅ Fixato:
+   `resolveToBase64DataUrl` aggiunto per `coverImageUrl` front e back
+   in `pngExport.ts` (entrambe le funzioni).
+2. ~~**Back cover wash opacity mismatch**~~. ✅ Fixato: `svgRenderer.ts`
+   allineato a `opacity="0.35"` + gradient 2-stop come la preview.
+3. ~~**Icona AI 512px pixelata in export HD**~~. ✅ Fixato: `size: '1K'`
+   in `useAIIconHero.ts`. Clamp server 500KB resta attivo.
 4. **Log image preview persa al refresh**. `stripPreview()` in
    `useAILogs.ts` rimuove `imagePreviewBase64` prima di sessionStorage.
    Flag `hasImage` persiste come badge 🖼️ ma l'immagine è visibile
