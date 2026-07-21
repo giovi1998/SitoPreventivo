@@ -31,6 +31,7 @@ export async function captureElementAsBase64(
 
     const svgData = await elementToSvg(element, rect, scale);
     const img = await loadImage(svgData);
+    URL.revokeObjectURL(svgData);
     ctx.drawImage(img, 0, 0, width, height);
 
     return canvas.toDataURL(type, quality);
@@ -89,7 +90,6 @@ function elementToSvg(element: HTMLElement, rect: DOMRect, scale: number): Promi
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
-      URL.revokeObjectURL(url);
       resolve(url);
     };
     img.onerror = () => {
