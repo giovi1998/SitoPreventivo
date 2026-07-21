@@ -132,7 +132,6 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
   const [mobileTab, setMobileTab] = React.useState<'ai' | 'manual' | null>(null);
   const loadedIdRef = React.useRef<string | undefined>(initialFlyer?.id);
   const [aiPrompt, setAiPrompt] = React.useState('');
-  const aiModel = 'deepseek-chat';
   const [aiTone, setAiTone] = React.useState<FlyerTone>('formale');
   const [activeSector, setActiveSector] = React.useState<typeof FLYER_SECTORS[number]>('ristorante');
   // Hero AI prompt editor (v2.4): user can override the auto-built
@@ -284,23 +283,23 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
     const brief = aiPrompt.trim();
     if (!brief) { addToast('info', 'Scrivi un brief nel campo AI prima di generare.'); return; }
     try {
-      const result = await ai.generate(debouncedFlyer, brief, aiTone, { modelId: aiModel });
+      const result = await ai.generate(debouncedFlyer, brief, aiTone);
       if (result.applied) { setFlyer(result.flyer); addToast('success', 'Copy generato e applicato'); setAiPrompt(''); }
       else {
         const reason = result.changes.find((c) => c.startsWith('error:')) || 'risposta non valida';
         addToast('error', `Copy non generato: ${reason}. Verifica la chiave DeepSeek in Impostazioni o il credito residuo.`);
       }
     } catch (err) { addToast('error', (err as Error).message); }
-  }, [ai, aiPrompt, aiTone, aiModel, debouncedFlyer, addToast]);
+  }, [ai, aiPrompt, aiTone, debouncedFlyer, addToast]);
 
   const handleRefine = React.useCallback(async (action: 'simplify' | 'formal' | 'young' | 'urgent') => {
     if (!flyerHasCopy(flyer)) { addToast('info', 'Compila prima il copy.'); return; }
     try {
-      const result = await ai.refine(flyer, action, { modelId: aiModel });
+      const result = await ai.refine(flyer, action);
       if (result.applied) { setFlyer(result.flyer); addToast('success', `Copy aggiornato: ${action}`); }
       else { addToast('error', "L'AI non ha restituito un risultato valido."); }
     } catch (err) { addToast('error', (err as Error).message); }
-  }, [ai, aiModel, flyer, addToast]);
+  }, [ai, flyer, addToast]);
 
   const handleAiReset = React.useCallback(() => { ai.reset(); addToast('info', 'Sessione AI azzerata'); }, [ai, addToast]);
 
@@ -386,7 +385,6 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
 
   const aiPanelProps = {
     aiPrompt, setAiPrompt,
-    aiModel,
     aiTone, setAiTone,
     ai, flyer, debouncedFlyer,
     hasCopy: flyerHasCopy(flyer),
