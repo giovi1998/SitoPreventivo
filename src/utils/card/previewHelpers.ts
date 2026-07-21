@@ -20,7 +20,7 @@ export function isGridModeFor(side: GridSide, card: BusinessCard): boolean {
 }
 
 export function gridPlacement(
-  el: { x: number; y: number; w: number; h: number; alignH?: 'left' | 'center' | 'right' | null; alignV?: 'top' | 'center' | 'bottom' | null; photoPlacement?: { x: number; y: number; scale: number } } | undefined,
+  el: { x: number; y: number; w: number; h: number; alignH?: 'left' | 'center' | 'right' | null; alignV?: 'top' | 'center' | 'bottom' | null; photoPlacement?: { x: number; y: number; scale: number }; placement?: { x: number; y: number; scale: number } } | undefined,
   /** v2.14: flex direction of the target cell. Text cells use 'column'
    * (CSS `.card-grid-cell--text`). In column mode the flex main axis is
    * vertical, so justifyContent must map to alignV (not alignH) and
@@ -44,7 +44,7 @@ export function gridPlacement(
     bottom: 'flex-end',
   };
   const isColumn = flexDirection === 'column';
-  const pp = el.photoPlacement;
+  const pp = el.placement ?? el.photoPlacement;
   const transform = pp ? `translate(${(pp.x ?? 0) * 50}%, ${(pp.y ?? 0) * 50}%) scale(${pp.scale ?? 1})` : undefined;
   return {
     gridColumn: `${el.x + 1} / span ${el.w}`,

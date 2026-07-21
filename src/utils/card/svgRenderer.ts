@@ -279,17 +279,17 @@ export function buildFrontSvg(
     const cellX = (col: number) => gridAreaX + col * (cellW + frontCellGap);
     const cellY = (row: number) => gridAreaY + row * (cellH + frontCellGap);
 
-    const photoEl = grid.elements.photo;
-    if (hasPhoto && photoEl) {
-      const x = cellX(photoEl.x);
-      const y = cellY(photoEl.y);
-      const w = photoEl.w * cellW;
-      const h = photoEl.h * cellH;
-      const isPhotoCircle = card.front.layout === 'photo-circle';
-      const pp = photoEl.photoPlacement;
-      const scale = pp?.scale ?? 1;
-      const dx = ((pp?.x ?? 0) * w) / 2;
-      const dy = ((pp?.y ?? 0) * h) / 2;
+      const photoEl = grid.elements.photo;
+      if (hasPhoto && photoEl) {
+        const x = cellX(photoEl.x);
+        const y = cellY(photoEl.y);
+        const w = photoEl.w * cellW;
+        const h = photoEl.h * cellH;
+        const isPhotoCircle = card.front.layout === 'photo-circle';
+        const pp = photoEl.placement ?? photoEl.photoPlacement;
+        const scale = pp?.scale ?? 1;
+        const dx = ((pp?.x ?? 0) * w) / 2;
+        const dy = ((pp?.y ?? 0) * h) / 2;
       // scaled image rect centered on cell, then nudged by placement.
       const imgW = w * scale;
       const imgH = h * scale;
@@ -798,18 +798,26 @@ export function buildBackSvg(
       const qh = qrCell.h;
       const qrAlignH = qrEl.alignH ?? 'center';
       const qrAlignV = qrEl.alignV ?? 'center';
-      // Reserve space for qrLabel under the QR inside the cell.
-      const labelReserve = card.back.qrLabel ? Math.round(Math.min(qw, qh) * 0.12) : 0;
+      // v2.15: reserve space for qrLabel under the QR using the same
+      // proportion as the preview (labelSize ~9.6px + 8px gap on 340px ref).
+      const labelReserve = card.back.qrLabel ? Math.max(20, Math.round(pxH * (18 / 340))) : 0;
       const qrSize = backQrSizePx(card, qw, qh - labelReserve, pxH);
+      // v2.15: apply QR nudge/scale from generic placement, mirroring photo
+      // placement behavior inside the cell.
+      const qrPlacement = qrEl.placement ?? qrEl.photoPlacement;
+      const qrScale = qrPlacement?.scale ?? 1;
+      const scaledQrSize = Math.min(qrSize * qrScale, Math.min(qw, qh - labelReserve));
+      const qrDx = ((qrPlacement?.x ?? 0) * qw) / 2;
+      const qrDy = ((qrPlacement?.y ?? 0) * (qh - labelReserve)) / 2;
       const pos = alignBoxInCell(
         { x: qx, y: qy, w: qw, h: qh - labelReserve },
-        qrSize,
-        qrSize,
+        scaledQrSize,
+        scaledQrSize,
         qrAlignH,
         qrAlignV,
       );
-      const qrX = pos.x;
-      const qrY = pos.y;
+      const qrX = pos.x + qrDx;
+      const qrY = pos.y + qrDy;
       const qrObj: any = {
         documentType: 'qrCode',
         id: 'card-back',
@@ -834,9 +842,11 @@ export function buildBackSvg(
       const innerScale = (qrSize - 8) / totalSize;
       out += `<g transform="translate(${qrX + 4} ${qrY + 4}) scale(${innerScale})">${extractQrInner(qrSvg)}</g>`;
 
-      // QR label below QR, still inside the cell (matches preview density).
+      // v2.15: QR label size matches preview grid-mode 0.6rem=9.6px on
+      // a 340px-tall reference, so the label stays proportional to the
+      // card instead of blowing up with the QR cell dimensions.
       if (card.back.qrLabel) {
-        const labelSize = fs(Math.min(qw, qh) * 0.07, fontScale);
+        const labelSize = fs(pxH * (9.6 / 340), fontScale);
         const belowY = qrY + qrSize + Math.round(labelSize * 0.4);
         out += `<text x="${qx + qw / 2}" y="${belowY + labelSize}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
       }

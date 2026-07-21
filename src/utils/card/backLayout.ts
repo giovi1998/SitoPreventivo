@@ -9,6 +9,7 @@
  */
 import { FONT_SCALE_MIN, FONT_SCALE_MAX, QR_SIZE_PX, gridPresetBackDefault } from '../documentSchemas';
 import type { BusinessCard, CardGrid } from '../documentSchemas';
+import { getEffectiveQrPayload } from './qrPayload';
 
 export type AlignH = 'left' | 'center' | 'right';
 export type AlignV = 'top' | 'center' | 'bottom';
@@ -184,8 +185,19 @@ export function effectiveBackGridForRender(
   card: BusinessCard,
 ): CardGrid {
   const services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
+  const hasQr = !!getEffectiveQrPayload(card);
+
+  // Count visible contact entries the same way the renderer does, so the
+  // collapse decision reflects actual printed content.
+  let contactCount = 0;
+  if (card.back.phone) contactCount += 1;
+  if (card.back.email) contactCount += 1;
+  if (card.back.website && !hasQr) contactCount += 1;
+  if (card.back.address) contactCount += 1;
+  if (card.back.vatNumber) contactCount += 1;
 
   const elements = { ...grid.elements };
+  const contactsEl = elements.contacts;
 
   // v2.9.1: inject a missing services cell from the default preset when
   // services content exists but the element is absent (legacy grids created
@@ -195,21 +207,65 @@ export function effectiveBackGridForRender(
     elements.services = preset.elements.services;
   }
 
-  // Drop empty services cell and optionally expand contacts into the gap.
+  // v2.15: when contacts are short (≤2 entries), collapse the contacts
+  // cell by one row and move services/socials up to fill the gap. This keeps
+  // the left column dense and avoids the large empty space below phone/email
+  // that looked broken in export.
+  if (contactsEl && contactCount <= 2 && contactsEl.h >= 2) {
+    const servicesEl = elements.services;
+    const socialsEl = elements.socials;
+    const servicesBelow = servicesEl
+      && servicesEl.x === contactsEl.x
+      && servicesEl.w === contactsEl.w
+      && servicesEl.y === contactsEl.y + contactsEl.h;
+    const socialsBelowServices = socialsEl
+      && servicesBelow
+      && socialsEl.x === servicesEl.x
+      && socialsEl.w === servicesEl.w
+      && socialsEl.y === servicesEl.y + servicesEl.h;
+    const socialsDirectlyBelow = !servicesEl
+      && socialsEl
+      && socialsEl.x === contactsEl.x
+      && socialsEl.w === contactsEl.w
+      && socialsEl.y === contactsEl.y + contactsEl.h;
+
+    if (servicesBelow || socialsDirectlyBelow) {
+      elements.contacts = { ...contactsEl, h: contactsEl.h - 1 };
+      if (servicesBelow) {
+        elements.services = { ...servicesEl, y: servicesEl.y - 1 };
+      }
+      if (socialsBelowServices) {
+        elements.socials = { ...socialsEl, y: socialsEl.y - 1 };
+      }
+      if (socialsDirectlyBelow) {
+        elements.socials = { ...socialsEl, y: socialsEl.y - 1 };
+      }
+    }
+  }
+
+  // Drop empty services cell. Only expand contacts into the freed row when
+  // there is no socials cell directly below to absorb the space (otherwise
+  // the collapse logic above already made the layout dense).
   if (services.length === 0) {
     const servicesEl = elements.services;
     if (servicesEl) {
       delete elements.services;
-      const contactsEl = elements.contacts;
+      const currentContacts = elements.contacts;
+      const socialsEl = elements.socials;
+      const socialsBelow = socialsEl
+        && socialsEl.x === servicesEl.x
+        && socialsEl.w === servicesEl.w
+        && socialsEl.y === servicesEl.y + servicesEl.h;
       if (
-        contactsEl
-        && contactsEl.x === servicesEl.x
-        && contactsEl.w === servicesEl.w
-        && contactsEl.y + contactsEl.h === servicesEl.y
+        !socialsBelow
+        && currentContacts
+        && currentContacts.x === servicesEl.x
+        && currentContacts.w === servicesEl.w
+        && currentContacts.y + currentContacts.h === servicesEl.y
       ) {
         elements.contacts = {
-          ...contactsEl,
-          h: contactsEl.h + servicesEl.h,
+          ...currentContacts,
+          h: currentContacts.h + servicesEl.h,
         };
       }
     }

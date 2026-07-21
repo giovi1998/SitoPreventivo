@@ -272,17 +272,17 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }));
   }, [gridEditorSide, card]);
 
-  const patchPhotoPlacement = useCallback((patch: { x?: number; y?: number; scale?: number }) => {
+  const patchElementPlacement = useCallback((element: keyof CardGrid['elements'], patch: { x?: number; y?: number; scale?: number }) => {
     const targetGrid = gridEditorSide === 'back' ? (card.backGrid ?? deriveGridFromLayout(card, 'back')) : (card.grid ?? deriveGridFromLayout(card, 'front'));
-    const photoEl = targetGrid.elements.photo;
-    if (!photoEl) return;
-    const prevPlacement = photoEl.photoPlacement ?? { x: 0, y: 0, scale: 1 };
+    const el = targetGrid.elements[element];
+    if (!el) return;
+    const prevPlacement = el.placement ?? el.photoPlacement ?? { x: 0, y: 0, scale: 1 };
     const next: typeof prevPlacement = {
       x: patch.x ?? prevPlacement.x,
       y: patch.y ?? prevPlacement.y,
       scale: patch.scale ?? prevPlacement.scale,
     };
-    patchGrid({ ...targetGrid, elements: { ...targetGrid.elements, photo: { ...photoEl, photoPlacement: next } } });
+    patchGrid({ ...targetGrid, elements: { ...targetGrid.elements, [element]: { ...el, placement: next } } });
   }, [card, gridEditorSide, patchGrid]);
 
   const handleAfterMove = useCallback((info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => {
@@ -993,7 +993,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       onAfterMove={handleAfterMove}
       onAfterResize={handleAfterResize}
       onAfterAlign={handleAfterAlign}
-      onPatchPhotoPlacement={patchPhotoPlacement}
+      onPatchPlacement={patchElementPlacement}
     />
   ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize, handleAfterAlign, setGridEditorSideLogged, setSelectedGridElementLogged]);
 

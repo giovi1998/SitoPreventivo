@@ -243,8 +243,12 @@ export const cardGridElementSchema = z.object({
   h: z.number().min(0).max(8),
   alignH: gridAlignHSchema,
   alignV: gridAlignVSchema,
-  // TB-023: posizione/scale della foto dentro la cella (drag mouse). x,y ∈ [-1,1], scale ∈ [0.5,2]
+  // TB-023: legacy alias for `placement` (kept for backwards compatibility
+  // with cards saved before the generic placement field was introduced).
   photoPlacement: z.object({ x: z.number().min(-1).max(1).default(0), y: z.number().min(-1).max(1).default(0), scale: z.number().min(0.5).max(2).default(1) }).optional(),
+  // v2.15: generic nudge/scale for any grid element (photo, QR, logo, etc.).
+  // x,y ∈ [-1,1] map to ±half the cell dimension; scale ∈ [0.5,2].
+  placement: z.object({ x: z.number().min(-1).max(1).default(0), y: z.number().min(-1).max(1).default(0), scale: z.number().min(0.5).max(2).default(1) }).optional(),
 });
 export type CardGridElement = z.infer<typeof cardGridElementSchema>;
 

@@ -33,10 +33,10 @@ export interface CardGridControlsProps {
   onAfterResize?: (info: { element: string; dw: number; dh: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
   onAfterAlign?: (info: { element: string; alignH: 'left' | 'center' | 'right'; alignV: 'top' | 'center' | 'bottom' }) => void;
   /**
-   * TB-023: when selected element is `photo`, allow nudging its position
-   * and scale inside the cell via the parent grid patch.
+   * v2.15: when selected element supports placement (photo, QR, etc.),
+   * allow nudging position and scale inside the cell via the parent grid patch.
    */
-  onPatchPhotoPlacement?: (patch: { x?: number; y?: number; scale?: number }) => void;
+  onPatchPlacement?: (element: keyof CardGrid['elements'], patch: { x?: number; y?: number; scale?: number }) => void;
   /**
    * Modalità presentazione:
    *  - 'inline' (default desktop): mostra frecce + ridimensiona inline
@@ -60,7 +60,7 @@ export function CardGridControls({
   onAfterMove,
   onAfterResize,
   onAfterAlign,
-  onPatchPhotoPlacement,
+  onPatchPlacement,
   mode = 'inline',
 }: CardGridControlsProps) {
   const activeGrid: CardGrid = useMemo(() => {
@@ -163,15 +163,18 @@ export function CardGridControls({
     onAfterAlign?.({ element: selected, alignH, alignV });
   };
 
-  const isPhotoSelected = selected === 'photo';
-  const photoPlacement = selectedEl?.photoPlacement ?? { x: 0, y: 0, scale: 1 };
+  // v2.15: placement controls work for any selected element that supports
+  // placement (photo legacy alias, generic placement). Initially enabled for
+  // photo and QR; later we can extend to logo/cover if useful.
+  const supportsPlacement = selected === 'photo' || selected === 'qr';
+  const placement = selectedEl?.placement ?? selectedEl?.photoPlacement ?? { x: 0, y: 0, scale: 1 };
 
-  const handlePatchPhotoPlacement = (patch: { x?: number; y?: number; scale?: number }) => {
-    if (!isPhotoSelected || !onPatchPhotoPlacement) return;
-    onPatchPhotoPlacement({
-      x: patch.x ?? photoPlacement.x,
-      y: patch.y ?? photoPlacement.y,
-      scale: patch.scale ?? photoPlacement.scale,
+  const handlePatchPlacement = (patch: { x?: number; y?: number; scale?: number }) => {
+    if (!selected || !supportsPlacement || !onPatchPlacement) return;
+    onPatchPlacement(selected, {
+      x: patch.x ?? placement.x,
+      y: patch.y ?? placement.y,
+      scale: patch.scale ?? placement.scale,
     });
   };
 
@@ -452,62 +455,62 @@ export function CardGridControls({
               className={!canGrowH ? 'blocked' : ''}
             ><span aria-hidden="true">+↕</span></button>
           </div>
-          {isPhotoSelected && onPatchPhotoPlacement && (
-            <div className="card-photo-placement" role="group" aria-label="Posiziona foto dentro cella" data-testid="grid-photo-placement">
-              <span className="card-grid-align-label">Nudge foto</span>
+          {supportsPlacement && onPatchPlacement && (
+            <div className="card-photo-placement" role="group" aria-label={`Posiziona ${selected === 'qr' ? 'QR' : 'foto'} dentro cella`} data-testid="grid-placement-controls">
+              <span className="card-grid-align-label">Nudge {selected === 'qr' ? 'QR' : 'foto'}</span>
               <div className="card-grid-arrows">
                 <button
                   type="button"
-                  onClick={() => handlePatchPhotoPlacement({ x: Math.max(-1, photoPlacement.x - 0.05) })}
-                  aria-label="Sposta foto sinistra"
-                  title="Sposta foto sinistra"
-                  disabled={photoPlacement.x <= -1}
-                  data-testid="grid-photo-left"
+                  onClick={() => handlePatchPlacement({ x: Math.max(-1, placement.x - 0.05) })}
+                  aria-label={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} sinistra`}
+                  title={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} sinistra`}
+                  disabled={placement.x <= -1}
+                  data-testid="grid-placement-left"
                 >
                   <span aria-hidden="true">←</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePatchPhotoPlacement({ y: Math.max(-1, photoPlacement.y - 0.05) })}
-                  aria-label="Sposta foto su"
-                  title="Sposta foto su"
-                  disabled={photoPlacement.y <= -1}
-                  data-testid="grid-photo-up"
+                  onClick={() => handlePatchPlacement({ y: Math.max(-1, placement.y - 0.05) })}
+                  aria-label={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} su`}
+                  title={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} su`}
+                  disabled={placement.y <= -1}
+                  data-testid="grid-placement-up"
                 >
                   <span aria-hidden="true">↑</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePatchPhotoPlacement({ y: Math.min(1, photoPlacement.y + 0.05) })}
-                  aria-label="Sposta foto giù"
-                  title="Sposta foto giù"
-                  disabled={photoPlacement.y >= 1}
-                  data-testid="grid-photo-down"
+                  onClick={() => handlePatchPlacement({ y: Math.min(1, placement.y + 0.05) })}
+                  aria-label={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} giù`}
+                  title={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} giù`}
+                  disabled={placement.y >= 1}
+                  data-testid="grid-placement-down"
                 >
                   <span aria-hidden="true">↓</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePatchPhotoPlacement({ x: Math.min(1, photoPlacement.x + 0.05) })}
-                  aria-label="Sposta foto destra"
-                  title="Sposta foto destra"
-                  disabled={photoPlacement.x >= 1}
-                  data-testid="grid-photo-right"
+                  onClick={() => handlePatchPlacement({ x: Math.min(1, placement.x + 0.05) })}
+                  aria-label={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} destra`}
+                  title={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} destra`}
+                  disabled={placement.x >= 1}
+                  data-testid="grid-placement-right"
                 >
                   <span aria-hidden="true">→</span>
                 </button>
               </div>
               <label className="card-field card-field--tight">
-                <span>Zoom foto ({(photoPlacement.scale * 100).toFixed(0)}%)</span>
+                <span>Zoom {selected === 'qr' ? 'QR' : 'foto'} ({(placement.scale * 100).toFixed(0)}%)</span>
                 <input
                   type="range"
                   min={0.5}
                   max={2}
                   step={0.05}
-                  value={photoPlacement.scale}
-                  onChange={(e) => handlePatchPhotoPlacement({ scale: Number(e.target.value) })}
-                  aria-label="Zoom foto"
-                  data-testid="grid-photo-zoom"
+                  value={placement.scale}
+                  onChange={(e) => handlePatchPlacement({ scale: Number(e.target.value) })}
+                  aria-label={`Zoom ${selected === 'qr' ? 'QR' : 'foto'}`}
+                  data-testid="grid-placement-zoom"
                 />
               </label>
             </div>

@@ -29,30 +29,43 @@ describe('backLayout', () => {
     expect(size).toBe(QR_SIZE_PX.medium);
   });
 
-  it('effectiveBackGridForRender drops empty services and expands contacts (v2.12: socials stay put)', () => {
+  it('v2.15: collapses short contacts and moves socials up when services are empty', () => {
     const card = createGiovanniCardTemplate();
-    // Giovanni: contacts h=2, services h=1, socials h=1 at y=3; no services content
+    // Giovanni template has phone+email (2 contacts), services empty.
     card.back.services = [];
     const grid = card.backGrid!;
     expect(grid.elements.services).toBeDefined();
     expect(grid.elements.socials).toBeDefined();
-    const socialsBefore = { ...grid.elements.socials! };
     const effective = effectiveBackGridForRender(grid, card);
     expect(effective.elements.services).toBeUndefined();
-    // Socials keep persisted position (must match red SOCIALS debug box + 3×3)
-    expect(effective.elements.socials?.y).toBe(socialsBefore.y);
-    expect(effective.elements.socials?.h).toBe(socialsBefore.h);
-    // Contacts expands into the empty services row when adjacent
-    expect(effective.elements.contacts?.h).toBe(grid.elements.contacts!.h + grid.elements.services!.h);
+    // Contacts shrink from h:2 to h:1; socials move up one row.
+    expect(effective.elements.contacts?.h).toBe(grid.elements.contacts!.h - 1);
+    expect(effective.elements.socials?.y).toBe(grid.elements.socials!.y - 1);
+    expect(effective.elements.socials?.h).toBe(grid.elements.socials!.h);
   });
 
-  it('effectiveBackGridForRender keeps services when content exists', () => {
+  it('v2.15: keeps services and collapses short contacts so the left column stays dense', () => {
     const card = createGiovanniCardTemplate();
     card.back.services = ['UX Design'];
     const grid = card.backGrid!;
     const effective = effectiveBackGridForRender(grid, card);
     expect(effective.elements.services).toBeDefined();
-    expect(effective.elements.socials?.y).toBe(grid.elements.socials?.y);
+    // Contacts shrink from h:2 to h:1, services move up one row, socials move up one row.
+    expect(effective.elements.contacts?.h).toBe(grid.elements.contacts!.h - 1);
+    expect(effective.elements.services?.y).toBe(grid.elements.services!.y - 1);
+    expect(effective.elements.socials?.y).toBe(grid.elements.socials!.y - 1);
+  });
+
+  it('does not collapse contacts when there are many contact entries', () => {
+    const card = createGiovanniCardTemplate();
+    card.back.services = [];
+    card.back.address = 'Via Roma 1, Milano';
+    card.back.vatNumber = '12345678901';
+    const grid = card.backGrid!;
+    const effective = effectiveBackGridForRender(grid, card);
+    // With 4 contact entries contacts needs h:2; socials stay at persisted y.
+    expect(effective.elements.contacts?.h).toBe(grid.elements.contacts!.h);
+    expect(effective.elements.socials?.y).toBe(grid.elements.socials!.y);
   });
 
   it('alignBoxInCell positions bottom-right', () => {

@@ -209,9 +209,10 @@ describe('svgRenderer', () => {
       expect(svg).toContain('Supporto');
     });
 
-    it('export socials y follows backGrid.elements.socials.y (preview/export parity)', () => {
-      // With services content present, collapse does not run — socials.y is
-      // respected as-is (y:3 lower than y:2).
+    it('export socials y follows effectiveBackGridForRender collapse (preview/export parity)', () => {
+      // v2.15: short contacts (2 entries) cause the effective grid to collapse
+      // contacts by one row and move services/socials up. The export must
+      // reflect this layout, so the persisted socials.y=3 becomes effective y=2.
       const base = createGiovanniCardTemplate();
       const atBottom = {
         ...base,
@@ -233,10 +234,11 @@ describe('svgRenderer', () => {
           ...atBottom.backGrid,
           elements: {
             ...atBottom.backGrid.elements,
-            // Move socials into services row (services still present but
-            // socials y is what we measure).
+            // Same effective positions after collapse: contacts h:1,
+            // services y:1, socials y:2.
+            contacts: { x: 0, y: 0, w: 2, h: 1 },
+            services: { x: 0, y: 1, w: 2, h: 1 },
             socials: { x: 0, y: 2, w: 2, h: 1 },
-            services: { x: 0, y: 3, w: 2, h: 1 },
           },
         },
       };
@@ -252,7 +254,8 @@ describe('svgRenderer', () => {
       const yUp = yOf(svgUp);
       expect(yBottom).not.toBeNaN();
       expect(yUp).not.toBeNaN();
-      expect(yUp).toBeLessThan(yBottom);
+      // Both should now land at the same effective y (socials moved up one row).
+      expect(yUp).toBe(yBottom);
     });
 
     it('export name respects alignH center (not stuck on right)', () => {
