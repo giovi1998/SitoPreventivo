@@ -7,7 +7,7 @@ import {
 } from '../../../utils/documentSchemas';
 import { SIZE_PRESET_LABELS, BORDER_LABELS } from './labels';
 import { AiFontPicker } from '../../ai-ui';
-import { DECORATIVE_PATTERN_IDS, type DecorativePatternId } from '../../../utils/decorations/patterns';
+import { DECORATIVE_PATTERN_IDS, type DecorativePatternId, defaultDecorativePalette } from '../../../utils/decorations/patterns';
 
 const PATTERN_LABELS: Record<DecorativePatternId, string> = {
   'wave-bottom': 'Onda in basso',
@@ -23,9 +23,10 @@ export interface CardStyleFieldsProps extends CardSectionProps {
 
 export function CardStyleFields({ card, patchStyle, onPatchDecorations }: CardStyleFieldsProps) {
   const fontScale = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, card.style.fontScale ?? 1));
-  const decorations = card.decorations;
-  const pattern = decorations?.pattern ?? null;
-  const opacity = decorations?.opacity ?? 0.2;
+  const decorations = card.decorations ?? { pattern: null, opacity: 0.2, palette: defaultDecorativePalette(card.style.accentColor, card.style.textColor) };
+  const pattern = decorations.pattern ?? null;
+  const opacity = decorations.opacity ?? 0.2;
+  const palette = decorations.palette || defaultDecorativePalette(card.style.accentColor, card.style.textColor);
   return (
     <fieldset className="card-fieldset">
       <legend>Stile</legend>
@@ -107,7 +108,10 @@ export function CardStyleFields({ card, patchStyle, onPatchDecorations }: CardSt
             value={pattern ?? ''}
             onChange={(e) => {
               const id = e.target.value as DecorativePatternId | '';
-              onPatchDecorations({ pattern: id || null });
+              onPatchDecorations({
+                pattern: id || null,
+                palette,
+              });
             }}
             aria-label="Pattern decorazione"
           >
@@ -117,21 +121,61 @@ export function CardStyleFields({ card, patchStyle, onPatchDecorations }: CardSt
             ))}
           </select>
           {pattern && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--muted, #647086)' }}>
-                Opacità ({Math.round(opacity * 100)}%)
-              </span>
-              <input
-                type="range"
-                min={0.05}
-                max={0.8}
-                step={0.05}
-                value={opacity}
-                onChange={(e) => onPatchDecorations({ opacity: Number(e.target.value) })}
-                aria-label="Opacità decorazione"
-                style={{ flex: 1 }}
-              />
-            </div>
+            <>
+              <div className="card-color-row" style={{ marginTop: 6 }}>
+                <label className="card-color-cell">
+                  <span>Primario</span>
+                  <div className="card-color-pill">
+                    <input
+                      type="color"
+                      value={palette.primary}
+                      onChange={(e) => onPatchDecorations({ palette: { ...palette, primary: e.target.value } })}
+                      aria-label="Colore primario decorazione"
+                    />
+                    <code>{palette.primary.toUpperCase()}</code>
+                  </div>
+                </label>
+                <label className="card-color-cell">
+                  <span>Secondario</span>
+                  <div className="card-color-pill">
+                    <input
+                      type="color"
+                      value={palette.secondary}
+                      onChange={(e) => onPatchDecorations({ palette: { ...palette, secondary: e.target.value } })}
+                      aria-label="Colore secondario decorazione"
+                    />
+                    <code>{palette.secondary.toUpperCase()}</code>
+                  </div>
+                </label>
+                <label className="card-color-cell">
+                  <span>Accento</span>
+                  <div className="card-color-pill">
+                    <input
+                      type="color"
+                      value={palette.accent || card.style.accentColor}
+                      onChange={(e) => onPatchDecorations({ palette: { ...palette, accent: e.target.value } })}
+                      aria-label="Colore accento decorazione"
+                    />
+                    <code>{(palette.accent || card.style.accentColor).toUpperCase()}</code>
+                  </div>
+                </label>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--muted, #647086)' }}>
+                  Opacità ({Math.round(opacity * 100)}%)
+                </span>
+                <input
+                  type="range"
+                  min={0.05}
+                  max={0.8}
+                  step={0.05}
+                  value={opacity}
+                  onChange={(e) => onPatchDecorations({ opacity: Number(e.target.value) })}
+                  aria-label="Opacità decorazione"
+                  style={{ flex: 1 }}
+                />
+              </div>
+            </>
           )}
         </div>
       )}

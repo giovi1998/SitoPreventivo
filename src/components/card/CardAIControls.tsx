@@ -8,7 +8,6 @@ import {
   CardAIPhotoSection,
   CardAIQuickActions,
   CardAIPromptSection,
-  CardAIDecorationSection,
   CardAIIconHeroSection,
 } from './ai';
 import type { PromptLibraryEntry } from '../../utils/promptLibrary';
@@ -43,7 +42,6 @@ export interface CardAIControlsProps {
   onRemoveCover?: (side: 'front' | 'back') => void;
   onGeneratePhoto?: (imageModel?: string) => void;
   card?: BusinessCard;
-  onPatchDecorations?: (patch: Partial<BusinessCard['decorations']>) => void;
   // Icon AI state
   iconPrompt?: string;
   setIconPrompt?: (v: string) => void;
@@ -95,7 +93,6 @@ export default function CardAIControls({
   onRemoveCover,
   onGeneratePhoto,
   card,
-  onPatchDecorations,
   iconPrompt = '',
   setIconPrompt,
   showIconPromptEditor = false,
@@ -189,14 +186,6 @@ export default function CardAIControls({
           onApplyPrompt={onApplyCoverPrompt}
           onDeletePrompt={onDeleteCoverPrompt}
           onFillAutoPrompt={onFillAutoCoverPrompt}
-        />
-      )}
-
-      {card && onPatchDecorations && (
-        <CardAIDecorationSection
-          card={card}
-          isProcessing={isProcessing}
-          onPatchDecorations={onPatchDecorations}
         />
       )}
 
