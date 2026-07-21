@@ -10,7 +10,6 @@ import { getTheme } from '../utils/documentThemes';
 import {
   AiSection,
   AiPromptTextarea,
-  AiSelect,
   AiGenerateButton,
   AiActionChip,
   AiActionGrid,
@@ -90,12 +89,9 @@ interface EditorViewProps {
   addClause: () => void;
   removeClause: (id: string) => void;
   onRunAI: (mode?: string) => void;
-  aiModel: string;
-  onAiModelChange: (m: string) => void;
   previewRef: React.Ref<HTMLElement>;
   aiLogs: any[];
   isProcessing: boolean;
-  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
   onResetChat: () => void;
   onReset?: () => void;
   isDirty: boolean;
@@ -114,8 +110,7 @@ interface EditorViewProps {
 
 export default function EditorView({
   quote, aiText, setAiText, patch, updateOption, addOption, removeOption,
-  updateOptions, updateClause, addClause, removeClause, onRunAI, aiModel, onAiModelChange,
-  previewRef, aiLogs, isProcessing, availableModels, onResetChat, onReset,
+  updateOptions, updateClause, addClause, removeClause,   onRunAI, previewRef, aiLogs, isProcessing, onResetChat, onReset,
   isDirty, saveQuote, documentTheme = 'corporate',
   onSave, onExportPDF, onExportDOCX, onImportPDF, onSaveAsTemplate,
   lastSaveTime, pdfLoading, docxLoading, lastCostUsd,
@@ -189,10 +184,6 @@ export default function EditorView({
     </Section>
   );
 
-  const modelOptions = availableModels.length > 0 
-    ? availableModels.map(m => ({ value: m.id, label: `${m.name}, ${m.model}` }))
-    : [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }];
-
   const QUICK_ACTIONS = [
     { mode: 'premium', label: 'Rendi premium' },
     { mode: 'faq', label: 'Aggiungi FAQ' },
@@ -204,14 +195,6 @@ export default function EditorView({
   // pannello è dentro la AIConsole rail (li fornisce la console).
   const aiPanelSections = (
     <>
-      <AiSection title="Modello AI" collapsible defaultOpen>
-        <AiSelect
-          value={aiModel}
-          onChange={(e) => onAiModelChange(e.target.value)}
-          options={modelOptions}
-          aria-label="Modello AI"
-        />
-      </AiSection>
       <AiSection title="Prompt e azioni rapide" collapsible defaultOpen hint='Descrivi cosa vuoi cambiare. Es. "Rendi il preventivo più premium, aggiungi FAQ".'>
         <AiPromptTextarea
           value={aiText}

@@ -132,7 +132,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
   const [mobileTab, setMobileTab] = React.useState<'ai' | 'manual' | null>(null);
   const loadedIdRef = React.useRef<string | undefined>(initialFlyer?.id);
   const [aiPrompt, setAiPrompt] = React.useState('');
-  const [aiModel, setAiModel] = React.useState('deepseek-chat');
+  const aiModel = 'deepseek-chat';
   const [aiTone, setAiTone] = React.useState<FlyerTone>('formale');
   const [activeSector, setActiveSector] = React.useState<typeof FLYER_SECTORS[number]>('ristorante');
   // Hero AI prompt editor (v2.4): user can override the auto-built
@@ -386,7 +386,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
 
   const aiPanelProps = {
     aiPrompt, setAiPrompt,
-    aiModel, setAiModel,
+    aiModel,
     aiTone, setAiTone,
     ai, flyer, debouncedFlyer,
     hasCopy: flyerHasCopy(flyer),

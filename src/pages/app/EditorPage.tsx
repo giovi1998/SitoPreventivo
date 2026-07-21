@@ -40,12 +40,9 @@ export default function EditorPage() {
       addClause={ctx.addClause}
       removeClause={ctx.removeClause}
       onRunAI={ctx.runAI}
-      aiModel={ctx.aiModel}
-      onAiModelChange={ctx.setAiModel}
       previewRef={ctx.previewRef}
       aiLogs={ctx.aiLogs}
       isProcessing={ctx.isProcessing}
-      availableModels={ctx.availableModels}
       onResetChat={ctx.resetChat}
       onReset={onReset}
       isDirty={ctx.isDirty}

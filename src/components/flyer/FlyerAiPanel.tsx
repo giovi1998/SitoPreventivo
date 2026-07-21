@@ -36,8 +36,6 @@ const QUICK_REFINE: Array<{ action: 'simplify' | 'formal' | 'young' | 'urgent'; 
 interface FlyerAiPanelProps {
   aiPrompt: string;
   setAiPrompt: (v: string) => void;
-  aiModel: string;
-  setAiModel: (v: string) => void;
   aiTone: FlyerTone;
   setAiTone: (v: FlyerTone) => void;
   ai: ReturnType<typeof useAIFlyer>;
@@ -79,7 +77,7 @@ interface FlyerAiPanelProps {
 }
 
 export function FlyerAiPanel({
-  aiPrompt, setAiPrompt, aiModel, setAiModel, aiTone, setAiTone, ai,
+  aiPrompt, setAiPrompt, aiTone, setAiTone, ai,
   flyer,   onGenerate, onRefine, onReset, hasCopy, onCollapse,
   tier = 'free', bare = false, showResetInRail = true,
   onGenerateHero, onRemoveHero, onResetHero, isGeneratingHero = false,
@@ -93,10 +91,6 @@ export function FlyerAiPanel({
     setImageModel(id);
     setAiImageModelDefault(id);
   };
-
-  const modelOptions = ai.availableModels.length > 0
-    ? ai.availableModels.map(m => ({ value: m.id, label: `${m.name}, ${m.model}` }))
-    : [{ value: 'deepseek-chat', label: 'DeepSeek Chat' }];
 
   const toneOptions = [
     { value: 'formale', label: 'Formale' },
@@ -211,12 +205,6 @@ export function FlyerAiPanel({
 
       <AiSection title="Genera copy" collapsible defaultOpen>
         <div className="stack">
-          <AiSelect 
-            label="Modello" 
-            value={aiModel} 
-            onChange={(e) => setAiModel(e.target.value)} 
-            options={modelOptions} 
-          />
           <AiSelect 
             label="Tono" 
             value={aiTone} 
