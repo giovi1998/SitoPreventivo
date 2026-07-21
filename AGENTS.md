@@ -204,7 +204,7 @@ solo gap test TB-007), `spec-api-saas-monetization.md` (NOT-STARTED,
 track futuro), `spec-intake-pipeline.md` (TB-019, NOT-STARTED, intake
 Google Form → Quickbrand, Architettura A ibrida). Gli spec implementati
 sono stati cancellati dopo verifica (traccia in git history +
-`doc/to-be-done.md`); anche `spec-design-ai-first-ux-redesign.md`
+`docs/to-be-done.md`); anche `spec-design-ai-first-ux-redesign.md`
 (Fasi 12-14) è stato cancellato il 2026-07-18 dopo completamento
 (deviazioni documentate sotto, §13-14).
 

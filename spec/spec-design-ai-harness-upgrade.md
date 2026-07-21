@@ -640,7 +640,7 @@ MiniMax M3 (context limit 512K token, ma costi GPU-time crescono).
 - `spec-design-flyer-refactor-preview-ai.md` — flyer engine esistente
 - `spec-intake-pipeline.md` — TB-019 intake Google Form
 - `spec-api-saas-monetization.md` — Stripe, track futuro
-- `doc/to-be-done.md` — TB-023 aggiornato con riferimento a questa spec
+- `docs/to-be-done.md` — TB-023 aggiornato con riferimento a questa spec
 - `AGENTS.md` — gotcha `@google/genai` import dinamico (applicabile a
   `ollama` package se usato)
 - Ollama Cloud docs: https://docs.ollama.com/cloud

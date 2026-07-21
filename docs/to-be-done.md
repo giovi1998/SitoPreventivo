@@ -100,7 +100,7 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 #### TB-006 Audit condivisione REQ-040/041 (spec #1)
 - **Spec**: #1 AC-040 — "produce documento che elenca minimo 5 pattern
   duplicati con proposta di astrazione per ciascuno"
-- **Gap**: `doc/audit-ui-components.md` non esiste.
+- **Gap**: `docs/audit-ui-components.md` non esiste.
   **Stato noto** (analisi statica di questa sessione):
   1. **Font picker**: estratto ✅ in `ai-ui/AiFontPicker.tsx`
   2. **Color picker**: vedo usi sparsi (`CardStyleFields`, `FlyerStyleFields`, `BuilderPanel`, `EditorView`) ma nessun `AiColorPicker` centralizzato
@@ -229,7 +229,7 @@ monetizzazione automatizzata per ultima. L'intake pipeline (TB-019)
 ## Roadmap business / go-to-market (dal BP appendice luglio 2026)
 
 Item tecnici e commerciali emersi dall'analisi di mercato 2026-07
-(`doc/business-plan.md` §A-G). Non sono bug: sono la strada per i
+(`docs/business-plan.md` §A-G). Non sono bug: sono la strada per i
 primi clienti paganti.
 
 ### Feature prodotto (in ordine di priorità)

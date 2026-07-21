@@ -527,9 +527,9 @@ Per considerare la spec implementata:
   trigger 15+ transazioni/mese. L'intake pipeline prepara il terreno
   per Stripe: quando il cliente paga online, il form può includere
   pagamento diretto.
-- `doc/business-plan.md` §C (servizio fatto-per-te) — il modello
+- `docs/business-plan.md` §C (servizio fatto-per-te) — il modello
   operativo che l'intake pipeline supporta.
-- `doc/to-be-done.md` TB-019 — traccia implementazione.
+- `docs/to-be-done.md` TB-019 — traccia implementazione.
 - `AGENTS.md` "API Schema Duplication" — constraint sul mirror schema
   in `api/index.ts`.
 - `AGENTS.md` "Vercel Routing" — constraint monolith, endpoint inline.
