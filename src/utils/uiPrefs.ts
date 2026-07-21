@@ -5,7 +5,7 @@
  * TB-023: aggiunte preferenze AI harness:
  * - `aiProviderDefault`: provider ID preferito per orchestratori
  * - `aiVisionEnabled`: toggle vision feedback (screenshot → MiniMax M3)
- * - `aiRagClientsEnabled`: toggle RAG clienti (consulta storico)
+
  * - `aiAutoFallback`: se true, fallback automatico DeepSeek se Ollama 429
  */
 
@@ -20,7 +20,7 @@ export interface UiPrefs {
   aiProviderDefault?: string;
   aiImageModelDefault?: string;
   aiVisionEnabled?: boolean;
-  aiRagClientsEnabled?: boolean;
+
   aiAutoFallback?: boolean;
   aiABTestingEnabled?: boolean;
 }
@@ -45,7 +45,7 @@ export function getUiPrefs(): UiPrefs {
     aiProviderDefault: parsed.aiProviderDefault,
     aiImageModelDefault: parsed.aiImageModelDefault,
     aiVisionEnabled: parsed.aiVisionEnabled,
-    aiRagClientsEnabled: parsed.aiRagClientsEnabled,
+
     aiAutoFallback: parsed.aiAutoFallback,
     aiABTestingEnabled: parsed.aiABTestingEnabled,
   };
@@ -123,15 +123,7 @@ export function setAiVisionEnabled(enabled: boolean): void {
   save(prefs);
 }
 
-export function getAiRagClientsEnabled(): boolean {
-  return getUiPrefs().aiRagClientsEnabled ?? true; // default ON per unlocked
-}
 
-export function setAiRagClientsEnabled(enabled: boolean): void {
-  const prefs = getUiPrefs();
-  prefs.aiRagClientsEnabled = enabled;
-  save(prefs);
-}
 
 export function getAiAutoFallback(): boolean {
   return getUiPrefs().aiAutoFallback ?? true;

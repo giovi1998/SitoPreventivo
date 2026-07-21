@@ -1,5 +1,5 @@
 ---
-title: AI Harness Upgrade — Multi-Provider, Pattern Decorativi, RAG Clienti
+title: AI Harness Upgrade — Multi-Provider, Pattern Decorativi
 version: 1.0
 date_created: 2026-07-20
 last_updated: 2026-07-20
@@ -15,9 +15,7 @@ icone stilizzate, layout editoriali, foto spostabili con drag). Lo scope
 copre: multi-provider AI (Ollama Pro + MiniMax M3 multimodale + Gemini 2.0
 Flash immagini), tracking costi reale, pattern decorativi riutilizzabili
 (wave/blob/splash/full-overlay), drag mouse foto dentro riquadro card (solo
-grid-mode), icone stilizzate AI per card+flyer, e RAG clienti (memoria
-persistente dei clienti dell'utente per generare design coerenti col loro
-brand storico).
+grid-mode), icone stilizzate AI per card+flyer.
 
 ## 1. Purpose & Scope
 
@@ -41,9 +39,6 @@ decorativi organici che l'app oggi non sa generare né esporre.
   la sua cella con coordinate `x/y/scale` normalizzate (-1..+1).
 - **Icone stilizzate AI**: MiniMax M3 (multimodale) o Gemini 2.0 Flash
   immagini per generare icone flat 2-colori tipo frutta/oggetti/animali.
-- **RAG clienti**: tabella Postgres `client_kb` per memorizzazione
-  vectorizzata dei dati clienti dell'utente (nome, settore, palette
-  storica, logo, card passate). L'AI consulta la KB prima di generare.
 - **Tracking costi reale**: colonna `tokens_cost_usd` + pricing tabella
   hardcoded (Ollama Pro = $0/token perché flat $20/mo, DeepSeek pay-per-
   token, Gemini per-image).
@@ -55,7 +50,6 @@ decorativi organici che l'app oggi non sa generare né esporre.
 
 - Self-hosted Ollama locale (usiamo solo Ollama Cloud API).
 - Fine-tuning modelli (out of scope, costi proibitivi per fase bootstrap).
-- RAG documentale interno (manuale, FAQ, ecc.) — solo RAG clienti.
 - Generation AI per il logo (il logo builder SVG resta manuale + AI
   parametrica già esistente; background Gemini opzionale).
 - Modifica dei layout flexbox card esistenti (drag solo in grid-mode).
@@ -76,7 +70,6 @@ flyer e (in futuro) logo con più libertà creativa.
 | **Gemini 2.0 Flash immagini** | `gemini-2.0-flash-preview-image-generation`, alternativa economica a Nano Banana 3.1 per icone/illustrazioni piccole. |
 | **Pattern decorativo** | SVG generato programmaticamente (wave/blob/splash/full-overlay) renderizzato come layer sotto il contenuto di card/flyer. |
 | **Drag foto** | Interazione pointer-driven in card grid-mode che sposta/scala la foto dentro la cella. Coordinate normalizzate -1..+1. |
-| **RAG clienti** | Retrieval-Augmented Generation: prima di generare card/flyer, l'AI recupera dati storici del cliente (settore, palette, logo) da un vector store Postgres. |
 | **Screenshot preview** | Render SVG/PNG della preview card/flyer inviato come immagine a MiniMax M3 oltre al JSON, per fare design feedback visivo. |
 | **Provider Registry** | `src/ai/providers/registry.ts`, mappa `id → AIProvider`. Esteso con Ollama + MiniMax. |
 
@@ -287,53 +280,7 @@ flyer e (in futuro) logo con più libertà creativa.
   user-uploaded, vedi AGENTS.md cardMerge parity).
 - **CON-IS-002**: Icone AI > 200KB vengono compresse a PNG 256×256.
 
-### 3.7 RAG Clienti
-
-- **REQ-RG-001**: Nuova tabella DB `client_kb` (migration
-  `db/migrations/0028_client_kb.sql`):
-  ```sql
-  CREATE TABLE client_kb (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_email TEXT NOT NULL,         -- proprietario (utente Quickbrand)
-    client_name TEXT NOT NULL,
-    client_sector TEXT,
-    client_palette JSONB,             -- {primary, secondary, accent}
-    client_logo_url TEXT,             -- base64 logo
-    client_brand_voice TEXT,          -- "formale", "giovane", "tecnico"
-    client_notes TEXT,                -- note libere
-    embedding VECTOR(768),            -- embedding di client_name+sector+notes
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-  );
-  CREATE INDEX idx_client_kb_user ON client_kb(user_email);
-  CREATE INDEX idx_client_kb_embedding ON client_kb USING ivfflat(embedding);
-  ```
-- **REQ-RG-002**: Endpoint `POST /api/clients` (auth required) per
-  creare/aggiornare entry. Genera embedding via Ollama `nomic-embed-text`
-  o fallback testo semplice se embeddings non disponibili.
-- **REQ-RG-003**: Endpoint `GET /api/clients?q=...` ritorna top-5 clienti
-  simili alla query (cosine similarity su embedding).
-- **REQ-RG-004**: UI "I miei clienti" in Settings: lista clienti, form
-  CRUD, "Importa da Google Form" (link a TB-019 intake pipeline).
-- **REQ-RG-005**: Quando l'utente genera una card/flyer, l'orchestratore
-  consulta RAG: dato il titolo del documento o un field "cliente",
-  recupera top-3 clienti simili e include i loro dati nel system prompt
-  ("Hai già lavorato con: {nome} ({settore}), palette storica: {colori},
-  voice: {voice}. Mantieni coerenza col brand storico se pertinente").
-- **REQ-RG-006**: Toggle UI "Usa RAG clienti" in AI Console. Default ON
-  per utenti unlocked, OFF per free (costo embedding).
-- **CON-RG-001**: Embeddings mai inviati a provider AI esterni. La
-  similarity search avviene server-side in Postgres.
-- **CON-RG-002**: Cliente può essere eliminato dall'utente (GDPR right to
-  erasure). DELETE cascade anche su embedding.
-- **CON-RG-003**: In locale (dev), RAG client usa localStorage con
-  similarity search testo semplice (no embeddings). Stesso pattern di
-  dataService `IS_LOCAL`.
-- **GUD-RG-001**: Intake pipeline (TB-019) può scrivere direttamente in
-  `client_kb` quando l'admin converte un intake in cliente. Spec TB-019
-  resta separato, ma l'integrazione è documentata qui.
-
-### 3.8 A/B Provider
+### 3.7 A/B Provider
 
 - **REQ-AB-001**: AI Console: bottone "Confronta provider" (visibile se
   ≥2 provider registrati). Click → genera 2 risposte parallele con
@@ -367,11 +314,8 @@ flyer e (in futuro) logo con più libertà creativa.
 - **REQ-UX-007**: Toggle "Vision AI" in AI Console: switch con icona
   occhio, tooltip "Invia screenshot della preview all'AI per feedback
   visivo". Default OFF (costo extra).
-- **REQ-UX-008**: Toggle "Usa RAG clienti" in AI Console: switch con
-  icona database, tooltip "Consulta lo storico dei tuoi clienti per
-  design coerente". Default ON per unlocked.
 - **CON-UX-001**: Tutti i nuovi toggle usano `pq_ui:v1` per persistenza
-  (`visionAi`, `ragClients`).
+  (`visionAi`).
 - **CON-UX-002**: Nessun emoji nei nuovi componenti. Icone Phosphor o
   Lucide (progetto già usa Lucide).
 
@@ -415,9 +359,6 @@ export class GeminiFlashImageProvider {
 | POST | `/api/ai/chat` | `{provider, model, messages, tools, format, requestId}` | user | Esteso per instradare a Ollama |
 | POST | `/api/ai/image-flash` | `{prompt, aspectRatio, size, requestId}` | user | Immagini Gemini Flash |
 | POST | `/api/ai/design-review` | `{docType, docJson, screenshotBase64, requestId}` | user | Vision feedback MiniMax M3 |
-| GET | `/api/clients?q=...` | — | user | RAG search clienti |
-| POST | `/api/clients` | `{clientName, sector, palette, logoUrl, brandVoice, notes}` | user | Create/update cliente |
-| DELETE | `/api/clients/:id` | — | user | Delete cliente |
 | GET | `/users/cost-breakdown?days=30` | — | admin | Costi aggregati |
 
 ### 4.4 Schema estensioni
@@ -476,12 +417,6 @@ heroIllustration?: string;
 - **AC-IS-001**: Given prompt "mela stilizzata" con colori `#E62020` +
   `#1A1A1A`, When `iconOrchestrator.generateIcon()` esegue, Then ritorna
   base64 PNG 256×256 con mela flat 2-colori.
-- **AC-RG-001**: Given utente con 3 clienti in KB (2 ristoranti, 1 B&B),
-  When genera card con titolo "Pizzeria da Luigi", Then il system prompt
-  include "Hai già lavorato con: [Ristorante X], [Ristorante Y]" con
-  palette storiche.
-- **AC-RG-002**: Given utente elimina cliente "Mario Rossi", Then
-  `DELETE /api/clients/:id` rimuove row + embedding (GDPR).
 - **AC-AB-001**: Given 2 provider registrati, When utente click "Confronta
   provider", Then modal mostra 2 risposte side-by-side con costo+latency.
 
@@ -511,18 +446,12 @@ heroIllustration?: string;
   click applica.
 - `src/components/__tests__/AIProviderBadge.dropdown.test.tsx` —
   dropdown apertura/chiusura, lista provider.
-- `src/components/card/__tests__/CardPreview.photoDrag.test.tsx` —
-  pointerdown/move/up simula drag, verifica onPatch.
-- `src/components/__tests__/CardGridControls.photo.test.tsx` — bottoni
-  +/- scale, reset posizione.
-- `src/components/__tests__/ClientList.test.tsx` — lista, CRUD form.
 - `src/hooks/__tests__/useAIDesignReview.test.ts` — screenshot + mock
   MiniMax + suggestions.
 - `api/__tests__/ollamaChat.test.ts` — endpoint /api/ai/chat con
   provider=ollama, mock fetch Ollama.
 - `api/__tests__/imageFlash.test.ts` — endpoint /api/ai/image-flash.
 - `api/__tests__/designReview.test.ts` — endpoint /api/ai/design-review.
-- `api/__tests__/clients.test.ts` — CRUD + RAG search.
 
 ### 6.2 Integration / E2E
 
@@ -534,7 +463,6 @@ heroIllustration?: string;
 - `e2e/logo-provider-switch.spec.ts` — switch provider da UI.
 - `e2e/card-vision-review.spec.ts` — vision AI suggerisce 3 miglioramenti.
 - `e2e/card-icon-ai.spec.ts` — genera icona AI, applica, export.
-- `e2e/clients-crud.spec.ts` — crea cliente, genera card con RAG.
 
 ### 6.3 Coverage
 
@@ -560,16 +488,7 @@ Target 60% su nuovi file. Files sotto soglia motivati con commento.
 - Benchmark coding/agentic top-tier (BrowesComp 83.5, supera Opus 4.7).
 - US-based, zero data retention.
 
-### 7.3 Perché RAG clienti
-
-- L'utente genera multiple card/flyer per lo stesso cliente nel tempo.
-  Senza RAG, ogni generazione parte da zero → incoerenza brand.
-- RAG recupera palette/storico prima di generare → coerenza.
-- Integrazione con TB-019 (intake Google Form): i brief diventano clienti
-  automaticamente quando l'admin converte.
-- Vector store in Postgres (pgvector) è gratis, niente servizio esterno.
-
-### 7.4 Perché pattern decorativi come layer SVG
+### 7.3 Perché pattern decorativi come layer SVG
 
 - Card/flyer usano già SVG per export. Aggiungere un layer decoration è
   un cambiamento minimo, non richiede refactor layout engine.
@@ -599,12 +518,9 @@ Target 60% su nuovi file. Files sotto soglia motivati con commento.
 ### External Systems
 
 - **EXT-001**: Ollama Cloud API (`https://ollama.com/api`) — chat +
-  vision + embeddings. Richiede `OLLAMA_API_KEY` env var.
+  vision. Richiede `OLLAMA_API_KEY` env var.
 - **EXT-002**: Google Gemini API (`@google/genai`) — già integrata per
   Nano Banana, estesa per 2.0 Flash immagini.
-- **EXT-003**: Neon Postgres con estensione `pgvector` — per RAG
-  clienti. Verificare disponibilità su Neon free tier (sì, pgvector
-  supportato).
 
 ### Third-Party Services
 
@@ -616,12 +532,10 @@ Target 60% su nuovi file. Files sotto soglia motivati con commento.
 - **INF-001**: Vercel Hobby plan — 1 funzione serverless monolite, env
   vars `OLLAMA_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`,
   `DATABASE_URL` (già presenti tranne `OLLAMA_API_KEY`).
-- **INF-002**: Neon Postgres free tier + pgvector.
 
 ### Data Dependencies
 
-- **DAT-001**: Tabella `client_kb` (nuova) + embeddings.
-- **DAT-002**: Colonna `users.tokens_cost_usd` (nuova).
+- **DAT-001**: Colonna `users.tokens_cost_usd` (nuova).
 
 ### Technology Platform Dependencies
 
@@ -633,9 +547,7 @@ Target 60% su nuovi file. Files sotto soglia motivati con commento.
 
 ### Compliance Dependencies
 
-- **COM-001**: GDPR right to erasure — `DELETE /api/clients/:id` deve
-  rimuovere row + embedding. Testato in `clients.test.ts`.
-- **COM-002**: Ollama Cloud zero data retention (partnership NVIDIA NCPs,
+- **COM-001**: Ollama Cloud zero data retention (partnership NVIDIA NCPs,
   no logging, no training) — documentato in Ollama privacy policy.
 
 ## 9. Examples & Edge Cases
@@ -703,13 +615,7 @@ l'API ritorna 429 con message "quota exceeded". Il provider deve:
 2. Suggerire fallback automatico a DeepSeek (toggle "Auto-fallback"
    in AI Console, default ON).
 
-### 9.6 Edge case: RAG clienti vuoto
-
-Se l'utente non ha clienti in KB, l'orchestratore salta la RAG phase e
-usa il prompt base. Nessun errore, solo log info "RAG: no clients found,
-proceeding without context".
-
-### 9.7 Edge case: Screenshot > 500KB
+### 9.6 Edge case: Screenshot > 500KB
 
 `compressForAI` già esistente (card/flyer) comprime a JPEG q0.7. Se
 ancora > 500KB, downscale a 800×600. Mai inviare screenshot > 1MB a
@@ -725,8 +631,6 @@ MiniMax M3 (context limit 512K token, ma costi GPU-time crescono).
   che l'AI scelga decoration coerente col settore.
 - Manuale: drag foto in grid-mode, salvare, ricaricare, verificare
   posizione persistita.
-- Manuale: creare 3 clienti in "I miei clienti", generare card con
-  RAG attivo, verificare coerenza palette.
 - Manuale: confronto A/B DeepSeek vs MiniMax M3 su stesso prompt.
 - Manuale: vision review card con foto, verificare 3 suggestions
   cliccabili.
@@ -734,8 +638,7 @@ MiniMax M3 (context limit 512K token, ma costi GPU-time crescono).
 ## 11. Related Specifications / Further Reading
 
 - `spec-design-flyer-refactor-preview-ai.md` — flyer engine esistente
-- `spec-intake-pipeline.md` — TB-019 intake Google Form, integrazione
-  RAG clienti (REQ-RG-001 + GUD-RG-001)
+- `spec-intake-pipeline.md` — TB-019 intake Google Form
 - `spec-api-saas-monetization.md` — Stripe, track futuro
 - `doc/to-be-done.md` — TB-023 aggiornato con riferimento a questa spec
 - `AGENTS.md` — gotcha `@google/genai` import dinamico (applicabile a
@@ -743,4 +646,3 @@ MiniMax M3 (context limit 512K token, ma costi GPU-time crescono).
 - Ollama Cloud docs: https://docs.ollama.com/cloud
 - MiniMax M3: https://ollama.com/library/minimax-m3
 - Ollama pricing: https://www.ollama.com/pricing
-- Neon pgvector: https://neon.tech/docs/extensions/pgvector

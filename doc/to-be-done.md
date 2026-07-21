@@ -325,17 +325,14 @@ primi clienti paganti.
   - Icone stilizzate AI: `iconOrchestrator` per card.builder.iconUrl +
     flyer.style.heroIllustration (es. frutta/oggetti/animali flat 2-colori)
     (REQ-IS-001..007)
-  - RAG clienti: tabella `client_kb` + pgvector embeddings, l'AI consulta
-    storico clienti prima di generare (coerenza brand nel tempo),
-    integrazione con TB-019 intake pipeline (REQ-RG-001..006)
   - A/B provider: confronto side-by-side in modal (REQ-AB-001..003)
 - **Effort**: ~45h (sprint 2-3)
   - Sprint 2 (~22h): provider Ollama+MiniMax, Gemini Flash, selector UI,
     pricing, pattern lib + picker
   - Sprint 3 (~23h): export pattern, AI v2 prompt, drag foto, icone AI,
-    RAG clienti, test
+    test
 - **Prereq**: nessuno tecnico. Business:订阅 Ollama Pro $20/mo +
-  `OLLAMA_API_KEY` in Vercel env. Neon pgvector (gratis, già supportato).
+  `OLLAMA_API_KEY` in Vercel env.
 - **Costi ricorrenti**: $20/mo Ollama Pro (flat) + DeepSeek pay-per-token
   esistente + Gemini per-image. Atteso ~$25-30/mo total a volume 100
   clienti/mese (vs $80+ con solo DeepSeek pay-per-token).

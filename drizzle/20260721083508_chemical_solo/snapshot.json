@@ -8,12 +8,6 @@
   "ddl": [
     {
       "isRlsEnabled": false,
-      "name": "client_kb",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
       "name": "documents",
       "entityType": "tables",
       "schema": "public"
@@ -35,123 +29,6 @@
       "name": "users",
       "entityType": "tables",
       "schema": "public"
-    },
-    {
-      "type": "serial",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "client_kb"
-    },
-    {
-      "type": "varchar(255)",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_email",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "client_kb"
-    },
-    {
-      "type": "varchar(255)",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "title",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "client_kb"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "content",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "client_kb"
-    },
-    {
-      "type": "varchar(50)",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "source",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "client_kb"
-    },
-    {
-      "type": "varchar(100)",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "source_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "client_kb"
-    },
-    {
-      "type": "vector(768)",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "embedding",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "client_kb"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "client_kb"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "client_kb"
     },
     {
       "type": "varchar(50)",
@@ -832,16 +709,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "user_settings"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "client_kb_pkey",
-      "schema": "public",
-      "table": "client_kb",
-      "entityType": "pks"
     },
     {
       "columns": [

@@ -66,83 +66,91 @@
 
 ---
 
-## 4. TB-023 Features — UI Wiring mancante
+## 4. Modulo AI Unificato — Architettura da definire
 
-**Sintomo**: molte feature TB-023 sono implementate nel codice ma non hanno alcuna UI esposta all'utente. L'utente non può attivarle/disattivarle.
+**Sintomo**: le feature AI TB-023 (provider, A/B, vision, fallback) sono
+implementate nel codice ma frammentate: ogni toggle è un silo, nessun modulo
+trasversale. Attaccarle in una tab "AI" di SettingsPage sarebbe un cerotto.
 
-### Audit completo
+### Direzione architetturale
 
-| Preferenza | Getter | Setter chiamato da UI? | Consumer in produzione | Stato |
-|------------|--------|----------------------|----------------------|-------|
-| `aiProviderDefault` | `getAiProviderDefault()` | **SI** — `AIProviderBadge.tsx:59` | `resolveProviderId.ts:19,44` | ✅ Wired |
-| `aiImageModelDefault` | `getAiImageModelDefault()` | No (solo badge provider) | Logo orchestrator | ⚠️ Parziale |
-| `aiVisionEnabled` | `getAiVisionEnabled()` | **NO** — setter mai importato | **Orfano** — nessun consumer lo legge | ❌ Dead code |
-| `aiRagClientsEnabled` | `getAiRagClientsEnabled()` | **SI** — `ClientRagPanel.tsx:77` | `ClientRagPanel.tsx:36,45` | ⚠️ Panel orfano |
-| `aiAutoFallback` | `getAiAutoFallback()` | **NO** — setter mai importato | **Orfano** — nessun consumer lo legge | ❌ Dead code |
-| `aiABTestingEnabled` | `getAiABTestingEnabled()` | **NO** — setter mai importato | `resolveProviderId.ts:16` (sempre false) | ❌ Irraggiungibile |
+AI non è una preferenza utente — è **infrastruttura trasversale**.
+Deve vivere in un modulo unico che ogni editor (card, flyer, logo, social,
+quote) può interrogare.
 
-### Componenti orfani (implementati ma non montati)
+```
+┌─────────────────────────────────────┐
+│           AI Module (core)          │
+│  provider selection · A/B split     │
+│  vision · fallback · cost tracking  │
+│  rate limiting · retry logic        │
+├─────────────────────────────────────┤
+│  Observability (logs · metrics)     │
+│  useAILogs · AIConsole · AIProvider │
+│  Badge · cost breakdown per call    │
+└─────────────────────────────────────┘
+         ↕               ↕
+   ┌──────────┐   ┌──────────┐
+   │ Card Ed. │   │ Logo Ed. │  ...flyer, social, quote
+   └──────────┘   └──────────┘
+```
+
+### Stato attuale (audit)
+
+| Preferenza | Getter | Consumer | Stato |
+|------------|--------|----------|-------|
+| `aiProviderDefault` | `getAiProviderDefault()` | `resolveProviderId.ts` | ✅ Wired |
+| `aiImageModelDefault` | `getAiImageModelDefault()` | Logo orchestrator | ⚠️ Parziale |
+| `aiVisionEnabled` | `getAiVisionEnabled()` | Nessun consumer | ❌ Dead code |
+| `aiAutoFallback` | `getAiAutoFallback()` | Nessun consumer | ❌ Dead code |
+| `aiABTestingEnabled` | `getAiABTestingEnabled()` | `resolveProviderId.ts` (always false) | ❌ Irraggiungibile |
+
+### Componenti orfani
 
 | Componente | File | Stato |
 |------------|------|-------|
-| `useAIDesignReview` hook | `src/hooks/useAIDesignReview.ts` | **Nessun `.tsx` lo importa** — hook completamente implementato ma mai usato |
-| `ClientRagPanel` | `src/components/rag/ClientRagPanel.tsx` | **Nessun genitore lo monta** — ha il suo toggle interno ma il pannello è irraggiungibile |
+| `useAIDesignReview` | `src/hooks/useAIDesignReview.ts` | Hook implementato, mai importato |
 
-### Cosa manca
+### Cosa serve (non un toggle in Settings)
 
-1. **`SettingsPage` non ha preferenze AI** — La pagina impostazioni ha solo "Sicurezza" e "Account". Zero toggle per provider, vision, A/B, fallback, RAG.
-2. **`AIProviderBadge` non espone A/B** — Il dropdown provider seleziona il provider di default ma non ha toggle per A/B testing.
-3. **`AIConsole` non ha settings** — È solo presentazione (collapse, prompt, log). Nessun pannello impostazioni.
-4. **`resolveProviderId` legge `aiABTestingEnabled`** ma è sempre `false` perché nessuno può cambiarlo → il ramo A/B è unreachable.
+1. **AI Module** — classe/servizio unico che wrappa provider selection, A/B
+   split, vision feedback, auto-fallback, cost tracking. Tutti gli editor
+   lo usano, nessuno configura i provider direttamente.
+2. **Observability** — `useAILogs` + `AILogPanel` + `AIProviderBadge` già
+   funzionano. Servono solo wiring nei punti giusti (screenshot capture
+   via `useAIDesignReview`, cost breakdown live).
+3. **SettingsPage** resta per preferenze utente (theme, doc type default,
+   non la config AI).
 
-### Fix necessari
-
-1. **Aggiungere tab "AI" in `SettingsPage`** con toggle per:
-   - Provider di default (riusare `AIProviderBadge` o selettore dedicato)
-   - Vision feedback ON/OFF (`aiVisionEnabled`)
-   - A/B testing ON/OFF (`aiABTestingEnabled`)
-   - Auto-fallback ON/OFF (`aiAutoFallback`)
-   - RAG clienti ON/OFF (`aiRagClientsEnabled`)
-2. **Montare `ClientRagPanel`** da qualche parte (settings o sidebar)
-3. **Wire `useAIDesignReview`** nei componenti che generano card/quote/flyer/logo
-4. **Wire `aiVisionEnabled`** — attualmente nessun consumer lo legge, quindi anche con il toggle non farebbe nulla. Serve collegarlo al flusso di screenshot capture.
-
----
-
-## 5. Riepilogo priorità
+### Priorità
 
 | # | Issue | Severità | Stato |
 |---|-------|----------|-------|
 | ~~1a~~ | ~~`coverImageUrl` non risolto in PNG export~~ | ~~Alta~~ | ✅ Fixato |
 | ~~1b~~ | ~~Back cover wash opacity mismatch~~ | ~~Media~~ | ✅ Fixato |
 | ~~2a~~ | ~~Icona AI 512px pixelata in export HD~~ | ~~Media~~ | ✅ Fixato |
+| ~~CONTATTI~~ | ~~Header retro nascosto da stacking context~~ | ~~Media~~ | ✅ Fixato |
 | 2b | Icona AI non si carica (errori CORS/removeBackground) | Alta | ⚠️ Da verificare con 1K |
 | 3  | Log image preview persa al refresh | Bassa (by design) | — |
-| 4a | A/B testing toggle assente da UI | Alta | **P1** |
-| 4b | `useAIDesignReview` hook orfano | Media | **P2** |
-| 4c | `ClientRagPanel` orfano | Media | **P2** |
-| 4d | `aiVisionEnabled` / `aiAutoFallback` orfani | Media | **P2** |
-| 4e | `SettingsPage` senza preferenze AI | Alta | **P1** |
+| 4  | Modulo AI unificato | Alta | **Da progettare** |
+| 4b | `useAIDesignReview` wiring screenshot | Media | **Dopo modulo AI** |
 
 ---
 
-## 6. File coinvolti (mappa rapida)
+## 5. File coinvolti (mappa rapida)
 
 ```
 FIXATI:
 src/utils/card/pngExport.ts          ← coverImageUrl resolve (1a) ✅
 src/utils/card/svgRenderer.ts        ← back cover opacity 0.35 (1b) ✅
 src/hooks/useAIIconHero.ts           ← size 1K (2a) ✅
+src/components/card/cardPreviewSide.css ← CONTATTI header z-index ✅
 
-RIMANENTI:
-api/index.ts                         ← clamp 500KB (2b), endpoint /ai/image-flash
-src/utils/ai/removeBackground.ts     ← verifica CORS/fallback con 1K (2b)
+RIMANENTI (da progettare come modulo):
+src/utils/resolveProviderId.ts       ← A/B branching unreachable
+src/hooks/useAIDesignReview.ts       ← hook orfano, da wiring
+src/utils/uiPrefs.ts                 ← 4 preferenze AI orfane
+api/index.ts                         ← clamp 500KB (2b)
+src/utils/ai/removeBackground.ts     ← verifica CORS/fallback con 1K
 src/hooks/useAILogs.ts               ← stripPreview, MAX_DETAIL_CHARS (3)
-src/components/AILogPanel.tsx        ← render imagePreviewBase64 (3)
-src/utils/ai/captureElement.ts       ← maxWidth=1024, quality=0.85 (3)
-src/pages/SettingsPage.tsx           ← aggiungere tab AI con tutti i toggle (4a-4e)
-src/components/rag/ClientRagPanel.tsx ← montare in settings o sidebar (4c)
-src/hooks/useAIDesignReview.ts       ← wire nei componenti card/quote/flyer/logo (4b)
-src/utils/uiPrefs.ts                 ← 5 preferenze AI orfane (4d)
-src/utils/resolveProviderId.ts       ← A/B branching unreachable (4a)
 ```
