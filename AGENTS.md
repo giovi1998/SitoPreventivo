@@ -742,6 +742,13 @@ Dettagli completi in `docs/post-tb023-known-issues.md`.
    solo nella sessione corrente. By design per evitare
    `QuotaExceededError`. Miglioramento futuro: salvare ultime N
    immagini a risoluzione ridotta, oppure usare IndexedDB.
+5. **TB-023 UI wiring mancante**. 5 di 6 preferenze AI in `uiPrefs.ts`
+   non hanno UI esposta: `aiABTestingEnabled` (irraggiungibile),
+   `aiVisionEnabled` (orfano), `aiAutoFallback` (orfano),
+   `aiImageModelDefault` (parziale), `aiRagClientsEnabled` (panel
+   orfano). `SettingsPage` non ha tab AI. `useAIDesignReview` hook
+   implementato ma mai importato. `ClientRagPanel` implementato ma mai
+   montato. Fix: aggiungere tab AI in `SettingsPage` con tutti i toggle.
 
 ## Responsive Patterns
 

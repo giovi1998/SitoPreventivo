@@ -83,7 +83,50 @@
 
 ---
 
-## 4. Riepilogo priorità
+## 4. TB-023 Features — UI Wiring mancante
+
+**Sintomo**: molte feature TB-023 sono implementate nel codice ma non hanno alcuna UI esposta all'utente. L'utente non può attivarle/disattivarle.
+
+### Audit completo
+
+| Preferenza | Getter | Setter chiamato da UI? | Consumer in produzione | Stato |
+|------------|--------|----------------------|----------------------|-------|
+| `aiProviderDefault` | `getAiProviderDefault()` | **SI** — `AIProviderBadge.tsx:59` | `resolveProviderId.ts:19,44` | ✅ Wired |
+| `aiImageModelDefault` | `getAiImageModelDefault()` | No (solo badge provider) | Logo orchestrator | ⚠️ Parziale |
+| `aiVisionEnabled` | `getAiVisionEnabled()` | **NO** — setter mai importato | **Orfano** — nessun consumer lo legge | ❌ Dead code |
+| `aiRagClientsEnabled` | `getAiRagClientsEnabled()` | **SI** — `ClientRagPanel.tsx:77` | `ClientRagPanel.tsx:36,45` | ⚠️ Panel orfano |
+| `aiAutoFallback` | `getAiAutoFallback()` | **NO** — setter mai importato | **Orfano** — nessun consumer lo legge | ❌ Dead code |
+| `aiABTestingEnabled` | `getAiABTestingEnabled()` | **NO** — setter mai importato | `resolveProviderId.ts:16` (sempre false) | ❌ Irraggiungibile |
+
+### Componenti orfani (implementati ma non montati)
+
+| Componente | File | Stato |
+|------------|------|-------|
+| `useAIDesignReview` hook | `src/hooks/useAIDesignReview.ts` | **Nessun `.tsx` lo importa** — hook completamente implementato ma mai usato |
+| `ClientRagPanel` | `src/components/rag/ClientRagPanel.tsx` | **Nessun genitore lo monta** — ha il suo toggle interno ma il pannello è irraggiungibile |
+
+### Cosa manca
+
+1. **`SettingsPage` non ha preferenze AI** — La pagina impostazioni ha solo "Sicurezza" e "Account". Zero toggle per provider, vision, A/B, fallback, RAG.
+2. **`AIProviderBadge` non espone A/B** — Il dropdown provider seleziona il provider di default ma non ha toggle per A/B testing.
+3. **`AIConsole` non ha settings** — È solo presentazione (collapse, prompt, log). Nessun pannello impostazioni.
+4. **`resolveProviderId` legge `aiABTestingEnabled`** ma è sempre `false` perché nessuno può cambiarlo → il ramo A/B è unreachable.
+
+### Fix necessari
+
+1. **Aggiungere tab "AI" in `SettingsPage`** con toggle per:
+   - Provider di default (riusare `AIProviderBadge` o selettore dedicato)
+   - Vision feedback ON/OFF (`aiVisionEnabled`)
+   - A/B testing ON/OFF (`aiABTestingEnabled`)
+   - Auto-fallback ON/OFF (`aiAutoFallback`)
+   - RAG clienti ON/OFF (`aiRagClientsEnabled`)
+2. **Montare `ClientRagPanel`** da qualche parte (settings o sidebar)
+3. **Wire `useAIDesignReview`** nei componenti che generano card/quote/flyer/logo
+4. **Wire `aiVisionEnabled`** — attualmente nessun consumer lo legge, quindi anche con il toggle non farebbe nulla. Serve collegarlo al flusso di screenshot capture.
+
+---
+
+## 5. Riepilogo priorità
 
 | # | Issue | Severità | Sforzo fix | Priorità |
 |---|-------|----------|------------|----------|
@@ -92,10 +135,15 @@
 | 2a | Icona AI 512px pixelata in export HD | Media (visibile su export grande) | Medio (serve 1K + gestione clamp) | **P2** |
 | 2b | Icona AI non si carica (errori CORS/removeBackground) | Alta (funzionalità rotta) | Basso | **P1** |
 | 3  | Log image preview persa al refresh | Bassa (by design) | Medio (IndexedDB o simile) | **P3** |
+| 4a | A/B testing toggle assente da UI | Alta (feature implementata ma irraggiungibile) | Medio (SettingsPage tab AI) | **P1** |
+| 4b | `useAIDesignReview` hook orfano | Media (hook mai importato) | Basso (wire nei parent) | **P2** |
+| 4c | `ClientRagPanel` orfano | Media (componente mai montato) | Basso (montare in settings/sidebar) | **P2** |
+| 4d | `aiVisionEnabled` / `aiAutoFallback` orfani | Media (toggle esistono ma nessun consumer) | Medio (servirebbe consumer logic) | **P2** |
+| 4e | `SettingsPage` senza preferenze AI | Alta (utente non può configurare nulla) | Medio (nuova tab AI) | **P1** |
 
 ---
 
-## 5. File coinvolti (mappa rapida)
+## 6. File coinvolti (mappa rapida)
 
 ```
 src/utils/card/pngExport.ts          ← fix coverImageUrl resolve (1a)
@@ -106,4 +154,9 @@ src/utils/ai/removeBackground.ts     ← verifica CORS/fallback (2b)
 src/hooks/useAILogs.ts               ← stripPreview, MAX_DETAIL_CHARS (3)
 src/components/AILogPanel.tsx        ← render imagePreviewBase64 (3)
 src/utils/ai/captureElement.ts       ← maxWidth=1024, quality=0.85 (3)
+src/pages/SettingsPage.tsx           ← aggiungere tab AI con tutti i toggle (4a-4e)
+src/components/rag/ClientRagPanel.tsx ← montare in settings o sidebar (4c)
+src/hooks/useAIDesignReview.ts       ← wire nei componenti card/quote/flyer/logo (4b)
+src/utils/uiPrefs.ts                 ← 5 preferenze AI orfane (4d)
+src/utils/resolveProviderId.ts       ← A/B branching unreachable (4a)
 ```
