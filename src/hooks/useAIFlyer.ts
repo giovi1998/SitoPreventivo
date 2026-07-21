@@ -119,8 +119,11 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       const visionEnabled = getAiVisionEnabled();
       if (visionEnabled) {
         try {
-          const { renderFlyerScreenshot } = await import('../utils/flyer/heroImage');
-          imagePreviewBase64 = await renderFlyerScreenshot(flyer);
+          const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
+          if (previewEl) {
+            const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+            imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+          }
         } catch {
           imagePreviewBase64 = undefined;
         }
@@ -141,8 +144,11 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       const visionEnabled = getAiVisionEnabled();
       if (visionEnabled) {
         try {
-          const { renderFlyerScreenshot } = await import('../utils/flyer/heroImage');
-          imagePreviewBase64 = await renderFlyerScreenshot(flyer);
+          const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
+          if (previewEl) {
+            const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
+            imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
+          }
         } catch {
           imagePreviewBase64 = undefined;
         }
