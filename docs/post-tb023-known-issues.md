@@ -1,6 +1,7 @@
 # Post-TB-023 Known Issues & Stato Implementazione
 
-> Ultimo aggiornamento: 2026-07-21
+> Ultimo aggiornamento: 2026-07-22 (verifica completa TB-023 — vedi
+> `docs/tb023-verification.md` per la checklist REQ con esiti).
 
 ---
 
@@ -14,20 +15,28 @@
 | 4 | CONTATTI header retro nascosto | `position: relative; z-index: 2` su `.card-back-header` | `src/components/card/cardPreviewSide.css` |
 | 5 | Costi immagini Gemini / log `modelId` | `calculateCostUsd` per logo background e flyer hero; `modelId` e `costUsd` passati al log | `src/hooks/useAILogo.ts`, `src/hooks/useAIFlyer.ts`, `src/utils/logo/backgroundImage.ts`, `src/ai/logoOrchestrator.ts` |
 | 6 | Badge provider mostrava costo per-call su Ollama flat | `isFlat` check in `AIProviderBadge` nasconde `lastCostUsd` per provider `unit: 'flat_monthly'` | `src/components/ai/AIProviderBadge.tsx` |
+| 7 | "Nuova conversazione" card non puliva log icon hero | `handleResetCardChat` ora chiama sia `resetCardChat()` che `clearIconHeroLogs()`. `useAIIconHero` espone `clear` per il reset. | `src/components/card/CardEditorShell.tsx`, `src/hooks/useAIIconHero.ts` |
 
 ---
 
 ## ⚠️ APERTI / DA VERIFICARE
 
-### 2b. Icona AI non si carica (CORS / removeBackground / clamp 500KB)
+### 2b. Icona AI non si carica (removeBackground / clamp 500KB)
 
-- **Stato**: fix 1K applicato; indagine aggiuntiva su rendering quadrato vuoto in corso.
-- **Possibili cause**:
-  - CORS su URL immagine generata.
-  - `removeBackground.ts` canvas pixel manipulation fallisce in browser reale.
-  - Immagine 1K > 500KB → 413 dal clamp server.
-  - Card preview container non scalava l'immagine; il CSS `img` della grid cell usava `max-width:100%;max-height:100%`, ma in alcune celle la dimensione calcolata poteva collassare a 0 se la cella non aveva altezza esplicita.
-- **File**: `src/hooks/useAIIconHero.ts`, `src/utils/ai/removeBackground.ts`, `api/index.ts`, `src/components/card/CardPreview.tsx`.
+- **Stato**: fix 1K applicato; causa CORS esclusa dalla verifica 2026-07-22
+  (le immagini sono data URL same-origin, `crossOrigin` irrilevante).
+- **Causa più plausibile (da verifica codice)**: `src/utils/ai/removeBackground.ts`
+  con `tolerance=240` — se Gemini produce un'icona chiara/pastello su bianco,
+  ampie zone dell'icona stessa superano la tolleranza e diventano trasparenti
+  → quadrato (quasi) vuoto. Il catch silenzioso in `useAIIconHero.ts:81-83`
+  maschera i fallimenti.
+- **Causa secondaria**: immagine 1K > 500KB → 413 dal clamp server
+  (`api/index.ts:2176-2179`) — ma si manifesta come errore/toast, non come
+  quadrato vuoto.
+- **Raccomandazione**: test manuale con icone reali; se confermato, alzare la
+  tolerance a ~250 (solo near-white puro) o rendere il background removal
+  opzionale (toggle "Rimuovi sfondo").
+- **File**: `src/hooks/useAIIconHero.ts`, `src/utils/ai/removeBackground.ts`, `api/index.ts`.
 - **Test manuale**: generare icona AI su card con sfondo chiaro e scuro, esportare PNG, verificare che l'icona appaia e non sia un quadrato vuoto.
 
 ### 3. AI Log Image Preview — persa al refresh
@@ -43,9 +52,10 @@
 ### Cosa è stato fatto
 
 1. **Nuovo `useAIHarness` hook** (`src/utils/ai/aiModule.ts`):
-   - Risolve provider (default, A/B salt, fallback).
+   - Risolve provider (default, fallback). ~~A/B salt~~ — A/B testing rimosso
+     definitivamente (commit `15aa0d5`), `resolveProviderId` non ha più il
+     parametro `salt`.
    - Espone preferenze AI: `visionEnabled`, provider, image model.
-   - Cattura screenshot preview tramite `capturePreview(selector)`.
    - Cattura screenshot preview tramite `capturePreview(selector)` (usato solo dai singoli hook AI quando vision è attiva).
    - Tracking costi live (`totalCostUsd`, `lastCostUsd`).
 
@@ -73,40 +83,48 @@
 
 ## 📋 Checklist Prossimi Passi
 
-### Prossima sessione (priorità alta)
+> Aggiornata 2026-07-22 dopo la verifica completa (`docs/tb023-verification.md`).
+> Gli item obsoleti (toggle Vision — già esistente; bottone "Analizza
+> preview" — rimosso deliberatamente) sono stati rimossi.
 
-1. **Verificare icona AI 1K end-to-end**
+### Priorità alta
+
+1. **Verificare icona AI 1K end-to-end** (issue 2b sopra)
    - Apri `/app/card`, genera icona AI.
    - Controlla preview + export PNG/SVG.
+   - Se quadrato vuoto: investigare `removeBackground.ts` tolerance 240.
    - Se 413, abbassare quality/compressione o tornare a 512 con upscaling.
-
-2. **Aggiungere toggle "Vision AI" nella UI**
-   - Posizione consigliata: AIConsole header (icona occhio) o Settings.
-   - Quando attivo, `useAI`/`useAICard`/`useAIFlyer`/`useAILogo` continuano a inviare screenshot preview (già fanno).
-   - Quando spento, saltare capture per risparmiare token.
-
-3. **Aggiungere bottone "Analizza preview"**
-   - Usa `useAIHarness().runDesignReview(docType, docJson, previewSelector)`.
-   - Mostrare i suggerimenti in AIConsole children.
-   - `docType` supportati: `'card' | 'flyer'`.
 
 ### Media priorità
 
-4. **Auto-fallback**
-   - Implementare retry in `useAIHarness` o in hook AI: se provider Ollama restituisce 429/503 e `aiAutoFallback` è ON, riprova con `deepseek-chat`.
+2. **Gap TB-023 documentati** (stima ~10h, da `tb023-verification.md` §4/§8):
+   - REQ-PD-007/008: AI sceglie decoration (schema output + prompt settore + quick chip).
+   - REQ-UX-001: DecorationPicker con 6 thumbnail SVG.
+   - Flyer: UI decoration manuale (schema+render esistono).
+   - REQ-UX-006: tooltip breakdown costi 30gg in `AIProviderBadge`.
 
-6. **Costi immagini Gemini**
+3. **Costi immagini Gemini**
    - Verificare che `calculateCostUsd('gemini-nano-banana', undefined, 1)` venga propagato nei log dei cover/photo/hero.
    - Oggi è hardcoded `$0.04`/`$0.02`, da confermare in dashboard.
 
+4. **Mismatch preview/export residui** (`tb023-verification.md` §10):
+   wrapping testo (richiede layout engine condiviso), font metrics,
+   font preview ridotti su mobile.
+
 ### Bassa priorità / backlog
 
-7. **AI Module test coverage**
+5. **AI Module test coverage**
    - `src/utils/ai/__tests__/aiModule.test.ts` — provider resolution, capture fallback, design review mock.
 
-8. **Dev proxy `/api/ai/design-review`**
-   - Aggiungere in `vite.config.js` se si vuole testare in locale senza chiamare Ollama diretto.
-   - Attuale: `useAIDesignReview` chiama `/api/ai/design-review` che in dev passa a Vercel monolith.
+6. **Codice morto da valutare**
+   - `src/hooks/useAIDesignReview.ts` (legacy non importato),
+     `src/components/card/ai/CardAIDecorationSection.tsx` (solo test),
+     endpoint `/api/ai/design-review` (orfano),
+     `src/ai/providers/geminiFlashImage.ts` (solo test).
+   - Decisione: tenere per futura UI design-review o rimuovere.
+
+7. **Dev proxy `/api/ai/design-review`**
+   - Aggiungere in `vite.config.js` solo se si riattiva la design review in locale.
 
 ---
 

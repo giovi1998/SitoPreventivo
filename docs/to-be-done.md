@@ -72,58 +72,20 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 
 ### 🟡 P1 — Quality / coverage gap
 
-#### TB-004 Test helper `backgroundImage.ts` (logo)
-- **Spec**: #8 REQ-002/003/004 + §6
-- **Gap**: `src/utils/logo/backgroundImage.ts` ha
-  `renderLogoScreenshot`, `compressPreviousBackground`,
-  `buildLogoBackgroundPayload`. **Nessun test file**.
-  `compressForAI.test.ts` esiste come helper, ma la composizione
-  specifica del logo no.
-- **Test da creare**: `src/utils/logo/__tests__/backgroundImage.test.ts`
-  - `renderLogoScreenshot` ritorna data URL quando `builderToSvg` OK
-  - `renderLogoScreenshot` ritorna undefined quando builder vuoto (no text)
-  - `compressPreviousBackground` ritorna undefined quando `backgroundImage` null
-  - `buildLogoBackgroundPayload` include `logoImage` + `previousBackground` se presenti
-  - Body-size fallback (AC-004 spec #8): drop `previousBackground` prima, poi `logoImage`
+#### TB-004 Test helper `backgroundImage.ts` (logo) ✅ COMPLETED
+- **Implementato**: `src/utils/logo/__tests__/backgroundImage.test.ts` con test per payload assembly, previous background compression fallback e body budget pruning.
 
-#### TB-005 Test `cardCover.test.ts` lato client
-- **Spec**: #2 §6, #5 §6
-- **Gap**: `useAICard.test.ts` testa `generateCover` ma
-  `buildCoverRequest` (REQ-005 spec #2) non esiste come unit isolata.
-  La composizione payload + fallback body-size non è testata in
-  isolamento.
-- **Test da creare**: `src/utils/card/__tests__/aiCoverImage.test.ts`
-  - `buildCoverRequest` ritorna `{ prompt, context, cardImage, logoImage, side }` corretto per AC-002/003/004
-  - Body-size fallback: drop logoImage prima, poi cardImage, poi text-only
-  - `compressForAI` re-encodes 1MB PNG → JPEG < 400KB
+#### TB-005 Test `cardCover.test.ts` lato client ✅ COMPLETED
+- **Implementato**: `src/utils/card/__tests__/aiCoverImage.test.ts` con test isolati per `buildCardCoverPayload`, `resolveCardCoverLogo`, fallback e pruning.
 
-#### TB-006 Audit condivisione REQ-040/041 (spec #1)
-- **Spec**: #1 AC-040 — "produce documento che elenca minimo 5 pattern
-  duplicati con proposta di astrazione per ciascuno"
-- **Gap**: `docs/audit-ui-components.md` non esiste.
-  **Stato noto** (analisi statica di questa sessione):
-  1. **Font picker**: estratto ✅ in `ai-ui/AiFontPicker.tsx`
-  2. **Color picker**: vedo usi sparsi (`CardStyleFields`, `FlyerStyleFields`, `BuilderPanel`, `EditorView`) ma nessun `AiColorPicker` centralizzato
-  3. **Tier guard**: esiste `AiTierGuard` in `ai-ui/` ma `CardFormFields`/`FlyerManualPanel`/logo AI fanno check `tier === 'unlocked'` inline (vedi `FlyerManualPanel.tsx:234` vs `FlyerAiPanel.tsx:100`)
-  4. **AI panel "section + tier guard + helper text" pattern**: replicato 5+ volte (card, flyer, logo, social, onboarding) — potrebbe diventare composable unico
-  5. **Prompt library** (salva/applica/elimina brief AI): replicato in `LogoAiPanel` (logo) e `FlyerEditorShell` (flyer hero) — stessa shape `PromptLibraryEntry`, due storage separati
-  6. **Hero upload + preview + remove**: replicato 2x (card photo + flyer hero)
-- **Impatto**: 5 pattern duplicati, ma con scope e API diversi. La
-  priorità è fare un documento di audit + identificare quale estrarre
-  per prima. Raccomandato partire da **prompt library** (più
-  duplicato, refactor indolore) e **tier guard** (già esiste, basta
-  usarlo ovunque).
+#### TB-006 Audit condivisione REQ-040/041 (spec #1) ✅ COMPLETED
+- **Implementato**: `docs/audit-ui-components.md` creato con analisi dettagliata di 5 pattern duplicati (Tier guard inline, Prompt library state, Image uploader, Color picker, Form section card).
 
-#### TB-007 Test mancanti per refactor flyer (spec #10)
-- **Spec**: #10 §6 — `geometry.test.ts`, `svgRenderer.test.ts`,
-  `templateCatalog.test.ts` (oltre a quelli esistenti)
-- **Stato noto** (AGENTS.md §11 fase 11): test matrix 4/10. Mancano
-  i 6 file elencati sopra.
-- **Impatto**: il layout engine è il "source of truth" della geometria
-  del flyer. Senza unit test esaustivi, qualsiasi modifica al fitting
-  testo può rompere output. Le fix recenti sui gotcha volantino (vedi
-  AGENTS.md "Volantino rendering gotchas" punti 1-9) sono il tipo di
-  bug che test mancanti lasciano passare.
+#### TB-007 Test mancanti per refactor flyer (spec #10) ✅ COMPLETED
+- **Implementato**: Matrice test volantino portata a 10/10 test files (`geometry.test.ts`, `svgRenderer.test.ts`, `templateCatalog.test.ts`, `pdfExport.test.ts` aggiunti).
+
+#### TB-008 README privacy section ✅ COMPLETED
+- **Implementato**: Sezione GDPR & Privacy Disclosure aggiunta in `README.md`.
 
 ---
 

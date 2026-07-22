@@ -276,8 +276,8 @@ flyer e (in futuro) logo con più libertà creativa.
   che è fotografico).
 - **REQ-IS-007**: Preview prima di applicare. Click "Applica" copia
   base64 in campo schema.
-- **CON-IS-001**: Icone AI mai sovrascrivono `photoUrl`/`logoUrl` (base64
-  user-uploaded, vedi AGENTS.md cardMerge parity).
+- **CON-IS-001**: Icona AI sostituisce sempre la foto corrente (`photoUrl`).
+  `logoUrl` caricato dall'utente non viene mai sovrascritto.
 - **CON-IS-002**: Icone AI > 200KB vengono compresse a PNG 256×256.
 
 ### 3.7 A/B Provider
