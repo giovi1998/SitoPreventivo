@@ -2,11 +2,11 @@
  * AI Module — unified client-side AI harness (TB-023 follow-up).
  *
  * Centralizes:
- * - provider resolution (default, A/B, fallback)
+ * - provider resolution (default, fallback)
  * - screenshot preview capture for vision feedback
  * - design review wiring
  * - cost tracking normalization
- * - AI preferences wiring (vision, auto-fallback, A/B)
+ * - AI preferences wiring (vision, auto-fallback)
  *
  * Editors consume this module instead of configuring provider/vision/fallback
  * directly in each hook.
@@ -26,8 +26,6 @@ import {
   setAiVisionEnabled,
   getAiAutoFallback,
   setAiAutoFallback,
-  getAiABTestingEnabled,
-  setAiABTestingEnabled,
   getAiProviderDefault,
   setAiProviderDefault,
   getAiImageModelDefault,
@@ -37,8 +35,6 @@ import {
 
 export interface AIRequestOptions {
   modelId?: string;
-  /** Salt per A/B testing deterministico (es. docId). */
-  abSalt?: string;
   /** Selettore DOM per l'elemento preview. */
   previewSelector?: string;
 }
@@ -85,8 +81,6 @@ export interface UseAIHarnessReturn extends AIHarnessState {
   setVision: (enabled: boolean) => void;
   /** Toggle auto-fallback. */
   setAutoFallback: (enabled: boolean) => void;
-  /** Toggle A/B testing. */
-  setABTesting: (enabled: boolean) => void;
   /** Ricalcola lo stato (da chiamare quando cambiano preferenze esterne). */
   refresh: () => void;
 }
@@ -131,11 +125,6 @@ export function useAIHarness(): UseAIHarnessReturn {
 
   const setAutoFallback = useCallback((enabled: boolean) => {
     setAiAutoFallback(enabled);
-    refresh();
-  }, [refresh]);
-
-  const setABTesting = useCallback((enabled: boolean) => {
-    setAiABTestingEnabled(enabled);
     refresh();
   }, [refresh]);
 
@@ -225,7 +214,6 @@ export function useAIHarness(): UseAIHarnessReturn {
     setImageModel,
     setVision,
     setAutoFallback,
-    setABTesting,
     refresh,
   };
 }
@@ -237,8 +225,6 @@ export {
   setAiVisionEnabled,
   getAiAutoFallback,
   setAiAutoFallback,
-  getAiABTestingEnabled,
-  setAiABTestingEnabled,
   getAiProviderDefault,
   setAiProviderDefault,
   getAiImageModelDefault,

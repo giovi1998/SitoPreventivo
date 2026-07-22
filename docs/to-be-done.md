@@ -37,7 +37,7 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 | 12 | `spec-tool-ai-card-flyer-tools.md` | **DONE** | `ToolAwareOrchestrator` wired end-to-end in `AIOrchestrator`, `CardAIOrchestrator`, `FlyerAIOrchestrator`; test tool path e fallback verdi. Gap residuo UI: callback `onToolStart/Complete` non passati da `useAICard` → assorbito in REQ-LOG-001 spec #14 |
 | 13 | `spec-api-saas-monetization.md` | **NOT-STARTED** | Zero Stripe/api-key in `api/` (verificato 2026-07-18). Track futuro separato, mantenuto in `spec/` |
 | 14 | `spec-design-ai-first-ux-redesign.md` | **DONE** | Fase 12 ✅ (useAILogs, 6 hook migrati, AILogEntry v2, trackUsage ESM, IMAGE_TOKEN_COST, X-Request-Id, ghost rate limit fix). Fase 13 ✅ (ToastProvider, token The Classic + purge teal/blu, ai-ui.css, ActionBar logo/QR, sidebar gruppi + pq_ui:v1, breakpoint canonici, font lazy, copy AI-first, HomePage AIDA + motion). Fase 14 ✅ (AIConsole rail in social/flyer/card/quote, logo tab AI-first, AIProviderBadge, suggestedPrompt doc vuoto, onboarding AI-first). Deviazioni documentate in AGENTS.md §13-14. Spec cancellato dopo verifica (185 file, 2177 test verdi). |
-| 15 | `spec-design-ai-harness-upgrade.md` | **PARTIAL** | TB-023. Modulo AI unificato (`useAIHarness` + `AIHarnessConsole`) implementato e cablato in 4 editor. Multi-provider registry esiste. RAG rimosso (deferred). Manca: toggle UI per vision/A/B/auto-fallback, wiring bottone design review, verifica icona AI 1K end-to-end. ~20h rimanenti. Vedi `docs/post-tb023-known-issues.md`. |
+| 15 | `spec-design-ai-harness-upgrade.md` | **PARTIAL** | TB-023. Modulo AI unificato (`useAIHarness` + `AIHarnessConsole`) implementato e cablato in 4 editor. Multi-provider registry esiste. RAG rimosso (deferred). Manca: wiring bottone design review, verifica icona AI 1K end-to-end, pattern decorativi SVG, drag foto grid-mode. ~15h rimanenti. Vedi `docs/post-tb023-known-issues.md`. |
 
 ---
 
@@ -325,7 +325,7 @@ primi clienti paganti.
   - Icone stilizzate AI: `iconOrchestrator` per card.builder.iconUrl +
     flyer.style.heroIllustration (es. frutta/oggetti/animali flat 2-colori)
     (REQ-IS-001..007)
-  - A/B provider: confronto side-by-side in modal (REQ-AB-001..003) — logica in `resolveProviderId`, manca toggle UI e modal
+  - A/B provider: rimosso definitivamente (non necessario in fase di validazione)
   - RAG clienti: **rimosso dal codebase** — deferred a quando il backend embeddings/vector search sarà pronto
 - **Effort**: ~45h totali, ~20h rimanenti dopo modulo AI unificato
   - Sprint 2 (~12h rimanenti): pattern decorativi lib + picker + drag foto

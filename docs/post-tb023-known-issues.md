@@ -66,7 +66,7 @@
 |---------|-------|------|
 | `aiVisionEnabled` toggle | ✅ mostrato in `AIConsole` solo per provider vision-enabled (MiniMax/Gemini) | Off di default; i singoli hook catturano screenshot solo se attiva |
 | `aiAutoFallback` toggle | ✅ mostrato in `AIConsole` | Logica di fallback da implementare nel provider layer quando serve |
-| `aiABTestingEnabled` toggle | ❌ rimossa dalla UI | Logica `resolveProviderId` resta ma non esposto; ritenuta non necessaria |
+| `aiABTestingEnabled` toggle | ❌ rimosso definitivamente | A/B testing rimosso dal codebase |
 | `useAIDesignReview` wiring UI | ❌ rimossa | Bottone "Analizza preview" tolto: non funzionava e non serviva nel flusso attuale |
 
 ---
@@ -92,11 +92,7 @@
 
 ### Media priorità
 
-4. **A/B testing toggle**
-   - Aggiungere switch "A/B provider" (default OFF).
-   - Quando ON, `resolveProviderId` sceglie random tra challenger pairs.
-
-5. **Auto-fallback**
+4. **Auto-fallback**
    - Implementare retry in `useAIHarness` o in hook AI: se provider Ollama restituisce 429/503 e `aiAutoFallback` è ON, riprova con `deepseek-chat`.
 
 6. **Costi immagini Gemini**
@@ -128,9 +124,9 @@ src/components/flyer/FlyerEditorShell.tsx ← usa AIHarnessConsole
 src/components/SocialEditor.tsx       ← usa AIHarnessConsole
 
 RIMANGONO:
-src/utils/resolveProviderId.ts         ← A/B branch unreachable
+src/utils/resolveProviderId.ts         ← default + fallback (no A/B)
 src/hooks/useAIDesignReview.ts         ← sostituito da aiModule.ts (legacy, non importato)
-src/utils/uiPrefs.ts                  ← preferenze AI orfane (vision/fallback/A/B)
+src/utils/uiPrefs.ts                  ← preferenze AI (vision/fallback/provider)
 src/utils/ai/removeBackground.ts       ← verificare con icona 1K
 src/hooks/useAILogs.ts                 ← stripPreview (by design)
 api/index.ts                           ← clamp 500KB

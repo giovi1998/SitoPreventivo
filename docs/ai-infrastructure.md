@@ -67,16 +67,13 @@ I provider testo (DeepSeek, Ollama) usano un pattern **dual-mode**:
 
 I provider immagine (Gemini) sono **sempre server-side**, sia in dev che in prod. In locale, il dev proxy in `vite.config.js` intercetta `/api/ai/logo-background` e lo risolve usando la stessa classe `GeminiImageProvider` via `ssrLoadModule`.
 
-### Selezione provider e A/B testing
+### Selezione provider
 
 `resolveProviderId.ts` gestisce la priority chain:
 
 1. Parametro esplicito `modelId` (se presente)
-2. A/B testing: se `aiABTestingEnabled=true` in `pq_ui:v1`, sceglie random tra `CHALLENGER_PAIRS`
-3. Default utente: `aiProviderDefault` da `pq_ui:v1`
-4. Fallback: `deepseek-chat` (registry default)
-
-**Stato attuale**: A/B è irraggiungibile (`aiABTestingEnabled` sempre false, nessun toggle UI). Il ramo A/B è dead code.
+2. Default utente: `aiProviderDefault` da `pq_ui:v1`
+3. Fallback: `deepseek-chat` (registry default)
 
 ---
 

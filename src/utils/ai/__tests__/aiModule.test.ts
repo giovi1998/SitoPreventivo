@@ -32,8 +32,6 @@ vi.mock('../../uiPrefs', async () => {
     setAiVisionEnabled: vi.fn(),
     getAiAutoFallback: () => true,
     setAiAutoFallback: vi.fn(),
-    getAiABTestingEnabled: () => false,
-    setAiABTestingEnabled: vi.fn(),
     getAiProviderDefault: () => undefined,
     setAiProviderDefault: vi.fn(),
   };
@@ -77,14 +75,6 @@ describe('useAIHarness', () => {
       result.current.setVision(true);
     });
     expect((await prefs()).setAiVisionEnabled).toHaveBeenCalledWith(true);
-  });
-
-  it('toggle A/B testing calls setAiABTestingEnabled', async () => {
-    const { result } = renderHook(() => useAIHarness());
-    act(() => {
-      result.current.setABTesting(true);
-    });
-    expect((await prefs()).setAiABTestingEnabled).toHaveBeenCalledWith(true);
   });
 
   it('toggle auto-fallback calls setAiAutoFallback', async () => {
