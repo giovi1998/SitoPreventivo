@@ -39,10 +39,18 @@ test.describe('Card AI tool path', () => {
     await selectGridPreset(page, 'centered');
 
     // Add many services to create need for truncation.
-    await page.getByText('Modifica').first().click();
-    await page.waitForTimeout(300);
-    await page.getByText('Retro').first().click();
-    await page.waitForTimeout(300);
+    // The "Modifica"/"Retro" tabs exist only in the mobile layout; on
+    // desktop the form (services included) is already visible.
+    const modificaTab = page.getByText('Modifica', { exact: true }).first();
+    if (await modificaTab.isVisible().catch(() => false)) {
+      await modificaTab.click();
+      await page.waitForTimeout(300);
+      const retroTab = page.getByText('Retro', { exact: true }).first();
+      if (await retroTab.isVisible().catch(() => false)) {
+        await retroTab.click();
+        await page.waitForTimeout(300);
+      }
+    }
     await addServices(page, [
       'Siti web',
       'E-commerce',
@@ -79,8 +87,13 @@ test.describe('Card AI tool path', () => {
       expect(busy).not.toBe('true');
     }).toPass({ timeout: 60000, intervals: [1000, 2000, 5000] });
 
-    // Verify AI log mentions tool usage.
-    const aiLogText = await page.locator('.ai-log-panel, [data-testid="ai-log-panel"]').first().innerText({ timeout: 10000 });
+    // Verify AI log mentions tool usage. Phase 14: the log lives behind the
+    // "Log AI" collapsible in the AI console — open it first (it renders
+    // AILogPanel only when expanded).
+    const logToggle = page.getByRole('button', { name: /Log AI/i }).first();
+    await expect(logToggle).toBeVisible();
+    await logToggle.click();
+    const aiLogText = await page.locator('.ai-log-panel, [data-testid="ai-log-panel"]').first().innerText({ timeout: 60000 });
     expect(aiLogText.length).toBeGreaterThan(50);
 
     // Best-effort: check if any tool-related keyword appears in log.

@@ -21,20 +21,15 @@ test.describe('Card layout event audit', () => {
     await applyGiovanniTemplate(page);
   });
 
-  test('moving an element emits a blocked event on collision', async ({ page }) => {
+  test('collision-blocked move is disabled with a collision title', async ({ page }) => {
     await setGridOn(page, true);
-    // Move name left into photo cell (collision in Giovanni split grid).
+    // Name left would collide with the photo cell (Giovanni split grid).
+    // Current UX: blocked moves disable the button instead of firing a
+    // blocked event on click (the title explains border vs collision).
     await selectGridElement(page, 'name');
-    await moveGrid(page, 'left');
-
-    const events = await page.evaluate(() => (window as any).__cardLayoutEvents ?? []);
-    const moveEvents = events.filter((e: any) => e.type === 'grid.move');
-    expect(moveEvents.length).toBeGreaterThan(0);
-
-    const last = moveEvents[moveEvents.length - 1];
-    expect(last.result).toBe('blocked');
-    expect(last.reason).toBe('collision');
-    expect(last.element).toBe('name');
+    const btn = page.locator('[data-testid="grid-move-left"]');
+    await expect(btn).toBeDisabled();
+    await expect(btn).toHaveAttribute('title', /collisione/i);
   });
 
   test('successful move emits ok event', async ({ page }) => {

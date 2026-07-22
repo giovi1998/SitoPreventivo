@@ -58,8 +58,9 @@ test.describe('Card AI rail (TB-023 UX feedback)', () => {
     await shot(page, 'tb023-provider-ollama-selected');
   });
 
-  test('decorations render as a real SVG in the preview (manual + AI rail)', async ({ page }) => {
-    // Dal pannello MANUALE (Stile → Decorazione).
+  test('decorations render as a real SVG in the preview (manual panel)', async ({ page }) => {
+    // Dal pannello MANUALE (Stile → Decorazione). La sezione Decorazione è
+    // stata rimossa dalla rail AI (TB-023): resta solo in CardStyleFields.
     const decoSelect = page.getByLabel(/Pattern decorazione/i);
     await decoSelect.selectOption('wave-bottom');
     await page.waitForTimeout(300);
@@ -79,16 +80,13 @@ test.describe('Card AI rail (TB-023 UX feedback)', () => {
 
     await shot(page, 'tb023-decoration-wave-manual');
 
-    // Dalla rail AI (sezione Decorazione).
-    const railDeco = page.locator('.card-ai-panel .ai-section', { has: page.locator('h3', { hasText: /^Decorazione$/ }) });
-    await railDeco.locator('.ai-section-header').click();
-    const railSelect = railDeco.locator('select[aria-label="Pattern"]').first();
-    await railSelect.selectOption('blob-corner');
+    // Cambio pattern dallo stesso pannello manuale.
+    await decoSelect.selectOption('blob-corner');
     await page.waitForTimeout(300);
     await expect(
       page.locator('[data-testid="card-preview-front"] svg.card-decorative-pattern [data-decorative-pattern="blob-corner"]'),
     ).toHaveCount(1);
-    await shot(page, 'tb023-decoration-blob-rail');
+    await shot(page, 'tb023-decoration-blob-manual');
   });
 
   test('log AI toggle opens AND closes the log panel', async ({ page }) => {
