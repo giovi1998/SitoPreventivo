@@ -25,6 +25,10 @@ export interface CardPreviewSurfaceProps {
   zoom: CardPreviewZoomApi;
   /** Mostrato in cima (es. "Anteprima"). Default nessun titolo. */
   heading?: string;
+  /** Elemento grid selezionato (front/back). Se la cella supporta placement
+   * (foto/QR) e onPatchPlacement è fornito, la preview abilita il drag. */
+  selectedElement?: { side: 'front' | 'back'; key: string } | null;
+  onPatchPlacement?: (key: string, patch: { x?: number; y?: number; scale?: number }) => void;
 }
 
 export default function CardPreviewSurface({
@@ -34,6 +38,8 @@ export default function CardPreviewSurface({
   onToggleGrid,
   zoom,
   heading,
+  selectedElement,
+  onPatchPlacement,
 }: CardPreviewSurfaceProps) {
   // Phase 2.2 REQ-C01: scaling che riserva spazio (no overflow). Usa `zoom`
   // CSS dove supportato, fallback a transform scale.
@@ -78,11 +84,25 @@ export default function CardPreviewSurface({
       <div className="card-previews" style={previewsStyle} data-card-preview="true">
         <div className="card-preview-wrap">
           <h3>Fronte</h3>
-          <CardPreview side="front" card={card} showGrid={showGrid} tier={tier} />
+          <CardPreview
+            side="front"
+            card={card}
+            showGrid={showGrid}
+            tier={tier}
+            selectedElement={selectedElement}
+            onPatchPlacement={onPatchPlacement}
+          />
         </div>
         <div className="card-preview-wrap">
           <h3>Retro</h3>
-          <CardPreview side="back" card={card} showGrid={showGrid} tier={tier} />
+          <CardPreview
+            side="back"
+            card={card}
+            showGrid={showGrid}
+            tier={tier}
+            selectedElement={selectedElement}
+            onPatchPlacement={onPatchPlacement}
+          />
         </div>
       </div>
     </>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { BusinessCard, BusinessCardLayout, CardGrid } from '../../utils/documentSchemas';
-import { deriveGridFromLayout } from '../../utils/documentSchemas';
+import { deriveGridFromLayout, gridPresetBackDefault } from '../../utils/documentSchemas';
 import {
   allElementOptionsForSide,
   getAvailableGridElements,
@@ -225,31 +225,18 @@ export function CardGridControls({
               onApplyPreset(v as BusinessCardLayout);
               return;
             }
-            // Fallback solo se il parent non passa onApplyPreset (es. test).
-            const FRONT_PRESETS: Record<BusinessCardLayout, CardGrid> = {
-              left: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 4 }, name: { x: 2, y: 0, w: 2, h: 1 }, title: { x: 2, y: 1, w: 2, h: 1 }, company: { x: 2, y: 2, w: 2, h: 1 }, logo: { x: 0, y: 3, w: 2, h: 1 } } },
-              centered: { cols: 4, rows: 4, elements: { photo: { x: 1, y: 0, w: 2, h: 1 }, name: { x: 0, y: 1, w: 4, h: 1 }, title: { x: 0, y: 2, w: 4, h: 1 }, company: { x: 0, y: 3, w: 2, h: 1 }, logo: { x: 2, y: 3, w: 2, h: 1 } } },
-              split: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 4 }, name: { x: 2, y: 0, w: 2, h: 1 }, title: { x: 2, y: 1, w: 2, h: 1 }, company: { x: 2, y: 2, w: 2, h: 1 }, logo: { x: 2, y: 3, w: 2, h: 1 } } },
-              right: { cols: 4, rows: 4, elements: { photo: { x: 2, y: 0, w: 2, h: 4 }, name: { x: 0, y: 0, w: 2, h: 1 }, title: { x: 0, y: 1, w: 2, h: 1 }, company: { x: 0, y: 2, w: 2, h: 1 }, logo: { x: 0, y: 3, w: 2, h: 1 } } },
-              top: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 4, h: 2 }, name: { x: 0, y: 2, w: 4, h: 1 }, title: { x: 0, y: 3, w: 2, h: 1 }, company: { x: 2, y: 3, w: 2, h: 1 }, logo: { x: 1, y: 3, w: 2, h: 1 } } },
-              bottom: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 3, w: 4, h: 1 }, name: { x: 0, y: 0, w: 4, h: 1 }, title: { x: 0, y: 1, w: 4, h: 1 }, logo: { x: 0, y: 2, w: 2, h: 1 }, company: { x: 2, y: 2, w: 2, h: 1 } } },
-              minimal: { cols: 4, rows: 4, elements: { logo: { x: 1, y: 0, w: 2, h: 1 }, photo: { x: 1, y: 0, w: 2, h: 1 }, name: { x: 0, y: 1, w: 4, h: 1 }, title: { x: 0, y: 2, w: 4, h: 1 }, company: { x: 0, y: 3, w: 4, h: 1 } } },
-              'photo-circle': { cols: 4, rows: 4, elements: { photo: { x: 1, y: 0, w: 2, h: 2 }, name: { x: 0, y: 2, w: 4, h: 1 }, title: { x: 0, y: 3, w: 3, h: 1 }, company: { x: 3, y: 3, w: 1, h: 1 }, logo: { x: 3, y: 3, w: 1, h: 1 } } },
-              compact: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 1, h: 2 }, logo: { x: 0, y: 2, w: 1, h: 2 }, name: { x: 1, y: 0, w: 3, h: 1 }, title: { x: 1, y: 1, w: 3, h: 1 }, company: { x: 1, y: 2, w: 3, h: 1 } } },
-            };
-            // Must match gridPresetBackDefault() (contacts + services + socials + qr).
+            // Fallback solo se il parent non passa onApplyPreset (es. test):
+            // usa gli STESSI preset canonici di applyGridPreset in
+            // CardEditorShell (gridPresetLeft & co. + filtro per contenuto e
+            // alignH/alignV), mai posizioni duplicate inline — la vecchia
+            // mappa FRONT_PRESETS locale era divergente (photo h:4 che si
+            // sovrapponeva al logo in riga 3).
             const grid = side === 'back'
-              ? {
-                cols: 4,
-                rows: 4,
-                elements: {
-                  contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left' as const, alignV: 'top' as const },
-                  services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left' as const, alignV: 'top' as const },
-                  socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left' as const, alignV: 'top' as const },
-                  qr: { x: 2, y: 0, w: 2, h: 4, alignH: 'center' as const, alignV: 'center' as const },
-                },
-              }
-              : FRONT_PRESETS[v as BusinessCardLayout] ?? FRONT_PRESETS.left;
+              ? gridPresetBackDefault()
+              : deriveGridFromLayout(
+                { ...card, front: { ...card.front, layout: v as BusinessCardLayout } },
+                'front',
+              );
             onChangeGrid(grid);
           }}
           aria-label="Preset griglia"

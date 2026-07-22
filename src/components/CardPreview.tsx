@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useCallback, useEffect } from 'react';
 import { deriveGridFromLayout } from '../utils/documentSchemas';
-import type { BusinessCard, CardGrid } from '../utils/documentSchemas';
+import type { BusinessCard, CardGrid, CardGridElement } from '../utils/documentSchemas';
 import type { Tier } from '../utils/watermark';
 import { resolveCardQrPayload } from '../utils/cardGenerator';
 import { generateQrSvg } from '../utils/qrGenerator';
@@ -22,9 +22,16 @@ interface CardPreviewProps {
   card: BusinessCard;
   showGrid?: boolean;
   tier?: Tier;
+  /** Elemento selezionato nel grid editor. Solo quando coincide con una
+   * cella foto/QR attiva e `onPatchPlacement` è fornito è possibile
+   * trascinare il contenuto per nudgarne la posizione. */
+  selectedElement?: { side: 'front' | 'back'; key: string } | null;
+  onPatchPlacement?: (key: string, patch: { x?: number; y?: number; scale?: number }) => void;
+  /** Se true disabilita ogni interazione di drag (utile per export/snapshot). */
+  readOnly?: boolean;
 }
 
-function CardPreview({ side, card, showGrid = false, tier = 'unlocked' }: CardPreviewProps) {
+function CardPreview({ side, card, showGrid = false, tier = 'unlocked', selectedElement, onPatchPlacement, readOnly }: CardPreviewProps) {
   const qrPayload = resolveCardQrPayload(card);
 
   const qrSvg = useMemo(() => {
@@ -141,14 +148,33 @@ function CardPreview({ side, card, showGrid = false, tier = 'unlocked' }: CardPr
   if (side === 'front') {
     return (
       <div className="card-preview-wrap" data-tier={tier} data-testid="card-preview-wrap-front">
-        <FrontPreview card={card} qrPayload={qrPayload} gridOverlay={gridOverlay} gridDebug={gridDebug} />
+        <FrontPreview
+          card={card}
+          qrPayload={qrPayload}
+          gridOverlay={gridOverlay}
+          gridDebug={gridDebug}
+          showGrid={showGrid}
+          selectedElement={selectedElement}
+          onPatchPlacement={onPatchPlacement}
+          readOnly={readOnly}
+        />
         <PreviewWatermark tier={tier} />
       </div>
     );
   }
   return (
     <div className="card-preview-wrap" data-tier={tier} data-testid="card-preview-wrap-back">
-      <BackPreview card={card} qrSvg={qrSvg} qrPayload={qrPayload} gridOverlay={gridOverlay} gridDebug={gridDebug} />
+      <BackPreview
+        card={card}
+        qrSvg={qrSvg}
+        qrPayload={qrPayload}
+        gridOverlay={gridOverlay}
+        gridDebug={gridDebug}
+        showGrid={showGrid}
+        selectedElement={selectedElement}
+        onPatchPlacement={onPatchPlacement}
+        readOnly={readOnly}
+      />
       <PreviewWatermark tier={tier} />
     </div>
   );
@@ -166,16 +192,126 @@ const DEBUG_COLORS: Record<string, string> = {
   services: '#a855f7',
 };
 
+function useDraggablePlacement(
+  side: 'front' | 'back',
+  elementKey: string,
+  element: CardGridElement | undefined,
+  deps: {
+    showGrid: boolean;
+    /** CON-DF-002: la cella deve avere contenuto reale (foto/QR) per essere
+     *  trascinabile — senza, il drag muoverebbe un placement invisibile. */
+    hasContent: boolean;
+    selectedElement: { side: 'front' | 'back'; key: string } | null | undefined;
+    onPatchPlacement?: (key: string, patch: { x?: number; y?: number; scale?: number }) => void;
+    readOnly?: boolean;
+  }
+) {
+  const draggingRef = useRef(false);
+  const startRef = useRef<{ x: number; y: number; placement: { x: number; y: number; scale: number } } | null>(null);
+  const cellRectRef = useRef<{ width: number; height: number } | null>(null);
+  const lastDeltaRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const enabled = !!(
+    deps.showGrid &&
+    deps.hasContent &&
+    !deps.readOnly &&
+    deps.selectedElement?.side === side &&
+    deps.selectedElement?.key === elementKey &&
+    element &&
+    deps.onPatchPlacement
+  );
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (!enabled) return;
+      const target = e.currentTarget as HTMLElement;
+      const rect = target.getBoundingClientRect();
+      cellRectRef.current = { width: rect.width, height: rect.height };
+      const placement = element!.placement ?? element!.photoPlacement ?? { x: 0, y: 0, scale: 1 };
+      startRef.current = { x: e.clientX, y: e.clientY, placement };
+      lastDeltaRef.current = { x: 0, y: 0 };
+      draggingRef.current = true;
+      try {
+        target.setPointerCapture(e.pointerId);
+      } catch {
+        // jsdom / old browsers: pointer capture is optional for this UX
+      }
+      target.classList.add('card-grid-cell--dragging');
+    },
+    [enabled, element]
+  );
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!draggingRef.current || !startRef.current || !cellRectRef.current || !deps.onPatchPlacement) return;
+      const dxPx = e.clientX - startRef.current.x;
+      const dyPx = e.clientY - startRef.current.y;
+      lastDeltaRef.current = { x: dxPx, y: dyPx };
+      const { width, height } = cellRectRef.current;
+      if (!width || !height) return;
+      const dX = (dxPx / (width / 2));
+      const dY = (dyPx / (height / 2));
+      const clampedX = Math.min(1, Math.max(-1, startRef.current.placement.x + dX));
+      const clampedY = Math.min(1, Math.max(-1, startRef.current.placement.y + dY));
+      // GUD-DF-002: dead zone attorno al centro — micro-drag sotto soglia
+      // snappano a 0 così ricentrare foto/QR non richiede precisione al pixel.
+      const nextX = Math.abs(clampedX) < 0.05 ? 0 : clampedX;
+      const nextY = Math.abs(clampedY) < 0.05 ? 0 : clampedY;
+      const eps = 0.002;
+      if (Math.abs(nextX - (element?.placement?.x ?? element?.photoPlacement?.x ?? 0)) > eps ||
+          Math.abs(nextY - (element?.placement?.y ?? element?.photoPlacement?.y ?? 0)) > eps) {
+        deps.onPatchPlacement!(elementKey, { x: nextX, y: nextY });
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      startRef.current = null;
+      cellRectRef.current = null;
+      lastDeltaRef.current = { x: 0, y: 0 };
+      try {
+        const target = e.target as HTMLElement;
+        target.classList.remove('card-grid-cell--dragging');
+        target.releasePointerCapture(e.pointerId);
+      } catch {
+        // pointer capture may already be lost
+      }
+    };
+
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', onPointerUp);
+    document.addEventListener('pointercancel', onPointerUp);
+    return () => {
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+      document.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [enabled, element, elementKey, deps.onPatchPlacement]);
+
+  return { onPointerDown, enabled, cursor: enabled ? 'grab' : undefined };
+}
+
 const FrontPreview = React.memo(function FrontPreview({
   card,
   qrPayload,
   gridOverlay,
   gridDebug,
+  showGrid,
+  selectedElement,
+  onPatchPlacement,
+  readOnly,
 }: {
   card: BusinessCard;
   qrPayload: string;
   gridOverlay: React.ReactNode;
   gridDebug: React.ReactNode;
+  showGrid: boolean;
+  selectedElement?: { side: 'front' | 'back'; key: string } | null;
+  onPatchPlacement?: (key: string, patch: { x?: number; y?: number; scale?: number }) => void;
+  readOnly?: boolean;
 }) {
   const sizeClass = SIZE_CLASS[card.style.sizePreset];
   const borderClass = `border-${card.style.borderStyle}`;
@@ -186,6 +322,13 @@ const FrontPreview = React.memo(function FrontPreview({
   // content. Same fix applied to BackPreview.
   const rawGrid = isGridModeFor('front', card) ? card.grid : undefined;
   const grid = rawGrid ?? deriveGridFromLayout(card, 'front');
+  const photoDrag = useDraggablePlacement('front', 'photo', grid?.elements?.photo, {
+    showGrid,
+    hasContent: hasPhoto,
+    selectedElement,
+    onPatchPlacement,
+    readOnly,
+  });
 
   const baseStyle: React.CSSProperties = {
     backgroundColor: card.style.bgColor,
@@ -293,12 +436,29 @@ const FrontPreview = React.memo(function FrontPreview({
       )}
 
       {grid!.elements.photo && (
-        <div className="card-grid-cell" data-testid="grid-el-photo" style={gridPlacement(grid!.elements.photo)}>
+        <div
+          className={`card-grid-cell ${photoDrag.enabled ? 'card-grid-cell--draggable' : ''}`}
+          data-testid="grid-el-photo"
+          style={{ ...gridPlacement(grid!.elements.photo), cursor: photoDrag.cursor }}
+          onPointerDown={photoDrag.onPointerDown}
+          title={photoDrag.enabled ? 'Trascina per spostare la foto' : undefined}
+        >
           {photoContent}
         </div>
       )}
       {grid!.elements.logo && card.front.logoUrl && (
-        <div className="card-grid-cell card-grid-cell--logo" data-testid="grid-el-logo" style={gridPlacement(grid!.elements.logo)}>
+        <div
+          className="card-grid-cell card-grid-cell--logo"
+          data-testid="grid-el-logo"
+          style={{
+            ...gridPlacement(grid!.elements.logo),
+            // Parity with export (svgRenderer): logoBackground 'card' draws
+            // a bg-tinted rect behind the dedicated logo cell.
+            ...(card.front.logoBackground === 'card'
+              ? { background: card.style.bgColor, borderRadius: '6px' }
+              : {}),
+          }}
+        >
           <img className="card-logo grid" src={card.front.logoUrl} alt="Logo aziendale" />
         </div>
       )}
@@ -327,12 +487,20 @@ const BackPreview = React.memo(function BackPreview({
   qrPayload,
   gridOverlay,
   gridDebug,
+  showGrid,
+  selectedElement,
+  onPatchPlacement,
+  readOnly,
 }: {
   card: BusinessCard;
   qrSvg: string;
   qrPayload: string;
   gridOverlay: React.ReactNode;
   gridDebug: React.ReactNode;
+  showGrid: boolean;
+  selectedElement?: { side: 'front' | 'back'; key: string } | null;
+  onPatchPlacement?: (key: string, patch: { x?: number; y?: number; scale?: number }) => void;
+  readOnly?: boolean;
 }) {
   const sizeClass = SIZE_CLASS[card.style.sizePreset];
   const borderClass = `border-${card.style.borderStyle}`;
@@ -376,7 +544,13 @@ const BackPreview = React.memo(function BackPreview({
   // v2.10: same collapse as SVG export — empty services row is removed so
   // socials sit under contacts (hard WYSIWYG).
   const grid = baseGrid ? effectiveBackGridForRender(baseGrid, card) : baseGrid;
-
+  const qrDrag = useDraggablePlacement('back', 'qr', grid?.elements?.qr, {
+    showGrid,
+    hasContent: !!qrPayload,
+    selectedElement,
+    onPatchPlacement,
+    readOnly,
+  });
   const qrSizePx = qrSizePxFor(card);
 
   const rootStyle: React.CSSProperties = {
@@ -554,7 +728,13 @@ const BackPreview = React.memo(function BackPreview({
           </div>
         )}
         {grid!.elements.qr && (
-          <div className="card-grid-cell card-grid-cell--qr" data-testid="grid-el-qr" style={gridPlacement(grid!.elements.qr)}>
+          <div
+            className={`card-grid-cell card-grid-cell--qr ${qrDrag.enabled ? 'card-grid-cell--draggable' : ''}`}
+            data-testid="grid-el-qr"
+            style={{ ...gridPlacement(grid!.elements.qr), cursor: qrDrag.cursor }}
+            onPointerDown={qrDrag.onPointerDown}
+            title={qrDrag.enabled ? 'Trascina per spostare il QR' : undefined}
+          >
             {qrContent}
           </div>
         )}

@@ -49,6 +49,18 @@
   z-index: 1;
 }
 
+/* GUD-DF-001: affordance drag — grab sulla cella trascinabile (foto/QR),
+ * grabbing mentre il drag è attivo (classe aggiunta da useDraggablePlacement). */
+.card-preview-side.grid-mode .card-grid-cell--draggable,
+.card-back-body-grid .card-grid-cell--draggable {
+  cursor: grab;
+}
+
+.card-preview-side.grid-mode .card-grid-cell--dragging,
+.card-back-body-grid .card-grid-cell--dragging {
+  cursor: grabbing;
+}
+
 .card-preview-side.grid-mode .card-grid-cell--text,
 .card-back-body-grid .card-grid-cell--text {
   flex-direction: column;
@@ -661,6 +673,15 @@
   align-items: center;
   gap: 3px;
   align-self: center;
+}
+
+/* TB-023: apply QR nudge/scale (generic placement) in grid-mode preview,
+ * same mechanism as .card-photo. The export applies the same placement
+ * to the QR box in svgRenderer (translate moves QR + label; scale only
+ * the QR box — the label font is not scaled in export). */
+.card-preview-side.grid-mode .card-grid-cell--qr .card-back-qr,
+.card-back-body-grid .card-grid-cell--qr .card-back-qr {
+  transform: var(--card-photo-transform, none);
 }
 
 .card-back-qr-frame {

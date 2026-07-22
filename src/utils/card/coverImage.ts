@@ -83,5 +83,5 @@ export function buildCardCoverPayload(
   if (images.logoImage) payload.logoImage = images.logoImage;
   if (imageModel) payload.imageModel = imageModel;
 
-  return pruneImagesForBodyBudget(payload, ['logoImage', 'cardImage'], BODY_BUDGET_BYTES);
+  return pruneImagesForBodyBudget(payload, ['cardImage', 'logoImage'], BODY_BUDGET_BYTES);
 }

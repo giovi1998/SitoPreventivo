@@ -54,7 +54,7 @@ export default function CardAIIconHeroSection({
     <AiSection
       title="Icona AI"
       id="card-ai-section-icon"
-      hint="Icona stilizzata 2-colori dal ruolo o dai servizi. Applicata come logo (o foto se il logo c'è già)."
+      hint="Icona stilizzata 2-colori dal ruolo o dai servizi. Sostituisce sempre la foto esistente (logo aziendale preservato)."
       collapsible
       defaultOpen={false}
     >
@@ -80,7 +80,7 @@ export default function CardAIIconHeroSection({
         title={locked ? 'Disponibile nella versione Pro' : 'Genera icona stilizzata 2-colori'}
         data-testid="card-generate-icon-ai"
       >
-        {isProcessing ? 'Generazione…' : locked ? '🔒 Icona AI (Pro)' : '✨ Genera icona AI'}
+        {isProcessing ? 'Generazione…' : locked ? 'Icona AI (Pro)' : 'Genera icona AI'}
       </button>
 
       <button

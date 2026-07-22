@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CardGrid } from '../utils/documentSchemas';
+import type { BusinessCardLayout, CardGrid } from '../utils/documentSchemas';
 import { CardGridControls, type GridSide } from './card/CardGridControls';
 import { getAvailableGridElements, gridForCollisions } from '../utils/card/gridElements';
 import { clampMove, wouldCollideOnMove } from '../utils/gridUtils';
@@ -13,14 +13,39 @@ interface MobileGridEditorProps {
   onSelect: (k: keyof CardGrid['elements'] | '') => void;
   onChangeSide: (s: GridSide) => void;
   onChangeGrid: (grid: CardGrid) => void;
+  /** Applica un preset di griglia (come il desktop via applyGridPreset). */
+  onApplyPreset?: (p: BusinessCardLayout) => void;
   /** Restituisce informazioni sulla mossa (per toast feedback in G). */
   onAfterMove?: (info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
+  onAfterResize?: (info: { element: string; dw: number; dh: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
+  onAfterAlign?: (info: { element: string; alignH: 'left' | 'center' | 'right'; alignV: 'top' | 'center' | 'bottom' }) => void;
+  onPatchPlacement?: (element: keyof CardGrid['elements'], patch: { x?: number; y?: number; scale?: number }) => void;
 }
 
 // Phase 2.2 REQ-B02: MobileGridEditor condivide la logica con
 // CardGridControls (selezione lato, filtro per contenuto, master switch
 // gating, cols/rows) ma presenta l'interazione move come popup 3×3
 // (più comodo su touch di 4 frecce inline).
+
+/**
+ * Motivo reale di una mossa bloccata (parità col desktop in
+ * CardGridControls.handleMove): fuori dai bordi → 'border', altrimenti il
+ * blocco viene da una collisione con un altro elemento → 'collision'.
+ * Esportata per i test: i bottoni del popup sono `disabled` quando la mossa
+ * è bloccata, quindi il ramo non è raggiungibile via click in jsdom.
+ */
+export function blockedMoveReason(
+  el: { x: number; y: number; w: number; h: number },
+  grid: CardGrid,
+  dx: number,
+  dy: number,
+): 'collision' | 'border' {
+  const nx = el.x + dx;
+  const ny = el.y + dy;
+  const outOfBounds = nx < 0 || ny < 0 || nx + el.w > grid.cols || ny + el.h > grid.rows;
+  return outOfBounds ? 'border' : 'collision';
+}
+
 export default function MobileGridEditor({
   card,
   side,
@@ -29,7 +54,11 @@ export default function MobileGridEditor({
   onSelect,
   onChangeSide,
   onChangeGrid,
+  onApplyPreset,
   onAfterMove,
+  onAfterResize,
+  onAfterAlign,
+  onPatchPlacement,
 }: MobileGridEditorProps) {
   const [popupOpen, setPopupOpen] = useState(false);
   const activeGrid: CardGrid = side === 'back'
@@ -65,7 +94,7 @@ export default function MobileGridEditor({
     if (!selected || !selectedEl) return;
     const r = clampMove(collisionGrid, selected, dx, dy);
     if (r.x === selectedEl.x && r.y === selectedEl.y) {
-      onAfterMove?.({ element: selected, dx, dy, applied: false, reason: dx === 0 ? (dy < 0 ? 'border' : 'border') : 'border' });
+      onAfterMove?.({ element: selected, dx, dy, applied: false, reason: blockedMoveReason(selectedEl, activeGrid, dx, dy) });
       return;
     }
     onChangeGrid(
@@ -83,9 +112,13 @@ export default function MobileGridEditor({
         gridEnabled={gridEnabled}
         onSideChange={(s) => { onChangeSide(s); onSelect(''); }}
         onChangeGrid={onChangeGrid}
+        onApplyPreset={onApplyPreset}
         selected={selected}
         onSelect={onSelect}
         onAfterMove={onAfterMove}
+        onAfterResize={onAfterResize}
+        onAfterAlign={onAfterAlign}
+        onPatchPlacement={onPatchPlacement}
         mode="mobile"
       />
       <button

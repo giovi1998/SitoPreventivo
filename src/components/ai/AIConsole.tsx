@@ -213,8 +213,6 @@ export default function AIConsole({
             </form>
           )}
 
-          {quickActions && <div className="ai-console__quick">{quickActions}</div>}
-
           {children && <div className="ai-console__children">{children}</div>}
 
           <div className={`ai-console__log ${logOpen ? 'ai-console__log--open' : ''}`}>

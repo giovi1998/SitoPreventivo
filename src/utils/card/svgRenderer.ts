@@ -206,10 +206,10 @@ export function buildFrontSvg(
   // 1a. Readability wash on top of the cover.
   //
   // Two stacked semi-transparent layers, both using the card's own
-  // background tint (`bgColor`). The first is a flat 35% wash that
+  // background tint (`bgColor`). The first is a flat 60% wash that
   // flattens the cover's gradients into a calm tinted page; the second
-  // is a soft vertical gradient that goes from 0% (full cover visible
-  // at the top) to 50% (mostly the bg tint) at the bottom, so the
+  // is a soft vertical gradient 0% → 25% (at 55%) → 80% at the bottom,
+  // matching the preview CSS hex-alpha stops (00/40/cc), so the
   // area where the user name sits in the default front grid is calmer
   // than the photo region at the top. This guarantees readable text
   // even when the AI cover happens to be too busy or too dark.
@@ -217,7 +217,7 @@ export function buildFrontSvg(
     out += `<rect width="${pxW}" height="${pxH}" fill="${bg}" opacity="0.6"/>`;
     out += `<defs><linearGradient id="frontReadGrad" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="${bg}" stop-opacity="0"/>
-      <stop offset="55%" stop-color="${bg}" stop-opacity="0.4"/>
+      <stop offset="55%" stop-color="${bg}" stop-opacity="0.25"/>
       <stop offset="100%" stop-color="${bg}" stop-opacity="0.8"/>
     </linearGradient></defs>`;
     out += `<rect width="${pxW}" height="${pxH}" fill="url(#frontReadGrad)"/>`;
@@ -301,9 +301,26 @@ export function buildFrontSvg(
         const r = Math.min(w, h) / 2;
         out += `<defs><clipPath id="photoCircle"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>`;
         out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#photoCircle)"/>`;
+        const photoBorderW = Math.max(1.5, Math.round(pxH * (2 / 340)));
+        out += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${accent}" stroke-width="${photoBorderW}"/>`;
       } else {
         out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 6)"/>`;
+        // Parity with preview CSS .card-photo { border: 2px solid accent }.
+        const photoBorderW = Math.max(1.5, Math.round(pxH * (2 / 340)));
+        out += `<rect x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" rx="6" fill="none" stroke="${accent}" stroke-width="${photoBorderW}"/>`;
       }
+    } else if (!hasPhoto && hasLogo && photoEl && !grid.elements.logo) {
+      // Parity with preview (CardPreview photoContent fallback): when there
+      // is no photo and no dedicated logo grid element, the logo is shown
+      // inside the photo cell with objectFit contain.
+      const x = cellX(photoEl.x);
+      const y = cellY(photoEl.y);
+      const w = photoEl.w * cellW;
+      const h = photoEl.h * cellH;
+      if (card.front.logoBackground === 'card') {
+        out += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${escapeXml(bg)}"/>`;
+      }
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet"/>`;
     }
 
     const logoEl = grid.elements.logo;
@@ -642,8 +659,12 @@ export function buildBackSvg(
     // services expand into the unused socials row so the left column doesn't
     // leave an empty gap. We create a temporary merged rect for rendering only.
     let servicesRenderEl = servicesEl;
-    if (services.length > 0 && !socialsEl && servicesEl) {
-      servicesRenderEl = { ...servicesEl, h: servicesEl.h + 1 };
+    // Parity fix: expand when socials CONTENT is empty (the preview checks
+    // socials.length, not just the grid element), reusing the socials
+    // element height when present instead of a hardcoded +1.
+    if (services.length > 0 && socials.length === 0 && servicesEl) {
+      const emptySocialsH = socialsEl?.h ?? 1;
+      servicesRenderEl = { ...servicesEl, h: servicesEl.h + emptySocialsH };
     }
     if (servicesRenderEl && services.length > 0) {
       const svcCell = gridCellRect(servicesRenderEl, cellW, cellH, bodyTop, padBox);
@@ -824,7 +845,7 @@ export function buildBackSvg(
         data: { type: 'url', payload: qrPayload },
         style: {
           errorCorrection: 'M',
-          fgColor: '#000000',
+          fgColor: card.style.textColor,
           bgColor: '#FFFFFF',
           size: qrSize * 2,
           margin: 1,
@@ -901,7 +922,7 @@ export function buildBackSvg(
         data: { type: 'url', payload: qrPayload },
         style: {
           errorCorrection: 'M',
-          fgColor: '#000000',
+          fgColor: card.style.textColor,
           bgColor: '#FFFFFF',
           size: fallbackQrSize * 2,
           margin: 1,
@@ -930,33 +951,46 @@ export function buildBackSvg(
   return out;
 }
 
-// Width-aware wrap: split text at word boundaries (spaces/slashes)
-// so long emails/URLs do not overflow cells. Does not break individual characters.
+// Width-aware wrap: split text at word boundaries, punctuation (@ . - _ / \s),
+// or hard character bounds so long emails/URLs do not overflow cells.
 function wrapTextAtWhitespace(text: string, maxWidthPx: number, fontSize: number): string[] {
   if (!text) return [];
   const avgCharW = fontSize * 0.52;
+  const maxChars = Math.max(1, Math.floor(maxWidthPx / avgCharW));
   const measure = (s: string) => s.length * avgCharW;
-  const tokens = text.split(/([/\s]+)/).filter((s) => s.length > 0);
+
+  const tokens = text.split(/([/@._\-\s]+)/).filter((s) => s.length > 0);
   const lines: string[] = [];
   let current = '';
+
   const pushCurrent = () => {
     if (current) {
-      lines.push(current.trim());
+      const trimmed = current.trim();
+      if (trimmed) lines.push(trimmed);
       current = '';
     }
   };
-  for (const token of tokens) {
-    const isSep = /^[/\s]+$/.test(token);
-    if (isSep) {
-      current += ' ';
-      continue;
-    }
-    const candidate = current ? current + token : token;
-    if (measure(candidate) <= maxWidthPx) {
-      current = candidate;
-    } else {
-      pushCurrent();
-      current = token;
+
+  for (const rawToken of tokens) {
+    const isSep = /^[/@._\-\s]+$/.test(rawToken);
+    const subTokens = !isSep && rawToken.length > maxChars
+      ? (rawToken.match(new RegExp(`.{1,${maxChars}}`, 'g')) || [rawToken])
+      : [rawToken];
+
+    for (const token of subTokens) {
+      const candidate = current ? current + token : token;
+
+      if (measure(candidate) <= maxWidthPx) {
+        current = candidate;
+      } else {
+        if (current) {
+          pushCurrent();
+          current = /^[/@._\-\s]+$/.test(token) ? '' : token;
+        } else {
+          lines.push(token);
+          current = '';
+        }
+      }
     }
   }
   pushCurrent();

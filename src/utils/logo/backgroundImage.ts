@@ -71,5 +71,5 @@ export function buildLogoBackgroundPayload(
   if (images.logoImage) payload.logoImage = images.logoImage;
   if (images.previousBackground) payload.previousBackground = images.previousBackground;
 
-  return pruneImagesForBodyBudget(payload, ['previousBackground', 'logoImage'], BODY_BUDGET_BYTES);
+  return pruneImagesForBodyBudget(payload, ['logoImage', 'previousBackground'], BODY_BUDGET_BYTES);
 }
