@@ -50,6 +50,23 @@ export class AIProviderRegistry {
   }
 
   /**
+   * TB-023: ritorna il provider di fallback se quello primario fallisce.
+   * Se primario è Ollama, il fallback è DeepSeek; se è DeepSeek, il fallback è Ollama.
+   */
+  getFallbackProvider(currentId?: string): { id: string; provider: AIProvider } | null {
+    const primaryId = currentId || this.defaultId;
+    if (primaryId.startsWith('ollama')) {
+      const fallback = this.providers.get('deepseek-chat');
+      if (fallback) return { id: 'deepseek-chat', provider: fallback };
+    }
+    const fallbackOllama = this.providers.get('ollama-minimax-m3');
+    if (fallbackOllama && primaryId !== 'ollama-minimax-m3') {
+      return { id: 'ollama-minimax-m3', provider: fallbackOllama };
+    }
+    return null;
+  }
+
+  /**
    * TB-023: ritorna il primo provider con vision disponibile (preferito
    * MiniMax M3). Usato da useAIDesignReview per screenshot feedback.
    */

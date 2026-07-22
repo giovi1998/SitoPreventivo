@@ -4,6 +4,9 @@ import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { drizzle } from 'drizzle-orm/neon-http';
+// TB-023 REQ-TC-006: costo flat mensile Ollama Pro (modulo puro in src/,
+// bundled correttamente negli import statici — no dipendenze ESM-only).
+import { OLLAMA_PRO_FLAT_MONTHLY } from '../src/ai/providerPricing';
 
 type VercelRequest = {
   method: string;
@@ -593,6 +596,37 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
       tokensUsed: usersTable.tokensUsed, tokenLimit: usersTable.tokenLimit,
     }).from(usersTable).orderBy(sql`created_at DESC`);
     return json(req, res, 200, list);
+  }
+
+  // TB-023 REQ-TC-006: cost breakdown per admin dashboard.
+  // DEVIAZIONE dalla spec: non esiste una tabella di log per-chiamata con
+  // provider/data — `users` ha solo aggregati lifetime (tokens_used,
+  // tokens_cost_usd). Il breakdown per-provider e per finestra temporale
+  // non è calcolabile senza storico: il parametro `days` è accettato per
+  // compatibilità con la spec ma i valori ritornati sono aggregati totali.
+  // Ollama Pro è $20/mo flat (costante condivisa con providerPricing).
+  if (path === '/users/cost-breakdown' && method === 'GET') {
+    const url = new URL(req.url, 'http://localhost');
+    const adminEmail = url.searchParams.get('adminEmail');
+    if (adminEmail !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    const daysParam = Number(url.searchParams.get('days'));
+    const days = Number.isFinite(daysParam) && daysParam > 0 ? Math.min(365, Math.floor(daysParam)) : 30;
+    const list = await db.select({
+      email: usersTable.email,
+      tokensUsed: usersTable.tokensUsed,
+      tokensCostUsd: usersTable.tokensCostUsd,
+    }).from(usersTable).orderBy(sql`tokens_cost_usd DESC`);
+    return json(req, res, 200, {
+      days,
+      ollamaProFlatMonthly: OLLAMA_PRO_FLAT_MONTHLY,
+      users: list.map((u) => ({
+        email: u.email,
+        tokensUsed: u.tokensUsed ?? 0,
+        tokensCostUsd: Number(u.tokensCostUsd ?? 0),
+      })),
+    });
   }
 
   if (path.startsWith('/users/') && path.endsWith('/profile') && method === 'GET') {

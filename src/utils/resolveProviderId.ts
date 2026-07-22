@@ -21,3 +21,17 @@ function normalizeProviderId(id: string): string {
   if (providerRegistry.listProviders().some((p) => p.id === id)) return id;
   return providerRegistry.getDefaultId();
 }
+
+/**
+ * CON-MM-002: true se il provider risolto supporta input vision (immagini).
+ * Gli hook AI lo usano per evitare di catturare screenshot preview che
+ * verrebbero scartati silenziosamente da provider text-only (es. DeepSeek).
+ */
+export function providerSupportsVision(providerId: string): boolean {
+  try {
+    const provider = providerRegistry.getProvider(providerId);
+    return (provider as { supportsVision?: boolean }).supportsVision ?? false;
+  } catch {
+    return false;
+  }
+}

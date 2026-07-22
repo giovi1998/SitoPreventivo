@@ -59,8 +59,8 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       imagePreviewBase64?: string;
     },
   ): Promise<CardProcessResult> {
-    const providerId = options?.modelId;
-    const provider = providerRegistry.getProvider(providerId);
+    const primaryProviderId = options?.modelId || providerRegistry.getDefaultId();
+    const provider = providerRegistry.getProvider(primaryProviderId);
     const prompt = userPrompt.trim();
     const changes: string[] = [];
 
@@ -102,47 +102,17 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
     const wantsTools = !wantsAnalysis && provider.supportsTools && needsCardTools(prompt);
     const toolsDefs = wantsTools ? this.toolRegistry.getDefinitions() : undefined;
 
-
-    let aiResponse: AIResponse;
-    let streamedContent = '';
-    let streamedToolCalls = new Map<string, AIToolCall>();
-    let streamedUsage: AIResponse['usage'] | undefined;
-
-    const canStream = !!options?.onStream && provider.supportsStreaming;
-
-    if (canStream) {
-      for await (const chunk of provider.stream(session.messages, {
+    const { response: aiResponse, providerId: finalProviderId } = await this.executeWithFallback(
+      primaryProviderId,
+      session.messages,
+      {
         temperature: wantsAnalysis ? 0.3 : 0.4,
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
         requestId: options?.requestId,
-      })) {
-        options.onStream!(chunk);
-
-        if (chunk.type === 'content') {
-          streamedContent += chunk.content || '';
-        } else if (chunk.type === 'tool_call' && chunk.toolCall) {
-          streamedToolCalls.set(chunk.toolCall.id, chunk.toolCall);
-        } else if (chunk.type === 'done' && chunk.usage) {
-          streamedUsage = chunk.usage;
-        } else if (chunk.type === 'error') {
-          throw new Error(chunk.error);
-        }
-      }
-
-      aiResponse = {
-        content: streamedContent || null,
-        toolCalls: streamedToolCalls.size > 0 ? [...streamedToolCalls.values()] : undefined,
-        usage: streamedUsage,
-      };
-    } else {
-      aiResponse = await provider.chat(session.messages, {
-        temperature: wantsAnalysis ? 0.3 : 0.4,
-        tools: toolsDefs,
-        responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
-        requestId: options?.requestId,
-      });
-    }
+      },
+      { onStream: options?.onStream }
+    );
 
     let currentCard = { ...card };
 
@@ -152,7 +122,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         role: 'assistant',
         content: aiResponse.content || '',
       });
-      const costUsd = this.trackUsage(aiResponse.usage, options?.userEmail, providerId);
+      const costUsd = this.trackUsage(aiResponse.usage, options?.userEmail, finalProviderId);
       return {
         card: currentCard,
         response: aiResponse,
@@ -232,7 +202,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         changes.push(`error:followup_failed:${(err as Error).message?.slice(0, 100) || 'unknown'}`);
       }
 
-      const costUsd = this.trackUsage(aiResponse.usage, options?.userEmail, providerId);
+      const costUsd = this.trackUsage(aiResponse.usage, options?.userEmail, finalProviderId);
       return {
         card: currentCard,
         response: aiResponse,
@@ -268,7 +238,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       changes.push('error:empty');
     }
 
-    const costUsd = this.trackUsage(aiResponse.usage, options?.userEmail, providerId);
+    const costUsd = this.trackUsage(aiResponse.usage, options?.userEmail, finalProviderId);
     return {
       card: currentCard,
       response: aiResponse,

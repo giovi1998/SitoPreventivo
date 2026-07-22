@@ -216,7 +216,8 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
       imagePreviewBase64?: string;
     }
   ): Promise<ProcessResult> {
-    const provider = providerRegistry.getProvider(options?.modelId);
+    const primaryProviderId = options?.modelId || providerRegistry.getDefaultId();
+    const provider = providerRegistry.getProvider(primaryProviderId);
     const prompt = userPrompt.trim();
     const changes: string[] = [];
 
@@ -253,49 +254,19 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
     const wantsTools = !wantsAnalysis && needsTools(prompt);
     let toolsDefs = (provider.supportsTools && wantsTools) ? this.toolRegistry.getDefinitions() : undefined;
 
-    let aiResponse: AIResponse;
-    let streamedContent = '';
-    const streamedToolCalls = new Map<string, AIToolCall>();
-    let streamedUsage: AIResponse['usage'] | undefined;
-
-    // Stream sempre se il provider supporta streaming e l'hook ha passato onStream.
-    // Questo dà feedback real-time all'utente sia per le risposte testuali che per i tool.
-    const canStream = !!options?.onStream && provider.supportsStreaming;
-
-    if (canStream) {
-      for await (const chunk of provider.stream(session.messages, {
+    const { response: aiResponse, providerId: finalProviderId } = await this.executeWithFallback(
+      primaryProviderId,
+      session.messages,
+      {
         tools: toolsDefs,
         temperature: wantsTools ? 0.7 : 0.2,
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
         requestId: options?.requestId,
-      })) {
-        options.onStream!(chunk);
-
-        if (chunk.type === 'content') {
-          streamedContent += chunk.content || '';
-        } else if (chunk.type === 'tool_call' && chunk.toolCall) {
-          streamedToolCalls.set(chunk.toolCall.id, chunk.toolCall);
-        } else if (chunk.type === 'done' && chunk.usage) {
-          streamedUsage = chunk.usage;
-        } else if (chunk.type === 'error') {
-          throw new Error(chunk.error);
-        }
+      },
+      {
+        onStream: options?.onStream,
       }
-
-      const toolCallsList = [...streamedToolCalls.values()];
-      aiResponse = {
-        content: streamedContent || null,
-        toolCalls: toolCallsList.length > 0 ? toolCallsList : undefined,
-        usage: streamedUsage,
-      };
-    } else {
-      aiResponse = await provider.chat(session.messages, {
-        tools: toolsDefs,
-        temperature: wantsTools ? 0.7 : 0.2,
-        responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
-        requestId: options?.requestId,
-      });
-    }
+    );
 
     let currentQuote = { ...quote };
 
@@ -379,7 +350,8 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
           content: `Preventivo AGGIORNATO dopo l'esecuzione dei tool (usa QUESTO stato come base, non il precedente):\n${JSON.stringify(postToolPayload)}\n\nGenera il JSON finale del preventivo. Mantieni le modifiche applicate dai tool (sconti, prezzi, ecc.) e applica solo eventuali modifiche testuali aggiuntive richieste dal prompt originale.`,
         });
 
-        const followUp = await provider.chat(session.messages, {
+        const followUpProvider = providerRegistry.getProvider(finalProviderId);
+        const followUp = await followUpProvider.chat(session.messages, {
           temperature: 0.4,
           responseFormat: { type: 'json_object' },
         });

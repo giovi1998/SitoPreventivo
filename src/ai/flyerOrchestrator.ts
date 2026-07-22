@@ -144,7 +144,8 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
     options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string },
     changeLabel?: string
   ): Promise<FlyerProcessResult> {
-    const provider: AIProvider = providerRegistry.getProvider(options?.modelId);
+    const primaryProviderId = options?.modelId || providerRegistry.getDefaultId();
+    const provider: AIProvider = providerRegistry.getProvider(primaryProviderId);
     const hasImagePreview = !!options?.imagePreviewBase64;
     const useVision = hasImagePreview && (provider as { supportsVision?: boolean }).supportsVision;
     const prompt = buildPrompt();
@@ -170,43 +171,17 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
     const wantsTools = provider.supportsTools && needsFlyerTools(prompt);
     const toolsDefs = wantsTools ? this.toolRegistry.getDefinitions() : undefined;
 
-    let aiResponse: AIResponse;
-    let streamedContent = '';
-    let streamedToolCalls = new Map<string, AIToolCall>();
-    let streamedUsage: AIResponse['usage'] | undefined;
-    const canStream = !!options?.onStream && provider.supportsStreaming;
-
-    if (canStream) {
-      for await (const chunk of provider.stream(session.messages, {
+    const { response: aiResponse, providerId: finalProviderId } = await this.executeWithFallback(
+      primaryProviderId,
+      session.messages,
+      {
         temperature: 0.7,
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : { type: 'json_object' },
         requestId: options?.requestId,
-      })) {
-        options.onStream!(chunk);
-        if (chunk.type === 'content') {
-          streamedContent += chunk.content || '';
-        } else if (chunk.type === 'tool_call' && chunk.toolCall) {
-          streamedToolCalls.set(chunk.toolCall.id, chunk.toolCall);
-        } else if (chunk.type === 'done' && chunk.usage) {
-          streamedUsage = chunk.usage;
-        } else if (chunk.type === 'error') {
-          throw new Error(chunk.error);
-        }
-      }
-      aiResponse = {
-        content: streamedContent || null,
-        toolCalls: streamedToolCalls.size > 0 ? [...streamedToolCalls.values()] : undefined,
-        usage: streamedUsage,
-      };
-    } else {
-      aiResponse = await provider.chat(session.messages, {
-        temperature: 0.7,
-        tools: toolsDefs,
-        responseFormat: wantsTools ? undefined : { type: 'json_object' },
-        requestId: options?.requestId,
-      });
-    }
+      },
+      { onStream: options?.onStream }
+    );
 
     let currentFlyer: Flyer = { ...flyer };
     let applied = false;
@@ -246,7 +221,8 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
           content: `Copy AGGIORNATO dopo i tool (usa QUESTO stato come base):\n${currentJson}\n\nRestituisci SOLO il JSON aggiornato con la stessa struttura.`,
         });
 
-        const followUp = await provider.chat(session.messages, {
+        const followUpProvider = providerRegistry.getProvider(finalProviderId);
+        const followUp = await followUpProvider.chat(session.messages, {
           temperature: 0.4,
           responseFormat: { type: 'json_object' },
         });

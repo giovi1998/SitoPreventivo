@@ -4,6 +4,7 @@ import { providerRegistry } from './providers/registry';
 import { ToolRegistry } from './tools/registry';
 import dataService from '../utils/dataService';
 import { calculateCostUsd } from './providerPricing';
+import { getAiAutoFallback } from '../utils/uiPrefs';
 import type { ChatMessage, AIResponse, AIStreamChunk, AIProvider, AIToolCall, ToolExecutor, ToolResult } from './types';
 
 type AIUsage = NonNullable<AIResponse['usage']>;
@@ -141,6 +142,49 @@ export abstract class BaseOrchestrator {
    * Consume a stream from a provider, accumulating content/toolCalls/usage
    * into a single AIResponse. Mirrors the inline streaming logic that was
    * duplicated in AIOrchestrator and CardAIOrchestrator.
+   *
+   * TB-023: se `autoFallback` è abilitato e la chiamata fallisce con errore
+   * transitorio (429/504/network/timeout), riprova automaticamente con il
+   * provider di fallback una sola volta.
+   */
+  protected async executeWithFallback(
+    primaryProviderId: string,
+    messages: ChatMessage[],
+    options: {
+      tools?: unknown;
+      temperature?: number;
+      responseFormat?: { type: 'json_object' };
+      requestId?: string;
+    } = {},
+    callbacks: {
+      onStream?: (chunk: AIStreamChunk) => void;
+      onFallback?: (fallbackId: string, reason: string) => void;
+    } = {}
+  ): Promise<{ response: AIResponse; providerId: string; didFallback: boolean }> {
+    const autoFallback = getAiAutoFallback();
+    const run = async (providerId: string) => {
+      const provider = providerRegistry.getProvider(providerId);
+      const response = await this.handleStream(provider, messages, options, callbacks);
+      return { response, providerId, didFallback: false };
+    };
+
+    try {
+      return await run(primaryProviderId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!autoFallback || !isTransientAiError(msg)) throw err;
+      const fallback = providerRegistry.getFallbackProvider(primaryProviderId);
+      if (!fallback) throw err;
+      callbacks.onFallback?.(fallback.id, msg);
+      const result = await run(fallback.id);
+      return { ...result, didFallback: true };
+    }
+  }
+
+  /**
+   * Consume a stream from a provider, accumulating content/toolCalls/usage
+   * into a single AIResponse. Mirrors the inline streaming logic that was
+   * duplicated in AIOrchestrator and CardAIOrchestrator.
    */
   protected async handleStream(
     provider: AIProvider,
@@ -253,6 +297,21 @@ export abstract class ToolAwareOrchestrator<T = unknown> extends BaseOrchestrato
     }
     return this.toolRegistry.execute(toolCall.function.name, args, payload);
   }
+}
+
+function isTransientAiError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes('429') ||
+    m.includes('504') ||
+    m.includes('timeout') ||
+    m.includes('timed out') ||
+    m.includes('errore di rete') ||
+    m.includes('networkerror') ||
+    m.includes('failed to fetch') ||
+    m.includes('troppe richieste') ||
+    m.includes('gateway')
+  );
 }
 
 /**

@@ -6,7 +6,7 @@ import { mapAiError } from '../utils/ai/mapAiError';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
 import { newRequestId } from '../utils/ai/requestId';
 import dataService from '../utils/dataService';
-import { resolveProviderId } from '../utils/resolveProviderId';
+import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
 
@@ -67,8 +67,11 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
       const requestId = newRequestId();
       const promptPreview = brief.length > 60 ? brief.slice(0, 57) + '...' : brief;
 
+      const resolvedModelId = resolveProviderId();
+      // CON-MM-002: cattura lo screenshot solo se il provider risolto supporta
+      // vision — con un provider text-only verrebbe catturato e scartato.
       let imagePreviewBase64: string | undefined;
-      const visionEnabled = getAiVisionEnabled();
+      const visionEnabled = getAiVisionEnabled() && providerSupportsVision(resolvedModelId);
       if (visionEnabled) {
         try {
           const previewEl = document.querySelector<HTMLElement>('[data-logo-preview]');
@@ -88,7 +91,6 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
       });
 
       try {
-        const resolvedModelId = resolveProviderId();
         const result = await getOrchestrator().generateLogo(logo, brief, {
           sector: options?.sector,
           modelId: resolvedModelId,

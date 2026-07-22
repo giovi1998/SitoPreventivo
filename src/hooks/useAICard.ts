@@ -16,7 +16,7 @@ import { mapAiError } from '../utils/ai/mapAiError';
 import { buildCardPhotoBrief } from '../utils/card/photoBrief';
 import { newRequestId } from '../utils/ai/requestId';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
-import { resolveProviderId } from '../utils/resolveProviderId';
+import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiVisionEnabled } from '../utils/uiPrefs';
 import { getAiImageModelDefault } from '../utils/uiPrefs';
@@ -101,9 +101,13 @@ export function useAICard(userEmail?: string): UseAICardReturn {
 
         const promptPreview = prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt;
 
+        const resolvedModelId = resolveProviderId(options?.modelId);
         // TB-023: cattura screenshot preview per vision/analysis mode.
+        // CON-MM-002: solo se il provider risolto supporta vision — con un
+        // provider text-only (es. DeepSeek) lo screenshot verrebbe catturato
+        // e poi scartato silenziosamente dall'orchestratore.
         let previewBase64: string | undefined;
-        const visionEnabled = getAiVisionEnabled();
+        const visionEnabled = getAiVisionEnabled() && providerSupportsVision(resolvedModelId);
         if (visionEnabled) {
           try {
             const { renderCardSideDataUrl } = await import('../utils/card/pngExport');
@@ -143,7 +147,6 @@ export function useAICard(userEmail?: string): UseAICardReturn {
           const orchestrator = getOrchestrator();
           options?.onProgress?.('🤖 Chiamata AI in corso...');
 
-        const resolvedModelId = resolveProviderId(options?.modelId);
         const result = await orchestrator.processPrompt(card, prompt, {
           modelId: resolvedModelId,
           userEmail,

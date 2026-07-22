@@ -8,7 +8,7 @@ import dataService from '../utils/dataService';
 import { logger } from '../utils/logger';
 import { mapAiError } from '../utils/ai/mapAiError';
 import { newRequestId } from '../utils/ai/requestId';
-import { resolveProviderId } from '../utils/resolveProviderId';
+import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiVisionEnabled } from '../utils/uiPrefs';
 
@@ -128,9 +128,12 @@ export function useAI(userEmail?: string): UseAIReturn {
 
       const promptPreview = prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt;
 
+      const resolvedModelId = resolveProviderId(options?.modelId);
       // TB-023: cattura screenshot preview per vision/analysis mode quando presente un elemento quote.
+      // CON-MM-002: solo se il provider risolto supporta vision — con un provider
+      // text-only (es. DeepSeek) lo screenshot verrebbe catturato e scartato.
       let previewBase64: string | undefined;
-      const visionEnabled = getAiVisionEnabled();
+      const visionEnabled = getAiVisionEnabled() && providerSupportsVision(resolvedModelId);
       if (visionEnabled) {
         try {
           const previewEl = document.querySelector<HTMLElement>('[data-quote-preview]');
@@ -150,7 +153,6 @@ export function useAI(userEmail?: string): UseAIReturn {
         const orchestrator = getOrchestrator();
         options?.onProgress?.('🤖 Chiamata AI in corso...');
 
-        const resolvedModelId = resolveProviderId(options?.modelId);
         const run = async (onStream?: (chunk: AIStreamChunk) => void) => orchestrator.processPrompt(quote, prompt, {
           modelId: resolvedModelId,
           requestId,

@@ -9,7 +9,7 @@ import { logger } from '../utils/logger';
 import { mapAiError } from '../utils/ai/mapAiError';
 import { newRequestId } from '../utils/ai/requestId';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
-import { resolveProviderId } from '../utils/resolveProviderId';
+import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
 
@@ -115,8 +115,11 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
     async (flyer: Flyer, brief: string, tone: FlyerTone, options?: { modelId?: string }) => {
       const trimmed = brief.trim();
       if (!trimmed) throw new Error('Inserisci un brief per generare il copy.');
+      const resolvedModelId = resolveProviderId(options?.modelId);
+      // CON-MM-002: cattura lo screenshot solo se il provider risolto supporta
+      // vision — con un provider text-only verrebbe catturato e scartato.
       let imagePreviewBase64: string | undefined;
-      const visionEnabled = getAiVisionEnabled();
+      const visionEnabled = getAiVisionEnabled() && providerSupportsVision(resolvedModelId);
       if (visionEnabled) {
         try {
           const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
@@ -130,7 +133,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       }
       return runWith(
         `Invio richiesta: "${trimmed.length > 60 ? trimmed.slice(0, 57) + '...' : trimmed}" (${tone})`,
-        async (onStream) => getOrchestrator().generateCopy(flyer, trimmed, tone, { modelId: resolveProviderId(options?.modelId), onStream, imagePreviewBase64 }),
+        async (onStream) => getOrchestrator().generateCopy(flyer, trimmed, tone, { modelId: resolvedModelId, onStream, imagePreviewBase64 }),
         options?.modelId,
         imagePreviewBase64,
       );
@@ -140,8 +143,11 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
 
   const refine = useCallback(
     async (flyer: Flyer, action: FlyerRefineAction, options?: { modelId?: string }) => {
+      const resolvedModelId = resolveProviderId(options?.modelId);
+      // CON-MM-002: cattura lo screenshot solo se il provider risolto supporta
+      // vision — con un provider text-only verrebbe catturato e scartato.
       let imagePreviewBase64: string | undefined;
-      const visionEnabled = getAiVisionEnabled();
+      const visionEnabled = getAiVisionEnabled() && providerSupportsVision(resolvedModelId);
       if (visionEnabled) {
         try {
           const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
@@ -155,7 +161,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       }
       return runWith(
         `Rifinisci copy: ${action}`,
-        async (onStream) => getOrchestrator().refineCopy(flyer, action, { modelId: resolveProviderId(options?.modelId), onStream, imagePreviewBase64 }),
+        async (onStream) => getOrchestrator().refineCopy(flyer, action, { modelId: resolvedModelId, onStream, imagePreviewBase64 }),
         options?.modelId,
         imagePreviewBase64,
       );
