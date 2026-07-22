@@ -5,7 +5,6 @@ import CardEditorShell from '../CardEditorShell';
 import dataService from '../../../utils/dataService';
 import { createEmptyCard, createGiovanniCardTemplate } from '../../../utils/documentSchemas';
 import { compressImage, generateCardPDF, generateCardPng } from '../../../utils/cardGenerator';
-import { useToast } from '../../../hooks/useToast';
 
 vi.mock('../../../utils/dataService', () => ({
   default: {
@@ -15,10 +14,13 @@ vi.mock('../../../utils/dataService', () => ({
   },
 }));
 
+const mockAddToast = vi.hoisted(() => vi.fn());
+const mockClearIconHeroLogs = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../hooks/useToast', () => ({
   useToast: () => ({
     toasts: [],
-    addToast: vi.fn(),
+    addToast: mockAddToast,
     dismissToast: vi.fn(),
   }),
 }));
@@ -47,6 +49,7 @@ vi.mock('../../../hooks/useAIIconHero', () => ({
     generate: vi.fn().mockResolvedValue('data:image/png;base64,ICON'),
     isProcessing: false,
     logs: [],
+    clear: mockClearIconHeroLogs,
   }),
 }));
 
@@ -64,7 +67,6 @@ const mockSave = dataService.saveDocument as unknown as ReturnType<typeof vi.fn>
 const mockCompress = compressImage as unknown as ReturnType<typeof vi.fn>;
 const mockGenPDF = generateCardPDF as unknown as ReturnType<typeof vi.fn>;
 const mockGenPng = generateCardPng as unknown as ReturnType<typeof vi.fn>;
-const { addToast: mockAddToast } = useToast();
 
 const baseProps = {
   userEmail: 'user@test.com',
@@ -78,7 +80,7 @@ describe('CardEditorShell', () => {
     mockCompress.mockClear();
     mockGenPDF.mockClear();
     mockGenPng.mockClear();
-    (mockAddToast as any).mockClear?.();
+    mockAddToast.mockClear();
   });
 
   it('renders both previews and form controls', () => {
@@ -195,5 +197,70 @@ describe('CardEditorShell', () => {
 
     await waitFor(() => expect(container.querySelector('img[alt="Cover fronte"]')).toBeInTheDocument(), { timeout: 3000 });
     expect(container.querySelector('img[alt="Cover retro"]')).toBeInTheDocument();
+  });
+
+  describe('CON-IS-001: icona AI sostituisce sempre la foto', () => {
+    const cardWithFront = (front: Record<string, string>) => ({
+      ...createEmptyCard(),
+      front: { ...createEmptyCard().front, ...front },
+    });
+
+    const clickGenerateIcon = async (container: HTMLElement) => {
+      fireEvent.click(screen.getByRole('button', { name: /^Icona AI/i }));
+      fireEvent.click(screen.getByTestId('card-generate-icon-ai'));
+      await waitFor(() => expect(mockAddToast).toHaveBeenCalled(), { timeout: 3000 });
+      return container;
+    };
+
+    it('logo e foto occupati → sostituisce la foto, logo preservato', async () => {
+      const initial = cardWithFront({
+        photoUrl: 'data:image/png;base64,USERPHOTO',
+        logoUrl: 'data:image/png;base64,OLDLOGO',
+      });
+      const { container } = render(<CardAIFloatingProvider><CardEditorShell {...baseProps} initialCard={initial} /></CardAIFloatingProvider>);
+      await clickGenerateIcon(container);
+
+      expect(mockAddToast).toHaveBeenCalledWith('success', expect.stringMatching(/applicata come foto/i), 4000);
+      const photo = container.querySelector('img[alt="Foto del titolare"]') as HTMLImageElement;
+      expect(photo.getAttribute('src')).toBe('data:image/png;base64,ICON');
+      const logo = container.querySelector('img[alt="Logo aziendale"]') as HTMLImageElement;
+      expect(logo.getAttribute('src')).toBe('data:image/png;base64,OLDLOGO');
+    });
+
+    it('logo occupato e foto libera → applica come foto', async () => {
+      const initial = cardWithFront({ logoUrl: 'data:image/png;base64,OLDLOGO' });
+      const { container } = render(<CardAIFloatingProvider><CardEditorShell {...baseProps} initialCard={initial} /></CardAIFloatingProvider>);
+      await clickGenerateIcon(container);
+
+      expect(mockAddToast).toHaveBeenCalledWith('success', expect.stringMatching(/applicata come foto/i), 4000);
+      const photo = container.querySelector('img[alt="Foto del titolare"]') as HTMLImageElement;
+      expect(photo.getAttribute('src')).toBe('data:image/png;base64,ICON');
+      const logo = container.querySelector('img[alt="Logo aziendale"]') as HTMLImageElement;
+      expect(logo.getAttribute('src')).toBe('data:image/png;base64,OLDLOGO');
+    });
+
+    it('logo libero → applica come foto', async () => {
+      const { container } = render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
+      await clickGenerateIcon(container);
+
+      expect(mockAddToast).toHaveBeenCalledWith('success', expect.stringMatching(/applicata come foto/i), 4000);
+      const photo = container.querySelector('img[alt="Foto del titolare"]') as HTMLImageElement;
+      expect(photo.getAttribute('src')).toBe('data:image/png;base64,ICON');
+      const logo = container.querySelector('img[alt="Logo aziendale"]');
+      expect(logo).toBeNull();
+    });
+  });
+
+  describe('reset "Nuova conversazione" clears all AI logs', () => {
+    it('calls both resetCardChat and clearIconHeroLogs when reset button clicked', async () => {
+      mockClearIconHeroLogs.mockClear();
+      render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);
+
+      // Expand "Prompt libero" section (it's collapsible) and click "Nuova conversazione"
+      const resetBtn = screen.getByRole('button', { name: /nuova conversazione/i });
+      fireEvent.click(resetBtn);
+
+      await waitFor(() => expect(mockClearIconHeroLogs).toHaveBeenCalled());
+    });
   });
 });

@@ -133,7 +133,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
   const { processCardPrompt, generateCover, generatePhoto, resetCardChat, cardAiLogs, isCardProcessing, availableModels, totalCostUsd, lastCostUsd } = useAICard(userEmail);
-  const { generate: generateIconHero, isProcessing: isIconHeroProcessing, logs: iconHeroLogs } = useAIIconHero(userEmail);
+  const { generate: generateIconHero, isProcessing: isIconHeroProcessing, logs: iconHeroLogs, clear: clearIconHeroLogs } = useAIIconHero(userEmail);
   const [isPhotoGenerating, setIsPhotoGenerating] = useState(false);
   const [iconPrompt, setIconPrompt] = useState('');
   const [showIconPromptEditor, setShowIconPromptEditor] = useState(false);
@@ -217,8 +217,11 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     });
   }, []);
 
-  const [selectedGridElement, setSelectedGridElement] = useState<keyof CardGrid['elements'] | ''>('');
+  const [selectedFrontElement, setSelectedFrontElement] = useState<keyof CardGrid['elements'] | ''>('');
+  const [selectedBackElement, setSelectedBackElement] = useState<keyof CardGrid['elements'] | ''>('');
   const [gridEditorSide, setGridEditorSide] = useState<GridSide>('front');
+
+  const selectedGridElement = gridEditorSide === 'back' ? selectedBackElement : selectedFrontElement;
 
   const setGridEditorSideLogged = useCallback((s: GridSide) => {
     setGridEditorSide(s);
@@ -226,7 +229,11 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, []);
 
   const setSelectedGridElementLogged = useCallback((k: keyof CardGrid['elements'] | '') => {
-    setSelectedGridElement(k);
+    if (gridEditorSide === 'back') {
+      setSelectedBackElement(k);
+    } else {
+      setSelectedFrontElement(k);
+    }
     pushLayoutEvent({ type: 'grid.select', side: gridEditorSide, element: k || undefined, result: 'ok' });
   }, [gridEditorSide]);
 
@@ -388,7 +395,8 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     setCard(createEmptyCard());
     setShowTemplateBanner(true);
     setShowGrid(false);
-    setSelectedGridElement('');
+    setSelectedFrontElement('');
+    setSelectedBackElement('');
     setGridEditorSide('front');
     setUploadError(null);
     setAiText('');
@@ -654,14 +662,9 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         imageModel: opts.imageModel,
         background: opts.background,
       });
-      // Apply as logo if no logo is set; otherwise store as photo for visual flair.
-      if (!card.front.logoUrl) {
-        patchFront({ logoUrl: dataUrl });
-        addToast('success', 'Icona AI generata e applicata come logo.', 4000);
-      } else {
-        patchFront({ photoUrl: dataUrl });
-        addToast('success', 'Icona AI generata e applicata come foto.', 4000);
-      }
+      // CON-IS-001: sostituisce sempre la foto (photoUrl) esistente.
+      patchFront({ photoUrl: dataUrl });
+      addToast('success', 'Icona AI generata e applicata come foto.', 4000);
     } catch (err: any) {
       addToast('error', err.message || 'Errore generazione icona AI', 5000);
     }
@@ -918,6 +921,11 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     return combined;
   }, [cardAiLogs, iconHeroLogs]);
 
+  const handleResetCardChat = useCallback(() => {
+    resetCardChat();
+    clearIconHeroLogs();
+  }, [resetCardChat, clearIconHeroLogs]);
+
   const aiPanelProps = {
     aiModel,
     onModelChange: setAiModel,
@@ -926,7 +934,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     availableModels,
     isProcessing: isCardProcessing || isCoverGenerating || isPhotoGenerating || isIconHeroProcessing,
     onRun: runCardAI,
-    onReset: resetCardChat,
+    onReset: handleResetCardChat,
     logs: mergedLogs,
     tier,
     onGenerateCover: handleGenerateCover,
@@ -972,12 +980,17 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       variant={isMobile ? 'mobile' : 'desktop'}
       {...aiPanelProps}
     />
-  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, isIconHeroProcessing, runCardAI, resetCardChat, mergedLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, coverPrompt, showCoverPromptEditor, coverLibrary, handleSaveCoverPrompt, handleApplyCoverPrompt, handleDeleteCoverPrompt, handleFillAutoCoverPrompt, patchDecorations, lastCostUsd, totalCostUsd]);
+  ), [isMobile, aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, isIconHeroProcessing, runCardAI, handleResetCardChat, mergedLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, coverPrompt, showCoverPromptEditor, coverLibrary, handleSaveCoverPrompt, handleApplyCoverPrompt, handleDeleteCoverPrompt, handleFillAutoCoverPrompt, patchDecorations, lastCostUsd, totalCostUsd]);
 
   // Phase 14: variante bare per la AIConsole rail (niente AILogPanel doppio)
   const aiPanelBare = useMemo(() => (
     <CardAIControls variant="desktop" bare {...aiPanelProps} />
-  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, isIconHeroProcessing, runCardAI, resetCardChat, mergedLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, coverPrompt, showCoverPromptEditor, coverLibrary, handleSaveCoverPrompt, handleApplyCoverPrompt, handleDeleteCoverPrompt, handleFillAutoCoverPrompt, patchDecorations, lastCostUsd, totalCostUsd]);
+  ), [aiModel, aiText, availableModels, isCardProcessing, isCoverGenerating, isPhotoGenerating, isIconHeroProcessing, runCardAI, handleResetCardChat, mergedLogs, tier, handleGenerateCover, handleRemoveCover, handleGeneratePhoto, card, photoPrompt, showPhotoPromptEditor, photoLibrary, handleSavePhotoPrompt, handleApplyPhotoPrompt, handleDeletePhotoPrompt, handleFillAutoPhotoPrompt, iconPrompt, showIconPromptEditor, iconLibrary, handleSaveIconPrompt, handleApplyIconPrompt, handleDeleteIconPrompt, handleFillAutoIconPrompt, handleGenerateIcon, coverPrompt, showCoverPromptEditor, coverLibrary, handleSaveCoverPrompt, handleApplyCoverPrompt, handleDeleteCoverPrompt, handleFillAutoCoverPrompt, patchDecorations, lastCostUsd, totalCostUsd]);
+
+  const selectedElementForPreview = useMemo(() => ({
+    side: gridEditorSide,
+    key: selectedGridElement,
+  }), [gridEditorSide, selectedGridElement]);
 
   const previewPanel = useMemo(() => (
     <CardPreviewSurface
@@ -987,8 +1000,10 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       onToggleGrid={handleToggleShowGrid}
       zoom={previewZoom}
       heading="Anteprima"
+      selectedElement={selectedElementForPreview}
+      onPatchPlacement={(key, patch) => patchElementPlacement(key as keyof CardGrid['elements'], patch)}
     />
-  ), [card, tier, showGrid, handleToggleShowGrid, previewZoom]);
+  ), [card, tier, showGrid, handleToggleShowGrid, previewZoom, selectedElementForPreview, patchElementPlacement]);
 
   const gridControls = useMemo(() => (
     <CardGridControls
@@ -997,7 +1012,6 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       gridEnabled={showGrid}
       onSideChange={(s) => {
         setGridEditorSideLogged(s);
-        setSelectedGridElementLogged('');
       }}
       onChangeGrid={patchGrid}
       onApplyPreset={applyGridPreset}
@@ -1064,9 +1078,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
                     gridEnabled={showGrid}
                     selected={selectedGridElement}
                     onSelect={setSelectedGridElementLogged}
-                    onChangeSide={(s) => { setGridEditorSideLogged(s); setSelectedGridElementLogged(''); }}
+                    onChangeSide={(s) => setGridEditorSideLogged(s)}
                     onChangeGrid={patchGrid}
+                    onApplyPreset={applyGridPreset}
                     onAfterMove={handleAfterMove}
+                    onAfterResize={handleAfterResize}
+                    onAfterAlign={handleAfterAlign}
+                    onPatchPlacement={patchElementPlacement}
                   />
                 </div>
               ),

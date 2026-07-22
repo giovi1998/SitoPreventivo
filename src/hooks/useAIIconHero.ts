@@ -28,10 +28,11 @@ export interface UseAIIconHeroReturn {
   ) => Promise<string>;
   isProcessing: boolean;
   logs: ReturnType<typeof useAILogs>['logs'];
+  clear: () => void;
 }
 
 export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
-  const { logs, info, success, error } = useAILogs('useAIIconHero');
+  const { logs, info, success, error, clear } = useAILogs('useAIIconHero');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const generate = useCallback(
@@ -105,5 +106,5 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
     [userEmail, info, success, error],
   );
 
-  return { generate, isProcessing, logs };
+  return { generate, isProcessing, logs, clear };
 }
