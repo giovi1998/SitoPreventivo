@@ -34,7 +34,7 @@ describe('CardAIIconHeroSection', () => {
     expandSection();
     const btn = screen.getByTestId('card-generate-icon-ai');
     expect(btn).toBeDisabled();
-    expect(btn.textContent).toContain('🔒');
+    expect(btn.textContent).toContain('(Pro)');
   });
 
   it('enables generate button when tier is unlocked (auto prompt allowed)', () => {

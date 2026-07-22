@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useAI } from '../useAI';
 import dataService from '../../utils/dataService';
+import { captureElementAsBase64 } from '../../utils/ai/captureElement';
+import { setAiVisionEnabled } from '../../utils/uiPrefs';
 
 vi.mock('../../utils/dataService', () => ({
   default: {
@@ -10,9 +12,11 @@ vi.mock('../../utils/dataService', () => ({
   },
 }));
 
+const orchestratorInstances = vi.hoisted(() => [] as { processPrompt: ReturnType<typeof vi.fn> }[]);
+
 vi.mock('../../ai/index', () => ({
   AIOrchestrator: vi.fn().mockImplementation(function () {
-    return {
+    const instance = {
       processPrompt: vi.fn().mockResolvedValue({
         quote: { quoteId: 'q1' },
         response: { content: '{"project":{"title":"X"}}', toolCalls: undefined, usage: { totalTokens: 500 } },
@@ -24,13 +28,23 @@ vi.mock('../../ai/index', () => ({
       resetSession: vi.fn(),
       getCurrentSessionId: vi.fn().mockReturnValue('sess-1'),
     };
+    orchestratorInstances.push(instance);
+    return instance;
   }),
 }));
+
+vi.mock('../../utils/ai/captureElement', () => ({
+  captureElementAsBase64: vi.fn().mockResolvedValue('data:image/jpeg;base64,PREVIEW'),
+}));
+
+const mockCapture = captureElementAsBase64 as unknown as ReturnType<typeof vi.fn>;
 
 describe('useAI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    orchestratorInstances.length = 0;
     sessionStorage.clear();
+    localStorage.clear();
   });
 
   it('returns initial state', () => {
@@ -189,5 +203,44 @@ describe('useAI', () => {
     expect(successLog).toBeUndefined();
     vi.doUnmock('../../ai/index');
     vi.resetModules();
+  });
+
+  describe('CON-MM-002: screenshot solo se il provider supporta vision', () => {
+    afterEach(() => {
+      setAiVisionEnabled(false);
+      document.querySelectorAll('[data-quote-preview]').forEach((el) => el.remove());
+    });
+
+    it('provider text-only (deepseek-chat): nessuna cattura, imagePreviewBase64 undefined', async () => {
+      setAiVisionEnabled(true);
+      document.body.insertAdjacentHTML('beforeend', '<div data-quote-preview></div>');
+      const { result } = renderHook(() => useAI('user@test.com'));
+      await act(async () => {
+        await result.current.processPrompt({ quoteId: 'q' } as any, 'ciao', { modelId: 'deepseek-chat' });
+      });
+      expect(mockCapture).not.toHaveBeenCalled();
+      const inst = orchestratorInstances.find((i) => i.processPrompt.mock.calls.length > 0)!;
+      expect(inst.processPrompt).toHaveBeenCalledWith(
+        expect.anything(),
+        'ciao',
+        expect.objectContaining({ imagePreviewBase64: undefined }),
+      );
+    });
+
+    it('provider vision (ollama-minimax-m3): cattura eseguita e passata all\'orchestratore', async () => {
+      setAiVisionEnabled(true);
+      document.body.insertAdjacentHTML('beforeend', '<div data-quote-preview></div>');
+      const { result } = renderHook(() => useAI('user@test.com'));
+      await act(async () => {
+        await result.current.processPrompt({ quoteId: 'q' } as any, 'ciao', { modelId: 'ollama-minimax-m3' });
+      });
+      expect(mockCapture).toHaveBeenCalled();
+      const inst = orchestratorInstances.find((i) => i.processPrompt.mock.calls.length > 0)!;
+      expect(inst.processPrompt).toHaveBeenCalledWith(
+        expect.anything(),
+        'ciao',
+        expect.objectContaining({ imagePreviewBase64: 'data:image/jpeg;base64,PREVIEW' }),
+      );
+    });
   });
 });

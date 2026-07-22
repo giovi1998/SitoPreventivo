@@ -7,6 +7,8 @@ vi.mock('../providers/registry', () => ({
   get providerRegistry() {
     return {
       getProvider: () => fakeProvider,
+      getDefaultId: () => 'mock-flyer',
+      getFallbackProvider: () => null,
       listProviders: () => [
         { id: 'mock-flyer', name: 'Mock', model: 'mock-flyer', supportsStreaming: true, supportsTools: false },
       ],

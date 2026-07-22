@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import CardPreview from '../CardPreview';
 import { createEmptyCard, createGiovanniCardTemplate, gridPresetLeft, gridPresetSplit, gridPresetBackDefault } from '../../utils/documentSchemas';
 import type { BusinessCardLayout, BusinessCard } from '../../utils/documentSchemas';
@@ -83,6 +83,121 @@ describe('CardPreview', () => {
       render(<CardPreview side="front" card={card} />);
       const img = screen.getByAltText(/Foto del titolare/i);
       expect(img).toBeInTheDocument();
+    });
+
+    it('drags photo cell to update placement when selected and showGrid=true (TB-023)', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, photoUrl: 'data:image/png;base64,AAAA', useGrid: true },
+        grid: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 3 } } },
+      };
+      const onPatch = vi.fn();
+      const { container } = render(
+        <CardPreview
+          side="front"
+          card={card}
+          showGrid={true}
+          selectedElement={{ side: 'front', key: 'photo' }}
+          onPatchPlacement={onPatch}
+        />,
+      );
+      const photoCell = container.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
+      expect(photoCell).not.toBeNull();
+      // jsdom has no layout; mock a 200x150 cell so drag deltas translate to placement.
+      photoCell.getBoundingClientRect = vi.fn(() => ({ x: 0, y: 0, width: 200, height: 150, top: 0, left: 0, right: 200, bottom: 150 } as DOMRect));
+      fireEvent.pointerDown(photoCell, { clientX: 0, clientY: 0, pointerId: 1 });
+      fireEvent.pointerMove(photoCell, { clientX: 50, clientY: 30, pointerId: 1 });
+      fireEvent.pointerUp(photoCell, { clientX: 50, clientY: 30, pointerId: 1 });
+      expect(onPatch).toHaveBeenCalled();
+      const lastCall = onPatch.mock.calls[onPatch.mock.calls.length - 1];
+      expect(lastCall[0]).toBe('photo');
+      expect(lastCall[1]).toMatchObject({ x: expect.any(Number), y: expect.any(Number) });
+    });
+
+    it('does NOT drag photo cell when selectedElement does not match (TB-023)', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, photoUrl: 'data:image/png;base64,AAAA', useGrid: true },
+        grid: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 3 } } },
+      };
+      const onPatch = vi.fn();
+      const { container } = render(
+        <CardPreview
+          side="front"
+          card={card}
+          showGrid={true}
+          selectedElement={{ side: 'front', key: 'name' }}
+          onPatchPlacement={onPatch}
+        />,
+      );
+      const photoCell = container.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
+      fireEvent.pointerDown(photoCell, { clientX: 0, clientY: 0, pointerId: 1 });
+      fireEvent.pointerMove(window, { clientX: 100, clientY: 50, pointerId: 1 });
+      fireEvent.pointerUp(window, { clientX: 100, clientY: 50, pointerId: 1 });
+      expect(onPatch).not.toHaveBeenCalled();
+    });
+
+    it('does NOT drag photo cell when the card has no photoUrl (CON-DF-002)', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        // photo cell present in grid but no real photo → drag must stay off.
+        front: { ...createEmptyCard().front, name: 'Mario', useGrid: true },
+        // `name` con contenuto attiva il grid-mode (hasGridElements); la
+        // cella photo resta nella grid persistita anche senza photoUrl.
+        grid: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 3 }, name: { x: 2, y: 0, w: 2, h: 1 } } },
+      };
+      const onPatch = vi.fn();
+      const { container } = render(
+        <CardPreview
+          side="front"
+          card={card}
+          showGrid={true}
+          selectedElement={{ side: 'front', key: 'photo' }}
+          onPatchPlacement={onPatch}
+        />,
+      );
+      const photoCell = container.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
+      expect(photoCell).not.toBeNull();
+      expect(photoCell.classList.contains('card-grid-cell--draggable')).toBe(false);
+      photoCell.getBoundingClientRect = vi.fn(() => ({ x: 0, y: 0, width: 200, height: 150, top: 0, left: 0, right: 200, bottom: 150 } as DOMRect));
+      fireEvent.pointerDown(photoCell, { clientX: 0, clientY: 0, pointerId: 1 });
+      fireEvent.pointerMove(photoCell, { clientX: 50, clientY: 30, pointerId: 1 });
+      fireEvent.pointerUp(photoCell, { clientX: 50, clientY: 30, pointerId: 1 });
+      expect(onPatch).not.toHaveBeenCalled();
+    });
+
+    it('snaps placement to center (x:0/y:0) when drag delta falls inside the dead zone (GUD-DF-002)', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, photoUrl: 'data:image/png;base64,AAAA', useGrid: true },
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: { photo: { x: 0, y: 0, w: 2, h: 3, placement: { x: 0.1, y: 0.1, scale: 1 } } },
+        },
+      };
+      const onPatch = vi.fn();
+      const { container } = render(
+        <CardPreview
+          side="front"
+          card={card}
+          showGrid={true}
+          selectedElement={{ side: 'front', key: 'photo' }}
+          onPatchPlacement={onPatch}
+        />,
+      );
+      const photoCell = container.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
+      // jsdom has no layout; mock a 200x150 cell so drag deltas translate to placement.
+      photoCell.getBoundingClientRect = vi.fn(() => ({ x: 0, y: 0, width: 200, height: 150, top: 0, left: 0, right: 200, bottom: 150 } as DOMRect));
+      fireEvent.pointerDown(photoCell, { clientX: 0, clientY: 0, pointerId: 1 });
+      // -6px su 200px → dX=-0.06 → 0.1-0.06=0.04 (<0.05) → snap 0.
+      // -4px su 150px → dY≈-0.053 → 0.1-0.053≈0.047 (<0.05) → snap 0.
+      fireEvent.pointerMove(photoCell, { clientX: -6, clientY: -4, pointerId: 1 });
+      fireEvent.pointerUp(photoCell, { clientX: -6, clientY: -4, pointerId: 1 });
+      expect(onPatch).toHaveBeenCalled();
+      const lastCall = onPatch.mock.calls[onPatch.mock.calls.length - 1];
+      expect(lastCall[0]).toBe('photo');
+      expect(lastCall[1]).toEqual({ x: 0, y: 0 });
     });
 
     it('does NOT render monogram (removed feature) when name is set but no photo', () => {
@@ -857,6 +972,66 @@ describe('CardPreview', () => {
       const back = screen.getByTestId('card-preview-back');
       // qrSize: small → "84px"
       expect((back as HTMLElement).style.getPropertyValue('--card-qr-size')).toBe('84px');
+    });
+  });
+
+  describe('v2.16 preview/export parity fixes (TB-023)', () => {
+    it('logo cell gets bg + radius when logoBackground is "card" (export parity)', () => {
+      const card: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        front: {
+          ...createGiovanniCardTemplate().front,
+          logoUrl: 'data:image/png;base64,iVBORw0KGgo=',
+          logoBackground: 'card',
+          useGrid: true,
+        },
+        grid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            logo: { x: 2, y: 0, w: 2, h: 2 },
+          },
+        },
+      };
+      render(<CardPreview side="front" card={card} showGrid={true} />);
+      const logoEl = document.querySelector('[data-testid="grid-el-logo"]') as HTMLElement;
+      expect(logoEl).not.toBeNull();
+      // jsdom normalizes hex to rgb(): assert the background is applied,
+      // not the exact serialization.
+      expect(logoEl.style.background).not.toBe('');
+      expect(logoEl.style.borderRadius).toBe('6px');
+    });
+
+    it('QR cell carries --card-photo-transform when placement is set (consumed by .card-back-qr CSS)', () => {
+      const card: BusinessCard = {
+        ...createGiovanniCardTemplate(),
+        back: {
+          ...createGiovanniCardTemplate().back,
+          useGrid: true,
+          qrPayload: 'https://example.com',
+        },
+        backGrid: {
+          cols: 4,
+          rows: 4,
+          elements: {
+            // contacts element required: without it the back preview
+            // discards the grid and derives from the default preset.
+            contacts: { x: 0, y: 0, w: 2, h: 4 },
+            qr: { x: 2, y: 0, w: 2, h: 2, placement: { x: 0.5, y: -0.2, scale: 1.2 } },
+          },
+        },
+      };
+      render(<CardPreview side="back" card={card} showGrid={true} />);
+      const qrEl = document.querySelector('[data-testid="grid-el-qr"]') as HTMLElement;
+      expect(qrEl).not.toBeNull();
+      const transformVar = qrEl.style.getPropertyValue('--card-photo-transform');
+      expect(transformVar).toContain('translate(25%, -10%)');
+      expect(transformVar).toContain('scale(1.2)');
+      // The CSS rule that consumes the var must exist for the QR block
+      // (regression: previously only .card-photo consumed it, so QR drag
+      // had no visual feedback in preview).
+      const qrBlock = qrEl.querySelector('.card-back-qr');
+      expect(qrBlock).not.toBeNull();
     });
   });
 });

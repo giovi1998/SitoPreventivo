@@ -2,16 +2,28 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AIStreamChunk } from '../types';
 
 let chatResponses: any[] = [];
+let fakeProvider: any;
 
-vi.mock('../providers/registry', () => {
-  const baseProvider = {
+vi.mock('../providers/registry', () => ({
+  get providerRegistry() {
+    return {
+      getProvider: vi.fn(() => fakeProvider),
+      getDefaultId: vi.fn(() => 'mock'),
+      getFallbackProvider: vi.fn(() => null),
+      listProviders: vi.fn(() => [{ id: 'mock', name: 'Mock', model: 'mock-model', supportsStreaming: true, supportsTools: true }]),
+    };
+  },
+}));
+
+import { CardAIOrchestrator } from '../cardOrchestrator';
+import { createEmptyCard } from '../../utils/documentSchemas';
+
+function setupMockProvider(overrides: Partial<typeof fakeProvider> = {}) {
+  fakeProvider = {
     name: 'Mock',
     model: 'mock-model',
     supportsStreaming: true,
     supportsTools: true,
-  };
-  const mockProvider = {
-    ...baseProvider,
     chat: vi.fn(async () => {
       const r = chatResponses.shift() ?? {
         content: JSON.stringify({ front: { name: 'MARIO ROSSI' }, style: { accentColor: '#1e3a5f' } }),
@@ -19,22 +31,15 @@ vi.mock('../providers/registry', () => {
       };
       return r;
     }),
-    stream: vi.fn(async function* (messages, options) {
+    stream: vi.fn(async function* () {
       const content = JSON.stringify({ front: { name: 'STREAMED' } });
       yield { type: 'content' as const, content } satisfies AIStreamChunk;
       yield { type: 'done' as const, usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } } satisfies AIStreamChunk;
     }),
+    ...overrides,
   };
-  return {
-    providerRegistry: {
-      getProvider: vi.fn(() => mockProvider),
-      listProviders: vi.fn(() => [{ id: 'mock', name: 'Mock', model: 'mock-model', supportsStreaming: true, supportsTools: true }]),
-    },
-  };
-});
-
-import { CardAIOrchestrator } from '../cardOrchestrator';
-import { createEmptyCard } from '../../utils/documentSchemas';
+  return fakeProvider;
+}
 
 describe('CardAIOrchestrator', () => {
   let orch: CardAIOrchestrator;
@@ -42,6 +47,7 @@ describe('CardAIOrchestrator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     chatResponses = [];
+    setupMockProvider();
     orch = new CardAIOrchestrator();
   });
 
@@ -122,9 +128,9 @@ describe('CardAIOrchestrator', () => {
   });
 
   it('processPrompt handles invalid JSON gracefully', async () => {
-    const { providerRegistry } = await import('../providers/registry');
-    (providerRegistry.getProvider as any).mockReturnValueOnce({
-      ...providerRegistry.getProvider(),
+    const prev = { ...fakeProvider };
+    setupMockProvider({
+      ...prev,
       chat: vi.fn(async () => ({ content: 'not json', usage: undefined })),
       stream: vi.fn(async function* () {}),
     });
@@ -134,9 +140,9 @@ describe('CardAIOrchestrator', () => {
   });
 
   it('processPrompt handles empty AI response', async () => {
-    const { providerRegistry } = await import('../providers/registry');
-    (providerRegistry.getProvider as any).mockReturnValueOnce({
-      ...providerRegistry.getProvider(),
+    const prev = { ...fakeProvider };
+    setupMockProvider({
+      ...prev,
       chat: vi.fn(async () => ({ content: null, usage: undefined })),
       stream: vi.fn(async function* () {}),
     });

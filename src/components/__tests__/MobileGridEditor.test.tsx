@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import MobileGridEditor from '../MobileGridEditor';
+import MobileGridEditor, { blockedMoveReason } from '../MobileGridEditor';
 import {
   gridPresetLeft,
   createGiovanniCardTemplate,
@@ -162,5 +162,84 @@ describe('MobileGridEditor (Phase 2.2 API)', () => {
     expect(optionTexts.some((t) => /QR/.test(t))).toBe(true);
     expect(optionTexts.some((t) => /^Foto$/.test(t))).toBe(false);
     expect(optionTexts.some((t) => /^Logo$/.test(t))).toBe(false);
+  });
+
+  it('delegates preset select to onApplyPreset when provided (no divergent inline fallback)', () => {
+    const card = createGiovanniCardTemplate();
+    const onApplyPreset = vi.fn();
+    const onChangeGrid = vi.fn();
+    render(
+      <MobileGridEditor
+        card={card}
+        side="front"
+        gridEnabled
+        selected=""
+        onSelect={() => {}}
+        onChangeSide={() => {}}
+        onChangeGrid={onChangeGrid}
+        onApplyPreset={onApplyPreset}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/Preset griglia/i), { target: { value: 'left' } });
+    expect(onApplyPreset).toHaveBeenCalledTimes(1);
+    expect(onApplyPreset).toHaveBeenCalledWith('left');
+    expect(onChangeGrid).not.toHaveBeenCalled();
+  });
+
+  it('fallback preset (no onApplyPreset) matches canonical gridPresetLeft: no photo/logo overlap, alignH/alignV set', () => {
+    const base = createEmptyCard();
+    const card: BusinessCard = {
+      ...base,
+      front: {
+        ...base.front,
+        photoUrl: 'data:image/png;base64,PHOTO',
+        logoUrl: 'data:image/png;base64,LOGO',
+        name: 'Mario Rossi',
+        title: 'CEO',
+        company: 'ACME',
+      },
+    };
+    const onChangeGrid = vi.fn();
+    render(
+      <MobileGridEditor
+        card={card}
+        side="front"
+        gridEnabled
+        selected=""
+        onSelect={() => {}}
+        onChangeSide={() => {}}
+        onChangeGrid={onChangeGrid}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/Preset griglia/i), { target: { value: 'left' } });
+    expect(onChangeGrid).toHaveBeenCalledTimes(1);
+    const grid: CardGrid = onChangeGrid.mock.calls[0][0];
+    expect(grid).toEqual(gridPresetLeft());
+    // Regression: il vecchio fallback inline metteva photo h:4 + logo y:3
+    // → sovrapposizione in riga 3. Qui photo (h:3) e logo (y:3) non collidono.
+    const photo = grid.elements.photo!;
+    const logo = grid.elements.logo!;
+    expect(photo.y + photo.h).toBeLessThanOrEqual(logo.y);
+    for (const el of Object.values(grid.elements)) {
+      expect(el?.alignH).toBeDefined();
+      expect(el?.alignV).toBeDefined();
+    }
+  });
+
+  it('blockedMoveReason returns "collision" when the move is blocked by another element', () => {
+    // Parità col desktop (CardGridControls.handleMove): il motivo del blocco
+    // non è sempre 'border'. I bottoni del popup sono disabled quando la
+    // mossa è bloccata, quindi il ramo è testato sull'helper puro.
+    const el = { x: 1, y: 1, w: 3, h: 1 };
+    const grid: CardGrid = { cols: 4, rows: 4, elements: {} };
+    // left: x+dx=0 resta dentro i bordi → il blocco (photo a x=0) è collisione.
+    expect(blockedMoveReason(el, grid, -1, 0)).toBe('collision');
+  });
+
+  it('blockedMoveReason returns "border" when the move exits the grid', () => {
+    const el = { x: 1, y: 0, w: 3, h: 1 };
+    const grid: CardGrid = { cols: 4, rows: 4, elements: {} };
+    expect(blockedMoveReason(el, grid, 0, -1)).toBe('border');
+    expect(blockedMoveReason(el, grid, 1, 0)).toBe('border'); // x+w=4 → bordo dx
   });
 });

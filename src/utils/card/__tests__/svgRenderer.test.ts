@@ -851,6 +851,95 @@ describe('v2.14 preview/export parity', () => {
   });
 });
 
+describe('svgRenderer v2.16 preview/export parity fixes (TB-023)', () => {
+  it('QR fgColor uses card textColor (was hardcoded #000000)', () => {
+    const base = createEmptyCard();
+    const card = {
+      ...base,
+      style: { ...base.style, textColor: '#112233' },
+      front: { ...base.front, name: '' },
+      back: { ...base.back, useGrid: true, qrLabel: '', qrPayload: 'https://example.com' },
+      backGrid: {
+        cols: 4, rows: 4,
+        elements: { qr: { x: 0, y: 0, w: 2, h: 2 } },
+      },
+    };
+    const svg = buildBackSvg(card as any, 1024, 663);
+    // QR modules are filled with the text color, matching the preview
+    // (CardPreview builds the QR with fgColor: card.style.textColor).
+    expect(svg).toContain('#112233');
+    expect(svg).not.toContain("fgColor: '#000000'");
+  });
+
+  it('front cover wash mid-stop is 0.25 (parity with preview hex alpha 40)', () => {
+    const base = createEmptyCard();
+    const card = {
+      ...base,
+      front: { ...base.front, coverImageUrl: 'data:image/png;base64,AAAA' },
+    };
+    const svg = buildFrontSvg(card as any, 1024, 663);
+    expect(svg).toContain('stop-opacity="0.25"');
+    expect(svg).not.toContain('stop-opacity="0.4"');
+  });
+
+  it('grid-mode photo has accent border stroke (parity with .card-photo CSS)', () => {
+    const base = createEmptyCard();
+    const card = {
+      ...base,
+      style: { ...base.style, accentColor: '#AABBCC' },
+      front: { ...base.front, photoUrl: 'data:image/png;base64,AAAA', useGrid: true },
+      grid: {
+        cols: 4, rows: 4,
+        elements: { photo: { x: 0, y: 0, w: 2, h: 3 } },
+      },
+    };
+    const svg = buildFrontSvg(card as any, 1024, 663);
+    expect(svg).toMatch(/<rect[^>]*fill="none" stroke="#AABBCC"/);
+  });
+
+  it('logo falls back into photo cell when no photo and no logo element (preview parity)', () => {
+    const base = createEmptyCard();
+    const card = {
+      ...base,
+      front: { ...base.front, photoUrl: null, logoUrl: 'data:image/png;base64,LOGO', useGrid: true },
+      grid: {
+        cols: 4, rows: 4,
+        elements: { photo: { x: 0, y: 0, w: 2, h: 3 } },
+      },
+    };
+    const svg = buildFrontSvg(card as any, 1024, 663);
+    expect(svg).toContain('data:image/png;base64,LOGO');
+  });
+
+  it('services expand into socials row when socials element exists but content is empty', () => {
+    const base = createEmptyCard();
+    const mkCard = (withSocialsEl: boolean) => ({
+      ...base,
+      back: {
+        ...base.back,
+        useGrid: true,
+        services: ['Consulenza', 'Supporto'],
+        socials: [],
+      },
+      backGrid: {
+        cols: 4, rows: 4,
+        elements: {
+          contacts: { x: 0, y: 0, w: 2, h: 2 },
+          services: { x: 0, y: 2, w: 2, h: 1 },
+          qr: { x: 2, y: 0, w: 2, h: 4 },
+          ...(withSocialsEl ? { socials: { x: 0, y: 3, w: 2, h: 1 } } : {}),
+        },
+      },
+    });
+    const svgWithout = buildBackSvg(mkCard(false) as any, 1024, 663);
+    const svgWith = buildBackSvg(mkCard(true) as any, 1024, 663);
+    // Both must render the services block at the same geometry: an empty
+    // socials element must not block the expansion (preview behavior).
+    const yOf = (svg: string) => yOfText(svg, 'Consulenza');
+    expect(yOf(svgWith)).toBe(yOf(svgWithout));
+  });
+});
+
 function fontSizeOfText(svg: string, text: string): number {
   const idx = svg.indexOf(text);
   if (idx === -1) return NaN;

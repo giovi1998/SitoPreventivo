@@ -1,0 +1,35 @@
+import { describe, it, expect } from 'vitest';
+import { calculateCostUsd, OLLAMA_PRO_FLAT_MONTHLY } from '../providerPricing';
+
+describe('providerPricing calculateCostUsd (spec TB-023 §6.1)', () => {
+  it('AC-TC-001: DeepSeek pay-per-token (600 input + 400 output → 0.000196)', () => {
+    const cost = calculateCostUsd('deepseek-chat', { promptTokens: 600, completionTokens: 400 });
+    // (600/1M)*0.14 + (400/1M)*0.28 = 0.000084 + 0.000112 = 0.000196
+    expect(cost).toBe(0.000196);
+  });
+
+  it('Ollama Pro flat: costo per chiamata sempre 0 anche con usage alto', () => {
+    const usage = { promptTokens: 100_000, completionTokens: 50_000 };
+    expect(calculateCostUsd('ollama-minimax-m3', usage)).toBe(0);
+    expect(calculateCostUsd('ollama-deepseek-v4-pro', usage)).toBe(0);
+    expect(calculateCostUsd('ollama-qwen-3.5', usage)).toBe(0);
+    expect(OLLAMA_PRO_FLAT_MONTHLY).toBe(20);
+  });
+
+  it('Gemini per-image: 1 immagine → perImage value', () => {
+    const usage = { promptTokens: 0, completionTokens: 0 };
+    expect(calculateCostUsd('gemini-nano-banana', usage, 1)).toBe(0.04);
+    expect(calculateCostUsd('gemini-flash-image', usage, 1)).toBe(0.02);
+    expect(calculateCostUsd('gemini-nano-banana', usage, 3)).toBe(0.12);
+  });
+
+  it('modello sconosciuto: fallback 0 (nessun pricing registrato)', () => {
+    const cost = calculateCostUsd('modello-inesistente', { promptTokens: 1000, completionTokens: 1000 });
+    expect(cost).toBe(0);
+  });
+
+  it('usage undefined → 0 anche per provider a consumo', () => {
+    expect(calculateCostUsd('deepseek-chat', undefined)).toBe(0);
+    expect(calculateCostUsd('gemini-nano-banana', undefined, 2)).toBe(0);
+  });
+});

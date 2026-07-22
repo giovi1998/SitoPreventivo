@@ -77,4 +77,15 @@ describe('AIConsole (REQ-AI-001/003/006)', () => {
     render(<AIConsole {...baseProps} />);
     expect(screen.queryByRole('button', { name: /Analizza preview con AI/i })).not.toBeInTheDocument();
   });
+
+  it('renderizza quickActions una sola volta (regression: doppio render in console)', () => {
+    render(
+      <AIConsole
+        {...baseProps}
+        quickActions={<button type="button">Nuova sessione</button>}
+      />
+    );
+    expect(screen.getAllByRole('button', { name: 'Nuova sessione' })).toHaveLength(1);
+    expect(document.querySelectorAll('.ai-console__quick')).toHaveLength(1);
+  });
 });

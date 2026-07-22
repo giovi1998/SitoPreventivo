@@ -8,9 +8,11 @@ vi.mock('../../utils/dataService', () => ({
   },
 }));
 
+const cardOrchestratorInstances = vi.hoisted(() => [] as { processPrompt: ReturnType<typeof vi.fn> }[]);
+
 vi.mock('../../ai/cardOrchestrator', () => ({
   CardAIOrchestrator: vi.fn().mockImplementation(function () {
-    return {
+    const instance = {
       processPrompt: vi.fn().mockResolvedValue({
         card: { id: 'card_1', documentType: 'businessCard', front: { name: 'AI NAME' } },
         response: { content: '{}', usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } },
@@ -22,12 +24,22 @@ vi.mock('../../ai/cardOrchestrator', () => ({
       getCurrentSessionId: vi.fn(() => null),
       getProviderList: vi.fn(() => [{ id: 'mock', name: 'Mock', model: 'mock', supportsStreaming: true, supportsTools: false }]),
     };
+    cardOrchestratorInstances.push(instance);
+    return instance;
   }),
+}));
+
+vi.mock('../../utils/card/pngExport', () => ({
+  renderCardSideDataUrl: vi.fn().mockResolvedValue('data:image/png;base64,SIDE'),
 }));
 
 import { useAICard } from '../useAICard';
 import { createEmptyCard, createGiovanniCardTemplate } from '../../utils/documentSchemas';
 import dataService from '../../utils/dataService';
+import { renderCardSideDataUrl } from '../../utils/card/pngExport';
+import { setAiVisionEnabled } from '../../utils/uiPrefs';
+
+const mockRenderSide = renderCardSideDataUrl as unknown as ReturnType<typeof vi.fn>;
 
 const originalLocation = window.location;
 
@@ -42,10 +54,13 @@ const setHost = (host: string) => {
 describe('useAICard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    cardOrchestratorInstances.length = 0;
+    localStorage.clear();
     setHost('localhost');
   });
 
   afterEach(() => {
+    setAiVisionEnabled(false);
     setHost('localhost');
   });
 
@@ -97,6 +112,21 @@ describe('useAICard', () => {
       await result.current.processCardPrompt(createEmptyCard(), 'test');
     });
     expect(dataService.trackTokens).toHaveBeenCalledWith('user@test.com', 15, expect.any(Number));
+  });
+
+  it('CON-MM-002: con provider text-only (deepseek-chat) non cattura lo screenshot anche con vision ON', async () => {
+    setAiVisionEnabled(true);
+    const { result } = renderHook(() => useAICard('user@test.com'));
+    await act(async () => {
+      await result.current.processCardPrompt(createEmptyCard(), 'test', { modelId: 'deepseek-chat' });
+    });
+    expect(mockRenderSide).not.toHaveBeenCalled();
+    const inst = cardOrchestratorInstances.find((i) => i.processPrompt.mock.calls.length > 0)!;
+    expect(inst.processPrompt).toHaveBeenCalledWith(
+      expect.anything(),
+      'test',
+      expect.objectContaining({ imagePreviewBase64: undefined }),
+    );
   });
 
   describe('generateCover', () => {
