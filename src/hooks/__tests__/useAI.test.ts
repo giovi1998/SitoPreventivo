@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useAI } from '../useAI';
 import dataService from '../../utils/dataService';
-import { captureElementAsBase64 } from '../../utils/ai/captureElement';
+import { renderQuotePreviewImage } from '../../utils/quote/quotePreviewImage';
 import { setAiVisionEnabled } from '../../utils/uiPrefs';
 
 vi.mock('../../utils/dataService', () => ({
@@ -33,11 +33,11 @@ vi.mock('../../ai/index', () => ({
   }),
 }));
 
-vi.mock('../../utils/ai/captureElement', () => ({
-  captureElementAsBase64: vi.fn().mockResolvedValue('data:image/jpeg;base64,PREVIEW'),
+vi.mock('../../utils/quote/quotePreviewImage', () => ({
+  renderQuotePreviewImage: vi.fn().mockResolvedValue('data:image/jpeg;base64,PREVIEW'),
 }));
 
-const mockCapture = captureElementAsBase64 as unknown as ReturnType<typeof vi.fn>;
+const mockCapture = renderQuotePreviewImage as unknown as ReturnType<typeof vi.fn>;
 
 describe('useAI', () => {
   beforeEach(() => {
@@ -213,10 +213,10 @@ describe('useAI', () => {
 
     it('provider text-only (deepseek-chat): nessuna cattura, imagePreviewBase64 undefined', async () => {
       setAiVisionEnabled(true);
-      document.body.insertAdjacentHTML('beforeend', '<div data-quote-preview></div>');
+      const quote = { quoteId: 'q', project: { title: 'Test' }, options: [] } as any;
       const { result } = renderHook(() => useAI('user@test.com'));
       await act(async () => {
-        await result.current.processPrompt({ quoteId: 'q' } as any, 'ciao', { modelId: 'deepseek-chat' });
+        await result.current.processPrompt(quote, 'ciao', { modelId: 'deepseek-chat' });
       });
       expect(mockCapture).not.toHaveBeenCalled();
       const inst = orchestratorInstances.find((i) => i.processPrompt.mock.calls.length > 0)!;
@@ -229,10 +229,10 @@ describe('useAI', () => {
 
     it('provider vision (ollama-minimax-m3): cattura eseguita e passata all\'orchestratore', async () => {
       setAiVisionEnabled(true);
-      document.body.insertAdjacentHTML('beforeend', '<div data-quote-preview></div>');
+      const quote = { quoteId: 'q', project: { title: 'Test' }, options: [] } as any;
       const { result } = renderHook(() => useAI('user@test.com'));
       await act(async () => {
-        await result.current.processPrompt({ quoteId: 'q' } as any, 'ciao', { modelId: 'ollama-minimax-m3' });
+        await result.current.processPrompt(quote, 'ciao', { modelId: 'ollama-minimax-m3' });
       });
       expect(mockCapture).toHaveBeenCalled();
       const inst = orchestratorInstances.find((i) => i.processPrompt.mock.calls.length > 0)!;
@@ -240,6 +240,22 @@ describe('useAI', () => {
         expect.anything(),
         'ciao',
         expect.objectContaining({ imagePreviewBase64: 'data:image/jpeg;base64,PREVIEW' }),
+      );
+    });
+
+    it('quote vuota: nessuna cattura anche con provider vision', async () => {
+      setAiVisionEnabled(true);
+      const quote = { quoteId: 'q', project: {}, options: [] } as any;
+      const { result } = renderHook(() => useAI('user@test.com'));
+      await act(async () => {
+        await result.current.processPrompt(quote, 'ciao', { modelId: 'ollama-minimax-m3' });
+      });
+      expect(mockCapture).not.toHaveBeenCalled();
+      const inst = orchestratorInstances.find((i) => i.processPrompt.mock.calls.length > 0)!;
+      expect(inst.processPrompt).toHaveBeenCalledWith(
+        expect.anything(),
+        'ciao',
+        expect.objectContaining({ imagePreviewBase64: undefined }),
       );
     });
   });

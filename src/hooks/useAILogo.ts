@@ -9,12 +9,13 @@ import dataService from '../utils/dataService';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
+import { renderLogoPreviewImage } from '../utils/logo/logoPreviewImage';
 
 export interface UseAILogoReturn {
   generate: (
     logo: Logo,
     brief: string,
-    options?: { sector?: string; onProgress?: (msg: string) => void },
+    options?: { sector?: string; modelId?: string; onProgress?: (msg: string) => void },
   ) => Promise<LogoProcessResult>;
   generateBackground: (
     logo: Logo,
@@ -63,22 +64,19 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
   );
 
   const generate = useCallback(
-    async (logo: Logo, brief: string, options?: { sector?: string; onProgress?: (msg: string) => void }) => {
+    async (logo: Logo, brief: string, options?: { sector?: string; modelId?: string; onProgress?: (msg: string) => void }) => {
       const requestId = newRequestId();
       const promptPreview = brief.length > 60 ? brief.slice(0, 57) + '...' : brief;
 
-      const resolvedModelId = resolveProviderId();
+      const resolvedModelId = resolveProviderId(options?.modelId);
       // CON-MM-002: cattura lo screenshot solo se il provider risolto supporta
       // vision — con un provider text-only verrebbe catturato e scartato.
       let imagePreviewBase64: string | undefined;
       const visionEnabled = getAiVisionEnabled() && providerSupportsVision(resolvedModelId);
-      if (visionEnabled) {
+      const hasLogoContent = !!(logo.builder.primaryText || logo.builder.tagline || logo.builder.iconType !== 'none');
+      if (visionEnabled && hasLogoContent) {
         try {
-          const previewEl = document.querySelector<HTMLElement>('[data-logo-preview]');
-          if (previewEl) {
-            const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
-            imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
-          }
+          imagePreviewBase64 = await renderLogoPreviewImage(logo, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
         } catch {
           imagePreviewBase64 = undefined;
         }
@@ -124,7 +122,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
           costUsd: cost,
           modelId: resolvedModelId,
           requestId,
-          detail: result.rawResponse?.slice(0, 2048),
+          detail: result.rawResponse?.slice(0, 16384),
           hasImage: !!imagePreviewBase64,
           imagePreviewBase64,
         });

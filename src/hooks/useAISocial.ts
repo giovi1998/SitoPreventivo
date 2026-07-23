@@ -8,7 +8,7 @@ import type { SocialSource, SocialTone } from '../ai/prompts/socialSystem';
 import { useAILogs } from './useAILogs';
 import { newRequestId } from '../utils/ai/requestId';
 import dataService from '../utils/dataService';
-import { resolveProviderId } from '../utils/resolveProviderId';
+import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiVisionEnabled } from '../utils/uiPrefs';
 
@@ -50,10 +50,11 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
       });
 
       try {
-        const visionEnabled = getAiVisionEnabled();
+        const resolvedModelId = resolveProviderId();
+        const visionEnabled = getAiVisionEnabled() && providerSupportsVision(resolvedModelId);
         const imagePreviewBase64 = visionEnabled ? await captureSocialPreview(source) : undefined;
         const result = await getOrchestrator().generatePosts(source, tone, {
-          modelId: resolveProviderId(),
+          modelId: resolvedModelId,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -74,7 +75,7 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
             }
           : undefined;
 
-        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048), hasImage: !!imagePreviewBase64, imagePreviewBase64 });
+        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 16384), hasImage: !!imagePreviewBase64, imagePreviewBase64 });
 
         if (userEmail && userEmail !== 'admin@gmail.com' && result.response?.usage) {
           const cost = calculateCostUsd(resolveProviderId(), result.response.usage);

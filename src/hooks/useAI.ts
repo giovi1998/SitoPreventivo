@@ -11,6 +11,7 @@ import { newRequestId } from '../utils/ai/requestId';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiVisionEnabled } from '../utils/uiPrefs';
+import { renderQuotePreviewImage } from '../utils/quote/quotePreviewImage';
 
 interface UseAIReturn {
   processPrompt: (
@@ -134,13 +135,10 @@ export function useAI(userEmail?: string): UseAIReturn {
       // text-only (es. DeepSeek) lo screenshot verrebbe catturato e scartato.
       let previewBase64: string | undefined;
       const visionEnabled = getAiVisionEnabled() && providerSupportsVision(resolvedModelId);
-      if (visionEnabled) {
+      const hasQuoteContent = !!(quote.project?.title || quote.options?.length);
+      if (visionEnabled && hasQuoteContent) {
         try {
-          const previewEl = document.querySelector<HTMLElement>('[data-quote-preview]');
-          if (previewEl) {
-            const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
-            previewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
-          }
+          previewBase64 = await renderQuotePreviewImage(quote, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
         } catch {
           previewBase64 = undefined;
         }
@@ -182,7 +180,7 @@ export function useAI(userEmail?: string): UseAIReturn {
           result = await run((chunk) => {
             if (chunk.type === 'content' && chunk.content) appendStream(retryStreamId, chunk.content);
           });
-          finalizeStream(retryStreamId, true, { detail: result.rawResponse?.slice(0, 2048) });
+          finalizeStream(retryStreamId, true, { detail: result.rawResponse?.slice(0, 16384) });
         }
 
         const tokens = result.response.usage
@@ -190,7 +188,7 @@ export function useAI(userEmail?: string): UseAIReturn {
           : undefined;
         const costUsd = tokens ? calculateCostUsd(resolvedModelId, result.response.usage) : 0;
         updateSessionId();
-        finalizeStream(streamId, true, { tokens, costUsd, modelId: resolvedModelId, requestId, detail: result.rawResponse?.slice(0, 2048), hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });
+        finalizeStream(streamId, true, { tokens, costUsd, modelId: resolvedModelId, requestId, detail: result.rawResponse?.slice(0, 16384), hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });
 
         if (userEmail && userEmail !== 'admin@gmail.com' && result.response.usage?.totalTokens) {
           setLastCostUsd(costUsd);

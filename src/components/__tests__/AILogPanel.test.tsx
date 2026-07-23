@@ -181,4 +181,14 @@ describe('AILogPanel', () => {
     expect(screen.getByText(/Request: req-42/)).toBeInTheDocument();
     expect(screen.getByText('raw body')).toBeInTheDocument();
   });
+
+  it('renders image preview inside expanded detail when imagePreviewBase64 is present', () => {
+    const preview = 'data:image/jpeg;base64,PREVIEW123';
+    const logs = [makeEntry({ msg: 'con immagine', imagePreviewBase64: preview })];
+    render(<AILogPanel logs={logs} isProcessing={false} />);
+    fireEvent.click(screen.getByText('con immagine'));
+    const img = screen.getByAltText('Anteprima allegata al prompt') as HTMLImageElement;
+    expect(img).toBeInTheDocument();
+    expect(img.src).toBe(preview);
+  });
 });

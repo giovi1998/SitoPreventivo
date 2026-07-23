@@ -13,6 +13,8 @@ export interface SvgRenderOptions {
   includeBleedBackground?: boolean;
   previewW?: number;
   previewH?: number;
+  /** TB-023: renderizza il body come testo SVG nativo (niente foreignObject) per immagini raster. */
+  renderBodyAsText?: boolean;
 }
 
 /**
@@ -149,28 +151,38 @@ export function renderFlyerSvg(plan: FlyerLayoutPlan, flyer: Flyer, options: Svg
     ));
   }
 
-  // Body (foreignObject with guaranteed clipping + columns)
+  // Body (foreignObject with guaranteed clipping + columns, or native SVG text
+  // when the SVG must be rasterized as an image — foreignObject is not supported
+  // in SVG loaded via <img>/canvas).
   if (plan.visibility.body && plan.boxes.body && plan.text.body.text) {
     const bodyBox = plan.boxes.body;
     const body = plan.text.body;
-    const magazine = plan.layout === 'magazine';
-    const columnCount = magazine ? magazineColumnCount(plan.size, bodyBox.h) : 1;
-    const colGap = 3;
-    const bodyStyle = [
-      `width:100%;min-width:0;max-width:100%;`,
-      `font-size:${(body.fontSizePt * MM_PER_PT).toFixed(4)}px;line-height:1.3;`,
-      `margin:0;padding:0;overflow:hidden;overflow-wrap:anywhere;`,
-      columnCount > 1 ? `column-count:${columnCount};column-gap:${mm(colGap)}mm;` : '',
-    ].join('');
+    if (options.renderBodyAsText) {
+      parts.push(renderTextBlock(
+        body,
+        bodyBox,
+        { font, color: text, fontWeight: 400, align: 'left', upperCase: false, clipId: 'clip-body', baseline: 'hanging' },
+      ));
+    } else {
+      const magazine = plan.layout === 'magazine';
+      const columnCount = magazine ? magazineColumnCount(plan.size, bodyBox.h) : 1;
+      const colGap = 3;
+      const bodyStyle = [
+        `width:100%;min-width:0;max-width:100%;`,
+        `font-size:${(body.fontSizePt * MM_PER_PT).toFixed(4)}px;line-height:1.3;`,
+        `margin:0;padding:0;overflow:hidden;overflow-wrap:anywhere;`,
+        columnCount > 1 ? `column-count:${columnCount};column-gap:${mm(colGap)}mm;` : '',
+      ].join('');
 
-    parts.push(`<foreignObject x="${mm(bodyBox.x)}" y="${mm(bodyBox.y)}" width="${mm(bodyBox.w)}" height="${mm(bodyBox.h)}" clip-path="url(#clip-body)">`);
-    parts.push(`<div xmlns="http://www.w3.org/1999/xhtml" style="${bodyStyle}font-family:${font}, sans-serif;color:${text};">`);
-    // Render body text as pre-wrapped lines to match the plan exactly
-    const bodyLines = body.lines;
-    for (const line of bodyLines) {
-      parts.push(`<div style="margin:0;padding:0;">${escapeHtml(line)}</div>`);
+      parts.push(`<foreignObject x="${mm(bodyBox.x)}" y="${mm(bodyBox.y)}" width="${mm(bodyBox.w)}" height="${mm(bodyBox.h)}" clip-path="url(#clip-body)">`);
+      parts.push(`<div xmlns="http://www.w3.org/1999/xhtml" style="${bodyStyle}font-family:${font}, sans-serif;color:${text};">`);
+      // Render body text as pre-wrapped lines to match the plan exactly
+      const bodyLines = body.lines;
+      for (const line of bodyLines) {
+        parts.push(`<div style="margin:0;padding:0;">${escapeHtml(line)}</div>`);
+      }
+      parts.push('</div></foreignObject>');
     }
-    parts.push('</div></foreignObject>');
   }
 
   // CTA (native SVG text on colored rect)

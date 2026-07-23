@@ -12,6 +12,7 @@ import { IMAGE_TOKEN_COST } from '../ai/costs';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
+import { renderFlyerPreviewImage } from '../utils/flyer/flyerPreviewImage';
 
 interface UseAIFlyerReturn {
   generate: (
@@ -63,11 +64,12 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       run: (onStream: (chunk: any) => void) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean; response?: { usage?: { promptTokens: number; completionTokens: number; totalTokens: number } } }>,
       modelId?: string,
       imagePreviewBase64?: string,
+      detail?: string,
     ) => {
       const resolvedId = resolveProviderId(modelId);
       const requestId = newRequestId();
       await ensureTokenBudget(requestId);
-      info(`📤 ${label}`, undefined, { requestId, hasImage: !!imagePreviewBase64, imagePreviewBase64 });
+      info(`📤 ${label}`, detail, { requestId, hasImage: !!imagePreviewBase64, imagePreviewBase64 });
       const streamId = startStream('Generazione in corso…', { requestId });
 
       try {
@@ -86,7 +88,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
           dataService.trackTokens(userEmail, total, cost).catch(() => {});
         }
         setLastCostUsd(cost);
-        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048), costUsd: cost, modelId: resolvedId, requestId, hasImage: !!imagePreviewBase64, imagePreviewBase64 });
+        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 16384), costUsd: cost, modelId: resolvedId, requestId, hasImage: !!imagePreviewBase64, imagePreviewBase64 });
 
         const realChanges = result.changes.filter((c) => !c.startsWith('error:'));
         const errorChanges = result.changes.filter((c) => c.startsWith('error:'));
@@ -120,13 +122,9 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       // vision — con un provider text-only verrebbe catturato e scartato.
       let imagePreviewBase64: string | undefined;
       const visionEnabled = getAiVisionEnabled() && providerSupportsVision(resolvedModelId);
-      if (visionEnabled) {
+      if (visionEnabled && flyer.content.headline) {
         try {
-          const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
-          if (previewEl) {
-            const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
-            imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
-          }
+          imagePreviewBase64 = await renderFlyerPreviewImage(flyer, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
         } catch {
           imagePreviewBase64 = undefined;
         }
@@ -136,6 +134,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         async (onStream) => getOrchestrator().generateCopy(flyer, trimmed, tone, { modelId: resolvedModelId, onStream, imagePreviewBase64 }),
         options?.modelId,
         imagePreviewBase64,
+        trimmed,
       );
     },
     [getOrchestrator, runWith]
@@ -148,13 +147,9 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       // vision — con un provider text-only verrebbe catturato e scartato.
       let imagePreviewBase64: string | undefined;
       const visionEnabled = getAiVisionEnabled() && providerSupportsVision(resolvedModelId);
-      if (visionEnabled) {
+      if (visionEnabled && flyer.content.headline) {
         try {
-          const previewEl = document.querySelector<HTMLElement>('[data-flyer-preview]');
-          if (previewEl) {
-            const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
-            imagePreviewBase64 = await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
-          }
+          imagePreviewBase64 = await renderFlyerPreviewImage(flyer, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' }) ?? undefined;
         } catch {
           imagePreviewBase64 = undefined;
         }
@@ -164,6 +159,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         async (onStream) => getOrchestrator().refineCopy(flyer, action, { modelId: resolvedModelId, onStream, imagePreviewBase64 }),
         options?.modelId,
         imagePreviewBase64,
+        `Azione: ${action}`,
       );
     },
     [getOrchestrator, runWith]
