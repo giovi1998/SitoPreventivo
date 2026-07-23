@@ -82,6 +82,12 @@ describe('LogoEditor', () => {
     expect(screen.getByText(/Cosa fa la tua attività/i)).toBeInTheDocument();
   });
 
+  it('renders [data-logo-preview] on the AI tab so useAILogo can capture it', () => {
+    render(<LogoEditor userEmail="user@test.com" />);
+    fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
+    expect(document.querySelector('[data-logo-preview]')).toBeInTheDocument();
+  });
+
   it('switching to AI tab with tier=free shows the locked message', () => {
     render(<LogoEditor userEmail="user@test.com" tier="free" />);
     fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));

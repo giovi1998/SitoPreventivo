@@ -172,6 +172,17 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
   const [imageModel, setImageModel] = useState<string>(() => getAiImageModelDefault());
 
+  // Anteprima live del logo corrente, sempre presente anche nel tab AI
+  // così useAILogo può catturare uno screenshot per i log AI / vision
+  // indipendentemente dal tab attivo (Builder vs AI).
+  const currentPreviewSvg = React.useMemo(() => {
+    try {
+      return sanitizeSvg(builderToSvg(logo.builder));
+    } catch {
+      return '';
+    }
+  }, [logo.builder]);
+
   // Load persisted state on mount — SOLO se il genitore non ha già
   // fornito uno stato più fresco via `initialState` (vedi sopra).
   useEffect(() => {
@@ -483,6 +494,14 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
         Rispondi a 3 domande. L'AI propone 3 concept di logo + background artistico. Il testo resta
         vettoriale (SVG editabile nel Builder).
       </p>
+
+      <div
+        className="logo-ai-current-preview"
+        data-logo-preview="true"
+        aria-label="Anteprima logo corrente"
+        role="img"
+        dangerouslySetInnerHTML={{ __html: currentPreviewSvg }}
+      />
 
       {step === 'chat' && (
         <div className="logo-ai-chat">
