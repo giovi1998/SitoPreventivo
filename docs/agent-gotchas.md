@@ -1,0 +1,358 @@
+# Agent Gotchas (dettaglio completo)
+
+Dettaglio completo delle regole/gotchas riassunte in `AGENTS.md`.
+Contenuto spostato qui per mantenere AGENTS.md sotto i 32 KB.
+Leggere la sezione pertinente prima di toccare il modulo corrispondente.
+
+---
+
+## 1. Vercel function bundling — lessons learned
+
+Quattro commit tentarono di refactorare la struttura API; tutti e quattro
+ruppero la produzione, ognuno per una causa diversa.
+
+1. `f004e5e` (split in `api/lib/` + `api/routes/`): superato il limite di 12
+   funzioni Hobby. Vercel conta ogni `.ts` in `api/` come funzione.
+2. `036ae25` (codice condiviso in `api/_lib/` + `api/_routes/` con underscore):
+   il prefisso `_` esclude i file SIA dal conteggio SIA dal bundle. Le
+   funzioni non trovavano il codice condiviso → `ERR_MODULE_NOT_FOUND`
+   a runtime ("Cannot find module '/var/task/api/_lib/handler'").
+3. `5e2971f` (`vercel.json` `functions.includeFiles`): copia i file ma non
+   li transpila. Ancora `ERR_MODULE_NOT_FOUND`.
+4. `05b17e6` (rollback al monolite): rimosse le rewrite
+   `{"source": "/api/(.*)", "destination": "/api"}` insieme allo split.
+   Senza di esse, Vercel cadeva sulla catch-all SPA `/(.*) -> /index.html`
+   e rispondeva **405 Method Not Allowed** a ogni POST `/api/*` (index.html
+   è uno static asset che non accetta POST).
+
+**Conclusione**: su piano Hobby, un singolo monolite è l'unica opzione
+sicura. Tenere SEMPRE in `vercel.json`, in quest'ordine (prima matcha
+prima):
+
+```json
+{ "rewrites": [
+  { "source": "/api/(.*)", "destination": "/api" },
+  { "source": "/(.*)", "destination": "/index.html" }
+] }
+```
+
+Regression test: `src/__tests__/vercelConfig.test.ts` (presenza + ordine).
+
+## 2. Logo AI / Gemini background gotchas
+
+Due bug distinti hanno bloccato la generazione background per un intero
+ciclo; nessuno era nel provider Gemini in sé.
+
+1. **Path proxy dev deve combaciare char-per-char col client/prod**. Client
+   (`LogoAiPanel.tsx`) e `api/index.ts` usano `/api/ai/logo-config` +
+   `/api/ai/logo-background`. Il middleware dev in `vite.config.js`
+   intercettava `/api/logo-config` (senza `/ai/`): fetch falliva
+   silenziosamente, `config.provider` restava `'none'`, ramo background
+   skippato lato client senza nessun log.
+2. **`process.env` non popolato di default nel dev server**. Vite espone
+   `.env` solo via `import.meta.env`; il codice server in `vite.config.js`
+   vede `process.env` vuoto. Fix: `loadEnv(mode, process.cwd(), '')` in
+   testa a `vite.config.js`, merge manuale in `process.env`.
+3. **Non duplicare la logica del provider nel middleware dev**. In passato
+   il middleware aveva una chiamata REST inline a Gemini (modello/API
+   diversi da `gemini.ts`), dev e prod divergevano. Ora usa
+   `server.ssrLoadModule('/src/ai/providers/gemini.ts')` e riusa la stessa
+   classe di produzione.
+4. **`interactions.create()` vuole `response_modalities` minuscolo**
+   (`['text', 'image']`), non `['TEXT', 'IMAGE']` (vecchia REST
+   `generateContent`). Maiuscolo → `400: value 'TEXT' is not supported`.
+5. **Dimensione immagine non enforced di default**: senza
+   `generation_config.image_config.image_size`, Gemini produce a `1K`
+   (~400KB-2MB) e il clamp server (500KB, `api/index.ts`
+   `/ai/logo-background`) scarta ~2/3 delle immagini con 413. Fix: chiedere
+   `image_size: '512'` (+ `aspect_ratio: '16:9'`) in richiesta. Valori:
+   `'512' | '1K' | '2K' | '4K'`.
+6. **`await import('../src/...')` non risolto in prod Vercel**. L'import
+   dinamico di un modulo sotto `src/` da `api/index.ts` fallisce in
+   produzione (`Cannot find module '/var/task/src/...'`) anche se gli
+   import **statici** da `src/` funzionano. Sintomo: 404
+   `{"error":"Endpoint AI non trovato"}` o 502. Fix:
+   `await import('@google/genai')` diretto (node_modules sempre bundled) e
+   logica provider inlinata.
+7. **Import statico di `@google/genai` crasha l'intera funzione**. Il
+   pacchetto v2.10.0 è ESM-only; l'import statico in cima a `api/index.ts`
+   rompe il bundle Vercel: OGNI endpoint `/api/*` ritorna
+   `FUNCTION_INVOCATION_FAILED` (anche `/api/ping`). Fix: solo import
+   dinamico dentro l'handler della route.
+8. **Prompt cover: metafore artistiche triggerano filtro copyright**.
+   Frasi tipo `"watercolor wash"`, `"drifts between"`, `"like diffuse ink
+   on wet paper"` → `400: Image generation blocked due to
+   copyright/recitation`. Fix: prompt neutro e piano (v2.8), poi v3.0 con
+   formula Nano-Banana (Subject+Action+Context+Composition+Lighting+Style)
+   e Negative Constraint Logic ("Ensure the background remains free
+   of...") invece di liste "no X". Le proibizioni card-like (no text, no
+   QR, no logos, no faces) sono OK; le metafore artistiche no.
+9. **Cache bundle JS browser dopo fix API**. Se un fix cambia path/body di
+   un endpoint, il vecchio bundle può ancora chiamare l'endpoint vecchio.
+   `Ctrl+F5` non sempre basta (Service Worker / cache HTTP): DevTools →
+   Application → Clear storage, oppure incognito.
+10. **`coverImageUrl` (base64 cover AI) non deve mai raggiungere DeepSeek**.
+    Il base64 (150KB+) nel contesto veniva riprodotto nella risposta JSON,
+    rompendo la validazione Zod (`error:invalid_card`). Fix:
+    `buildCardAIContext` (`src/ai/prompts/cardContext.ts`) strippa
+    `coverImageUrl` insieme a `photoUrl` e `logoUrl`.
+11. **Context limit disallineato validatore vs builder**. Zod
+    `context: z.string().max(N)` in `api/index.ts` e `MAX_CONTEXT_LEN` in
+    `coverBrief.ts` devono coincidere (ora 2000). Verificare SEMPRE dopo
+    modifiche a `buildCoverContext`.
+12. **`LogoAiPanel`: background AI perso cambiando tab AI → Builder → AI**.
+    Bug già in prod quando scoperto. Cause + fix (tutti in
+    `LogoAiPanel.tsx` / `LogoEditor.tsx`):
+    - `bgImages` mancava dalle dipendenze dell'effect di persistenza:
+      primo persist catturava `[null,null,null]`, gli update successivi
+      non ritriggeravano. Al remount (cambio tab) si ricaricava lo
+      snapshot senza immagini.
+    - Race sul debounce 500ms: cambio tab entro 500ms dall'arrivo
+      dell'immagine → cleanup cancellava il timer prima della scrittura.
+      Fix parziale: `latestStateRef` + flush-on-unmount.
+    - Spinner condiviso sui 3 concept durante rigenerazione singola:
+      `bgLoading` usava solo `isGeneratingBg` (bool globale). Fix:
+      `bgLoading = regeneratingIdx === i || (isGeneratingBg &&
+      regeneratingIdx === null && !bgImages[i] && !bgErrors[i])`.
+    - `SaveDialog` non si chiudeva dopo salvataggio riuscito: mancava
+      `setShowSaveDialog(false)` dopo il toast.
+    - **Causa radice: `localStorage` non è il posto giusto per immagini
+      base64**. Payload con 3 immagini base64 →
+      `QuotaExceededError` su `setItem` NON catturato → crash intera app
+      (la cleanup sincrona flush-on-unmount propagava fino
+      all'`ErrorBoundary` al cambio tab; lo stesso errore nel setTimeout
+      del debounce finiva solo in console).
+      **Fix definitivo**: (a) stato sollevato al genitore — `LogoAiPanel`
+      accetta `initialState`/`onStateChange` (`LogoAiState`), `LogoEditor`
+      tiene `aiStateRef` (mai smontato al cambio tab): meccanismo PRIMARIO,
+      nessuna serializzazione; (b) `localStorage` solo backup best-effort
+      per F5, sempre in try/catch via `safeLocalStorageSet()`; se quota,
+      retry senza `bgImages`.
+      **Regola generale**: nessun dato con immagini base64 (screenshot,
+      background AI, cover, hero) deve avere `localStorage` come unica
+      persistenza in-sessione. Fonte primaria = stato sollevato al
+      componente genitore stabile; localStorage = cache opzionale wrappata.
+    Regression test: `LogoAiPanel.test.tsx` ("persistenza bgImages su
+    cambio tab", "spinner durante generazione background"),
+    `LogoEditor.test.tsx` (stato sollevato via `aiStateRef`, no-throw su
+    QuotaExceededError al cambio tab). Verificati disattivando i fix.
+
+## 3. Cover AI Card gotchas
+
+1. Endpoint 404 in prod = §2.6 (import dinamico `../src/` non risolto).
+2. FUNCTION_INVOCATION_FAILED ovunque = §2.7 (import statico
+   `@google/genai`).
+3. 400 copyright/recitation = §2.8 (prompt con metafore). Fix prompt
+   neutro v2.8 (`coverBrief.ts`).
+
+## 4. Card export SVG gotchas (`svgRenderer.ts` `buildBackSvg`)
+
+Bug rendering retro card export vs preview (label/valore non allineati).
+
+1. **`dominant-baseline` contatti = `alphabetic`, non `text-before-edge`**.
+   La preview usa `.card-back-line { align-items: baseline }`: label e
+   valore di font diverso condividono la baseline alfabetica. Con
+   `text-before-edge` su entrambi, il valore più grande ha baseline più
+   bassa → label "galleggiante". Fix: `alphabetic` su label+valore,
+   `y = cy + valAscent + pad*0.25` (`valAscent ≈ valSize * 0.8`). Gli
+   altri `<text>` del retro (eyebrow, services, socials, QR label)
+   restano `text-before-edge` (righe singole). NON cambiare tutto il
+   file a `alphabetic`: romperesti services/socials.
+2. **`wrapTextAtWhitespace` non spezzava email/URL senza spazi** (ora
+   hard-breaka i token lunghi per chunk — gotcha obsoleto, ma ricordare:
+   la preview usa `overflow-wrap: break-word`).
+3. **`colLabelWFor` può rubare spazio al valore**: `ks*6` troppo largo su
+   celle strette. Se il valore esce, ridurre a `ks*4` o calcolare la
+   larghezza reale `key.length * keySize * 0.6`.
+
+Regression test: `svgRenderer.test.ts` "contact label and value share the
+same baseline (alphabetic, v2.9 regression)".
+
+## 5. Preview/export parity v2.14 (`svgRenderer.ts` / `previewHelpers.ts`)
+
+Quattro fix insieme per allineare preview React e export SVG/PNG/PDF.
+
+1. **`gridPlacement` axis swap per celle text (`flex-direction: column`)**.
+   In column mode il main axis flex è verticale: `justifyContent` =
+   verticale, `alignItems` = orizzontale. Senza swap, `alignV='top'` non
+   aveva effetto sulle celle testo. Fix: parametro `flexDirection` in
+   `gridPlacement()`; quando `'column'`, swap `justifyContent=vMap[alignV]`,
+   `alignItems=hMap[alignH]`. CardPreview passa `'column'` per tutte le
+   celle text. NON dimenticare `'column'` per nuove celle text.
+2. **Font-size fronte rem-based (proporzionale a pxH), non cell-relative**:
+   name `16/340`, title `12.48/340`, company `11.52/340` (erano frazioni
+   di cellH → export ~50% troppo grande). `fontSize = fs(pxH * sizePct,
+   fontScale)`.
+3. **Front export grid padding + cell gap**: preview ha `padding:16px;
+   gap:4px`. `frontGridPad = pxH*(16/340)`, `frontCellGap = pxH*(4/340)`,
+   celle offset via `cellX()`/`cellY()`. Padding interno celle text:
+   `cellPadX = 10/340`, `cellPadY = 6/340`.
+4. **Back export font-size allineate ai rem grid-mode**: contacts key
+   `9.6/340`, val `11.52/340`, services `13.6/340`, servicesLabel
+   `11.2/340`, socials `10.88/340`.
+
+Regression test: `previewHelpers.test.ts` (swap assi), `svgRenderer.test.ts`
+describe "v2.14 preview/export parity". `layoutAudit.ts` LOGO_TOO_SMALL
+threshold 0.35→0.30 per lo shrink da padding+gap.
+
+## 6. v2.15 / v2.16 card details
+
+- **v2.15 short-contacts collapse**: `effectiveBackGridForRender` in
+  `src/utils/card/backLayout.ts` riduce la cella `contacts` h:2→h:1 e
+  sposta `services`/`socials` su di una riga quando i contatti visibili
+  sono ≤2. >2 contatti → cella resta h:2.
+- **v2.15 QR label export parity**: label sotto QR in export
+  `font-size = pxH * (9.6/340)`; spazio riservato `pxH * (18/340)`.
+- **v2.15 generic element placement**: `CardGridElement.placement
+  {x,y,scale}` (oltre al legacy `photoPlacement`); frecce nudge + zoom
+  per `photo` e `qr` in `CardGridControls`; export applica offset/scale
+  a foto e QR.
+- **v2.16 fix** (verifica TB-023): QR fgColor → `card.style.textColor`,
+  placement QR in preview, wash fronte mid-stop 0.4→0.25, bordo accent
+  foto in export, espansione servizi su contenuti socials, logo fallback
+  in cella foto, `logoBackground:'card'` in cella logo preview.
+  Regression: `svgRenderer.test.ts` + `CardPreview.test.tsx` describe
+  "v2.16 preview/export parity fixes (TB-023)", e2e
+  `card-preview-export-parity.spec.ts`.
+- **Mismatch residui preview/export** (da documentare finché non esiste un
+  layout engine condiviso): (1) wrapping testo diverso CSS vs
+  `wrapTextAtWhitespace`; (2) font metrics baseline/line-height
+  approssimati in export; (3) font preview ridotti su mobile ≤900px
+  (preview-only, `cardBase.css:152-164`).
+
+## 7. Volantino rendering gotchas (`src/utils/flyer/`)
+
+Violare queste regole reintroduce overflow del testo fuori dai box.
+
+1. **Unità `font-size` in SVG con viewBox in mm**: `font-size="8.5pt"` o
+   `"3mm"` vengono convertiti in px a 96dpi e interpretati come user unit
+   (= mm) → font ~3.78× troppo grande. Fix: **unitless**,
+   `font-size="${fontSizePt * MM_PER_PT}"`. Stessa regola per
+   `foreignObject` body CSS: `font-size: ${...}px` (px = user unit).
+2. **Metriche font Arial calibrate** (`scripts/flyer-calibrate-real.mjs`):
+   `boldUpper: 0.69`, `boldUpperCta: 0.67`, `regularBody: 0.46`,
+   `regularMixed: 0.50`. `charWidthMm = factor * fontSizePt * MM_PER_PT`.
+3. **Altezza glyph reale** ≈ 1.15× font-size. `GLYPH_HEIGHT_FACTOR = 1.15`;
+   altezza box = `(lines-1) * fontSize * lineHeight + fontSize *
+   GLYPH_HEIGHT_FACTOR`, NON `lines * fontSize * lineHeight`.
+4. **`dominant-baseline="text-before-edge"`** su tutti i `<text>` nativi:
+   senza, il testo "sale" ~0.7em sopra il box.
+5. **`clip-path`** con rect in mm: taglia il side-bearing negativo del
+   primo glifo (~0.3mm tollerabile).
+6. **Budget copy al font minimo è un hard limit**: `getFlyerCopyBudget`
+   usa `bounds.X.min`; al font reale (da `fitText`) entrano molti meno
+   char — il campo body mostra "1758 CAR. RESIDUI" ma a 13pt ne entrano
+   ~500. Mitigazioni possibili: budget al font reale, troncamento con
+   warning, copy AI più corto.
+7. **Subheadline è mixed-case**: `kind: 'regular'` in `fitText`, non
+   `'boldUpper'` (mix causa wrap errato).
+8. **CTA fitting**: usare `fitCtaText` (shrink + ellipsis centrale).
+9. **Verifier Playwright**: `getBBox()` (user unit) vs `clipPath` rect;
+   tolleranza orizz. 0.3mm, vert. 0.6mm.
+
+## 8. Card layout/event harness + known issues aperti
+
+- Harness e2e unificato: `e2e/helpers/cardHarness.ts` (login, fill, grid,
+  export, parse SVG).
+- Event logging: `src/utils/card/layoutEvents.ts`; in test mode o
+  `localStorage['pq_card_layout_debug']='1'` → `window.__cardLayoutEvents`.
+- Layout audit: `src/utils/card/layoutAudit.ts` (ratio font
+  contatti/socials, overlap label/valore, posizione QR, logo piccolo).
+- WYSIWYG test command:
+  `npx playwright test e2e/card-export-inspection.spec.ts
+  e2e/card-wysiwyg-visual.spec.ts e2e/card-grid-export-roundtrip.spec.ts
+  e2e/card-grid-behavior.spec.ts e2e/card-layout-audit.spec.ts
+  e2e/card-grid-behavior-audit.spec.ts`
+
+Issue aperti (scope minore):
+- Mobile grid editor: molte frecce/tap; valutare drag-and-drop diretto.
+- `selectedGridElement` è `useState` locale in CardEditor → si perde
+  cambiando tab. Fix: persistere in `card.selectedGridElement` o alzare
+  in AppShell.
+- CardPreview test QR in jsdom: `generateQrSvg` non gira; i test
+  verificano solo il placeholder. Fix: mock `qrcode`.
+
+## 9. Post-TB-023 known issues
+
+Dettagli in `docs/post-tb023-known-issues.md`. Stato: fixati cover PNG
+export, wash opacity retro, icona AI pixelata, header CONTATTI stacking
+(`position:relative; z-index:2` su `.card-back-header`). Aperti:
+- Log image preview persa al refresh (by design, QuotaExceeded).
+- Modulo AI unificato: feature TB-023 (provider, vision, fallback)
+  frammentate in silos per editor; serve modulo trasversale (§4 del doc).
+
+## 10. Phase status & roadmap (storico completo)
+
+Spec attivi in `spec/`: `spec-design-flyer-refactor-preview-ai.md`
+(Phase 11, solo gap test TB-007), `spec-api-saas-monetization.md`
+(NOT-STARTED), `spec-intake-pipeline.md` (TB-019, NOT-STARTED). Gli spec
+implementati sono cancellati dopo verifica (traccia in git history +
+`docs/to-be-done.md`); anche `spec-design-ai-first-ux-redesign.md`
+(Fasi 12-14) cancellato il 2026-07-18 dopo completamento.
+
+| Fase | Stato | Note |
+|------|-------|------|
+| 0, Auto-save fix | ✅ | `processingRef`/`cooldownRef` in EditorView, toast merge. |
+| 1, QR Code | ✅ | 7 tipi, export SVG/PNG, migration DB `documents`. |
+| 2, Business Card | ✅ (2.2 refactor) | Master switch, init-from-layout, QR sizing, fontScale, servicesLabel, parity mobile, AI parity. |
+| 3, Volantino | ✅ | 4 layout × 5 formati, bleed 3mm, AI copy via `POST /ai/copy-flyer` (10/min/IP). PDF+PNG client-side. |
+| 4, Logo SVG Builder | ✅ | v1 senza AI (Replicate deferred). Tab "AI Generation" disabilitato con messaggio. |
+| 5, Tier System | ✅ | Watermark free, unlock code via admin, tier guard su save. |
+| 6, Unified Collection | ✅ | `documents` table rinominata, collection unificata. |
+| 7, Polish | ✅ | Onboarding step 5, HomePage "Perché noi", `preferredDocumentType` in DB. `LogoAiDocsPage` pubblica rimossa deliberatamente. |
+| 8, Quickbrand Rebrand | ✅ | Rename + palette "The Classic" (Red & Ink), HomePage/LoginPage rebrand, test. |
+| 9, Card Refactor Submodules | ✅ | 11 utils + 9 components `src/utils/card/*` + `src/components/card/*`, barrel/shell. |
+| 10, Card Grid UX Alignment | ✅ | alignH/alignV (9-pos), preset retro separato, e2e. |
+| 11, Flyer Refactor Preview/AI | ⚠️ parziale | 12/12 utils + 11/11 components + 5/5 CSS. Gap: test matrix 4/10, `ai/flyer/budgets.ts` in `utils/flyer/budgets.ts` (deviazione equivalente). |
+| 12, AI Observability | ✅ | `useAILogs` condiviso, fix `trackUsage`, `IMAGE_TOKEN_COST`, `X-Request-Id` end-to-end, log server JSON, rate limit ghost fix, `pq_ai_logs:v1`. 6 hook AI migrati. |
+| 13, Design System & UX | ✅ | Token "The Classic" + ghost in `GlobalStyles :root`, purge teal/blu (`designTokens.test.ts`), Outfit/Inter/JetBrains Mono, font picker lazy, kit `ai-ui/ai-ui.css`, ToastProvider, sidebar gruppi + collapsed in `pq_ui:v1`, `BP_SHELL=768`/`BP_WORKSPACE=1024`, `AILogPanel` prop `theme`, copy AI-first, unlock `QB-` (PQ- legacy validi), HomePage AIDA + bento, `ActionBar` (logo+QR). Deviazioni: token esistenti non rimappati; breakpoint storici migrati progressivamente; card/flyer/quote mantengono cluster azioni. |
+| 14, AI Console & AI-first | ✅ | `AIConsole` rail (collapse per editorKind, suggestedPrompt+focus, hidePrompt, quickActions, AIProviderBadge). Migrati social/flyer/card/quote. Onboarding AI-first. Deviazioni: logo mantiene tab Builder/AI top-level (tab default `ai` su logo vuoto); QR resta manuale (eccezione documentata); mobile mantiene bottom sheet/overlay. |
+| 15, AI Harness Upgrade (TB-023) | ✅ | Spec `spec/spec-design-ai-harness-upgrade.md`. Multi-provider (Ollama Pro + DeepSeek), badge provider menu (apre verso il basso, fix clipping), tracking costi, 5 pattern decorativi SVG preview+export, generic `placement`, Icona AI card, dev-proxy `/api/ai/chat(/stream)` + `/api/ai/image-flash`. **A/B provider rimosso deliberatamente** (commit `15aa0d5`): `resolveProviderId` è solo resolver modelId→pref→default. **Bottone "Analizza preview" rimosso deliberatamente**: `/api/ai/design-review` + `useAIDesignReview` restano orfani (vedi `docs/post-tb023-known-issues.md`). **v2.16**: screenshot preview allegato ai log e inviato al modello vision-enabled tramite `data-*-preview` + `captureElementAsBase64`; `imagePreviewBase64` nel dettaglio log; `hasImage`/`modelId`/`costUsd` propagati. Verifica completa 2026-07-22: `docs/tb023-verification.md`. |
+
+## 11. Notes su skill e scope AI (storico)
+
+- **UX namelix-like**: implementata solo in onboarding
+  (`BrandNameGenerator.tsx`) e, in variante semplificata (3 domande), nel
+  tab AI del logo. Per card/flyer/social il flusso AI è diretto
+  (parametri → genera → applica). Estensione fattibile ma fuori scope.
+- **Skill taste (leonxlnx/taste-skill)**: solo per l'agente di coding,
+  guidano il design di HomePage/Editor/Preview. Nessun impatto runtime:
+  l'app usa DeepSeek (testo) e Gemini Nano Banana (immagini) via proxy
+  server-side.
+- **Gemini Nano Banana scope**: attualmente wireato solo a logo
+  background (`/ai/logo-background`, `LogoAIOrchestrator.generateBackground()`)
+  più cover card / icona AI card (TB-023). Flyer usa hero statiche
+  (picsum.photos). Estensione a flyer hero AI fattibile ma fuori scope.
+
+## 12. Gotchas dev/localhost AI (dettaglio)
+
+1. **Flyer copy AI in localhost**: richiede `VITE_DEEPSEEK_API_KEY` in
+   `.env` (o `deepseekApiKey` in localStorage). Il token-check in
+   `useAIFlyer.ts` esclude `localhost` (`!isLocalhost()`), come
+   `useAICard`; senza l'esclusione un utente non-admin in dev veniva
+   bloccato da `dataService.getUserProfile`.
+2. **Cover "entrambi i lati" NON parallela**: due chiamate simultanee a
+   Gemini via dev proxy → `502 Bad Gateway`. Fix: serializzare
+   fronte → retro (`CardEditorShell.handleGenerateCover('both')`).
+3. **Background AI logo non sovrascritto a null**: i concept DeepSeek
+   hanno `backgroundImage: null`; `LogoAiPanel.applyConcept` non deve
+   spreadarlo (cancellerebbe il background Gemini pagato). Escludere dal
+   patch di default; settarlo solo se `bgImages[idx]` disponibile.
+4. **`vite.config.js` va riavviato dopo modifiche al dev proxy**: Vite
+   non ricarica i middleware custom su hot-reload. Sintomo: 404/502 su
+   `/api/ai/card-cover` ecc.
+5. **Dev proxy `/api/ai/card-cover` truncava `context` a 1000 char**
+   mentre server e `coverBrief.ts` accettano 2000. Tenere allineati.
+
+## 13. OWASP Top 10 (stato)
+
+- A01 Access Control ✅ /users, /quotes/all, /users/limits, /users/tokens
+- A02 Crypto ✅ bcrypt 12, constant-time compare admin
+- A03 Injection ✅ Zod su tutti gli input
+- A04 Insecure Design 🟡 threat modeling mancante (TODO)
+- A05 Misconfiguration ✅ CORS ristretto, body 1MB, no stack trace
+- A06 Vulnerable Components 🟡 audit dipendenze non fatto (TODO)
+- A07 Auth Failures ✅ rate-limit login + tokens + aistream
+- A08 Data Integrity ✅ env server-side only
+- A09 Logging ✅ logger strutturato, /api/logs client→server
+- A10 SSRF ✅ solo outbound hardcoded (DeepSeek/Ollama/Gemini)
