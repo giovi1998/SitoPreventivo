@@ -36,7 +36,7 @@ export function FlyerPreviewPanel({
           <span style={{ fontSize: '.72rem', fontWeight: 600 }}>{previewFocus ? '✕' : '🎯'}</span>
         </button>
       </div>
-      <div data-flyer-preview="true" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh', position: 'relative' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh', position: 'relative' }}>
         <FlyerPreview flyer={flyer} showDebug={showDebug} />
         <PreviewWatermark tier={tier} className="flyer-preview-watermark" />
       </div>

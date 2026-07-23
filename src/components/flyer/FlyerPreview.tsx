@@ -33,6 +33,7 @@ export function FlyerPreview({ flyer, showDebug = false, className }: FlyerPrevi
       }}
       aria-label="Anteprima volantino"
       data-testid="flyer-preview"
+      data-flyer-preview="true"
     >
       <div style={{ width: '100%', height: '100%' }} dangerouslySetInnerHTML={{ __html: svg }} />
     </div>
