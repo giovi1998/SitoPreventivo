@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CardAIFloatingProvider } from '../../../hooks/useCardAIFloating';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import CardEditorShell from '../CardEditorShell';
 import dataService from '../../../utils/dataService';
 import { createEmptyCard, createGiovanniCardTemplate } from '../../../utils/documentSchemas';
@@ -261,6 +261,80 @@ describe('CardEditorShell', () => {
       fireEvent.click(resetBtn);
 
       await waitFor(() => expect(mockClearIconHeroLogs).toHaveBeenCalled());
+    });
+  });
+
+  describe('save feedback & auto-save robustness', () => {
+    const AUTO_SAVE_DELAY = 30_000;
+    const cardWithFrontName = () => ({
+      ...createEmptyCard(),
+      front: { ...createEmptyCard().front, name: 'Mario Rossi' },
+    });
+
+    it('auto-save failure surfaces an error toast (not just a log)', async () => {
+      vi.useFakeTimers();
+      try {
+        mockSave.mockResolvedValue({ error: 'QuotaExceededError' });
+        render(<CardAIFloatingProvider><CardEditorShell {...baseProps} initialCard={cardWithFrontName()} /></CardAIFloatingProvider>);
+        await act(async () => { vi.advanceTimersByTime(AUTO_SAVE_DELAY); });
+        expect(mockSave).toHaveBeenCalled();
+        expect(mockAddToast).toHaveBeenCalledWith('error', expect.stringMatching(/Salvataggio automatico non riuscito/i));
+      } finally {
+        vi.useRealTimers();
+        mockSave.mockResolvedValue({ success: true });
+      }
+    });
+
+    it('cardHasContent recognizes cards with only back services/socials/qr/address/vat or cover', async () => {
+      vi.useFakeTimers();
+      try {
+        const empty = createEmptyCard();
+        const cases: Array<Record<string, unknown>> = [
+          { back: { ...empty.back, services: ['Logo design'] } },
+          { back: { ...empty.back, socials: [{ platform: 'instagram', url: 'https://instagram.com/x' }] } },
+          { back: { ...empty.back, qrPayload: 'https://example.com' } },
+          { back: { ...empty.back, address: 'Via Roma 1' } },
+          { back: { ...empty.back, vatNumber: 'IT12345678901' } },
+          { front: { ...empty.front, coverImageUrl: 'data:image/png;base64,COVER' } },
+        ];
+        for (const overrides of cases) {
+          mockSave.mockClear();
+          const initial = { ...createEmptyCard(), ...overrides };
+          const { unmount } = render(<CardAIFloatingProvider><CardEditorShell {...baseProps} initialCard={initial} /></CardAIFloatingProvider>);
+          await act(async () => { vi.advanceTimersByTime(AUTO_SAVE_DELAY); });
+          expect(mockSave).toHaveBeenCalled();
+          unmount();
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('flushes the pending auto-save on unmount exactly once', async () => {
+      vi.useFakeTimers();
+      try {
+        const { unmount } = render(<CardAIFloatingProvider><CardEditorShell {...baseProps} initialCard={cardWithFrontName()} /></CardAIFloatingProvider>);
+        // Unmount prima che scada il debounce: il save pendente deve partire subito.
+        unmount();
+        expect(mockSave).toHaveBeenCalledTimes(1);
+        // Il timer schedulato era stato cancellato: niente doppio save.
+        await act(async () => { vi.advanceTimersByTime(AUTO_SAVE_DELAY * 2); });
+        expect(mockSave).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('passes isSaved to CardSaveAction: Salvato dopo il save, di nuovo Salva dopo una modifica', async () => {
+      render(<CardAIFloatingProvider><CardEditorShell {...baseProps} initialCard={cardWithFrontName()} /></CardAIFloatingProvider>);
+      expect(screen.getByRole('button', { name: /^Salva$/i })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /^Salva$/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /Conferma salvataggio/i }));
+      // Desktop: aria-label "Già salvato" quando isSaved=true.
+      await waitFor(() => expect(screen.getByRole('button', { name: /Già salvato/i })).toBeInTheDocument());
+      // Dirty tracking: modificare la card riporta il pulsante a "Salva".
+      fireEvent.change(screen.getByLabelText(/Nome \(fronte\)/i), { target: { value: 'Luigi Bianchi' } });
+      await waitFor(() => expect(screen.getByRole('button', { name: /^Salva$/i })).toBeInTheDocument());
     });
   });
 });

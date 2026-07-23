@@ -214,9 +214,29 @@ threshold 0.35→0.30 per lo shrink da padding+gap.
   Regression: `svgRenderer.test.ts` + `CardPreview.test.tsx` describe
   "v2.16 preview/export parity fixes (TB-023)", e2e
   `card-preview-export-parity.spec.ts`.
+- **v2.16 placement universale nudge+zoom** (spec
+  `spec-card-nudge-layout-template.md` v2.0): `placement {x,y,scale}` su
+  TUTTI gli elementi grid (non più solo photo/qr); per i testi scale =
+  fattore font-size locale (slider "Dimensione" in `CardGridControls`).
+  Export SVG applica nudge+scale anche ai testi fronte e retro
+  (contacts/services/socials). Slider globale "Dimensione testo" rimosso
+  da `CardStyleFields.tsx`; `fontScale` resta campo LEGACY (default 1,
+  clamp 0.7–1.5, ancora usato da preview/export/AI merge) — non rimuoverlo
+  dallo schema senza migrazione dati.
+- **v2.16 wrap export via `textMeasure.ts`**: `wrapTextAtWhitespace` usa
+  canvas `measureText` per la larghezza reale dei glyph; il fattore 0.52
+  resta solo come fallback senza canvas (jsdom, test deterministici).
+  Mismatch 0.52 ridotto ma NON eliminato: i mismatch residui sotto restano
+  validi.
+- **cardMerge preserva placement (CON-AI-001)**: quando l'AI riposiziona
+  un elemento grid, merge con l'elemento corrente invece di replace →
+  `placement` esistente sopravvive a un move AI; placement fornito
+  dall'AI accettato clampato ai limiti schema, omesso = "keep current".
+  Stessa famiglia di regole di CON-IS-001 (merge AI mai distruttivo).
 - **Mismatch residui preview/export** (da documentare finché non esiste un
-  layout engine condiviso): (1) wrapping testo diverso CSS vs
-  `wrapTextAtWhitespace`; (2) font metrics baseline/line-height
+  layout engine condiviso): (1) wrapping testo diverso CSS vs export (ora
+  via `textMeasure` canvas: ridotto ma residuo, metriche reali solo in
+  browser); (2) font metrics baseline/line-height
   approssimati in export; (3) font preview ridotti su mobile ≤900px
   (preview-only, `cardBase.css:152-164`).
 

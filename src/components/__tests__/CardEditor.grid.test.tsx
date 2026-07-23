@@ -47,8 +47,10 @@ describe('Grid editor (B2)', () => {
 
   it('applying a preset SOSTITUISCE la grid (no duplicati di elementi come logo)', () => {
     const card = createGiovanniCardTemplate();
-    expect(card.grid?.elements.logo).toEqual({ x: 2, y: 2, w: 2, h: 2, alignH: 'center', alignV: 'center' });
-    expect(card.grid?.elements.photo).toEqual({ x: 0, y: 0, w: 2, h: 4 });
+    // v2.16: template = layout right-balanced; griglia derivata da
+    // gridPresetRightBalanced con `company` filtrata (vuota).
+    expect(card.grid?.elements.logo).toEqual({ x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'center' });
+    expect(card.grid?.elements.photo).toEqual({ x: 2, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' });
     renderEditor({ initialCard: card });
     fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
     const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;
@@ -159,7 +161,9 @@ describe('Grid editor (B2)', () => {
   it('disables move buttons at grid boundary (Phase 2.1 visual feedback)', () => {
     renderEditor({ initialCard: createGiovanniCardTemplate() });
     const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
-    fireEvent.change(nameSelect, { target: { value: 'photo' } });
+    // v2.16: photo non è più sul bordo sinistro (right-balanced, x:2);
+    // name è a x:0 → mossa a sinistra bloccata dal limite griglia.
+    fireEvent.change(nameSelect, { target: { value: 'name' } });
     const leftBtn = screen.getByRole('button', { name: /Sposta a sinistra/i }) as HTMLButtonElement;
     expect(leftBtn).toBeDisabled();
     expect(leftBtn.title).toMatch(/Limite/);
@@ -168,10 +172,11 @@ describe('Grid editor (B2)', () => {
   it('disables grow buttons when at right/bottom edge (Phase 2.1)', () => {
     renderEditor({ initialCard: createGiovanniCardTemplate() });
     const nameSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
+    // v2.16: photo (x:2, w:2) tocca il bordo destro → grow larghezza al limite.
     fireEvent.change(nameSelect, { target: { value: 'photo' } });
-    const growH = screen.getByRole('button', { name: /Aumenta altezza/i }) as HTMLButtonElement;
-    expect(growH).toBeDisabled();
-    expect(growH.title).toMatch(/Limite/);
+    const growW = screen.getByRole('button', { name: /Aumenta larghezza/i }) as HTMLButtonElement;
+    expect(growW).toBeDisabled();
+    expect(growW.title).toMatch(/Limite/);
   });
 
   it('logo is selectable in grid editor (Phase 2.1)', () => {
@@ -350,7 +355,7 @@ describe('Grid editor (B2)', () => {
     expect(shrinkW).not.toBeDisabled();
   });
 
-  it('grid editor back: moves QR down blocked by grid edge (Giovanni template)', () => {
+  it('grid editor back: moves QR down once, then blocked by grid edge (Giovanni template)', () => {
     renderEditor({ initialCard: createGiovanniCardTemplate() });
     const gridToggle = screen.getByLabelText(/Mostra griglia/i);
     fireEvent.click(gridToggle);
@@ -359,6 +364,10 @@ describe('Grid editor (B2)', () => {
     const elSelect = screen.getByLabelText(/Elemento selezionato/i) as HTMLSelectElement;
     fireEvent.change(elSelect, { target: { value: 'qr' } });
     const downBtn = screen.getByRole('button', { name: /Sposta giù/i });
+    // v2.16: QR retro è h:3 (era h:4 full-height) → la prima mossa giù è
+    // consentita (y:0→1), poi la cella tocca il bordo inferiore (y+h = 4).
+    expect(downBtn).not.toBeDisabled();
+    fireEvent.click(downBtn);
     expect(downBtn).toBeDisabled();
   });
 

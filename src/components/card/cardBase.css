@@ -98,8 +98,8 @@
 
 /* ─── Grid mode card preview ──────────────────── */
 .card-preview-side.grid-mode {
-  padding: 16px;
-  gap: 4px;
+  padding: var(--card-grid-pad, 16px);
+  gap: var(--card-grid-gap, 4px);
 }
 
 .card-preview-side.grid-mode .card-name {

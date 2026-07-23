@@ -320,7 +320,10 @@ describe('documentSchemas', () => {
       expect(card.back.email).toBe('webdevcaglian@gmail.com');
       expect(card.back.qrPayload).toBe('');
       expect(card.front.name).toContain('GIOVANNI');
-      expect(card.front.layout).toBe('split');
+      // v2.16: il template usa il preset bilanciato derivato dall'audit.
+      expect(card.front.layout).toBe('right-balanced');
+      // v2.17 (REQ-CTRL-003): nuove card neutre, sizing per-elemento.
+      expect(card.style.fontScale).toBe(1);
       expect(card.front.photoUrl).toBe('/giovanni-photo.jpg');
       expect(card.title.toLowerCase()).toContain('giovanni');
       const r = businessCardSchema.safeParse(card);

@@ -33,10 +33,16 @@ export interface CardGridControlsProps {
   onAfterResize?: (info: { element: string; dw: number; dh: number; applied: boolean; reason?: 'collision' | 'border' }) => void;
   onAfterAlign?: (info: { element: string; alignH: 'left' | 'center' | 'right'; alignV: 'top' | 'center' | 'bottom' }) => void;
   /**
-   * v2.15: when selected element supports placement (photo, QR, etc.),
-   * allow nudging position and scale inside the cell via the parent grid patch.
+   * v2.16: when a selected element has content, allow nudging its position
+   * inside the cell. Scale nudge is offered only for image-like elements
+   * (photo, QR, logo). The generic `placement` field is used.
    */
   onPatchPlacement?: (element: keyof CardGrid['elements'], patch: { x?: number; y?: number; scale?: number }) => void;
+  /**
+   * v2.16: callback used by the disabled-state hint to offer a one-click
+   * "Attiva griglia" action when the grid master switch is OFF.
+   */
+  onRequestEnableGrid?: () => void;
   /**
    * Modalità presentazione:
    *  - 'inline' (default desktop): mostra frecce + ridimensiona inline
@@ -61,6 +67,7 @@ export function CardGridControls({
   onAfterResize,
   onAfterAlign,
   onPatchPlacement,
+  onRequestEnableGrid,
   mode = 'inline',
 }: CardGridControlsProps) {
   const activeGrid: CardGrid = useMemo(() => {
@@ -163,10 +170,12 @@ export function CardGridControls({
     onAfterAlign?.({ element: selected, alignH, alignV });
   };
 
-  // v2.15: placement controls work for any selected element that supports
-  // placement (photo legacy alias, generic placement). Initially enabled for
-  // photo and QR; later we can extend to logo/cover if useful.
-  const supportsPlacement = selected === 'photo' || selected === 'qr';
+  // v2.16: every selected element with content supports positional nudge.
+  // v2.17: scale nudge is available for every element — for photo/QR/logo it
+  // zooms the image, for text elements it acts as a local font-size factor
+  // (replaces the removed global "Dimensione testo" slider).
+  const supportsPlacement = !!selectedEl;
+  const supportsPlacementScale = !!selectedEl;
   const placement = selectedEl?.placement ?? selectedEl?.photoPlacement ?? { x: 0, y: 0, scale: 1 };
 
   const handlePatchPlacement = (patch: { x?: number; y?: number; scale?: number }) => {
@@ -179,6 +188,7 @@ export function CardGridControls({
   };
 
   const elementOptions = allElementOptionsForSide(side);
+  const selectedLabel = elementOptions.find((o) => o.value === selected)?.label ?? 'elemento';
 
   return (
     <div
@@ -188,9 +198,19 @@ export function CardGridControls({
     >
       <div className="card-grid-editor-title">Sposta elementi sulla griglia</div>
       {isSideDisabled && (
-        <p className="card-grid-editor-hint" data-testid="grid-editor-disabled-hint">
-          Attiva <strong>“Griglia ON”</strong> in alto a destra per spostare e ridimensionare gli elementi.
-        </p>
+        <div className="card-grid-editor-hint" data-testid="grid-editor-disabled-hint">
+          Attiva <strong>“Griglia ON”</strong> per spostare e ridimensionare gli elementi.
+          {onRequestEnableGrid && (
+            <button
+              type="button"
+              className="card-grid-enable-btn"
+              onClick={onRequestEnableGrid}
+              data-testid="grid-editor-enable-btn"
+            >
+              Attiva griglia
+            </button>
+          )}
+        </div>
       )}
       <label className="card-field">
         <span>Lato</span>
@@ -232,7 +252,10 @@ export function CardGridControls({
             // mappa FRONT_PRESETS locale era divergente (photo h:4 che si
             // sovrapponeva al logo in riga 3).
             const grid = side === 'back'
-              ? gridPresetBackDefault()
+              ? deriveGridFromLayout(
+                { ...card, front: { ...card.front, layout: v as BusinessCardLayout } },
+                'back',
+              )
               : deriveGridFromLayout(
                 { ...card, front: { ...card.front, layout: v as BusinessCardLayout } },
                 'front',
@@ -249,6 +272,7 @@ export function CardGridControls({
               <option value="centered">Centrato</option>
               <option value="split">Diviso (foto a sx)</option>
               <option value="right">Diviso inverso (foto a dx)</option>
+              <option value="right-balanced">Bilanciato DX (foto a dx)</option>
               <option value="top">Foto in alto</option>
               <option value="bottom">Foto in basso</option>
               <option value="minimal">Minimal</option>
@@ -443,14 +467,14 @@ export function CardGridControls({
             ><span aria-hidden="true">+↕</span></button>
           </div>
           {supportsPlacement && onPatchPlacement && (
-            <div className="card-photo-placement" role="group" aria-label={`Posiziona ${selected === 'qr' ? 'QR' : 'foto'} dentro cella`} data-testid="grid-placement-controls">
-              <span className="card-grid-align-label">Nudge {selected === 'qr' ? 'QR' : 'foto'}</span>
+            <div className="card-photo-placement" role="group" aria-label={`Posiziona ${selectedLabel} dentro cella`} data-testid="grid-placement-controls">
+              <span className="card-grid-align-label">Nudge {selectedLabel}</span>
               <div className="card-grid-arrows">
                 <button
                   type="button"
                   onClick={() => handlePatchPlacement({ x: Math.max(-1, placement.x - 0.05) })}
-                  aria-label={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} sinistra`}
-                  title={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} sinistra`}
+                  aria-label={`Sposta ${selectedLabel} sinistra`}
+                  title={`Sposta ${selectedLabel} sinistra`}
                   disabled={placement.x <= -1}
                   data-testid="grid-placement-left"
                 >
@@ -459,8 +483,8 @@ export function CardGridControls({
                 <button
                   type="button"
                   onClick={() => handlePatchPlacement({ y: Math.max(-1, placement.y - 0.05) })}
-                  aria-label={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} su`}
-                  title={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} su`}
+                  aria-label={`Sposta ${selectedLabel} su`}
+                  title={`Sposta ${selectedLabel} su`}
                   disabled={placement.y <= -1}
                   data-testid="grid-placement-up"
                 >
@@ -469,8 +493,8 @@ export function CardGridControls({
                 <button
                   type="button"
                   onClick={() => handlePatchPlacement({ y: Math.min(1, placement.y + 0.05) })}
-                  aria-label={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} giù`}
-                  title={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} giù`}
+                  aria-label={`Sposta ${selectedLabel} giù`}
+                  title={`Sposta ${selectedLabel} giù`}
                   disabled={placement.y >= 1}
                   data-testid="grid-placement-down"
                 >
@@ -479,27 +503,33 @@ export function CardGridControls({
                 <button
                   type="button"
                   onClick={() => handlePatchPlacement({ x: Math.min(1, placement.x + 0.05) })}
-                  aria-label={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} destra`}
-                  title={`Sposta ${selected === 'qr' ? 'QR' : 'foto'} destra`}
+                  aria-label={`Sposta ${selectedLabel} destra`}
+                  title={`Sposta ${selectedLabel} destra`}
                   disabled={placement.x >= 1}
                   data-testid="grid-placement-right"
                 >
                   <span aria-hidden="true">→</span>
                 </button>
               </div>
-              <label className="card-field card-field--tight">
-                <span>Zoom {selected === 'qr' ? 'QR' : 'foto'} ({(placement.scale * 100).toFixed(0)}%)</span>
-                <input
-                  type="range"
-                  min={0.5}
-                  max={2}
-                  step={0.05}
-                  value={placement.scale}
-                  onChange={(e) => handlePatchPlacement({ scale: Number(e.target.value) })}
-                  aria-label={`Zoom ${selected === 'qr' ? 'QR' : 'foto'}`}
-                  data-testid="grid-placement-zoom"
-                />
-              </label>
+              {supportsPlacementScale && (() => {
+                const isTextScale = selected !== 'photo' && selected !== 'qr' && selected !== 'logo';
+                const scaleLabel = isTextScale ? 'Dimensione' : 'Zoom';
+                return (
+                <label className="card-field card-field--tight">
+                  <span>{scaleLabel} {selectedLabel} ({(placement.scale * 100).toFixed(0)}%)</span>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={2}
+                    step={0.05}
+                    value={placement.scale}
+                    onChange={(e) => handlePatchPlacement({ scale: Number(e.target.value) })}
+                    aria-label={`${scaleLabel} ${selectedLabel}`}
+                    data-testid="grid-placement-zoom"
+                  />
+                </label>
+                );
+              })()}
             </div>
           )}
         </>

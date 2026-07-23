@@ -120,6 +120,9 @@
 
 4. **Mismatch preview/export residui** (`tb023-verification.md` §10):
    wrapping testo (richiede layout engine condiviso), font metrics.
+   Wrapping export **parzialmente mitigato** (2026-07-23): `wrapTextAtWhitespace`
+   ora usa `src/utils/card/textMeasure.ts` (canvas `measureText`; fallback
+   0.52 in jsdom) — mismatch ridotto ma non eliminato.
    ~~Font preview ridotti su mobile~~ → **RISOLTO** (issue 8: auto-fit).
 
 ### Bassa priorità / backlog
@@ -132,6 +135,8 @@
      `src/components/card/ai/CardAIDecorationSection.tsx` (solo test),
      endpoint `/api/ai/design-review` (orfano),
      `src/ai/providers/geminiFlashImage.ts` (solo test).
+   - Metodi Client RAG in `src/utils/dataService.js:750-780` (indagine
+     TB-023: nessun chiamante, da pulire).
    - Decisione: tenere per futura UI design-review o rimuovere.
 
 7. **Dev proxy `/api/ai/design-review`**

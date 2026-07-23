@@ -112,16 +112,29 @@ Tutte le `/app/*` sono servite dalla catch-all SPA in `vercel.json`.
   inizializza dal layout (`deriveGridFromLayout`).
 - Grid elements: `photo`, `name`, `title`, `company`, `logo`, `qr`,
   `contacts`, `socials` con `x,y,w,h` in `card.grid` / `card.backGrid`.
-  Preset: `gridPresetLeft/Centered/Split/BackDefault`.
+  Preset: `gridPresetLeft/Centered/Split/BackDefault` +
+  `gridPresetRightBalanced/BackBalanced` (v2.16, layout `right-balanced`;
+  template Giovanni derivato dai preset).
 - `cardMerge.ts`: clamp collisioni graduali, NON sovrascrive
-  `photoUrl`/`logoUrl` (base64 user-uploaded).
+  `photoUrl`/`logoUrl` (base64 user-uploaded); su riposizionamento AI fa
+  merge (non replace) e preserva `placement` esistente (CON-AI-001),
+  accetta placement AI clampato ai limiti schema.
 - **Icona AI slot policy (CON-IS-001)**: l'icona generata va sempre in
   `photoUrl` (sostituisce foto), `logoUrl` mai toccato.
 - **Vision gating (CON-MM-002)**: screenshot preview solo se
   `getAiVisionEnabled() && providerSupportsVision(modelId)`; con provider
   text-only la cattura è saltata del tutto.
-- **Font scale** (0.7–1.5) via CSS var `--card-font-scale`, replicata in
-  export via helper `fs()`. `SAFE_FONT_FAMILIES` per il selettore.
+- **Placement universale (v2.16)**: nudge x/y + zoom `placement {x,y,scale}`
+  per TUTTI gli elementi grid (era solo photo/qr). Slider
+  `grid-placement-zoom`: label "Zoom" per photo/qr/logo, "Dimensione" per i
+  testi (scale = fattore font-size locale). Export SVG applica placement
+  anche ai testi fronte/retro; wrap testo export via
+  `src/utils/card/textMeasure.ts` (canvas measureText, fallback 0.52).
+- **Font scale globale LEGACY**: slider "Dimensione testo" rimosso da
+  `CardStyleFields.tsx` (testid `card-font-scale` eliminato). `fontScale`
+  resta nello schema (default 1, clamp 0.7–1.5) e in preview
+  `--card-font-scale` / export `fs()` / AI merge per backward compat
+  documenti esistenti. `SAFE_FONT_FAMILIES` per il selettore.
 - Export: PDF 10-up, PNG, SVG, JSON — tutto client-side (pdfmake + canvas).
 - Preview/export non ancora perfettamente identici: mismatch residui
   (wrapping, font metrics) documentati in `docs/agent-gotchas.md` §6.

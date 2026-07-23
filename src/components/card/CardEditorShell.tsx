@@ -75,9 +75,16 @@ function cardHasContent(c: BusinessCard): boolean {
     || c.front.company?.trim()
     || c.front.photoUrl
     || c.front.logoUrl
+    || c.front.coverImageUrl
     || c.back.phone?.trim()
     || c.back.email?.trim()
     || c.back.website?.trim()
+    || c.back.address?.trim()
+    || c.back.vatNumber?.trim()
+    || (c.back.services ?? []).some((s) => s.trim())
+    || c.back.socials.some((s) => s.url?.trim())
+    || c.back.qrPayload?.trim()
+    || c.back.coverImageUrl
   );
 }
 
@@ -112,6 +119,14 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const [isCoverGenerating, setIsCoverGenerating] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedIdRef = useRef<string | undefined>(initialCard?.id);
+  const [isSaved, setIsSaved] = useState(false);
+  // Snapshot dell'auto-save pendente: letto dal flush on unmount, che gira
+  // con deps [] e non può chiudere sullo stato (sarebbe stale).
+  const pendingAutoSaveRef = useRef<{ email: string; card: BusinessCard } | null>(null);
+  const saveFnRef = useRef(saveDocumentGuarded);
+  // Settato prima di un setCard innescato dal save stesso, così il dirty
+  // tracker non rimette subito isSaved a false.
+  const justSavedRef = useRef(false);
 
   // Always attach layout events on the card editor (localhost + prod).
   // pushLayoutEvent still gates console output; window.__cardLayoutEvents is free.
@@ -514,7 +529,9 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       addToast('error', result.error);
       return;
     }
+    justSavedRef.current = true;
     setCard(sanitized);
+    setIsSaved(true);
     loadedIdRef.current = sanitized.id;
     setShowSaveDialog(false);
     addToast('success', `«${title}» salvato. Visibile in Collection.`);
@@ -740,8 +757,11 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   useEffect(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    pendingAutoSaveRef.current = null;
     if (!userEmail || !cardHasContent(card)) return;
+    pendingAutoSaveRef.current = { email: userEmail, card };
     autoSaveTimerRef.current = setTimeout(() => {
+      pendingAutoSaveRef.current = null;
       const title = defaultCardTitle(card);
       const sanitized: BusinessCard = {
         ...pruneCardGrids(card),
@@ -754,9 +774,16 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
           addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
         } else if (result.error) {
           logger.error('Card auto-save failed', { err: result.error });
+          // Mai ingoiare l'errore: senza toast l'utente crede sia salvato
+          // (es. QuotaExceededError con immagini base64).
+          addToast('error', `Salvataggio automatico non riuscito: ${result.error}`);
         } else {
           // Keep title in sync if auto-derived (no toast noise).
-          if (card.title !== title) setCard((prev) => (prev.title === title ? prev : { ...prev, title }));
+          if (card.title !== title) {
+            justSavedRef.current = true;
+            setCard((prev) => (prev.title === title ? prev : { ...prev, title }));
+          }
+          setIsSaved(true);
           if (onSaved && sanitized.id) onSaved(sanitized);
         }
       });
@@ -765,6 +792,44 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
   }, [card, userEmail, saveDocumentGuarded, addToast, onSaved]);
+
+  // saveFnRef punta sempre all'ultima save: il flush on unmount sotto ha
+  // deps [] e non può chiudere sul valore dell'hook.
+  useEffect(() => {
+    saveFnRef.current = saveDocumentGuarded;
+  }, [saveDocumentGuarded]);
+
+  // Dirty tracking: ogni modifica alla card che non arriva da un save
+  // riporta l'indicatore da "Salvato" a "Salva".
+  useEffect(() => {
+    if (justSavedRef.current) {
+      justSavedRef.current = false;
+      return;
+    }
+    setIsSaved(false);
+  }, [card]);
+
+  // Flush on unmount (cambio route dentro l'app): se un save è ancora nel
+  // debounce di 30s, eseguilo ora invece di perdere le modifiche in silenzio.
+  // pendingAutoSaveRef è azzerato quando il timer schedulato scatta, quindi
+  // niente doppi save. Nessun setState/toast qui: il componente è smontato.
+  useEffect(() => {
+    return () => {
+      const pending = pendingAutoSaveRef.current;
+      pendingAutoSaveRef.current = null;
+      if (!pending) return;
+      const title = defaultCardTitle(pending.card);
+      const sanitized: BusinessCard = {
+        ...pruneCardGrids(pending.card),
+        title,
+        userEmail: pending.email,
+        updatedAt: new Date().toISOString(),
+      };
+      void saveFnRef.current(pending.email, sanitized).then((result) => {
+        if (result?.error) logger.error('Card flush-save on unmount failed', { err: result.error });
+      });
+    };
+  }, []);
 
   const updateSocial = useCallback((idx: number, key: 'platform' | 'url', value: string) => {
     setCard((prev) => {
@@ -1012,12 +1077,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       onAfterResize={handleAfterResize}
       onAfterAlign={handleAfterAlign}
       onPatchPlacement={patchElementPlacement}
+      onRequestEnableGrid={handleToggleShowGrid}
     />
-  ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize, handleAfterAlign, setGridEditorSideLogged, setSelectedGridElementLogged]);
+  ), [card, gridEditorSide, showGrid, patchGrid, applyGridPreset, selectedGridElement, handleAfterMove, handleAfterResize, handleAfterAlign, setGridEditorSideLogged, setSelectedGridElementLogged, handleToggleShowGrid]);
 
   const desktopActions = (
     <div className="card-actions">
-      <CardSaveAction variant="desktop" onClick={openSaveDialog} />
+      <CardSaveAction variant="desktop" onClick={openSaveDialog} isSaved={isSaved} />
       <CardExportMenu
         variant="desktop"
         open={exportMenuOpen}
@@ -1143,7 +1209,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       {isMobile && (
         <>
           <div className="card-mobile-toolbar" data-testid="mobile-toolbar">
-            <CardSaveAction variant="mobile" onClick={openSaveDialog} />
+            <CardSaveAction variant="mobile" onClick={openSaveDialog} isSaved={isSaved} />
             <CardExportMenu
               variant="mobile"
               open={exportMenuOpen}

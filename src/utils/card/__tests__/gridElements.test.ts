@@ -8,7 +8,7 @@ import {
   FRONT_ELEMENT_KEYS,
   BACK_ELEMENT_KEYS,
 } from '../gridElements';
-import { createEmptyCard, createGiovanniCardTemplate } from '../../documentSchemas';
+import { createEmptyCard, createGiovanniCardTemplate, deriveGridFromLayout } from '../../documentSchemas';
 import type { BusinessCard } from '../../documentSchemas';
 import type { GridElementKey } from '../gridElements';
 
@@ -151,7 +151,12 @@ describe('gridElements', () => {
         ...base,
         back: { ...base.back, services: ['SEO'] },
       };
-      const filtered = gridForCollisions(card.backGrid!, card, 'back', 'socials');
+      // v2.16: il backGrid del template non include più la cella services
+      // (filtrata alla creazione perché vuota); con contenuto reale la
+      // griglia derivata dal layout la reintroduce (preset back balanced).
+      const backGrid = deriveGridFromLayout(card, 'back');
+      expect(backGrid.elements.services).toBeDefined();
+      const filtered = gridForCollisions(backGrid, card, 'back', 'socials');
       expect(filtered.elements.services).toBeDefined();
     });
 
@@ -172,14 +177,25 @@ describe('gridElements', () => {
   });
 
   describe('pruneEmptyGridElements / pruneCardGrids', () => {
-    it('removes grid elements with no content (e.g. Giovanni template ghost services)', () => {
-      // createGiovanniCardTemplate() ships a `services` cell in backGrid
-      // even though back.services is empty by default — a real-world
-      // "ghost" entry that should not survive a save/export.
+    it('removes grid elements with no content (legacy ghost services cell)', () => {
+      // v2.16: createGiovanniCardTemplate() NON spedisce più la cella
+      // `services` fantasma (back.services vuoto → filtrata alla creazione).
       const card = createGiovanniCardTemplate();
       expect(card.back.services).toEqual([]);
-      expect(card.backGrid?.elements.services).toBeDefined();
-      const pruned = pruneCardGrids(card);
+      expect(card.backGrid?.elements.services).toBeUndefined();
+      // Un documento legacy può però averla ancora persistita: prune deve
+      // rimuoverla in save/export senza toccare gli elementi popolati.
+      const legacy: BusinessCard = {
+        ...card,
+        backGrid: {
+          ...card.backGrid!,
+          elements: {
+            ...card.backGrid!.elements,
+            services: { x: 0, y: 2, w: 2, h: 1 },
+          },
+        },
+      };
+      const pruned = pruneCardGrids(legacy);
       expect(pruned.backGrid?.elements.services).toBeUndefined();
       // Populated elements are untouched.
       expect(pruned.backGrid?.elements.contacts).toBeDefined();
@@ -190,7 +206,11 @@ describe('gridElements', () => {
     it('keeps services once they have real content', () => {
       const base = createGiovanniCardTemplate();
       const card = { ...base, back: { ...base.back, services: ['Siti web'] } };
-      const pruned = pruneCardGrids(card);
+      // Con contenuto, la cella services rientra nella griglia derivata...
+      const withGrid: BusinessCard = { ...card, backGrid: deriveGridFromLayout(card, 'back') };
+      expect(withGrid.backGrid?.elements.services).toBeDefined();
+      // ...e prune la conserva.
+      const pruned = pruneCardGrids(withGrid);
       expect(pruned.backGrid?.elements.services).toBeDefined();
     });
 

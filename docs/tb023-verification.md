@@ -1,7 +1,8 @@
 # TB-023 Verification — Checklist REQ & Esito
 
-> Data verifica: 2026-07-22. Metodo: audit codice (4 agenti paralleli),
-> cross-check documentazione, test unitari/e2e, screenshot Playwright.
+> Data verifica: 2026-07-22 (originale), aggiornata 2026-07-23 (fix responsive/vision/log).
+> Metodo: audit codice (4 agenti paralleli), cross-check documentazione,
+> test unitari/e2e, screenshot Playwright.
 > Spec di riferimento: `spec/spec-design-ai-harness-upgrade.md`.
 > Legenda: ✅ implementato / 🔶 deviato-equivalente / ⚠️ parziale /
 > ❌ mancante / 🗑️ rimosso deliberatamente / 🛠️ fixato in questa verifica.

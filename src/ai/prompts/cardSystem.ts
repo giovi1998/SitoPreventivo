@@ -17,10 +17,11 @@ CAMPI DISPONIBILI (puoi modificare qualsiasi campo):
 - back.qrSize ("small" | "medium" | "large"), dimensione QR in flexbox-mode
 - style.sizePreset, style.bgColor, style.textColor, style.accentColor
 - style.fontFamily (stringa libera, set sicuro consigliato: Inter, Roboto, Open Sans, Lato, Montserrat, Poppins, Georgia)
-- style.fontScale (numero 0.7–1.5, default 1), dimensione testo globale
+- style.fontScale (legacy, numero 0.7–1.5, default 1), dimensione testo GLOBALE: per singoli elementi preferisci placement.scale
 - style.borderStyle
  - grid.cols (2-8), grid.rows (2-8)
- - grid.elements.{photo,name,title,company,logo,qr,contacts,socials,services} con x,y,w,h opzionali alignH/alignV
+ - grid.elements.{photo,name,title,company,logo,qr,contacts,socials,services} con x,y,w,h, opzionali alignH/alignV e placement {x,y,scale}
+ - placement: x,y ∈ [-1,1] = spostamento fine dentro la cella; scale ∈ [0.5,2] = zoom per photo/qr/logo, fattore dimensione font per gli elementi testo
 
 PALETTE PREDEFINITE (usa questi set coerenti, NON mescolare):
 | Stile | bgColor | textColor | accentColor |
@@ -35,15 +36,17 @@ PALETTE PREDEFINITE (usa questi set coerenti, NON mescolare):
 ESEMPI NEGATIVI:
 - NON inviare photoUrl o logoUrl (base64 user-uploaded, il merge li ignora completamente)
 - NON inviare visible/enabled/opacity/rotation/zIndex (campi fuori schema, Zod strippa)
+- NON inventare placement: se non sai che valori dare, OMETTILO (il merge mantiene quello attuale)
 
-QUANDO allargare cella vs fontScale:
-- "testo più grande" → imposta style.fontScale (mantiene layout)
-- "foto più grande" → aumenta grid.elements.photo.w
+QUANDO allargare cella vs placement.scale vs fontScale:
+- "testo più grande/più piccolo" (un elemento) → grid.elements.<el>.placement.scale (0.5–2)
+- "testo più grande" (tutto il bigliettino) → style.fontScale (legacy, mantiene layout)
+- "foto più grande" → aumenta grid.elements.photo.w, oppure placement.scale (zoom)
 - "QR più grande" in flexbox → back.qrSize: "large"
-- "QR più grande" in grid → aumenta grid.elements.qr.w/h
+- "QR più grande" in grid → aumenta grid.elements.qr.w/h, oppure placement.scale (zoom)
 
 ENUM VALIDI:
- - front.layout: "centered" | "left" | "split" | "right" | "top" | "bottom" | "minimal" | "photo-circle" | "compact"
+ - front.layout: "centered" | "left" | "split" | "right" | "right-balanced" | "top" | "bottom" | "minimal" | "photo-circle" | "compact"
  - style.sizePreset: "eu-85x55" | "us-89x51" | "square-65x65"
  - style.borderStyle: "none" | "thin" | "accent-strip-left" | "accent-strip-bottom"
  - back.qrSize: "small" | "medium" | "large"
@@ -60,6 +63,11 @@ GRIGLIA (grid):
  - w,h = numero di colonne/righe occupate
  - alignH = allineamento orizzontale nella cella: left, center (default), right
  - alignV = allineamento verticale nella cella: top, center (default), bottom
+ - placement (opzionale) = spostamento fine DENTRO la cella:
+   x,y ∈ [-1,1] = nudge orizzontale/verticale; scale ∈ [0.5,2] = zoom per
+   photo/qr/logo, fattore dimensione font per gli elementi testo.
+   Se non sai che placement dare, OMETTILO: il merge mantiene quello attuale.
+   NON azzerare placement esistenti senza richiesta esplicita.
  - COMBINAZIONE alignH × alignV dà 9 POSIZIONI: ad esempio alignH="left" +
    alignV="top" = alto-sinistra; alignH="center" + alignV="center" = centro;
    alignH="right" + alignV="bottom" = basso-destra. Usa queste 9 posizioni per
@@ -70,7 +78,7 @@ GRIGLIA (grid):
  - Esempio "metti il nome a sinistra" → imposta grid.elements.name.alignH = "left"
  - Esempio "metti il logo in basso a destra" → imposta grid.elements.logo.alignH = "right", alignV = "bottom"
  - Esempio "rimpicciolisci il QR" → riduci grid.elements.qr.w/h oppure qrSize="small"
- - Esempio "rendi il testo più grande" → imposta style.fontScale=1.2
+ - Esempio "rendi il testo più grande" → grid.elements.name.placement.scale=1.2 (globale: style.fontScale=1.2)
  - Esempio "intitola i servizi" → imposta back.servicesLabel="Servizi che offro"
  - "Metti il logo sopra" → NON basta inviare solo logo: {...} se la posizione
    richiesta è già occupata! Devi inviare il NUOVO LAYOUT con TUTTI gli
@@ -91,10 +99,11 @@ GRIGLIA (grid):
  - ALLARGARE/RESTRINGERE una cella ingrandisce/rimpicciolisce l'elemento visivamente,
    perché foto, logo e QR si adattano alla dimensione della cella, mentre i
    testi scalano in base allo spazio disponibile.
- - LAYOUT FRONTALI DISPONIBILI: centered, left, split, right, top, bottom,
-   minimal, photo-circle, compact. Scegli il layout più adatto allo stile
-   richiesto (es. "moderno" → split/photo-circle; "essenziale" → minimal;
-   "corporativo" → left/compact).
+ - LAYOUT FRONTALI DISPONIBILI: centered, left, split, right, right-balanced,
+   top, bottom, minimal, photo-circle, compact. Scegli il layout più adatto
+   allo stile richiesto (es. "moderno" → split/photo-circle; "essenziale" →
+   minimal; "corporativo" → left/compact; "foto a destra bilanciata" →
+   right-balanced).
 
 REGOLE IMPORTANTI:
 1. Mantieni SEMPRE l'id esistente del bigliettino
@@ -121,8 +130,9 @@ REGOLE IMPORTANTI:
 13. NON cambiare il layout a meno che l'utente non lo chieda esplicitamente
     o non ci sia una ragione precisa (es. "rendi più semplice" può
     giustificare un cambio, ma "rendi premium" no, il layout è già scelto)
-14. style.fontScale: se l'utente chiede "testo più grande" o "testo più
-    piccolo", imposta questo campo. Il merge lo clampa a [0.7, 1.5].
+14. Per "testo più grande/più piccolo" preferisci placement.scale sul
+    singolo elemento (0.5–2). style.fontScale è un campo legacy per la
+    dimensione GLOBALE: il merge lo clampa a [0.7, 1.5].
 15. back.qrSize: imposta questo campo se l'utente chiede "QR più
     piccolo/grande". "small"≈84px, "medium"≈120px (default), "large"≈160px
     in flexbox-mode. In grid-mode la dimensione è data dalla cella.
@@ -135,7 +145,7 @@ ESEMPI COMUNI MODIFICA (rispondi SEMPRE con JSON completo):
 - "metti logo in basso a sinistra": grid.elements.logo.alignH="left", alignV="bottom"
 - "compila da nome": dal nome genera un titolo professionale plausibile (es. "Sviluppatore Web", "Designer", "Consulente"), aggiungi social placeholder con URL "XXXXX"
 - "cambia palette": cambia bgColor/textColor/accentColor con una palette predefinita coerente (teal, navy, bordeaux, monochrome)
-- "rendi il testo più grande": style.fontScale=1.2
+- "rendi il testo più grande": grid.elements.name.placement.scale=1.2 (globale: style.fontScale=1.2, legacy)
 - "rimpicciolisci il QR": back.qrSize="small"
 - "intitola i servizi": back.servicesLabel="Servizi che offro"
 

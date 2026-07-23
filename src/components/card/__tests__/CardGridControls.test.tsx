@@ -41,10 +41,45 @@ describe('CardGridControls', () => {
     expect(screen.getByLabelText(/zoom foto/i)).toHaveValue('1');
   });
 
-  it('does not show placement controls for element without placement support', () => {
+  it('does not show placement controls when no element is selected', () => {
+    const card = createGiovanniCardTemplate();
+    renderControls({ card, selected: '' });
+    expect(screen.queryByTestId('grid-placement-controls')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('grid-placement-zoom')).not.toBeInTheDocument();
+  });
+
+  it('shows zoom slider labelled "Dimensione" for text elements (name/title)', () => {
     const card = createGiovanniCardTemplate();
     renderControls({ card, selected: 'name' });
-    expect(screen.queryByTestId('grid-placement-controls')).not.toBeInTheDocument();
+    expect(screen.getByTestId('grid-placement-zoom')).toBeInTheDocument();
+    expect(screen.getByLabelText(/dimensione nome/i)).toHaveValue('1');
+
+    renderControls({ card, selected: 'title' });
+    expect(screen.getByLabelText(/dimensione ruolo/i)).toBeInTheDocument();
+  });
+
+  it('shows zoom slider labelled "Dimensione" for back text elements (contacts)', () => {
+    const card = createGiovanniCardTemplate();
+    renderControls({ card, side: 'back', selected: 'contacts' });
+    expect(screen.getByTestId('grid-placement-zoom')).toBeInTheDocument();
+    expect(screen.getByLabelText(/dimensione contatti/i)).toBeInTheDocument();
+  });
+
+  it('keeps "Zoom" label for image-like elements (photo/qr)', () => {
+    const card = createGiovanniCardTemplate();
+    renderControls({ card, selected: 'photo' });
+    expect(screen.getByLabelText(/zoom foto/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/dimensione foto/i)).not.toBeInTheDocument();
+
+    renderControls({ card, side: 'back', selected: 'qr' });
+    expect(screen.getByLabelText(/zoom qr/i)).toBeInTheDocument();
+  });
+
+  it('changes text scale via range and patches placement.scale', () => {
+    const card = createGiovanniCardTemplate();
+    const { mocks } = renderControls({ card, selected: 'name' });
+    fireEvent.change(screen.getByTestId('grid-placement-zoom'), { target: { value: '1.3' } });
+    expect(mocks.onPatchPlacement).toHaveBeenCalledWith('name', { x: 0, y: 0, scale: 1.3 });
   });
 
   it('nudges photo left and clamps to -1', () => {

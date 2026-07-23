@@ -124,7 +124,9 @@ describe('mergeCardAIResponse', () => {
       },
     });
     // Phase 2.2 REQ-A04: qr è un elemento del retro, va in card.backGrid
-    expect(merged.backGrid?.elements.qr).toEqual({ x: 2, y: 0, w: 1, h: 2 });
+    // (toMatchObject: il merge v2.0 preserva alignH/alignV/placement del
+    // corrente, quindi l'elemento ha campi extra oltre a x/y/w/h)
+    expect(merged.backGrid?.elements.qr).toMatchObject({ x: 2, y: 0, w: 1, h: 2 });
     expect(merged.grid?.elements.qr).toBeUndefined();
     expect(changes.some((c) => c.includes('qr'))).toBe(true);
   });
@@ -141,7 +143,7 @@ describe('mergeCardAIResponse', () => {
         },
       },
     });
-    expect(merged.grid?.elements.photo).toEqual({ x: 0, y: 0, w: 2, h: 2 });
+    expect(merged.grid?.elements.photo).toMatchObject({ x: 0, y: 0, w: 2, h: 2 });
     expect(changes.some((c) => c.includes('photo'))).toBe(true);
   });
 
@@ -157,7 +159,7 @@ describe('mergeCardAIResponse', () => {
           },
         },
       });
-      expect(merged.grid?.elements.logo).toEqual({ x: 2, y: 3, w: 1, h: 1 });
+      expect(merged.grid?.elements.logo).toMatchObject({ x: 2, y: 3, w: 1, h: 1 });
       expect(changes.some((c) => c.includes('logo'))).toBe(true);
     });
 
@@ -316,7 +318,10 @@ describe('mergeCardAIResponse', () => {
         },
       });
       expect(merged.backGrid).toEqual(originalBackGrid);
-      expect(merged.grid?.elements.photo).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+      // v2.16: il template Giovanni usa 'right-balanced' con photo a (2,0,2,3).
+      // La mossa a x=0 è bloccata dalla colonna testi (name/title/company),
+      // il resize a 1×1 è applicato → (2,0,1,1).
+      expect(merged.grid?.elements.photo).toMatchObject({ x: 2, y: 0, w: 1, h: 1 });
     });
 
     it('preserves existing grid when AI only touches back elements', () => {
@@ -332,7 +337,7 @@ describe('mergeCardAIResponse', () => {
         },
       });
       expect(merged.grid).toEqual(originalGrid);
-      expect(merged.backGrid?.elements.qr).toEqual({ x: 2, y: 0, w: 2, h: 4 });
+      expect(merged.backGrid?.elements.qr).toMatchObject({ x: 2, y: 0, w: 2, h: 4 });
     });
 
     it('uses existing backGrid (always present) when AI adds back elements (grid-only refactor)', () => {
@@ -355,7 +360,7 @@ describe('mergeCardAIResponse', () => {
       // shrinkH a h=1 ok → resta (2,0,1,1).
       expect(merged.backGrid?.cols).toBe(6);
       expect(merged.backGrid?.rows).toBe(6);
-      expect(merged.backGrid?.elements.qr).toEqual({ x: 2, y: 0, w: 1, h: 1 });
+      expect(merged.backGrid?.elements.qr).toMatchObject({ x: 2, y: 0, w: 1, h: 1 });
     });
   });
 
@@ -739,5 +744,103 @@ describe('mergeCardAIResponse', () => {
       // Changes tracciate
       expect(changes.length).toBeGreaterThan(0);
     });
+  });
+});
+
+// ─── Spec card-nudge v2.0 (REQ-AI-002/003, REQ-TEST-001) ────────────────
+describe('mergeCardAIResponse — placement (nudge/zoom) preservation', () => {
+  it('preserves existing placement/photoPlacement when AI moves only x/y/w/h (regression)', () => {
+    const card = createEmptyCard();
+    card.grid = {
+      cols: 4,
+      rows: 4,
+      elements: {
+        photo: {
+          x: 0, y: 0, w: 2, h: 4,
+          placement: { x: 0.3, y: -0.2, scale: 1.4 },
+          photoPlacement: { x: 0.1, y: 0.1, scale: 1.2 },
+        },
+        name: { x: 2, y: 0, w: 2, h: 1 },
+      },
+    };
+    // L'AI ridimensiona la foto SENZA menzionare placement
+    const { card: merged } = mergeCardAIResponse(card, {
+      grid: { elements: { photo: { x: 0, y: 0, w: 2, h: 2 } } },
+    });
+    expect(merged.grid?.elements.photo?.w).toBe(2);
+    expect(merged.grid?.elements.photo?.h).toBe(2);
+    // placement e photoPlacement NON devono essere persi nel merge
+    expect(merged.grid?.elements.photo?.placement).toEqual({ x: 0.3, y: -0.2, scale: 1.4 });
+    expect(merged.grid?.elements.photo?.photoPlacement).toEqual({ x: 0.1, y: 0.1, scale: 1.2 });
+  });
+
+  it('preserves existing alignH/alignV when AI moves only x/y/w/h', () => {
+    const card = createEmptyCard();
+    card.grid = {
+      cols: 4,
+      rows: 4,
+      elements: {
+        name: { x: 0, y: 0, w: 2, h: 1, alignH: 'right', alignV: 'bottom' },
+      },
+    };
+    const { card: merged } = mergeCardAIResponse(card, {
+      grid: { elements: { name: { x: 2, y: 0, w: 2, h: 1 } } },
+    });
+    expect(merged.grid?.elements.name?.x).toBe(2);
+    expect(merged.grid?.elements.name?.alignH).toBe('right');
+    expect(merged.grid?.elements.name?.alignV).toBe('bottom');
+  });
+
+  it('accepts AI-provided placement (in bounds) and applies it', () => {
+    const card = createEmptyCard();
+    const { card: merged, changes } = mergeCardAIResponse(card, {
+      grid: {
+        elements: {
+          photo: { x: 0, y: 0, w: 2, h: 4, placement: { x: 0.5, y: 0.5, scale: 1.5 } },
+        },
+      },
+    });
+    expect(merged.grid?.elements.photo?.placement).toEqual({ x: 0.5, y: 0.5, scale: 1.5 });
+    expect(changes.some((c) => c.includes('photo'))).toBe(true);
+  });
+
+  it('placement-only change is tracked (not reported as collision block)', () => {
+    const card = createEmptyCard();
+    const { card: merged, changes } = mergeCardAIResponse(card, {
+      grid: {
+        elements: {
+          // stessa posizione di gridPresetLeft.photo (0,0,2,3), cambia solo placement
+          photo: { x: 0, y: 0, w: 2, h: 3, placement: { x: 0, y: 0, scale: 2 } },
+        },
+      },
+    });
+    expect(merged.grid?.elements.photo?.placement).toEqual({ x: 0, y: 0, scale: 2 });
+    expect(changes.some((c) => /photo.*placement/.test(c))).toBe(true);
+    expect(changes.some((c) => /photo.*bloccato/.test(c))).toBe(false);
+  });
+
+  it('rejects AI placement out of range via safeParse (scale 5 → card unchanged)', () => {
+    const card = createEmptyCard();
+    const originalGrid = JSON.parse(JSON.stringify(card.grid));
+    const { card: merged, changes } = mergeCardAIResponse(card, {
+      grid: {
+        elements: {
+          photo: { x: 0, y: 0, w: 2, h: 2, placement: { x: 0, y: 0, scale: 5 } },
+        },
+      },
+    });
+    // Lo schema ha range stretti: placement invalido → safeParse fallisce →
+    // nessuna modifica applicata (mai crash, mai campo strippato).
+    expect(merged.grid).toEqual(originalGrid);
+    expect(changes).toHaveLength(0);
+  });
+
+  it('accepts front.layout "right-balanced" (passes validation and merge)', () => {
+    const card = createEmptyCard();
+    const { card: merged, changes } = mergeCardAIResponse(card, {
+      front: { layout: 'right-balanced' },
+    });
+    expect(merged.front.layout).toBe('right-balanced');
+    expect(changes.some((c) => c.includes('right-balanced'))).toBe(true);
   });
 });

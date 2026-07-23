@@ -684,6 +684,17 @@
   transform: var(--card-photo-transform, none);
 }
 
+/* v2.16: positional nudge for text and logo cells, mirroring the photo/QR
+ * placement transform. v2.17: scale also applies to text cells (it acts as a
+ * local font-size factor, matching the export per-element scale); for logo it
+ * zooms the whole cell in/out from the centre. */
+.card-preview-side.grid-mode .card-grid-cell--text,
+.card-back-body-grid .card-grid-cell--text,
+.card-preview-side.grid-mode .card-grid-cell--logo,
+.card-back-body-grid .card-grid-cell--logo {
+  transform: var(--card-photo-transform, none);
+}
+
 .card-back-qr-frame {
   padding: 4px;
   background: #fff;

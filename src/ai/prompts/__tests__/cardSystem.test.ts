@@ -78,4 +78,29 @@ describe('buildCardSystemPrompt', () => {
     expect(p).toContain('logoUrl');
     expect(p).toContain('visible');
   });
+
+  // ─── Spec card-nudge v2.0 (REQ-AI-004/005) ────────────────────
+  it('documents per-element placement (x/y nudge, scale) in the JSON contract', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toContain('placement');
+    expect(p).toMatch(/placement.*scale|scale.*placement/i);
+    expect(p).toMatch(/-1,1|\[-1, ?1\]/); // bound nudge documentato
+    expect(p).toMatch(/0\.5[–-]2|\[0\.5, ?2\]/); // bound scale documentato
+  });
+
+  it('documents the right-balanced layout in the enum and layout list', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toContain('right-balanced');
+  });
+
+  it('says to OMIT placement rather than guess it (anti-hallucination, REQ-AI-005)', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toMatch(/NON inventare placement.*OMETTILO|OMETTILO.*placement|placement[\s\S]{0,200}OMETTILO/i);
+  });
+
+  it('prefers placement.scale over fontScale for per-element text sizing (legacy fontScale)', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toMatch(/fontScale.*legacy|legacy.*fontScale/i);
+    expect(p).toContain('placement.scale');
+  });
 });

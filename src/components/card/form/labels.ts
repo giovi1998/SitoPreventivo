@@ -11,6 +11,7 @@ export const LAYOUT_LABELS: Record<BusinessCardLayout, string> = {
   left: 'Sinistra (foto a sx)',
   split: 'Split (foto a sx)',
   right: 'Split inverso (foto a dx)',
+  'right-balanced': 'Bilanciato DX (foto a dx)',
   top: 'Foto in alto',
   bottom: 'Foto in basso',
   minimal: 'Minimal (testo centrato)',

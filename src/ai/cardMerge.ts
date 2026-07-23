@@ -1,4 +1,4 @@
-import type { BusinessCard, CardGrid } from '../utils/documentSchemas';
+import type { BusinessCard, CardGrid, CardGridElement } from '../utils/documentSchemas';
 import { businessCardSchema, FONT_SCALE_MIN, FONT_SCALE_MAX } from '../utils/documentSchemas';
 import { aiCardInputSchema } from './aiCardInputSchema';
 import { stepMove, stepResize } from '../utils/gridUtils';
@@ -51,6 +51,22 @@ function isGridHallucinated(elements: Record<string, unknown>): boolean {
   });
   if (allInvalidSize) return true;
   return false;
+}
+
+// Spec card-nudge v2.0 (REQ-AI-003): placement {x,y∈[-1,1], scale∈[0.5,2]}
+// fornito dall'AI. Lo schema Zod ha già range stretti, ma clappiamo comunque
+// in difesa: valori non numerici/invalidi → undefined → il merge mantiene il
+// placement corrente (mai crash, mai campo strippato).
+type GridPlacement = { x: number; y: number; scale: number };
+function clampPlacement(p: unknown): GridPlacement | undefined {
+  if (!p || typeof p !== 'object') return undefined;
+  const o = p as Record<string, unknown>;
+  if (typeof o.x !== 'number' || typeof o.y !== 'number' || typeof o.scale !== 'number') return undefined;
+  return {
+    x: Math.max(-1, Math.min(1, o.x)),
+    y: Math.max(-1, Math.min(1, o.y)),
+    scale: Math.max(0.5, Math.min(2, o.scale)),
+  };
 }
 
 export function mergeCardAIResponse(
@@ -251,7 +267,12 @@ export function mergeCardAIResponse(
     const elements = g.elements as Record<string, unknown> | undefined;
     if (elements && typeof elements === 'object' && !isGridHallucinated(elements)) {
       for (const key of Object.keys(elements)) {
-        const el = elements[key] as { x: number; y: number; w: number; h: number };
+        const el = elements[key] as {
+          x: number; y: number; w: number; h: number;
+          alignH?: 'left' | 'center' | 'right';
+          alignV?: 'top' | 'center' | 'bottom';
+          placement?: { x: number; y: number; scale: number };
+        };
         if (!el || typeof el !== 'object') continue;
         if (typeof el.x !== 'number' || typeof el.y !== 'number' ||
             typeof el.w !== 'number' || typeof el.h !== 'number') continue;
@@ -270,7 +291,19 @@ export function mergeCardAIResponse(
           elements: { ...currentTargetGrid.elements },
         };
         const current = currentTargetGrid.elements[key as keyof typeof currentTargetGrid.elements];
-        let sanitized: { x: number; y: number; w: number; h: number; alignH?: 'left' | 'center' | 'right'; alignV?: 'top' | 'center' | 'bottom' } = el;
+        // Spec card-nudge v2.0 (REQ-AI-002/003): FONDI l'elemento AI con
+        // quello corrente invece di sostituirlo. I campi inviati dall'AI
+        // sovrascrivono; quelli omessi (placement, photoPlacement, alignH/V)
+        // restano. placement dell'AI è clampato ai bound schema; se invalido
+        // si mantiene il placement corrente.
+        const aiPlacement = clampPlacement(el.placement);
+        let sanitized: CardGridElement = current ? { ...current, ...el } : { ...el };
+        const keepPlacement = aiPlacement ?? current?.placement;
+        if (keepPlacement) {
+          sanitized.placement = keepPlacement;
+        } else {
+          delete sanitized.placement; // niente chiave esplicita a undefined
+        }
         if (current) {
           const dx = el.x - current.x;
           const dy = el.y - current.y;
@@ -310,21 +343,31 @@ export function mergeCardAIResponse(
           sanitized.w === el.w && sanitized.h === el.h;
         // Preserve alignment changes even if position did not change.
         const alignmentChanged = !!current && (sanitized.alignH !== current.alignH || sanitized.alignV !== current.alignV);
+        // Stesso trattamento per placement (nudge/zoom): se cambia solo quello,
+        // non va segnalato come "bloccato (collisione)".
+        const placementChanged = !!current &&
+          JSON.stringify(sanitized.placement ?? null) !== JSON.stringify(current.placement ?? null);
+        const positionUnchanged = !alignmentChanged && !placementChanged;
 
         newTargetGrid.elements = { ...newTargetGrid.elements, [key]: sanitized };
 
-        if (sameAsCurrent && !alignmentChanged) {
+        const alignMsg = alignmentChanged
+          ? `, alignH=${sanitized.alignH ?? 'center'}, alignV=${sanitized.alignV ?? 'center'}`
+          : '';
+        const placementMsg = placementChanged
+          ? `, placement=${JSON.stringify(sanitized.placement)}`
+          : '';
+
+        if (sameAsCurrent && positionUnchanged) {
           // Nessuna modifica effettiva: richiesta impossibile per collisione/bordi.
           changes.push(`Griglia: ${key} bloccato (collisione), posizione richiesta non raggiungibile`);
         } else {
           updated[target] = newTargetGrid;
-          if (sameAsRequested && !alignmentChanged) {
-            changes.push(`Griglia: ${key} posizionato a (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}`);
+          if (sameAsRequested) {
+            // Posizione richiesta raggiunta (o solo align/placement cambiati).
+            changes.push(`Griglia: ${key} posizionato a (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}${alignMsg}${placementMsg}`);
           } else {
-            const alignMsg = alignmentChanged
-              ? `, alignH=${sanitized.alignH ?? 'center'}, alignV=${sanitized.alignV ?? 'center'}`
-              : '';
-            changes.push(`Griglia: ${key} parziale (collisione), richiesto (${el.x}, ${el.y}) ${el.w}×${el.h}, applicato (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}${alignMsg}`);
+            changes.push(`Griglia: ${key} parziale (collisione), richiesto (${el.x}, ${el.y}) ${el.w}×${el.h}, applicato (${sanitized.x}, ${sanitized.y}) ${sanitized.w}×${sanitized.h}${alignMsg}${placementMsg}`);
           }
         }
       }

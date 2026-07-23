@@ -51,8 +51,8 @@ describe('aiCardInputSchema', () => {
     expect(aiCardInputSchema.safeParse({ front: { name: 123 } }).success).toBe(false);
   });
 
-  it('accepts all 9 layouts', () => {
-    for (const layout of ['centered', 'left', 'split', 'right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact'] as const) {
+  it('accepts all 10 layouts', () => {
+    for (const layout of ['centered', 'left', 'split', 'right', 'right-balanced', 'top', 'bottom', 'minimal', 'photo-circle', 'compact'] as const) {
       expect(aiCardInputSchema.safeParse({ front: { layout } }).success).toBe(true);
     }
   });
@@ -128,6 +128,47 @@ describe('aiCardInputSchema', () => {
   it('accepts front/back.useGrid from AI output', () => {
     expect(aiCardInputSchema.safeParse({ front: { useGrid: true } }).success).toBe(true);
     expect(aiCardInputSchema.safeParse({ back: { useGrid: true } }).success).toBe(true);
+  });
+
+  // ─── Spec card-nudge v2.0 (REQ-AI-001): placement + right-balanced ───
+  it('accepts layout "right-balanced" (REQ-TEST-002)', () => {
+    const r = aiCardInputSchema.safeParse({ front: { layout: 'right-balanced' } });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.front?.layout).toBe('right-balanced');
+  });
+
+  it('accepts grid element placement within bounds', () => {
+    const r = aiCardInputSchema.safeParse({
+      grid: {
+        elements: {
+          name: { x: 0, y: 0, w: 2, h: 1, placement: { x: 0.5, y: -0.5, scale: 1.5 } },
+          photo: { x: 0, y: 1, w: 2, h: 2, placement: { x: -1, y: 1, scale: 0.5 } },
+        },
+      },
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.grid?.elements?.name?.placement).toEqual({ x: 0.5, y: -0.5, scale: 1.5 });
+    }
+  });
+
+  it('rejects placement out of range (safeParse fails, REQ-TEST-002)', () => {
+    // scale > 2
+    expect(aiCardInputSchema.safeParse({
+      grid: { elements: { name: { x: 0, y: 0, w: 1, h: 1, placement: { x: 0, y: 0, scale: 5 } } } },
+    }).success).toBe(false);
+    // scale < 0.5
+    expect(aiCardInputSchema.safeParse({
+      grid: { elements: { name: { x: 0, y: 0, w: 1, h: 1, placement: { x: 0, y: 0, scale: 0.1 } } } },
+    }).success).toBe(false);
+    // x fuori [-1, 1]
+    expect(aiCardInputSchema.safeParse({
+      grid: { elements: { name: { x: 0, y: 0, w: 1, h: 1, placement: { x: 2, y: 0, scale: 1 } } } },
+    }).success).toBe(false);
+    // y fuori [-1, 1]
+    expect(aiCardInputSchema.safeParse({
+      grid: { elements: { name: { x: 0, y: 0, w: 1, h: 1, placement: { x: 0, y: -1.5, scale: 1 } } } },
+    }).success).toBe(false);
   });
 
   it('strips invented fields (visible, opacity, etc.)', () => {

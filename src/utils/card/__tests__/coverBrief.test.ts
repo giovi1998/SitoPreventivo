@@ -23,8 +23,10 @@ describe('buildCardCoverBrief', () => {
     const card = createGiovanniCardTemplate();
     const { context } = buildCardCoverBrief(card);
     expect(context).toContain('Front grid 4x4');
-    expect(context).toContain('photo cols 0-2, rows 0-4');
-    expect(context).toContain('name cols 2-4, rows 0-1');
+    // v2.16: template Giovanni = layout right-balanced (foto a destra h:3,
+    // banda testi a sinistra). Celle da gridPresetRightBalanced.
+    expect(context).toContain('photo cols 2-4, rows 0-3');
+    expect(context).toContain('name cols 0-2, rows 0-1');
   });
 
   it('keeps text areas readable in prompt', () => {

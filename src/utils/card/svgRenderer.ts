@@ -1,5 +1,14 @@
 import type { BusinessCard, CardGrid } from '../documentSchemas';
 import { FONT_SCALE_MIN, FONT_SCALE_MAX, deriveGridFromLayout, hasGridElements } from '../documentSchemas';
+import {
+  GRID_PAD_REF,
+  GRID_GAP_REF,
+  GRID_REF_HEIGHT,
+  GRID_TEXT_PAD_X_REF,
+  GRID_TEXT_PAD_Y_REF,
+  GRID_PHOTO_BORDER_REF,
+} from './gridConstants';
+import { estimateCharsForWidth, measureTextWidth, type MeasureTextOptions } from './textMeasure';
 import { generateQrSvg } from '../qrGenerator';
 import { resolveCardQrPayload, getEffectiveQrPayload } from './qrPayload';
 import { deriveHostname, deriveHandle } from './textDerivation';
@@ -265,11 +274,9 @@ export function buildFrontSvg(
   const rawFrontGrid = card.front.useGrid && hasGridElements('front', card) ? card.grid : undefined;
   const grid = rawFrontGrid ?? deriveGridFromLayout(card, 'front');
   if (grid && grid.cols > 0 && grid.rows > 0) {
-    // v2.14: match preview CSS `.card-preview-side.grid-mode { padding: 16px; gap: 4px }`.
-    // Scale 16px padding and 4px gap to export coordinates using the 340px
-    // reference height (same as backPad/PREVIEW_REF_H).
-    const frontGridPad = Math.max(6, Math.round(pxH * (16 / 340)));
-    const frontCellGap = Math.max(2, Math.round(pxH * (4 / 340)));
+    // v2.16: grid proportions are shared with the preview via gridConstants.
+    const frontGridPad = Math.max(6, Math.round(pxH * (GRID_PAD_REF / GRID_REF_HEIGHT)));
+    const frontCellGap = Math.max(2, Math.round(pxH * (GRID_GAP_REF / GRID_REF_HEIGHT)));
     const gridAreaX = frontGridPad;
     const gridAreaY = frontGridPad;
     const gridAreaW = pxW - 2 * frontGridPad;
@@ -301,12 +308,12 @@ export function buildFrontSvg(
         const r = Math.min(w, h) / 2;
         out += `<defs><clipPath id="photoCircle"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>`;
         out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#photoCircle)"/>`;
-        const photoBorderW = Math.max(1.5, Math.round(pxH * (2 / 340)));
+        const photoBorderW = Math.max(1.5, Math.round(pxH * (GRID_PHOTO_BORDER_REF / GRID_REF_HEIGHT)));
         out += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${accent}" stroke-width="${photoBorderW}"/>`;
       } else {
         out += `<image href="${escapeXml(card.front.photoUrl!)}" x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 6)"/>`;
         // Parity with preview CSS .card-photo { border: 2px solid accent }.
-        const photoBorderW = Math.max(1.5, Math.round(pxH * (2 / 340)));
+        const photoBorderW = Math.max(1.5, Math.round(pxH * (GRID_PHOTO_BORDER_REF / GRID_REF_HEIGHT)));
         out += `<rect x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" rx="6" fill="none" stroke="${accent}" stroke-width="${photoBorderW}"/>`;
       }
     } else if (!hasPhoto && hasLogo && photoEl && !grid.elements.logo) {
@@ -331,22 +338,27 @@ export function buildFrontSvg(
       const h = logoEl.h * cellH;
       // v2.12: logo box is 72% of the cell (matches preview CSS max-width/height)
       // so 3×3 alignment can move it. preserveAspectRatio keeps artwork aspect.
+      // v2.16: placement scale/zoom and nudge are applied like photo/QR.
+      const logoPlacement = logoEl.placement ?? logoEl.photoPlacement;
+      const logoScale = logoPlacement?.scale ?? 1;
       const alignH = logoEl.alignH ?? 'center';
       const alignV = logoEl.alignV ?? 'center';
       const xAlign = alignH === 'left' ? 'xMin' : alignH === 'right' ? 'xMax' : 'xMid';
       const yAlign = alignV === 'top' ? 'YMin' : alignV === 'bottom' ? 'YMax' : 'YMid';
-      const logoW = w * 0.72;
-      const logoH = h * 0.72;
+      const logoW = w * 0.72 * logoScale;
+      const logoH = h * 0.72 * logoScale;
       let logoX = x + (w - logoW) / 2;
       let logoY = y + (h - logoH) / 2;
       if (alignH === 'left') logoX = x + w * 0.04;
       else if (alignH === 'right') logoX = x + w - logoW - w * 0.04;
       if (alignV === 'top') logoY = y + h * 0.04;
       else if (alignV === 'bottom') logoY = y + h - logoH - h * 0.04;
+      const logoNudgeX = ((logoPlacement?.x ?? 0) * w) / 2;
+      const logoNudgeY = ((logoPlacement?.y ?? 0) * h) / 2;
       if (card.front.logoBackground === 'card') {
         out += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${escapeXml(bg)}"/>`;
       }
-      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${logoX}" y="${logoY}" width="${logoW}" height="${logoH}" preserveAspectRatio="${xAlign}${yAlign} meet"/>`;
+      out += `<image href="${escapeXml(card.front.logoUrl!)}" x="${logoX + logoNudgeX}" y="${logoY + logoNudgeY}" width="${logoW}" height="${logoH}" preserveAspectRatio="${xAlign}${yAlign} meet"/>`;
     }
 
     const textKeys: Array<keyof CardGrid['elements'] & ('name' | 'title' | 'company')> = ['name', 'title', 'company'];
@@ -378,16 +390,23 @@ export function buildFrontSvg(
       const h = el.h * cellH;
       const alignH = el.alignH ?? 'center';
       const alignV = el.alignV ?? 'center';
-      const fontSize = fs(pxH * cfg.sizePct, fontScale);
-      // v2.14: use cell padding (matches CSS 6px 10px scaled to export).
-      const cellPadX = Math.max(4, Math.round(pxH * (10 / 340)));
-      const cellPadY = Math.max(3, Math.round(pxH * (6 / 340)));
-      const textX = alignH === 'left' ? x + cellPadX : alignH === 'right' ? x + w - cellPadX : x + w / 2;
-      const textY = alignV === 'top'
+      // v2.17 (spec v2.0 REQ-ZOOM-003): placement.scale is a local font-size
+      // factor for text elements. scale=1 leaves the output byte-identical.
+      const placement = el.placement ?? el.photoPlacement;
+      const elScale = placement?.scale ?? 1;
+      const fontSize = fs(pxH * cfg.sizePct, fontScale) * elScale;
+      // v2.16: cell padding from shared gridConstants.
+      const cellPadX = Math.max(4, Math.round(pxH * (GRID_TEXT_PAD_X_REF / GRID_REF_HEIGHT)));
+      const cellPadY = Math.max(3, Math.round(pxH * (GRID_TEXT_PAD_Y_REF / GRID_REF_HEIGHT)));
+      // v2.16: positional nudge inside the cell.
+      const nudgeX = ((placement?.x ?? 0) * w) / 2;
+      const nudgeY = ((placement?.y ?? 0) * h) / 2;
+      const textX = (alignH === 'left' ? x + cellPadX : alignH === 'right' ? x + w - cellPadX : x + w / 2) + nudgeX;
+      const textY = (alignV === 'top'
         ? y + cellPadY
         : alignV === 'bottom'
           ? y + h - fontSize - cellPadY
-          : y + (h - fontSize) / 2;
+          : y + (h - fontSize) / 2) + nudgeY;
       const anchor = alignH === 'left' ? 'start' : alignH === 'right' ? 'end' : 'middle';
       const opacityAttr = cfg.opacity !== undefined ? ` opacity="${cfg.opacity}"` : '';
       const letterAttr = cfg.letterSpacing ? ` letter-spacing="${cfg.letterSpacing}"` : '';
@@ -529,8 +548,13 @@ export function buildBackSvg(
     if (contactsEl) {
       // v2.10: cell rect from shared backLayout (matches preview padding).
       const cell = gridCellRect(contactsEl, cellW, cellH, bodyTop, padBox);
-      const cx = cell.x;
-      const cy = cell.y;
+      // v2.17 (spec v2.0 REQ-ZOOM-003): nudge x/y with the same semantics as
+      // the front texts (±half the cell dimension) + scale as a local
+      // font-size factor. The hard clip below stays on the un-nudged cell.
+      const contactsPlacement = contactsEl.placement ?? contactsEl.photoPlacement;
+      const contactsScale = contactsPlacement?.scale ?? 1;
+      const cx = cell.x + ((contactsPlacement?.x ?? 0) * cell.w) / 2;
+      const cy = cell.y + ((contactsPlacement?.y ?? 0) * cell.h) / 2;
       const cw = cell.w;
       const ch = cell.h;
 
@@ -547,8 +571,8 @@ export function buildBackSvg(
       // (cell ~300px → 48px labels). Then shrink-to-fit short cells.
       // v2.14: match preview grid-mode rem sizes (0.6rem=9.6px, 0.72rem=11.52px
       // on 340px reference). Before: 9.3/12.5 (flexbox values, slightly off).
-      let keySize = fs(pxH * (9.6 / 340), fontScale);
-      let valSize = fs(pxH * (11.52 / 340), fontScale);
+      let keySize = fs(pxH * (9.6 / 340), fontScale) * contactsScale;
+      let valSize = fs(pxH * (11.52 / 340), fontScale) * contactsScale;
       const wrappableKeys = new Set(['Email', 'Telefono']);
       // Label column = longest key glyph width + gap (never overlaps value).
       // "TELEFONO" ≈ 8 chars; uppercase sans ≈ 0.62em per char + letter-spacing.
@@ -564,7 +588,7 @@ export function buildBackSvg(
         const valueMaxW = Math.max(10, cw - colLabelW - pad * 0.5);
         return contactEntries.reduce((total, entry) => {
           const wrapped = wrappableKeys.has(entry.key)
-            ? wrapTextAtWhitespace(entry.value, valueMaxW, vs)
+            ? wrapTextAtWhitespace(entry.value, valueMaxW, vs, fontFamily)
             : [entry.value];
           return total + wrapped.length;
         }, 0);
@@ -616,7 +640,7 @@ export function buildBackSvg(
       const renderContact = (entry: { key: string; value: string; color?: string; isAccent?: boolean }) => {
         // Always wrap values to valueMaxW (not only email/phone) so long
         // strings never spill past the cell even without clip.
-        const wrapped = wrapTextAtWhitespace(entry.value, valueMaxW, valSize);
+        const wrapped = wrapTextAtWhitespace(entry.value, valueMaxW, valSize, fontFamily);
         out += `<text x="${labelX}" y="${lineY}" font-family="${fontFamily}" font-size="${keySize}" font-weight="700" fill="${text}" opacity="0.55" letter-spacing="0.4" text-anchor="${labelAnchor}" dominant-baseline="alphabetic">${escapeXml(entry.key.toUpperCase())}</text>`;
         wrapped.forEach((line) => {
           out += `<text x="${valueXBase}" y="${lineY}" font-family="${fontFamily}" font-size="${valSize}" font-weight="500" fill="${entry.isAccent ? accent : (entry.color ?? text)}" text-anchor="${valueAnchor}" dominant-baseline="alphabetic">${escapeXml(line)}</text>`;
@@ -634,13 +658,13 @@ export function buildBackSvg(
           })
           .join('   ');
         // Size vs card height (same as dedicated socials cell), then wrap.
-        let socialSize = fs(pxH * (10.88 / 340), fontScale);
+        let socialSize = fs(pxH * (10.88 / 340), fontScale) * contactsScale;
         const socialLineH = (s: number) => s * 1.35;
         const remainH = Math.max(8, cy + ch - lineY - pad * 0.25);
-        while (socialSize > 6 && wrapTextAtWhitespace(socialsText, cw, socialSize).length * socialLineH(socialSize) > remainH) {
+        while (socialSize > 6 && wrapTextAtWhitespace(socialsText, cw, socialSize, fontFamily).length * socialLineH(socialSize) > remainH) {
           socialSize *= 0.9;
         }
-        const lines = wrapTextAtWhitespace(socialsText, cw, socialSize);
+        const lines = wrapTextAtWhitespace(socialsText, cw, socialSize, fontFamily);
         let sy = lineY + Math.round(socialSize * 0.4);
         lines.forEach((line) => {
           if (sy > cy + ch) return;
@@ -668,8 +692,13 @@ export function buildBackSvg(
     }
     if (servicesRenderEl && services.length > 0) {
       const svcCell = gridCellRect(servicesRenderEl, cellW, cellH, bodyTop, padBox);
-      const sx = svcCell.x;
-      const sy = svcCell.y;
+      // v2.17 (REQ-ZOOM-003): nudge/scale applied to the effective render
+      // cell (including the socials-row expansion above), same semantics
+      // as the front texts. The clip below stays on the un-nudged cell.
+      const svcPlacement = servicesRenderEl.placement ?? servicesRenderEl.photoPlacement;
+      const svcScale = svcPlacement?.scale ?? 1;
+      const sx = svcCell.x + ((svcPlacement?.x ?? 0) * svcCell.w) / 2;
+      const sy = svcCell.y + ((svcPlacement?.y ?? 0) * svcCell.h) / 2;
       const sw = svcCell.w;
       const sh = svcCell.h;
       const servicesAlignH = servicesRenderEl.alignH ?? 'left';
@@ -679,12 +708,12 @@ export function buildBackSvg(
       let labelSize = 0;
       if (servicesLabelText) {
         // v2.14: match preview grid-mode 0.7rem = 11.2px (was 10px).
-        labelSize = fs(pxH * (11.2 / 340), fontScale);
+        labelSize = fs(pxH * (11.2 / 340), fontScale) * svcScale;
         svcY += labelSize * 1.1;
       }
       const hasLongService = services.some((s) => s.length >= 40);
       // v2.14: match preview grid-mode 0.85rem = 13.6px (was 13px).
-      let svcSize = fs(pxH * (13.6 / 340), fontScale) * (hasLongService ? 0.85 : 1);
+      let svcSize = fs(pxH * (13.6 / 340), fontScale) * (hasLongService ? 0.85 : 1) * svcScale;
       // v2.5.1: tighter line-height (1.2 instead of 1.35) so 2-3
       // services + label fit a 1-row cell without shrinking too much.
       const svcLineH = (s: number) => s * 1.2;
@@ -763,8 +792,15 @@ export function buildBackSvg(
       const cellY = box.y;
       const cellBoxW = box.w;
       const cellBoxH = box.h;
+      // v2.17 (REQ-ZOOM-003): nudge x/y (±half the cell dimension, same as
+      // front texts) + scale as a local font-size factor. The clip path
+      // stays on the un-nudged cell box.
+      const socialsPlacement = socialsEl.placement ?? socialsEl.photoPlacement;
+      const socialsScale = socialsPlacement?.scale ?? 1;
+      const socialsNudgeX = ((socialsPlacement?.x ?? 0) * cellBoxW) / 2;
+      const socialsNudgeY = ((socialsPlacement?.y ?? 0) * cellBoxH) / 2;
       const innerPad = padBox.cellX * 0.5;
-      const sx = cellX + innerPad;
+      const sx = cellX + innerPad + socialsNudgeX;
       const sw = Math.max(10, cellBoxW - innerPad * 2);
       const sh = Math.max(10, cellBoxH - innerPad * 2);
       const socialsText = socials
@@ -775,27 +811,27 @@ export function buildBackSvg(
         })
         .join('   ');
       // v2.14: match preview grid-mode 0.68rem = 10.88px (was 10px).
-      let socialSize = fs(pxH * (10.88 / 340), fontScale);
+      let socialSize = fs(pxH * (10.88 / 340), fontScale) * socialsScale;
       const socialLineH = (s: number) => s * 1.35;
       const neededSocialH = (s: number) => {
-        const lines = wrapTextAtWhitespace(socialsText, sw, s);
+        const lines = wrapTextAtWhitespace(socialsText, sw, s, fontFamily);
         return lines.length * socialLineH(s);
       };
       while (socialSize > 6 && neededSocialH(socialSize) > sh) {
         socialSize *= 0.92;
       }
-      const lines = wrapTextAtWhitespace(socialsText, sw, socialSize);
+      const lines = wrapTextAtWhitespace(socialsText, sw, socialSize, fontFamily);
       const blockH = lines.length * socialLineH(socialSize);
       const alignV = socialsEl.alignV ?? 'top';
       const alignH = socialsEl.alignH ?? 'left';
-      let startY = cellY + innerPad;
-      if (alignV === 'center') startY = cellY + (cellBoxH - blockH) / 2;
-      else if (alignV === 'bottom') startY = cellY + cellBoxH - blockH - innerPad;
+      let startY = cellY + innerPad + socialsNudgeY;
+      if (alignV === 'center') startY = cellY + (cellBoxH - blockH) / 2 + socialsNudgeY;
+      else if (alignV === 'bottom') startY = cellY + cellBoxH - blockH - innerPad + socialsNudgeY;
       const anchor = alignH === 'right' ? 'end' : alignH === 'center' ? 'middle' : 'start';
       const textX = alignH === 'right'
-        ? cellX + cellBoxW - innerPad
+        ? cellX + cellBoxW - innerPad + socialsNudgeX
         : alignH === 'center'
-          ? cellX + cellBoxW / 2
+          ? cellX + cellBoxW / 2 + socialsNudgeX
           : sx;
       const clipId = `clipSocials${socialsEl.x}${socialsEl.y}${socialsEl.w}${socialsEl.h}`;
       out += `<defs><clipPath id="${clipId}"><rect x="${cellX}" y="${cellY}" width="${cellBoxW}" height="${cellBoxH}"/></clipPath></defs>`;
@@ -953,11 +989,20 @@ export function buildBackSvg(
 
 // Width-aware wrap: split text at word boundaries, punctuation (@ . - _ / \s),
 // or hard character bounds so long emails/URLs do not overflow cells.
-function wrapTextAtWhitespace(text: string, maxWidthPx: number, fontSize: number): string[] {
+// v2.17 (spec v2.0 REQ-TXT-001): measurement goes through textMeasure —
+// real canvas metrics (with the card's actual font family) in the browser,
+// the legacy 0.52 heuristic as the no-canvas fallback (jsdom tests stay
+// deterministic and byte-identical to the previous estimate).
+export function wrapTextAtWhitespace(
+  text: string,
+  maxWidthPx: number,
+  fontSize: number,
+  fontFamily?: string,
+): string[] {
   if (!text) return [];
-  const avgCharW = fontSize * 0.52;
-  const maxChars = Math.max(1, Math.floor(maxWidthPx / avgCharW));
-  const measure = (s: string) => s.length * avgCharW;
+  const measureOpts: MeasureTextOptions = { fontSize, fontFamily };
+  const maxChars = estimateCharsForWidth(maxWidthPx, measureOpts);
+  const measure = (s: string) => measureTextWidth(s, measureOpts);
 
   const tokens = text.split(/([/@._\-\s]+)/).filter((s) => s.length > 0);
   const lines: string[] = [];

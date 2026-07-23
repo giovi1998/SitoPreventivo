@@ -166,7 +166,8 @@ describe('useAICard', () => {
       await act(async () => result.current.generateCover(createGiovanniCardTemplate()));
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.context).toContain('Front grid 4x4');
-      expect(body.context).toContain('photo cols 0-2, rows 0-4');
+      // v2.16: template Giovanni = right-balanced, foto cols 2-4 rows 0-3.
+      expect(body.context).toContain('photo cols 2-4, rows 0-3');
     });
 
     it('uses only prompt when explicit prompt override is provided', async () => {

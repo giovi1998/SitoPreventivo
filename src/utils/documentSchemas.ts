@@ -156,8 +156,10 @@ export const businessCardSizePresetSchema = z.enum(['eu-85x55', 'us-89x51', 'squ
 export type BusinessCardSizePreset = z.infer<typeof businessCardSizePresetSchema>;
 
 // Phase 2.3: layout frontali espansi con nuovi template selezionabili.
+// v2.16: 'right-balanced' derives from the Giovanni card audit: photo on the
+// right but not full-height, tighter text band, paired with a balanced back.
 export const businessCardLayoutSchema = z.enum([
-  'centered', 'left', 'split', 'right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact',
+  'centered', 'left', 'split', 'right', 'right-balanced', 'top', 'bottom', 'minimal', 'photo-circle', 'compact',
 ]);
 export type BusinessCardLayout = z.infer<typeof businessCardLayoutSchema>;
 
@@ -345,6 +347,24 @@ export function gridPresetRight(): CardGrid {
   };
 }
 
+// v2.16: balanced right preset. Photo is prominent but not full-height; the
+// left text band has more breathing room and the bottom-right cell is left
+// empty so the layout does not feel crowded. Derived from the Giovanni card
+// audit (card_1784802983118_70ojhd).
+export function gridPresetRightBalanced(): CardGrid {
+  return {
+    cols: 4,
+    rows: 4,
+    elements: {
+      name: { x: 0, y: 0, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      title: { x: 0, y: 1, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      company: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      logo: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      photo: { x: 2, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' },
+    },
+  };
+}
+
 export function gridPresetTop(): CardGrid {
   return {
     cols: 4,
@@ -432,17 +452,36 @@ export function gridPresetBackDefault(): CardGrid {
   };
 }
 
+// v2.16: balanced back preset paired with gridPresetRightBalanced. QR is
+// shorter (h:3) with the label underneath, leaving room for contacts/services/
+// socials in the left column without the oversized empty bands of the default.
+export function gridPresetBackBalanced(): CardGrid {
+  return {
+    cols: 4,
+    rows: 4,
+    elements: {
+      contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left', alignV: 'top' },
+      services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+      socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+      qr: { x: 2, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' },
+    },
+  };
+}
+
 // Phase 2.2 REQ-E03: init-from-layout. Deriva la griglia iniziale dal
 // layout flexbox corrente così che attivare il master switch NON sposti
-// visivamente gli elementi. Per il retro usa sempre gridPresetBackDefault.
+// visivamente gli elementi. Per il retro usa sempre gridPresetBackDefault,
+// tranne quando il fronte è 'right-balanced' (accoppiato al back bilanciato).
 // `filterByContent` rimuove gli elementi vuoti (es. `logo` se non c'è
 // logoUrl), così l'utente non vede "riserve" inutili nella griglia.
 // Phase 2.3: lookup table per tutti i layout frontali supportati.
-const FRONT_GRID_PRESETS: Record<BusinessCardLayout, () => CardGrid> = {
+// Esportata per l'invariante di registrazione preset (REQ-TEST-004).
+export const FRONT_GRID_PRESETS: Record<BusinessCardLayout, () => CardGrid> = {
   centered: gridPresetCentered,
   left: gridPresetLeft,
   split: gridPresetFrontSplit,
   right: gridPresetRight,
+  'right-balanced': gridPresetRightBalanced,
   top: gridPresetTop,
   bottom: gridPresetBottom,
   minimal: gridPresetMinimal,
@@ -455,7 +494,10 @@ export function deriveGridFromLayout(
   side: 'front' | 'back',
 ): CardGrid {
   if (side === 'back') {
-    return filterGridElementsByContent(gridPresetBackDefault(), card, 'back');
+    const backPreset = card.front.layout === 'right-balanced'
+      ? gridPresetBackBalanced()
+      : gridPresetBackDefault();
+    return filterGridElementsByContent(backPreset, card, 'back');
   }
   const presetFn = FRONT_GRID_PRESETS[card.front.layout] ?? gridPresetLeft;
   return filterGridElementsByContent(presetFn(), card, 'front');
@@ -651,7 +693,7 @@ export function createGiovanniCardTemplate(): BusinessCard {
   const phone = '35180008042';
   const email = 'webdevcaglian@gmail.com';
   const linkedInUrl = 'https://www.linkedin.com/in/giovanni-cidu-16162b212';
-  return {
+  const base: BusinessCard = {
     ...createEmptyCard(),
     title: 'Bigliettino Giovanni, Web Developer',
     front: {
@@ -662,7 +704,8 @@ export function createGiovanniCardTemplate(): BusinessCard {
       photoUrl: '/giovanni-photo.jpg',
       logoUrl: giovanniLogoDataUri(),
       coverImageUrl: null,
-      layout: 'split',
+      // v2.16: use the balanced right preset derived from the Giovanni card audit.
+      layout: 'right-balanced',
       // v2.8.1: the template includes custom front/back grids, so grid-mode
       // must be active from the start. Otherwise preview and export derive
       // from the flexbox layout and ignore the custom grids.
@@ -693,28 +736,18 @@ export function createGiovanniCardTemplate(): BusinessCard {
       accentColor: '#01696F',
       fontFamily: 'Inter',
       borderStyle: 'accent-strip-left',
-      fontScale: 1.05,
+      // v2.17 (REQ-CTRL-003): nuove card neutre — il sizing è per-elemento
+      // (placement.scale); fontScale resta un campo legacy per i documenti
+      // esistenti.
+      fontScale: 1,
     },
-    grid: {
-      cols: 4,
-      rows: 4,
-      elements: {
-        photo: { x: 0, y: 0, w: 2, h: 4 },
-        name: { x: 2, y: 0, w: 2, h: 1, alignH: 'center', alignV: 'center' },
-        title: { x: 2, y: 1, w: 2, h: 1, alignH: 'center', alignV: 'top' },
-        logo: { x: 2, y: 2, w: 2, h: 2, alignH: 'center', alignV: 'center' },
-      },
-    },
-    backGrid: {
-      cols: 4,
-      rows: 4,
-      elements: {
-        contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left', alignV: 'top' },
-        services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'top' },
-        socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'top' },
-        qr: { x: 2, y: 0, w: 2, h: 4, alignH: 'center', alignV: 'center' },
-      },
-    },
+  };
+  // Derive grids from the chosen layout so the template stays in sync with the
+  // preset factories. Empty cells (company, in this case) are filtered out.
+  return {
+    ...base,
+    grid: deriveGridFromLayout(base, 'front'),
+    backGrid: deriveGridFromLayout(base, 'back'),
   };
 }
 

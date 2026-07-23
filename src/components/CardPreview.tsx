@@ -12,6 +12,7 @@ import {
   qrSizePxFor,
   sideGrid,
 } from '../utils/card/previewHelpers';
+import { GRID_PAD_REF, GRID_GAP_REF } from '../utils/card/gridConstants';
 import { effectiveBackGridForRender } from '../utils/card/backLayout';
 import { deriveHandle, deriveHostname } from '../utils/card/textDerivation';
 import { renderDecorativePattern } from '../utils/decorations/patterns';
@@ -329,6 +330,34 @@ const FrontPreview = React.memo(function FrontPreview({
     onPatchPlacement,
     readOnly,
   });
+  const logoDrag = useDraggablePlacement('front', 'logo', grid?.elements?.logo, {
+    showGrid,
+    hasContent: hasLogo,
+    selectedElement,
+    onPatchPlacement,
+    readOnly,
+  });
+  const nameDrag = useDraggablePlacement('front', 'name', grid?.elements?.name, {
+    showGrid,
+    hasContent: !!card.front.name,
+    selectedElement,
+    onPatchPlacement,
+    readOnly,
+  });
+  const titleDrag = useDraggablePlacement('front', 'title', grid?.elements?.title, {
+    showGrid,
+    hasContent: !!card.front.title,
+    selectedElement,
+    onPatchPlacement,
+    readOnly,
+  });
+  const companyDrag = useDraggablePlacement('front', 'company', grid?.elements?.company, {
+    showGrid,
+    hasContent: !!card.front.company,
+    selectedElement,
+    onPatchPlacement,
+    readOnly,
+  });
 
   const baseStyle: React.CSSProperties = {
     backgroundColor: card.style.bgColor,
@@ -336,6 +365,10 @@ const FrontPreview = React.memo(function FrontPreview({
     fontFamily: card.style.fontFamily,
     ['--card-accent' as any]: card.style.accentColor,
     ['--card-font-scale' as any]: clampFontScale(card.style.fontScale ?? 1),
+    // v2.16: expose grid proportions as CSS variables so preview and export
+    // share the same source of truth (see gridConstants.ts).
+    ['--card-grid-pad' as any]: `${GRID_PAD_REF}px`,
+    ['--card-grid-gap' as any]: `${GRID_GAP_REF}px`,
     display: 'grid',
     gridTemplateColumns: `repeat(${grid!.cols}, 1fr)`,
     gridTemplateRows: `repeat(${grid!.rows}, 1fr)`,
@@ -448,32 +481,53 @@ const FrontPreview = React.memo(function FrontPreview({
       )}
       {grid!.elements.logo && card.front.logoUrl && (
         <div
-          className="card-grid-cell card-grid-cell--logo"
+          className={`card-grid-cell card-grid-cell--logo ${logoDrag.enabled ? 'card-grid-cell--draggable' : ''}`}
           data-testid="grid-el-logo"
           style={{
             ...gridPlacement(grid!.elements.logo),
+            cursor: logoDrag.cursor,
             // Parity with export (svgRenderer): logoBackground 'card' draws
             // a bg-tinted rect behind the dedicated logo cell.
             ...(card.front.logoBackground === 'card'
               ? { background: card.style.bgColor, borderRadius: '6px' }
               : {}),
           }}
+          onPointerDown={logoDrag.onPointerDown}
+          title={logoDrag.enabled ? 'Trascina per spostare il logo' : undefined}
         >
           <img className="card-logo grid" src={card.front.logoUrl} alt="Logo aziendale" />
         </div>
       )}
       {grid!.elements.name && card.front.name && (
-        <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-name" style={gridPlacement(grid!.elements.name, 'column')}>
+        <div
+          className={`card-grid-cell card-grid-cell--text ${nameDrag.enabled ? 'card-grid-cell--draggable' : ''}`}
+          data-testid="grid-el-name"
+          style={{ ...gridPlacement(grid!.elements.name, 'column'), cursor: nameDrag.cursor }}
+          onPointerDown={nameDrag.onPointerDown}
+          title={nameDrag.enabled ? 'Trascina per spostare il nome' : undefined}
+        >
           <div className="card-name">{card.front.name}</div>
         </div>
       )}
       {grid!.elements.title && card.front.title && (
-        <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-title" style={gridPlacement(grid!.elements.title, 'column')}>
+        <div
+          className={`card-grid-cell card-grid-cell--text ${titleDrag.enabled ? 'card-grid-cell--draggable' : ''}`}
+          data-testid="grid-el-title"
+          style={{ ...gridPlacement(grid!.elements.title, 'column'), cursor: titleDrag.cursor }}
+          onPointerDown={titleDrag.onPointerDown}
+          title={titleDrag.enabled ? 'Trascina per spostare il ruolo' : undefined}
+        >
           <div className="card-title" style={{ color: card.style.accentColor }}>{card.front.title}</div>
         </div>
       )}
       {grid!.elements.company && card.front.company && (
-        <div className="card-grid-cell card-grid-cell--text" data-testid="grid-el-company" style={gridPlacement(grid!.elements.company, 'column')}>
+        <div
+          className={`card-grid-cell card-grid-cell--text ${companyDrag.enabled ? 'card-grid-cell--draggable' : ''}`}
+          data-testid="grid-el-company"
+          style={{ ...gridPlacement(grid!.elements.company, 'column'), cursor: companyDrag.cursor }}
+          onPointerDown={companyDrag.onPointerDown}
+          title={companyDrag.enabled ? 'Trascina per spostare l\'azienda' : undefined}
+        >
           <div className="card-company">{card.front.company}</div>
         </div>
       )}
@@ -551,6 +605,27 @@ const BackPreview = React.memo(function BackPreview({
     onPatchPlacement,
     readOnly,
   });
+  const contactsDrag = useDraggablePlacement('back', 'contacts', grid?.elements?.contacts, {
+    showGrid,
+    hasContent: hasContacts,
+    selectedElement,
+    onPatchPlacement,
+    readOnly,
+  });
+  const servicesDrag = useDraggablePlacement('back', 'services', grid?.elements?.services, {
+    showGrid,
+    hasContent: (card.back.services ?? []).some((s) => s.trim().length > 0),
+    selectedElement,
+    onPatchPlacement,
+    readOnly,
+  });
+  const socialsDrag = useDraggablePlacement('back', 'socials', grid?.elements?.socials, {
+    showGrid,
+    hasContent: socials.length > 0,
+    selectedElement,
+    onPatchPlacement,
+    readOnly,
+  });
   const qrSizePx = qrSizePxFor(card);
 
   const rootStyle: React.CSSProperties = {
@@ -560,6 +635,9 @@ const BackPreview = React.memo(function BackPreview({
     ['--card-accent' as any]: card.style.accentColor,
     ['--card-font-scale' as any]: clampFontScale(card.style.fontScale ?? 1),
     ['--card-qr-size' as any]: `${qrSizePx}px`,
+    // v2.16: grid proportion variables, shared with export.
+    ['--card-grid-pad' as any]: `${GRID_PAD_REF}px`,
+    ['--card-grid-gap' as any]: `${GRID_GAP_REF}px`,
     position: 'relative',
   };
 
@@ -705,7 +783,13 @@ const BackPreview = React.memo(function BackPreview({
         {gridDebug}
 
         {grid!.elements.contacts && (
-          <div className="card-grid-cell card-grid-cell--text card-grid-cell--contacts" data-testid="grid-el-contacts" style={gridPlacement(grid!.elements.contacts, 'column')}>
+          <div
+            className={`card-grid-cell card-grid-cell--text card-grid-cell--contacts ${contactsDrag.enabled ? 'card-grid-cell--draggable' : ''}`}
+            data-testid="grid-el-contacts"
+            style={{ ...gridPlacement(grid!.elements.contacts, 'column'), cursor: contactsDrag.cursor }}
+            onPointerDown={contactsDrag.onPointerDown}
+            title={contactsDrag.enabled ? 'Trascina per spostare i contatti' : undefined}
+          >
             {contactsContent}
             {!grid!.elements.services && servicesContent}
             {!grid!.elements.socials && socialsContent}
@@ -713,16 +797,19 @@ const BackPreview = React.memo(function BackPreview({
         )}
         {grid!.elements.services && servicesContent && (
           <div
-            className="card-grid-cell card-grid-cell--text card-grid-cell--services"
+            className={`card-grid-cell card-grid-cell--text card-grid-cell--services ${servicesDrag.enabled ? 'card-grid-cell--draggable' : ''}`}
             data-testid="grid-el-services"
             style={(() => {
               const base = gridPlacement(grid!.elements.services, 'column');
-              if (!base || socials.length > 0) return base;
+              const withCursor = { ...base, cursor: servicesDrag.cursor };
+              if (!base || socials.length > 0) return withCursor;
               // When socials are empty, let services expand into the unused socials row.
               const el = grid!.elements.services;
               const emptySocialsH = grid!.elements.socials?.h ?? 1;
-              return { ...base, gridRow: `${el.y + 1} / span ${el.h + emptySocialsH}` };
+              return { ...withCursor, gridRow: `${el.y + 1} / span ${el.h + emptySocialsH}` };
             })()}
+            onPointerDown={servicesDrag.onPointerDown}
+            title={servicesDrag.enabled ? 'Trascina per spostare i servizi' : undefined}
           >
             {servicesContent}
           </div>
@@ -739,7 +826,13 @@ const BackPreview = React.memo(function BackPreview({
           </div>
         )}
         {grid!.elements.socials && socialsContent && (
-          <div className="card-grid-cell card-grid-cell--text card-grid-cell--socials" data-testid="grid-el-socials" style={gridPlacement(grid!.elements.socials, 'column')}>
+          <div
+            className={`card-grid-cell card-grid-cell--text card-grid-cell--socials ${socialsDrag.enabled ? 'card-grid-cell--draggable' : ''}`}
+            data-testid="grid-el-socials"
+            style={{ ...gridPlacement(grid!.elements.socials, 'column'), cursor: socialsDrag.cursor }}
+            onPointerDown={socialsDrag.onPointerDown}
+            title={socialsDrag.enabled ? 'Trascina per spostare i social' : undefined}
+          >
             {socialsContent}
           </div>
         )}

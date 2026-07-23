@@ -9,6 +9,16 @@ const gridElementShape = z.object({
   h: z.number(),
   alignH: z.enum(['left', 'center', 'right']).optional(),
   alignV: z.enum(['top', 'center', 'bottom']).optional(),
+  // Spec card-nudge v2.0 (REQ-AI-001): nudge fine dentro la cella.
+  // x,y ∈ [-1,1] = offset; scale ∈ [0.5,2] = zoom (photo/qr/logo) o
+  // fattore dimensione font (elementi testo). Range stretto: valori fuori
+  // range fanno fallire il safeParse (l'AI deve omettere placement se non
+  // sa cosa mettere, non inventare numeri).
+  placement: z.object({
+    x: z.number().min(-1).max(1),
+    y: z.number().min(-1).max(1),
+    scale: z.number().min(0.5).max(2),
+  }).optional(),
 });
 
 // Phase 2.2 REQ-I01: schema di input AI per il bigliettino. Allineato
@@ -22,6 +32,9 @@ const gridElementShape = z.object({
 //   - style.fontScale (number; il merge lo clampa a [0.7, 1.5])
 //   - grid.elements.logo (prima mancante: l'AI non poteva posizionare
 //     il logo nel grid, incoerente con cardMerge che lo gestisce)
+// Spec card-nudge v2.0 (REQ-AI-001):
+//   - grid.elements.*.placement {x∈[-1,1], y∈[-1,1], scale∈[0.5,2]}
+//   - front.layout include 'right-balanced' (già in documentSchemas.ts)
 export const aiCardInputSchema = z.object({
   front: z.object({
     name: z.string().optional(),
@@ -33,7 +46,7 @@ export const aiCardInputSchema = z.object({
     // directly (it is generated via GeminiImageProvider), but we keep it
     // in the schema so the client can merge/preserve it safely.
     coverImageUrl: z.string().nullable().optional(),
-    layout: z.enum(['centered', 'left', 'split', 'right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact']).optional(),
+    layout: z.enum(['centered', 'left', 'split', 'right', 'right-balanced', 'top', 'bottom', 'minimal', 'photo-circle', 'compact']).optional(),
     useGrid: z.boolean().optional(),
   }).optional(),
 

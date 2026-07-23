@@ -1,10 +1,5 @@
 import type { CardSectionProps, BusinessCardBorderStyle, BusinessCardSizePreset } from './types';
 import type { BusinessCard } from '../../../utils/documentSchemas';
-import {
-  FONT_SCALE_MIN,
-  FONT_SCALE_MAX,
-  FONT_SCALE_STEP,
-} from '../../../utils/documentSchemas';
 import { SIZE_PRESET_LABELS, BORDER_LABELS } from './labels';
 import { AiFontPicker } from '../../ai-ui';
 import { DECORATIVE_PATTERN_IDS, type DecorativePatternId, defaultDecorativePalette } from '../../../utils/decorations/patterns';
@@ -22,7 +17,6 @@ export interface CardStyleFieldsProps extends CardSectionProps {
 }
 
 export function CardStyleFields({ card, patchStyle, onPatchDecorations }: CardStyleFieldsProps) {
-  const fontScale = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, card.style.fontScale ?? 1));
   const decorations = card.decorations ?? { pattern: null, opacity: 0.2, palette: defaultDecorativePalette(card.style.accentColor, card.style.textColor) };
   const pattern = decorations.pattern ?? null;
   const opacity = decorations.opacity ?? 0.2;
@@ -179,44 +173,6 @@ export function CardStyleFields({ card, patchStyle, onPatchDecorations }: CardSt
           )}
         </div>
       )}
-      <div className="card-field" data-testid="card-font-scale">
-        <span>Dimensione testo ({Math.round(fontScale * 100)}%)</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            type="button"
-            className="card-preview-zoom-btn"
-            onClick={() => patchStyle({ fontScale: Math.max(FONT_SCALE_MIN, Math.round((fontScale - FONT_SCALE_STEP) * 100) / 100) })}
-            disabled={fontScale <= FONT_SCALE_MIN}
-            aria-label="Diminuisci dimensione testo"
-            title="Diminuisci dimensione testo"
-          >−</button>
-          <input
-            type="range"
-            min={FONT_SCALE_MIN}
-            max={FONT_SCALE_MAX}
-            step={FONT_SCALE_STEP}
-            value={fontScale}
-            onChange={(e) => patchStyle({ fontScale: Number(e.target.value) })}
-            aria-label="Dimensione testo"
-            style={{ flex: 1 }}
-          />
-          <button
-            type="button"
-            className="card-preview-zoom-btn"
-            onClick={() => patchStyle({ fontScale: Math.min(FONT_SCALE_MAX, Math.round((fontScale + FONT_SCALE_STEP) * 100) / 100) })}
-            disabled={fontScale >= FONT_SCALE_MAX}
-            aria-label="Aumenta dimensione testo"
-            title="Aumenta dimensione testo"
-          >+</button>
-          <button
-            type="button"
-            onClick={() => patchStyle({ fontScale: 1 })}
-            className="card-ai-reset"
-            aria-label="Reset dimensione testo"
-            title="Reset (100%)"
-          >Reset</button>
-        </div>
-      </div>
     </fieldset>
   );
 }

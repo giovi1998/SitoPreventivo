@@ -257,6 +257,56 @@ export async function screenshotDir(): Promise<string> {
   return dir;
 }
 
+/**
+ * Salva lo screenshot di un lato della preview card in `e2e/__screenshots__/`
+ * e ritorna il buffer PNG (per le asserzioni pixel-sampling).
+ */
+export async function saveCardSideScreenshot(
+  page: Page,
+  testid: 'card-preview-front' | 'card-preview-back',
+  fileName: string,
+): Promise<Buffer> {
+  const dir = await screenshotDir();
+  const el = page.locator(`[data-testid="${testid}"]`).first();
+  await expect(el).toBeVisible();
+  return el.screenshot({ path: path.join(dir, fileName) });
+}
+
+/**
+ * Verifica che uno screenshot PNG non sia "mostly black" né blank (tutto
+ * bianco/uniforme). Pixel-sampling reale via canvas in-page, adattato da
+ * `assertImageNotMostlyBlack` di e2e/ai-log-preview.spec.ts (REQ-TEST-008).
+ */
+export async function assertScreenshotNotMostlyBlack(
+  page: Page,
+  buffer: Buffer,
+  label: string,
+): Promise<void> {
+  const dataUrl = `data:image/png;base64,${buffer.toString('base64')}`;
+  const result = await page.evaluate(async (src) => {
+    const res = await fetch(src);
+    const blob = await res.blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, bitmap.width);
+    canvas.height = Math.max(1, bitmap.height);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { nonBlack: 0, nonWhite: 0 };
+    ctx.drawImage(bitmap, 0, 0);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let nonBlack = 0;
+    let nonWhite = 0;
+    const step = 16; // campiona 1 pixel ogni 16
+    for (let i = 0; i < data.length; i += step * 4) {
+      if (data[i] > 30 || data[i + 1] > 30 || data[i + 2] > 30) nonBlack++;
+      if (data[i] < 245 || data[i + 1] < 245 || data[i + 2] < 245) nonWhite++;
+    }
+    return { nonBlack, nonWhite };
+  }, dataUrl);
+  expect(result.nonBlack, `${label}: screenshot mostly-black`).toBeGreaterThan(20);
+  expect(result.nonWhite, `${label}: screenshot blank/uniforme`).toBeGreaterThan(20);
+}
+
 export async function copyExportToScreenshot(tempPath: string, name: string): Promise<string> {
   const dir = await screenshotDir();
   const dest = path.join(dir, name);
