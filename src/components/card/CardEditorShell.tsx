@@ -40,6 +40,7 @@ import { useCardPreviewZoom } from '../../hooks/useCardPreviewZoom';
 import { useCardAIFloating } from '../../hooks/useCardAIFloating';
 import { logger } from '../../utils/logger';
 import { useDocumentSave } from '../../hooks/useDocumentSave';
+import { getAiProviderDefault } from '../../utils/uiPrefs';
 import CardSaveAction from './CardSaveAction';
 import CardExportMenu from './CardExportMenu';
 import CardPreviewSurface from './CardPreviewSurface';
@@ -104,7 +105,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [aiText, setAiText] = useState('');
-  const [aiModel, setAiModel] = useState('deepseek-chat');
+  const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || 'deepseek-chat');
   // Phase 14: lo stato expanded della rail AI è gestito da AIConsole in
   // pq_ui:v1 (editorKind='card'), non più da useState locale.
   const [showGrid, setShowGrid] = useState(false);
@@ -144,16 +145,6 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const [coverPrompt, setCoverPrompt] = useState('');
   const [showCoverPromptEditor, setShowCoverPromptEditor] = useState(false);
   const [coverLibrary, setCoverLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardCover));
-
-  useEffect(() => {
-    const defaultZoom = isMobile ? 0.7 : 1;
-    if (isMobile && previewZoom.zoom > 0.9) {
-      previewZoom.setZoom(defaultZoom);
-    } else if (!isMobile && previewZoom.zoom < 0.9) {
-      previewZoom.setZoom(defaultZoom);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMobile]);
 
   useEffect(() => {
     if (!exportMenuOpen) return;
@@ -1138,6 +1129,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
               tier={tier}
               onSubmitPrompt={(text: string) => setAiText(text)}
               hidePrompt
+              onProviderChange={(id: string) => setAiModel(id)}
               // REQ-AI-003: su card vuota la rail propone un prompt contestuale
               // con focus; l'expanded resta default true (o pq_ui:v1 se persistito).
               suggestedPrompt={!cardHasContent(card) ? 'Descrivi la tua attività, creo il bigliettino.' : undefined}

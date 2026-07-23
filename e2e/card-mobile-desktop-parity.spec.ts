@@ -96,4 +96,44 @@ test.describe('Card mobile vs desktop parity', () => {
     await expect(photoCell).toBeVisible();
     await expect(photoCell).toHaveCSS('grid-row', /1 \/ span 3/);
   });
+
+  test('preview keeps the same font-to-card proportions on mobile and desktop', async ({ page }) => {
+    // Regression for the responsive preview: the whole card must scale uniformly
+    // instead of changing font sizes relative to the card width.
+    await page.setViewportSize(DESKTOP);
+    await loginAsTestUser(page);
+    await openCardEditor(page);
+    await fillSampleCard(page);
+
+    const previewFront = page.locator('.card-preview-front').first();
+    const name = page.locator('.card-name').first();
+    await expect(previewFront).toBeVisible();
+    await expect(name).toBeVisible();
+
+    // Use bounding-box widths so the measurement reflects the *visual* size
+    // after CSS zoom/transform scaling. computedStyle font-size is the logical
+    // (pre-scale) value and would make the ratio look different even when the
+    // visual proportions are identical.
+    const desktopCardW = await previewFront.evaluate((el) => el.getBoundingClientRect().width);
+    const desktopNameW = await name.evaluate((el) => el.getBoundingClientRect().width);
+    const desktopRatio = desktopNameW / desktopCardW;
+
+    await page.setViewportSize(MOBILE);
+    await page.waitForTimeout(400);
+    // On mobile the preview tab is active by default.
+    await expect(previewFront).toBeVisible();
+    await expect(name).toBeVisible();
+
+    const mobileCardW = await previewFront.evaluate((el) => el.getBoundingClientRect().width);
+    const mobileNameW = await name.evaluate((el) => el.getBoundingClientRect().width);
+    const mobileRatio = mobileNameW / mobileCardW;
+
+    // With uniform scaling the text-to-card width ratio should be identical
+    // within a small tolerance (sub-pixel rounding). Before the fix mobile
+    // resized fonts independently and the ratio diverged.
+    expect(mobileRatio).toBeCloseTo(desktopRatio, 2);
+
+    const shotDir = await screenshotDir();
+    await page.screenshot({ path: path.join(shotDir, 'parity-mobile-proportions.png') });
+  });
 });

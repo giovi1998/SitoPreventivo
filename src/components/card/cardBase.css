@@ -148,18 +148,3 @@
   word-break: break-word;
   max-width: 100%;
 }
-
-@media (max-width: 900px) {
-  .card-preview-side.grid-mode .card-back-qr-svg svg {
-    /* minimo leggibile anche su mobile: 44px (vedi .card-back-qr-svg) */
-    min-width: 44px;
-    min-height: 44px;
-  }
-  .card-preview-side.grid-mode .card-back-key {
-    font-size: 0.58rem;
-    min-width: 42px;
-  }
-  .card-preview-side.grid-mode .card-back-val {
-    font-size: 0.66rem;
-  }
-}
