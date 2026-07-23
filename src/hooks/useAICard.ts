@@ -170,7 +170,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         const tokens = result.response.usage
           ? { prompt: result.response.usage.promptTokens, completion: result.response.usage.completionTokens, total: result.response.usage.totalTokens }
           : undefined;
-        finalizeStream(streamId, true, { tokens, costUsd: textCost, detail: result.rawResponse?.slice(0, 2048), modelId: resolvedModelId, requestId, hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });
+        finalizeStream(streamId, true, { tokens, costUsd: textCost, detail: result.rawResponse?.slice(0, 16384), modelId: resolvedModelId, requestId, hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });
 
         const realChanges = result.changes.filter((c: string) => !c.startsWith('error:'));
         const errorChanges = result.changes.filter((c: string) => c.startsWith('error:'));
