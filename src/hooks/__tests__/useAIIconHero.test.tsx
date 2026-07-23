@@ -61,6 +61,16 @@ describe('useAIIconHero', () => {
     ).rejects.toThrow();
   });
 
+  it('returns a user-friendly hint on 404', async () => {
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ error: 'Not Found' }) });
+
+    const { result } = renderHook(() => useAIIconHero('user@test.com'));
+    await expect(
+      act(async () => result.current.generate('x', 'icon')),
+    ).rejects.toThrow(/riavvia npm run dev|deploy/);
+  });
+
   it('isProcessing is true while generating and false after', async () => {
     const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     let resolveFetch: (v: any) => void;

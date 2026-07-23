@@ -347,20 +347,21 @@ export function gridPresetRight(): CardGrid {
   };
 }
 
-// v2.16: balanced right preset. Photo is prominent but not full-height; the
-// left text band has more breathing room and the bottom-right cell is left
-// empty so the layout does not feel crowded. Derived from the Giovanni card
-// audit (card_1784802983118_70ojhd).
+// v2.17: "business card professionale" — right-balanced rework. Name spans the
+// full top row for strong hierarchy; photo is a centred square on the right
+// (not full-height) so the left text band has clear breathing room; logo sits
+// small in the bottom-left corner. Derived from the Giovanni card audit
+// (card_1784802983118_70ojhd).
 export function gridPresetRightBalanced(): CardGrid {
   return {
     cols: 4,
     rows: 4,
     elements: {
-      name: { x: 0, y: 0, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+      name: { x: 0, y: 0, w: 4, h: 1, alignH: 'left', alignV: 'center' },
+      photo: { x: 2, y: 1, w: 2, h: 2, alignH: 'center', alignV: 'center' },
       title: { x: 0, y: 1, w: 2, h: 1, alignH: 'left', alignV: 'center' },
       company: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'center' },
-      logo: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'center' },
-      photo: { x: 2, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' },
+      logo: { x: 0, y: 3, w: 1, h: 1, alignH: 'left', alignV: 'center' },
     },
   };
 }
@@ -700,7 +701,7 @@ export function createGiovanniCardTemplate(): BusinessCard {
       ...createEmptyCard().front,
       name: 'GIOVANNI CIDU',
       title: 'Web Developer',
-      company: '',
+      company: 'WebdevCA',
       photoUrl: '/giovanni-photo.jpg',
       logoUrl: giovanniLogoDataUri(),
       coverImageUrl: null,

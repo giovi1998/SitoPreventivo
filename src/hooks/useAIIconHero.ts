@@ -41,6 +41,9 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
       setIsProcessing(true);
       info(kind === 'icon' ? '🎨 Generazione icona AI...' : '🖼️ Generazione hero AI...', prompt.slice(0, 300), { requestId });
 
+      let responseStatus: number | undefined;
+      const url = `${import.meta.env?.VITE_API_BASE || ''}/api/ai/image-flash`;
+
       try {
         const { removeWhiteBackground } = await import('../utils/ai/removeBackground');
         const apiBase = import.meta.env?.VITE_API_BASE || '';
@@ -61,7 +64,13 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
           }),
         });
 
+        responseStatus = res.status;
         if (!res.ok) {
+          if (res.status === 404) {
+            throw new Error(
+              `Endpoint icona AI non trovato. Se sei in locale: riavvia npm run dev. Se sei su Vercel: verifica che il deploy includa la route /api/ai/image-flash.`,
+            );
+          }
           const err = await res.json().catch(() => ({ error: `Errore ${kind} AI (${res.status})` }));
           throw new Error(err.error || `${kind} AI ${res.status}`);
         }
@@ -95,8 +104,9 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
         );
         return finalDataUrl;
       } catch (err: any) {
-        const hint = mapAiError(err);
-        logger.error(`IconHero AI ${kind} failed`, { route: 'useAIIconHero.generate', err: err?.message });
+        const is404Hint = err?.message?.includes('Endpoint icona AI non trovato');
+        const hint = is404Hint ? err.message : mapAiError(err);
+        logger.error(`IconHero AI ${kind} failed`, { route: 'useAIIconHero.generate', status: responseStatus, url, err: err?.message });
         error(`❌ ${hint}`, undefined, { requestId });
         throw new Error(hint);
       } finally {

@@ -105,4 +105,73 @@ describe('backLayout', () => {
     expect(pos.x).toBe(80);
     expect(pos.y).toBe(80);
   });
+
+  it('v2.16: services empty + socials present collapses the services row by moving socials up', () => {
+    // Balanced back preset: contacts {0,0,2,2}, services {0,2,2,1},
+    // socials {0,3,2,1}. When services is empty, collapse the services row
+    // by moving socials up to y:2 and align contacts to the bottom of its
+    // cell so the two blocks stay vertically dense (no blank services band).
+    const card = createGiovanniCardTemplate();
+    card.back.services = [];
+    card.backGrid = {
+      cols: 4,
+      rows: 4,
+      elements: {
+        contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left', alignV: 'top' },
+        services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+        socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+        qr: { x: 2, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' },
+      },
+    };
+    const effective = effectiveBackGridForRender(card.backGrid, card);
+    expect(effective.elements.services).toBeUndefined();
+    expect(effective.elements.contacts?.h).toBe(2);
+    expect(effective.elements.contacts?.y).toBe(0);
+    expect(effective.elements.contacts?.alignV).toBe('bottom');
+    expect(effective.elements.socials?.y).toBe(2);
+    expect(effective.elements.socials?.h).toBe(1);
+  });
+
+  it('v2.16: services and socials empty gives the whole left column to contacts', () => {
+    const card = createGiovanniCardTemplate();
+    card.back.services = [];
+    card.back.socials = [];
+    card.backGrid = {
+      cols: 4,
+      rows: 4,
+      elements: {
+        contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left', alignV: 'top' },
+        services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+        socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+        qr: { x: 2, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' },
+      },
+    };
+    const effective = effectiveBackGridForRender(card.backGrid, card);
+    expect(effective.elements.services).toBeUndefined();
+    expect(effective.elements.socials).toBeUndefined();
+    expect(effective.elements.contacts?.h).toBe(4);
+    expect(effective.elements.contacts?.y).toBe(0);
+  });
+
+  it('v2.16: with services present the balanced preset layout follows the existing v2.15 collapse', () => {
+    const card = createGiovanniCardTemplate();
+    card.back.services = ['UX Design'];
+    card.backGrid = {
+      cols: 4,
+      rows: 4,
+      elements: {
+        contacts: { x: 0, y: 0, w: 2, h: 2, alignH: 'left', alignV: 'top' },
+        services: { x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+        socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+        qr: { x: 2, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' },
+      },
+    };
+    const effective = effectiveBackGridForRender(card.backGrid, card);
+    // The new services-empty rules must not alter the normal case: the
+    // existing v2.15 collapse still shrinks short contacts and moves
+    // services/socials up.
+    expect(effective.elements.contacts?.h).toBe(1);
+    expect(effective.elements.services?.y).toBe(1);
+    expect(effective.elements.socials?.y).toBe(2);
+  });
 });

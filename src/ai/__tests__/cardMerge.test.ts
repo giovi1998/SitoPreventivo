@@ -318,10 +318,10 @@ describe('mergeCardAIResponse', () => {
         },
       });
       expect(merged.backGrid).toEqual(originalBackGrid);
-      // v2.16: il template Giovanni usa 'right-balanced' con photo a (2,0,2,3).
+      // v2.17: il template Giovanni usa 'right-balanced' con photo a (2,1,2,2).
       // La mossa a x=0 è bloccata dalla colonna testi (name/title/company),
-      // il resize a 1×1 è applicato → (2,0,1,1).
-      expect(merged.grid?.elements.photo).toMatchObject({ x: 2, y: 0, w: 1, h: 1 });
+      // il resize a 1×1 è applicato → (2,1,1,1).
+      expect(merged.grid?.elements.photo).toMatchObject({ x: 2, y: 1, w: 1, h: 1 });
     });
 
     it('preserves existing grid when AI only touches back elements', () => {
@@ -337,6 +337,7 @@ describe('mergeCardAIResponse', () => {
         },
       });
       expect(merged.grid).toEqual(originalGrid);
+      // AI sends QR at (2,0,2,4); no back collision, so the resize is applied.
       expect(merged.backGrid?.elements.qr).toMatchObject({ x: 2, y: 0, w: 2, h: 4 });
     });
 

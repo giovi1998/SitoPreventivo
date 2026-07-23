@@ -364,9 +364,9 @@ export function buildFrontSvg(
     const textKeys: Array<keyof CardGrid['elements'] & ('name' | 'title' | 'company')> = ['name', 'title', 'company'];
     // v2.14: font sizes proportional to CARD height (pxH), matching preview
     // grid-mode rem sizes on a 340px-tall reference card.
-    //   name    1rem    = 16px    → 16/340
-    //   title   0.78rem = 12.48px → 12.48/340
-    //   company 0.72rem = 11.52px → 11.52/340
+    //   name    1.15rem = 18.4px  → 18.4/340
+    //   title   0.9rem  = 14.4px  → 14.4/340
+    //   company 0.84rem = 13.44px → 13.44/340
     // Before this fix, sizes were relative to CELL height (0.28/0.21/0.18 of
     // cellH), which made export fonts ~50% larger than the preview at
     // standard export DPI (1700×1100). Now they scale with the card, not
@@ -376,9 +376,9 @@ export function buildFrontSvg(
       'name' | 'title' | 'company',
       { text: string; weight: number; color: string; letterSpacing: number; sizePct: number; opacity?: number }
     > = {
-      name: { text: card.front.name.toUpperCase(), weight: 800, color: text, letterSpacing: 0.5, sizePct: 16 / 340 },
-      title: { text: card.front.title, weight: 600, color: accent, letterSpacing: 0, sizePct: 12.48 / 340 },
-      company: { text: card.front.company, weight: 400, color: text, letterSpacing: 0, sizePct: 11.52 / 340, opacity: 0.78 },
+      name: { text: card.front.name.toUpperCase(), weight: 800, color: text, letterSpacing: 0.5, sizePct: 18.4 / 340 },
+      title: { text: card.front.title, weight: 600, color: accent, letterSpacing: 0, sizePct: 14.4 / 340 },
+      company: { text: card.front.company, weight: 400, color: text, letterSpacing: 0, sizePct: 13.44 / 340, opacity: 0.78 },
     };
     for (const key of textKeys) {
       const el = grid.elements[key];
@@ -569,10 +569,10 @@ export function buildBackSvg(
       // ~340px-tall preview (.card-back-key 0.58rem≈9.3px, .card-back-val
       // 0.78rem≈12.5px). Sizing vs min(cw,ch) blew up at export DPI
       // (cell ~300px → 48px labels). Then shrink-to-fit short cells.
-      // v2.14: match preview grid-mode rem sizes (0.6rem=9.6px, 0.72rem=11.52px
-      // on 340px reference). Before: 9.3/12.5 (flexbox values, slightly off).
-      let keySize = fs(pxH * (9.6 / 340), fontScale) * contactsScale;
-      let valSize = fs(pxH * (11.52 / 340), fontScale) * contactsScale;
+      // v2.17: match preview grid-mode rem sizes (0.68rem=10.88px,
+      // 0.8rem=12.8px on 340px reference).
+      let keySize = fs(pxH * (10.88 / 340), fontScale) * contactsScale;
+      let valSize = fs(pxH * (12.8 / 340), fontScale) * contactsScale;
       const wrappableKeys = new Set(['Email', 'Telefono']);
       // Label column = longest key glyph width + gap (never overlaps value).
       // "TELEFONO" ≈ 8 chars; uppercase sans ≈ 0.62em per char + letter-spacing.
@@ -658,7 +658,7 @@ export function buildBackSvg(
           })
           .join('   ');
         // Size vs card height (same as dedicated socials cell), then wrap.
-        let socialSize = fs(pxH * (10.88 / 340), fontScale) * contactsScale;
+        let socialSize = fs(pxH * (12.16 / 340), fontScale) * contactsScale;
         const socialLineH = (s: number) => s * 1.35;
         const remainH = Math.max(8, cy + ch - lineY - pad * 0.25);
         while (socialSize > 6 && wrapTextAtWhitespace(socialsText, cw, socialSize, fontFamily).length * socialLineH(socialSize) > remainH) {
@@ -810,8 +810,8 @@ export function buildBackSvg(
           return `${s.platform} ${value}`;
         })
         .join('   ');
-      // v2.14: match preview grid-mode 0.68rem = 10.88px (was 10px).
-      let socialSize = fs(pxH * (10.88 / 340), fontScale) * socialsScale;
+      // v2.17: match preview grid-mode 0.76rem = 12.16px (was 10.88px).
+      let socialSize = fs(pxH * (12.16 / 340), fontScale) * socialsScale;
       const socialLineH = (s: number) => s * 1.35;
       const neededSocialH = (s: number) => {
         const lines = wrapTextAtWhitespace(socialsText, sw, s, fontFamily);

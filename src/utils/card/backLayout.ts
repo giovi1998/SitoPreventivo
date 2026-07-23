@@ -184,7 +184,8 @@ export function effectiveBackGridForRender(
   grid: CardGrid,
   card: BusinessCard,
 ): CardGrid {
-  const services = (card.back.services ?? []).filter((s) => s.trim().length > 0);
+  const servicesContent = (card.back.services ?? []).filter((s) => s.trim().length > 0);
+  const socialsContent = (card.back.socials ?? []).filter((s) => s.platform && s.url);
   const hasQr = !!getEffectiveQrPayload(card);
 
   // Count visible contact entries the same way the renderer does, so the
@@ -203,8 +204,57 @@ export function effectiveBackGridForRender(
   // services content exists but the element is absent (legacy grids created
   // before services grid support). This prevents silent data loss in export.
   const preset = gridPresetBackDefault();
-  if (services.length > 0 && !elements.services && preset.elements.services) {
+  if (servicesContent.length > 0 && !elements.services && preset.elements.services) {
     elements.services = preset.elements.services;
+  }
+
+  // v2.16+: fill the empty-services gap in the balanced back preset
+  // (contacts {0,0,2,2}, services {0,2,2,1}, socials {0,3,2,1}) so the
+  // left column stays dense and no blank row is left between contacts and
+  // socials. This applies only when the three cells are stacked in the same
+  // column; other layouts keep using the generic collapse below.
+  const servicesEl = elements.services;
+  const socialsEl = elements.socials;
+
+  const contactsAboveServices = contactsEl && servicesEl
+    && contactsEl.x === servicesEl.x
+    && contactsEl.w === servicesEl.w
+    && contactsEl.y + contactsEl.h === servicesEl.y;
+
+  const socialsBelowServices = socialsEl && servicesEl
+    && socialsEl.x === servicesEl.x
+    && socialsEl.w === servicesEl.w
+    && socialsEl.y === servicesEl.y + servicesEl.h;
+
+  if (servicesContent.length === 0 && servicesEl && contactsAboveServices) {
+    if (socialsBelowServices && socialsContent.length > 0) {
+      // Services empty but socials present: collapse the services row by
+      // moving socials up into it and aligning contacts to the bottom of its
+      // cell. This keeps the two blocks vertically dense (no blank services
+      // band between them) while preserving the grid editor/debug overlay.
+      elements.contacts = {
+        ...contactsEl,
+        alignV: 'bottom' as const,
+      };
+      elements.socials = {
+        ...socialsEl,
+        y: servicesEl.y,
+      };
+      delete elements.services;
+      return { ...grid, elements };
+    }
+
+    if (socialsBelowServices && socialsContent.length === 0) {
+      // Both services and socials empty: use the whole left column for
+      // contacts (e.g. a minimal contact-only card).
+      elements.contacts = {
+        ...contactsEl,
+        h: Math.min(grid.rows - contactsEl.y, contactsEl.h + servicesEl.h + socialsEl.h),
+      };
+      delete elements.services;
+      delete elements.socials;
+      return { ...grid, elements };
+    }
   }
 
   // v2.15: when contacts are short (≤2 entries), collapse the contacts
@@ -212,8 +262,6 @@ export function effectiveBackGridForRender(
   // the left column dense and avoids the large empty space below phone/email
   // that looked broken in export.
   if (contactsEl && contactCount <= 2 && contactsEl.h >= 2) {
-    const servicesEl = elements.services;
-    const socialsEl = elements.socials;
     const servicesBelow = servicesEl
       && servicesEl.x === contactsEl.x
       && servicesEl.w === contactsEl.w
@@ -246,12 +294,10 @@ export function effectiveBackGridForRender(
   // Drop empty services cell. Only expand contacts into the freed row when
   // there is no socials cell directly below to absorb the space (otherwise
   // the collapse logic above already made the layout dense).
-  if (services.length === 0) {
-    const servicesEl = elements.services;
+  if (servicesContent.length === 0) {
     if (servicesEl) {
       delete elements.services;
       const currentContacts = elements.contacts;
-      const socialsEl = elements.socials;
       const socialsBelow = socialsEl
         && socialsEl.x === servicesEl.x
         && socialsEl.w === servicesEl.w

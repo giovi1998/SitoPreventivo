@@ -696,7 +696,7 @@ describe('svgRenderer', () => {
       expect(found).toBeGreaterThan(0);
     });
 
-    it('v2.12: empty services drops services cell; socials stay at persisted y (3×3 match)', () => {
+    it('v2.16: empty services expands contacts into the gap; socials stays at persisted y', () => {
       const card = createGiovanniCardTemplate();
       card.back.services = [];
       const withGap = {
@@ -727,9 +727,11 @@ describe('svgRenderer', () => {
       const yWithServices = yOf(buildBackSvg(withServices, 1024, 663));
       expect(yEmpty).not.toBeNaN();
       expect(yWithServices).not.toBeNaN();
-      // Socials y must match whether services content is empty or not
-      // (persisted grid cell, not a render-time relocate).
-      expect(Math.abs(yEmpty - yWithServices)).toBeLessThan(2);
+      // Services empty: the services row is collapsed by moving socials up
+      // to y:2, so socials now renders at roughly the same y as when services
+      // are present (v2.15 collapse also moves socials up to y:2).
+      expect(yEmpty - yWithServices).toBeGreaterThanOrEqual(-10);
+      expect(yEmpty - yWithServices).toBeLessThan(10);
     });
 
     it('v2.9.1: services still render when backGrid.services is missing but services content exists (regression)', () => {
@@ -807,12 +809,13 @@ describe('v2.14 preview/export parity', () => {
       },
     };
     const svg = buildFrontSvg(card, 1024, 663);
-    // name: 663 * (16/340) = 31.2 → ~31 (fontScale=1)
-    // title: 663 * (12.48/340) = 24.3 → ~24
+    // v2.17: name 1.15rem = 18.4/340; title 0.9rem = 14.4/340 (fontScale=1)
+    // name: 663 * (18.4/340) = 35.9 → ~36
+    // title: 663 * (14.4/340) = 28.1 → ~28
     const nameSize = fontSizeOfText(svg, 'MARIO');
     const titleSize = fontSizeOfText(svg, 'Dev');
-    expect(nameSize).toBeCloseTo(663 * (16 / 340), 0);
-    expect(titleSize).toBeCloseTo(663 * (12.48 / 340), 0);
+    expect(nameSize).toBeCloseTo(663 * (18.4 / 340), 0);
+    expect(titleSize).toBeCloseTo(663 * (14.4 / 340), 0);
   });
 
   it('front grid cells have padding offset (not starting at 0,0)', () => {
@@ -830,7 +833,7 @@ describe('v2.14 preview/export parity', () => {
     expect(nameY).toBeGreaterThan(10); // should be ≈31+3=34, not 0
   });
 
-  it('back key/val font sizes match grid-mode rem values (9.6/11.52 base)', () => {
+  it('back key/val font sizes match grid-mode rem values (10.88/12.8 base)', () => {
     const card = {
       ...createEmptyCard(),
       back: { ...createEmptyCard().back, phone: '123456789', useGrid: true },
@@ -842,12 +845,12 @@ describe('v2.14 preview/export parity', () => {
       },
     };
     const svg = buildBackSvg(card, 1024, 663);
-    // key: 663 * (9.6/340) ≈ 18.7
-    // val: 663 * (11.52/340) ≈ 22.5
+    // v2.17: key 0.68rem = 10.88/340 → 663*(10.88/340) ≈ 21.2
+    // val 0.8rem = 12.8/340 → 663*(12.8/340) ≈ 24.9
     const keySize = fontSizeOfText(svg, 'TELEFONO');
     const valSize = fontSizeOfText(svg, '123456789');
-    expect(keySize).toBeCloseTo(663 * (9.6 / 340), 0);
-    expect(valSize).toBeCloseTo(663 * (11.52 / 340), 0);
+    expect(keySize).toBeCloseTo(663 * (10.88 / 340), 0);
+    expect(valSize).toBeCloseTo(663 * (12.8 / 340), 0);
   });
 });
 

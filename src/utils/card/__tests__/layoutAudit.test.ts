@@ -15,11 +15,13 @@ describe('layoutAudit', () => {
     expect(audit.findings.filter((f) => f.severity === 'error')).toHaveLength(0);
   });
 
-  it('does not flag logo too small on real Giovanni export', () => {
+  it('flags logo as small on right-balanced Giovanni export', () => {
     const card = createGiovanniCardTemplate();
     const svg = buildCardSvg(card, 'front', W, H);
     const audit = auditExportSvg('front', svg, card);
-    expect(audit.findings.some((f) => f.code === 'LOGO_TOO_SMALL')).toBe(false);
+    const finding = audit.findings.find((f) => f.code === 'LOGO_TOO_SMALL');
+    expect(finding).toBeDefined();
+    expect(finding!.metrics?.logoWidthRatio).toBeLessThan(0.30);
   });
 
   it('reports missing TELEFONO on empty back', () => {

@@ -103,22 +103,22 @@
 }
 
 .card-preview-side.grid-mode .card-name {
-  font-size: calc(1rem * var(--card-font-scale));
+  font-size: calc(1.15rem * var(--card-font-scale));
   font-weight: 700;
 }
 
 .card-preview-side.grid-mode .card-title {
-  font-size: calc(0.78rem * var(--card-font-scale));
+  font-size: calc(0.9rem * var(--card-font-scale));
   font-weight: 600;
 }
 
 .card-preview-side.grid-mode .card-company {
-  font-size: calc(0.72rem * var(--card-font-scale));
+  font-size: calc(0.84rem * var(--card-font-scale));
   opacity: 0.8;
 }
 
 .card-preview-side.grid-mode .card-back-key {
-  font-size: calc(0.6rem * var(--card-font-scale));
+  font-size: calc(0.68rem * var(--card-font-scale));
   text-transform: uppercase;
   letter-spacing: 0.04em;
   opacity: 0.6;
@@ -126,7 +126,7 @@
 }
 
 .card-preview-side.grid-mode .card-back-val {
-  font-size: calc(0.72rem * var(--card-font-scale));
+  font-size: calc(0.8rem * var(--card-font-scale));
   /* Phase 2.2: wrap invece di ellipsis (vedi .card-back-val flexbox). */
   overflow-wrap: break-word;
   word-break: break-word;
@@ -143,7 +143,7 @@
 }
 
 .card-preview-side.grid-mode .card-back-socials {
-  font-size: calc(0.68rem * var(--card-font-scale));
+  font-size: calc(0.76rem * var(--card-font-scale));
   overflow-wrap: break-word;
   word-break: break-word;
   max-width: 100%;

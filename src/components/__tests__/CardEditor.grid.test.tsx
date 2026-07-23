@@ -47,10 +47,10 @@ describe('Grid editor (B2)', () => {
 
   it('applying a preset SOSTITUISCE la grid (no duplicati di elementi come logo)', () => {
     const card = createGiovanniCardTemplate();
-    // v2.16: template = layout right-balanced; griglia derivata da
-    // gridPresetRightBalanced con `company` filtrata (vuota).
-    expect(card.grid?.elements.logo).toEqual({ x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'center' });
-    expect(card.grid?.elements.photo).toEqual({ x: 2, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' });
+    // v2.17: template = layout right-balanced; griglia derivata da
+    // gridPresetRightBalanced (company popolata, logo 1×1 in basso a sx).
+    expect(card.grid?.elements.logo).toEqual({ x: 0, y: 3, w: 1, h: 1, alignH: 'left', alignV: 'center' });
+    expect(card.grid?.elements.photo).toEqual({ x: 2, y: 1, w: 2, h: 2, alignH: 'center', alignV: 'center' });
     renderEditor({ initialCard: card });
     fireEvent.click(screen.getByLabelText(/Mostra griglia/i));
     const presetSelect = screen.getByLabelText(/Preset griglia/i) as HTMLSelectElement;

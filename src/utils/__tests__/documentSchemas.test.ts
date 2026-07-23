@@ -18,6 +18,7 @@ import {
   gridPresetSplit,
   gridPresetFrontSplit,
   gridPresetRight,
+  gridPresetRightBalanced,
   gridPresetTop,
   gridPresetBottom,
   gridPresetMinimal,
@@ -330,9 +331,9 @@ describe('documentSchemas', () => {
       expect(r.success).toBe(true);
     });
 
-    it('does not pre-fill any placeholder company on front', () => {
+    it('pre-fills company to WebdevCA on front', () => {
       const card = createGiovanniCardTemplate();
-      expect(card.front.company).toBe('');
+      expect(card.front.company).toBe('WebdevCA');
     });
 
     it('includes a transparent SVG logo as data URI (Phase 2.1: logoUrl non null)', () => {
@@ -483,6 +484,21 @@ describe('documentSchemas', () => {
       expect(g.elements.photo!.w).toBe(1);
       expect(g.elements.logo!.w).toBe(1);
       expect(g.elements.name!.x).toBe(1);
+    });
+
+    it('gridPresetRightBalanced is the v2.17 professional business-card layout', () => {
+      const g = gridPresetRightBalanced();
+      expect(g.cols).toBe(4);
+      expect(g.rows).toBe(4);
+      // Strong hierarchy: name spans the full top row.
+      expect(g.elements.name).toEqual({ x: 0, y: 0, w: 4, h: 1, alignH: 'left', alignV: 'center' });
+      // Centred photo on the right, square, not full-height.
+      expect(g.elements.photo).toEqual({ x: 2, y: 1, w: 2, h: 2, alignH: 'center', alignV: 'center' });
+      // Text band on the left under the name.
+      expect(g.elements.title).toEqual({ x: 0, y: 1, w: 2, h: 1, alignH: 'left', alignV: 'center' });
+      expect(g.elements.company).toEqual({ x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'center' });
+      // Small logo in the bottom-left corner.
+      expect(g.elements.logo).toEqual({ x: 0, y: 3, w: 1, h: 1, alignH: 'left', alignV: 'center' });
     });
   });
 
