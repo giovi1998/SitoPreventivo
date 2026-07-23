@@ -12,7 +12,7 @@ import { logger } from '../utils/logger';
 
 const MAX_LOG_ENTRIES = 40;
 const STREAM_UPDATE_THRESHOLD = 80;
-const MAX_DETAIL_CHARS = 8192;
+const MAX_DETAIL_CHARS = 16384;
 
 function getStorageKey(route?: string): string {
   // Scope logs per source so switching pages doesn't leak AI logs between editors.

@@ -58,7 +58,7 @@ export function useAIOnboarding(userEmail?: string): UseAIOnboardingReturn {
         const tokens = result.response?.usage
           ? { prompt: result.response.usage.promptTokens, completion: result.response.usage.completionTokens, total: result.response.usage.totalTokens }
           : undefined;
-        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 2048) });
+        finalizeStream(streamId, true, { tokens, detail: result.rawResponse?.slice(0, 16384) });
 
         if (userEmail && userEmail !== 'admin@gmail.com' && result.response?.usage) {
           const cost = calculateCostUsd(resolveProviderId(), result.response.usage);

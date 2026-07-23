@@ -27,6 +27,7 @@ import { tryCatch } from '../utils/errors';
 import { FREE_DOCUMENT_LIMIT } from '../utils/watermark';
 import { logger } from '../utils/logger';
 import { isLocalhost } from '../utils/env';
+import { getAiProviderDefault, setAiProviderDefault } from '../utils/uiPrefs';
 
 function generateId() {
   const year = new Date().getFullYear();
@@ -72,7 +73,7 @@ export default function AppShell() {
   const [quotes, setQuotes] = useState<any[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [aiText, setAiText] = useState("Rendi il preventivo più professionale e aggiungi dettagli tecnici");
-  const [aiModel, setAiModel] = useState('deepseek-chat');
+  const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || 'deepseek-chat');
   const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
@@ -607,6 +608,11 @@ export default function AppShell() {
     addToast('info', 'Nuovo preventivo vuoto');
   }, [setQuote, setView, addToast]);
 
+  const handleProviderChange = useCallback((providerId: string) => {
+    setAiProviderDefault(providerId);
+    setAiModel(providerId);
+  }, []);
+
   const ctxValue = {
     editingQuote: quote, setEditingQuote: setQuote, saveQuote, quotes,
     setView, openQuote, resetQuote, duplicate, removeQuote: (id: string) => {
@@ -618,6 +624,7 @@ export default function AppShell() {
     createFromTemplate,
     runAI,
     aiText, setAiText, aiModel, setAiModel,
+    onAiProviderChange: handleProviderChange,
     patch, updateOption, updateOptions, addOption, removeOption,
     updateClause, addClause, removeClause,
     exportPDF, exportDOCX, saveCurrentQuote, saveAsTemplate,

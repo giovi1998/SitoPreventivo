@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useAIHarness } from '../../utils/ai/aiModule';
 import AIConsole from './AIConsole';
 import type { AILogEntry } from '../../ai/types';
@@ -18,20 +18,29 @@ export interface AIHarnessConsoleProps {
   suggestedPrompt?: string;
   hidePrompt?: boolean;
   className?: string;
+  /** TB-023: callback extra quando l'utente cambia provider dal badge. */
+  onProviderChange?: (providerId: string) => void;
 }
 
 /**
  * AIConsole pre-wired con AIHarness.
  * Usa `useAIHarness` per provider selection, costi, e preferenze AI.
  */
-export default function AIHarnessConsole(props: AIHarnessConsoleProps): React.ReactElement {
+export default function AIHarnessConsole({ onProviderChange, ...props }: AIHarnessConsoleProps): React.ReactElement {
   const harness = useAIHarness();
+  const handleProviderChange = useCallback(
+    (providerId: string) => {
+      harness.setProvider(providerId);
+      onProviderChange?.(providerId);
+    },
+    [harness, onProviderChange]
+  );
   return (
     <AIConsole
       {...props}
       lastCostUsd={harness.lastCostUsd}
       totalCostUsd={harness.totalCostUsd}
-      onProviderChange={harness.setProvider}
+      onProviderChange={handleProviderChange}
       visionEnabled={harness.visionEnabled}
       providerId={harness.providerId}
       onVisionToggle={() => harness.setVision(!harness.visionEnabled)}

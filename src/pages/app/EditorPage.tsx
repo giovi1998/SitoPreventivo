@@ -13,6 +13,7 @@ export default function EditorPage() {
     documentType: 'quote',
     contextField: 'editingQuote',
   });
+  const onProviderChange = ctx.onAiProviderChange;
 
   // Defense-in-depth: l'AdminEditorRoute in main.tsx blocca già, ma
   // questo fallback protegge da un eventuale accesso diretto.
@@ -57,6 +58,7 @@ export default function EditorPage() {
       pdfLoading={ctx.pdfLoading}
       docxLoading={ctx.docxLoading}
       lastCostUsd={ctx.lastCostUsd}
+      onProviderChange={onProviderChange}
     />
   );
 }

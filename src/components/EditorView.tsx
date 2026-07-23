@@ -106,6 +106,8 @@ interface EditorViewProps {
   pdfLoading: boolean;
   docxLoading?: boolean;
   lastCostUsd?: number;
+  /** TB-023: callback quando l'utente cambia provider dal badge. */
+  onProviderChange?: (providerId: string) => void;
 }
 
 export default function EditorView({
@@ -114,6 +116,7 @@ export default function EditorView({
   isDirty, saveQuote, documentTheme = 'corporate',
   onSave, onExportPDF, onExportDOCX, onImportPDF, onSaveAsTemplate,
   lastSaveTime, pdfLoading, docxLoading, lastCostUsd,
+  onProviderChange,
 }: EditorViewProps) {
   const [showAi, setShowAi] = React.useState(true);
   const [showManual, setShowManual] = React.useState(true);
@@ -260,6 +263,7 @@ export default function EditorView({
       tier="unlocked"
       onSubmitPrompt={(text: string) => setAiText(text)}
       hidePrompt
+      onProviderChange={onProviderChange}
       quickActions={
         <button type="button" className="card-ai-reset" onClick={onResetChat} disabled={isProcessing}>
           Nuova conversazione
