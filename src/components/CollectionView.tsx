@@ -262,8 +262,8 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   const filtered = useMemo(() => {
     const tab = TABS.find((t) => t.id === activeTab);
     let list = documents.filter((d) => d && d.id);
-    if (tab?.type) {
-      list = list.filter((d) => d.documentType === tab.type);
+    if (activeTab !== 'all') {
+      list = list.filter((d) => d.documentType === activeTab);
     }
     if (search.trim()) {
       const q = search.toLowerCase();
