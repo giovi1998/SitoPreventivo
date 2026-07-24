@@ -338,6 +338,37 @@ const dataService = {
     return { success: true, data: hydrateDocument(row) };
   },
 
+  // Solo i tipi "editor" con stato complesso sono duplicabili.
+  // qrCode: è solo un payload, duplicare = rifare → no.
+  // generatedImage: sono asset AI, l'originale rimane in collezione → no (l'utente
+  // può già scaricare e ri-importare se vuole).
+  // quote: ha numerazione + cliente → duplicazione manuale dall'interno editor.
+  canDuplicate(doc) {
+    if (!doc || !doc.documentType) return false;
+    return doc.documentType === 'businessCard'
+      || doc.documentType === 'logo'
+      || doc.documentType === 'flyer';
+  },
+
+  async duplicateDocument(doc, userEmail) {
+    if (!doc || !doc.id) return { success: false, error: 'Documento mancante' };
+    if (!userEmail) return { success: false, error: 'Email mancante' };
+    if (!this.canDuplicate(doc)) {
+      return { success: false, error: 'Tipo non duplicabile' };
+    }
+    const baseTitle = doc.title || 'Senza titolo';
+    const newDoc = {
+      ...doc,
+      id: `dup_${doc.id}_${Date.now()}`,
+      title: `${baseTitle} (copia)`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      // Mantieni lo stesso userEmail, NON toccare userEmail qui (dataService.saveDocument lo aggiunge)
+    };
+    const result = await this.saveDocument(userEmail, newDoc);
+    return result;
+  },
+
   async getDocuments(email, documentType) {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_documents:v1') || [];

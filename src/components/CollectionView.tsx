@@ -644,6 +644,35 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                     )}
                     <p className="card-meta">{meta}</p>
                     <div className="card-actions">
+                      {type !== 'generatedImage' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => onOpen(doc)}
+                            data-testid={`open-${doc.id}`}
+                            title="Apri"
+                          >
+                            Apri
+                          </button>
+                          {dataService.canDuplicate(doc) && (
+                            <button
+                              type="button"
+                              onClick={() => dataService.duplicateDocument(doc, userEmail).then(() => {
+                                if (ctx?.refreshDocuments) ctx.refreshDocuments();
+                                setRefreshKey((k) => k + 1);
+                                if (typeof ctx.duplicate === 'function') ctx.duplicate(doc);
+                                addToast('success', 'Documento duplicato');
+                              }).catch(() => {
+                                addToast('error', 'Duplicazione fallita');
+                              })}
+                              data-testid={`duplicate-${doc.id}`}
+                              title="Duplica"
+                            >
+                              <Icon name="copy" />Duplica
+                            </button>
+                          )}
+                        </>
+                      )}
                       {type === 'generatedImage' && doc.imageData && (
                         <button
                           type="button"

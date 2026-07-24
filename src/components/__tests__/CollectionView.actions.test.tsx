@@ -38,6 +38,117 @@ async function renderCollection(ctxOverrides: Record<string, any> = {}) {
 }
 
 describe('CollectionView, actions (phase 6, AC-007/008/009/010)', () => {
+  it('"Apri" on a quote calls openDocument (AC-007)', async () => {
+    // Phase 7: quotes are admin-only in the Collection, so this test
+    // needs admin role to see the quote card. The action under test
+    // (openDocument dispatch) is the same regardless of role.
+    seedDocumentsLocalStorage([
+      makeDocument({ id: 'q1', documentType: 'quote', title: 'My quote' }),
+    ]);
+    const ctx = buildContextValue();
+    const authValue = { ...AUTH_VALUE, user: { email: 'user@test.com', role: 'admin' as const } };
+    render(
+      <AuthContext.Provider value={authValue as any}>
+        <AppContext.Provider value={ctx as any}>
+          <TestRouter>
+            <CollectionViewForTest />
+          </TestRouter>
+        </AppContext.Provider>
+      </AuthContext.Provider>,
+    );
+    await waitFor(() => {
+      expect(screen.queryByText(/Caricamento documenti/i)).toBeNull();
+    });
+    fireEvent.click(screen.getByTestId('open-q1'));
+    await waitFor(() => {
+      expect(ctx.openDocument).toHaveBeenCalled();
+    });
+    const arg = ctx.openDocument.mock.calls[0][0];
+    expect(arg.id).toBe('q1');
+    expect(arg.documentType).toBe('quote');
+  });
+
+  it('"Apri" on a QR code dispatches to qr editor (AC-008)', async () => {
+    seedDocumentsLocalStorage([
+      makeDocument({ id: 'qr1', documentType: 'qrCode', title: 'My QR' }),
+    ]);
+    const ctx = await renderCollection();
+    fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /QR Code/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId('open-qr1')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('open-qr1'));
+    await waitFor(() => {
+      expect(ctx.openDocument).toHaveBeenCalled();
+    });
+    expect(ctx.openDocument.mock.calls[0][0].documentType).toBe('qrCode');
+  });
+
+  it('"Apri" on a business card dispatches to card editor', async () => {
+    seedDocumentsLocalStorage([
+      makeDocument({ id: 'c1', documentType: 'businessCard', title: 'My card' }),
+    ]);
+    const ctx = await renderCollection();
+    fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Bigliettini/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId('open-c1')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('open-c1'));
+    await waitFor(() => {
+      expect(ctx.openDocument).toHaveBeenCalled();
+    });
+    expect(ctx.openDocument.mock.calls[0][0].documentType).toBe('businessCard');
+  });
+
+  it('"Apri" on a logo dispatches to logo editor', async () => {
+    seedDocumentsLocalStorage([
+      makeDocument({ id: 'l1', documentType: 'logo', title: 'My logo' }),
+    ]);
+    const ctx = await renderCollection();
+    fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Loghi/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId('open-l1')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('open-l1'));
+    await waitFor(() => {
+      expect(ctx.openDocument).toHaveBeenCalled();
+    });
+    expect(ctx.openDocument.mock.calls[0][0].documentType).toBe('logo');
+  });
+
+  it('"Duplica" creates a new ID + " (copia)" title for businessCard (AC-009)', async () => {
+    const saveSpy = vi.spyOn(dataService, 'saveDocument').mockResolvedValue({ success: true, data: {} } as any);
+    seedDocumentsLocalStorage([
+      makeDocument({ id: 'c1', documentType: 'businessCard', title: 'My card' }),
+    ]);
+    const ctx = await renderCollection();
+    fireEvent.click(within(screen.getByRole('tablist')).getByRole('tab', { name: /Bigliettini/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId('duplicate-c1')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('duplicate-c1'));
+    await waitFor(() => {
+      expect(saveSpy).toHaveBeenCalled();
+    });
+    const saved = saveSpy.mock.calls[0][1];
+    expect(saved.id).not.toBe('c1');
+    expect(saved.title).toBe('My card (copia)');
+    expect(ctx.duplicate).toHaveBeenCalled();
+    saveSpy.mockRestore();
+  });
+
+  it('"Duplica" is NOT shown for generatedImage (AI assets live in their own tab)', async () => {
+    seedDocumentsLocalStorage([
+      makeDocument({ id: 'img1', documentType: 'generatedImage', title: 'AI cover', data: { imageData: 'data:image/png;base64,AA' } }),
+    ]);
+    const ctx = await renderCollection();
+    await waitFor(() => {
+      expect(screen.getByTestId('card-img1')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('open-img1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('duplicate-img1')).not.toBeInTheDocument();
+  });
+
   it('"Elimina" shows confirm modal, then calls deleteDocument and refreshes (AC-010)', async () => {
     // Phase 7: quotes are admin-only, so we use a businessCard as
     // the test document. The action under test (deleteDocument call
