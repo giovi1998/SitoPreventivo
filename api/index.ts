@@ -23,8 +23,15 @@ type VercelResponse = {
   writableEnded: boolean;
 };
 
-const connectionString = process.env.DATABASE_URL!;
-const db = drizzle(connectionString, { schema: {} as never });
+let _db: ReturnType<typeof drizzle> | null = null;
+function getDb() {
+  if (!_db) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) throw new Error('Database non configurato sul server');
+    _db = drizzle(connectionString, { schema: {} as never });
+  }
+  return _db;
+}
 
 const usersTable = pgTable('users', {
   id: serial().primaryKey(),
@@ -506,11 +513,11 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     const { email, password, username, gender, tokenLimit } = v.data;
     if (email === ADMIN_EMAIL) return json(req, res, 403, { error: 'Email non disponibile' });
 
-    const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    const existing = await getDb().select().from(usersTable).where(eq(usersTable.email, email));
     if (existing.length > 0) return json(req, res, 409, { error: 'Email già registrata' });
 
     const hashed = await bcrypt.hash(password, 12);
-    const [created] = await db.insert(usersTable).values({
+    const [created] = await getDb().insert(usersTable).values({
       email, password: hashed, username, gender, role: 'user',
       tokenLimit: tokenLimit || 1000000,
     }).returning();
@@ -553,7 +560,7 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
       });
     }
 
-    const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    const [found] = await getDb().select().from(usersTable).where(eq(usersTable.email, email));
     if (!found || !(await bcrypt.compare(password, found.password))) {
       recordRateAttempt(ip, false, 'login');
       return json(req, res, 401, { error: 'Email o password errati' });
@@ -574,13 +581,13 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     const v = validate(ChangePasswordSchema, body);
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, oldPassword, newPassword } = v.data;
-    const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    const [found] = await getDb().select().from(usersTable).where(eq(usersTable.email, email));
     if (!found) return json(req, res, 404, { error: 'Utente non trovato' });
     if (!(await bcrypt.compare(oldPassword, found.password))) {
       return json(req, res, 401, { error: 'Password attuale errata' });
     }
     const hashed = await bcrypt.hash(newPassword, 12);
-    await db.update(usersTable).set({ password: hashed }).where(eq(usersTable.email, email));
+    await getDb().update(usersTable).set({ password: hashed }).where(eq(usersTable.email, email));
     return json(req, res, 200, { success: true });
   }
 
@@ -590,7 +597,7 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     if (adminEmail !== ADMIN_EMAIL) {
       return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
     }
-    const list = await db.select({
+    const list = await getDb().select({
       email: usersTable.email, username: usersTable.username, gender: usersTable.gender,
       role: usersTable.role, createdAt: usersTable.createdAt,
       tokensUsed: usersTable.tokensUsed, tokenLimit: usersTable.tokenLimit,
@@ -613,7 +620,7 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     }
     const daysParam = Number(url.searchParams.get('days'));
     const days = Number.isFinite(daysParam) && daysParam > 0 ? Math.min(365, Math.floor(daysParam)) : 30;
-    const list = await db.select({
+    const list = await getDb().select({
       email: usersTable.email,
       tokensUsed: usersTable.tokensUsed,
       tokensCostUsd: usersTable.tokensCostUsd,
@@ -631,7 +638,7 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
 
   if (path.startsWith('/users/') && path.endsWith('/profile') && method === 'GET') {
     const email = decodeURIComponent(path.replace('/users/', '').replace('/profile', ''));
-    const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    const [found] = await getDb().select().from(usersTable).where(eq(usersTable.email, email));
     if (!found) return json(req, res, 404, { error: 'Utente non trovato' });
     return json(req, res, 200, {
       email: found.email, username: found.username, gender: found.gender,
@@ -646,7 +653,7 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     const v = validate(TokenLimitSchema, body);
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, tokenLimit } = v.data;
-    await db.update(usersTable).set({ tokenLimit }).where(eq(usersTable.email, email));
+    await getDb().update(usersTable).set({ tokenLimit }).where(eq(usersTable.email, email));
     return json(req, res, 200, { success: true });
   }
 
@@ -664,12 +671,12 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     }
     // TB-023: aggiorna anche tokens_cost_usd se passato
     if (typeof costUsd === 'number' && costUsd > 0) {
-      await db.update(usersTable).set({
+      await getDb().update(usersTable).set({
         tokensUsed: sql`tokens_used + ${tokens}`,
         tokensCostUsd: sql`COALESCE(tokens_cost_usd, 0) + ${costUsd}`,
       }).where(eq(usersTable.email, email));
     } else {
-      await db.update(usersTable).set({
+      await getDb().update(usersTable).set({
         tokensUsed: sql`tokens_used + ${tokens}`,
       }).where(eq(usersTable.email, email));
     }
@@ -685,7 +692,7 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     if (email === ADMIN_EMAIL) {
       return json(req, res, 200, { data: { tier: 'unlocked', documentCount: 0, documentLimit: null } });
     }
-    const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    const [settings] = await getDb().select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
     const tier = settings?.tier === 'unlocked' ? 'unlocked' : 'free';
     return json(req, res, 200, {
       data: {
@@ -704,9 +711,9 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
       return json(req, res, 200, { data: { documentCount: 0 } });
     }
     // upsert: ensure user_settings row exists, then increment
-    const [existing] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    const [existing] = await getDb().select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
     if (!existing) {
-      const [created] = await db.insert(userSettingsTable).values({
+      const [created] = await getDb().insert(userSettingsTable).values({
         userEmail: email,
         tier: 'free',
         documentCount: Math.max(0, delta),
@@ -714,7 +721,7 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
       return json(req, res, 200, { data: { documentCount: created.documentCount || 0 } });
     }
     const newCount = Math.max(0, (existing.documentCount || 0) + delta);
-    await db.update(userSettingsTable).set({
+    await getDb().update(userSettingsTable).set({
       documentCount: newCount,
     }).where(eq(userSettingsTable.userEmail, email));
     return json(req, res, 200, { data: { documentCount: newCount } });
@@ -741,7 +748,7 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     }
 
     // Lookup case-insensitive
-    const [found] = await db.select().from(unlockCodesTable)
+    const [found] = await getDb().select().from(unlockCodesTable)
       .where(sql`LOWER(${unlockCodesTable.code}) = LOWER(${normalized})`);
 
     if (!found) {
@@ -754,7 +761,7 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     }
 
     // Atomic claim: only update if used_by is still null (race-condition safe)
-    const claimResult = await db.update(unlockCodesTable).set({
+    const claimResult = await getDb().update(unlockCodesTable).set({
       usedBy: email,
       usedAt: sql`now()`,
     }).where(sql`${unlockCodesTable.code} = ${found.code} AND ${unlockCodesTable.usedBy} IS NULL`).returning();
@@ -764,15 +771,15 @@ const handleUsers: RouteHandler = async (path, method, req, res, body) => {
     }
 
     // Upsert user_settings → unlocked
-    const [existing] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    const [existing] = await getDb().select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
     if (existing) {
-      await db.update(userSettingsTable).set({
+      await getDb().update(userSettingsTable).set({
         tier: 'unlocked',
         unlockCode: normalized,
         unlockedAt: sql`now()`,
       }).where(eq(userSettingsTable.userEmail, email));
     } else {
-      await db.insert(userSettingsTable).values({
+      await getDb().insert(userSettingsTable).values({
         userEmail: email,
         tier: 'unlocked',
         unlockCode: normalized,
@@ -805,7 +812,7 @@ const handleAdmin: RouteHandler = async (path, method, req, res, body) => {
       return json(req, res, 400, { error: 'Package non valido' });
     }
     const code = generateUnlockCode();
-    const [created] = await db.insert(unlockCodesTable).values({
+    const [created] = await getDb().insert(unlockCodesTable).values({
       code,
       package: pkg,
       usedBy: null,
@@ -821,7 +828,7 @@ const handleAdmin: RouteHandler = async (path, method, req, res, body) => {
     if (adminEmail !== ADMIN_EMAIL) {
       return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
     }
-    const list = await db.select().from(unlockCodesTable).orderBy(sql`created_at DESC`);
+    const list = await getDb().select().from(unlockCodesTable).orderBy(sql`created_at DESC`);
     return json(req, res, 200, {
       data: list.map(c => ({
         code: c.code,
@@ -844,14 +851,14 @@ const handleAdmin: RouteHandler = async (path, method, req, res, body) => {
     if (userEmail === ADMIN_EMAIL) {
       return json(req, res, 200, { data: { tier: 'unlocked' } });
     }
-    const [existing] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, userEmail));
+    const [existing] = await getDb().select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, userEmail));
     if (existing) {
-      await db.update(userSettingsTable).set({
+      await getDb().update(userSettingsTable).set({
         tier: 'unlocked',
         unlockedAt: sql`now()`,
       }).where(eq(userSettingsTable.userEmail, userEmail));
     } else {
-      await db.insert(userSettingsTable).values({
+      await getDb().insert(userSettingsTable).values({
         userEmail,
         tier: 'unlocked',
         unlockedAt: sql`now()`,
@@ -872,7 +879,7 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
   if (path === '/quotes' && method === 'GET') {
     const userEmail = searchParams.get('email');
     if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
-    const list = await db.select().from(documentsTable).where(eq(documentsTable.userEmail, userEmail)).orderBy(sql`created_at DESC`);
+    const list = await getDb().select().from(documentsTable).where(eq(documentsTable.userEmail, userEmail)).orderBy(sql`created_at DESC`);
     return json(req, res, 200, list);
   }
 
@@ -880,7 +887,7 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
     if (searchParams.get('adminEmail') !== ADMIN_EMAIL) {
       return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
     }
-    const list = await db.select().from(documentsTable).orderBy(sql`created_at DESC`);
+    const list = await getDb().select().from(documentsTable).orderBy(sql`created_at DESC`);
     return json(req, res, 200, list);
   }
 
@@ -889,12 +896,12 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, quote } = v.data;
 
-    const existing = await db.select().from(documentsTable).where(eq(documentsTable.id, quote.id));
+    const existing = await getDb().select().from(documentsTable).where(eq(documentsTable.id, quote.id));
     if (existing.length > 0) {
       if (existing[0].userEmail !== email) {
         return json(req, res, 403, { error: 'Non autorizzato' });
       }
-      const [updated] = await db.update(documentsTable).set({
+      const [updated] = await getDb().update(documentsTable).set({
         documentType: existing[0].documentType || 'quote',
         title: quote.title, client: quote.client, date: quote.date,
         intro: quote.intro, color: quote.color, vat: quote.vat,
@@ -909,7 +916,7 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
       return json(req, res, 200, updated);
     }
 
-    const [saved] = await db.insert(documentsTable).values({
+    const [saved] = await getDb().insert(documentsTable).values({
       id: quote.id, userEmail: email, documentType: 'quote',
       title: quote.title, client: quote.client,
       date: quote.date, intro: quote.intro, color: quote.color, vat: quote.vat,
@@ -928,19 +935,19 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
     const email = body.email || searchParams.get('email');
     if (!email) return json(req, res, 400, { error: 'Email richiesta' });
 
-    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, quoteId));
+    const [existing] = await getDb().select().from(documentsTable).where(eq(documentsTable.id, quoteId));
     if (!existing) return json(req, res, 404, { error: 'Preventivo non trovato' });
     if (existing.userEmail !== email) {
       return json(req, res, 403, { error: 'Non autorizzato' });
     }
-    await db.delete(documentsTable).where(eq(documentsTable.id, quoteId));
+    await getDb().delete(documentsTable).where(eq(documentsTable.id, quoteId));
     return json(req, res, 200, { success: true });
   }
 
   if (path === '/quotes/templates' && method === 'GET') {
     const userEmail = searchParams.get('email');
     if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
-    const list = await db.select().from(documentsTable)
+    const list = await getDb().select().from(documentsTable)
       .where(and(eq(documentsTable.userEmail, userEmail), eq(documentsTable.isTemplate, true)))
       .orderBy(sql`created_at DESC`);
     return json(req, res, 200, list);
@@ -957,7 +964,7 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     const userEmail = searchParams.get('email');
     if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
     const type = searchParams.get('type');
-    const all = await db.select().from(documentsTable)
+    const all = await getDb().select().from(documentsTable)
       .where(eq(documentsTable.userEmail, userEmail))
       .orderBy(sql`updated_at DESC`);
     const filtered = type ? all.filter((d) => d.documentType === type) : all;
@@ -969,7 +976,7 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     const userEmail = searchParams.get('email');
     const type = searchParams.get('type');
     if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
-    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, documentId));
+    const [existing] = await getDb().select().from(documentsTable).where(eq(documentsTable.id, documentId));
     if (!existing || existing.userEmail !== userEmail || (type && existing.documentType !== type)) {
       return json(req, res, 404, { error: 'Documento non trovato' });
     }
@@ -998,12 +1005,12 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     };
 
     const dataToStore = extractDocumentData(document);
-    const existing = await db.select().from(documentsTable).where(eq(documentsTable.id, document.id));
+    const existing = await getDb().select().from(documentsTable).where(eq(documentsTable.id, document.id));
     if (existing.length > 0) {
       if (existing[0].userEmail !== email) {
         return json(req, res, 403, { error: 'Non autorizzato' });
       }
-      const [updated] = await db.update(documentsTable).set({
+      const [updated] = await getDb().update(documentsTable).set({
         documentType: document.documentType,
         title: document.title,
         data: dataToStore as never,
@@ -1011,7 +1018,7 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
       }).where(eq(documentsTable.id, document.id)).returning();
       return json(req, res, 200, updated);
     }
-    const [saved] = await db.insert(documentsTable).values({
+    const [saved] = await getDb().insert(documentsTable).values({
       id: document.id,
       userEmail: email,
       documentType: document.documentType,
@@ -1021,13 +1028,13 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     }).returning();
     // Phase 5: increment user document count (admin excluded, no-op)
     if (email !== ADMIN_EMAIL) {
-      const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+      const [settings] = await getDb().select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
       if (settings) {
-        await db.update(userSettingsTable).set({
+        await getDb().update(userSettingsTable).set({
           documentCount: sql`COALESCE(${userSettingsTable.documentCount}, 0) + 1`,
         }).where(eq(userSettingsTable.userEmail, email));
       } else {
-        await db.insert(userSettingsTable).values({
+        await getDb().insert(userSettingsTable).values({
           userEmail: email,
           tier: 'free',
           documentCount: 1,
@@ -1042,12 +1049,12 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     const email = body.email || searchParams.get('email');
     if (!email) return json(req, res, 400, { error: 'Email richiesta' });
 
-    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, documentId));
+    const [existing] = await getDb().select().from(documentsTable).where(eq(documentsTable.id, documentId));
     if (!existing) return json(req, res, 404, { error: 'Documento non trovato' });
     if (existing.userEmail !== email) {
       return json(req, res, 403, { error: 'Non autorizzato' });
     }
-    await db.delete(documentsTable).where(eq(documentsTable.id, documentId));
+    await getDb().delete(documentsTable).where(eq(documentsTable.id, documentId));
     return json(req, res, 200, { success: true });
   }
 
@@ -1064,7 +1071,7 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
     if (email === ADMIN_EMAIL) {
       return json(req, res, 200, { userEmail: ADMIN_EMAIL, onboardingDone: true });
     }
-    const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    const [settings] = await getDb().select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
     return json(req, res, 200, settings || { userEmail: email, onboardingDone: false });
   }
 
@@ -1075,9 +1082,9 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
     if (email === ADMIN_EMAIL) {
       return json(req, res, 200, { success: true, userEmail: ADMIN_EMAIL, ...settings });
     }
-    const existing = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    const existing = await getDb().select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
     if (existing.length > 0) {
-      const [updated] = await db.update(userSettingsTable).set({
+      const [updated] = await getDb().update(userSettingsTable).set({
         ...(settings.displayName !== undefined && { displayName: settings.displayName }),
         ...(settings.companyName !== undefined && { companyName: settings.companyName }),
         ...(settings.profession !== undefined && { profession: settings.profession }),
@@ -1090,7 +1097,7 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
       }).where(eq(userSettingsTable.userEmail, email)).returning();
       return json(req, res, 200, updated);
     }
-    const [created] = await db.insert(userSettingsTable).values({
+    const [created] = await getDb().insert(userSettingsTable).values({
       userEmail: email,
       displayName: settings.displayName,
       companyName: settings.companyName,
