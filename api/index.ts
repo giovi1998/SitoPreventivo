@@ -5,9 +5,9 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 // drizzle-orm/neon-http is ESM-only — static import crashes Vercel Lambda.
 // Loaded dynamically inside getDb() on first use.
-// TB-023 REQ-TC-006: costo flat mensile Ollama Pro (modulo puro in src/,
-// bundled correttamente negli import statici — no dipendenze ESM-only).
-import { OLLAMA_PRO_FLAT_MONTHLY } from '../src/ai/providerPricing';
+// TB-023 REQ-TC-006: costo flat mensile Ollama Pro.
+// Inlined to avoid cross-boundary api/→src/ import (Vercel Lambda ERR_MODULE_NOT_FOUND).
+const OLLAMA_PRO_FLAT_MONTHLY = 20;
 
 type VercelRequest = {
   method: string;
