@@ -15,13 +15,14 @@ describe('layoutAudit', () => {
     expect(audit.findings.filter((f) => f.severity === 'error')).toHaveLength(0);
   });
 
-  it('flags logo as small on right-balanced Giovanni export', () => {
+  it('does not flag logo as too small on split Giovanni export', () => {
     const card = createGiovanniCardTemplate();
     const svg = buildCardSvg(card, 'front', W, H);
     const audit = auditExportSvg('front', svg, card);
+    // v2.8.3: nel layout split il logo occupa una cella 2×2 a destra —
+    // larghezza sufficiente, nessun warning LOGO_TOO_SMALL.
     const finding = audit.findings.find((f) => f.code === 'LOGO_TOO_SMALL');
-    expect(finding).toBeDefined();
-    expect(finding!.metrics?.logoWidthRatio).toBeLessThan(0.30);
+    expect(finding).toBeUndefined();
   });
 
   it('reports missing TELEFONO on empty back', () => {

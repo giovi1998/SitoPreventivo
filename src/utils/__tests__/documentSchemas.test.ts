@@ -321,19 +321,43 @@ describe('documentSchemas', () => {
       expect(card.back.email).toBe('webdevcaglian@gmail.com');
       expect(card.back.qrPayload).toBe('');
       expect(card.front.name).toContain('GIOVANNI');
-      // v2.16: il template usa il preset bilanciato derivato dall'audit.
-      expect(card.front.layout).toBe('right-balanced');
-      // v2.17 (REQ-CTRL-003): nuove card neutre, sizing per-elemento.
-      expect(card.style.fontScale).toBe(1);
+      // v2.8.3: il template usa il layout split del JSON utente.
+      expect(card.front.layout).toBe('split');
+      expect(card.style.fontScale).toBe(1.05);
+      expect(card.style.accentColor).toBe('#1e3a5f');
       expect(card.front.photoUrl).toBe('/giovanni-photo.jpg');
       expect(card.title.toLowerCase()).toContain('giovanni');
       const r = businessCardSchema.safeParse(card);
       expect(r.success).toBe(true);
     });
 
-    it('pre-fills company to WebdevCA on front', () => {
+    it('does not pre-fill any placeholder company on front', () => {
       const card = createGiovanniCardTemplate();
-      expect(card.front.company).toBe('WebdevCA');
+      expect(card.front.company).toBe('');
+    });
+
+    it('pre-fills services and ships a vertically balanced back grid (v2.8.3)', () => {
+      const card = createGiovanniCardTemplate();
+      expect(card.back.services).toEqual([
+        'Sviluppo Web Frontend',
+        'Sviluppo Backend',
+        'Consulenza Tecnica',
+      ]);
+      expect(card.back.servicesLabel).toBe('Servizi che offro');
+      const els = card.backGrid!.elements;
+      expect(els.contacts).toMatchObject({ x: 0, y: 0, w: 2, h: 1 });
+      expect(els.services).toMatchObject({ x: 0, y: 1, w: 2, h: 2 });
+      expect(els.socials).toMatchObject({ x: 0, y: 3, w: 2, h: 1 });
+      expect(els.qr).toMatchObject({ x: 2, y: 0, w: 2, h: 4 });
+    });
+
+    it('front grid groups name+title as a single block (v2.8.3)', () => {
+      const card = createGiovanniCardTemplate();
+      const els = card.grid!.elements;
+      expect(els.photo).toMatchObject({ x: 0, y: 0, w: 2, h: 4 });
+      expect(els.name).toMatchObject({ x: 2, y: 0, w: 2, h: 1, alignH: 'center', alignV: 'bottom' });
+      expect(els.title).toMatchObject({ x: 2, y: 1, w: 2, h: 1, alignH: 'center', alignV: 'top' });
+      expect(els.logo).toMatchObject({ x: 2, y: 2, w: 2, h: 2, alignH: 'center', alignV: 'center' });
     });
 
     it('includes a transparent SVG logo as data URI (Phase 2.1: logoUrl non null)', () => {

@@ -14,8 +14,8 @@ describe('buildCardCoverBrief', () => {
   it('includes palette in both prompt and context', () => {
     const card = createGiovanniCardTemplate();
     const { prompt, context } = buildCardCoverBrief(card);
-    expect(prompt).toContain('#01696F');
-    expect(context).toContain('accent #01696F');
+    expect(prompt).toContain(card.style.accentColor);
+    expect(context).toContain(`accent ${card.style.accentColor}`);
     expect(context).toContain(card.style.bgColor);
   });
 
@@ -23,10 +23,10 @@ describe('buildCardCoverBrief', () => {
     const card = createGiovanniCardTemplate();
     const { context } = buildCardCoverBrief(card);
     expect(context).toContain('Front grid 4x4');
-    // v2.17: template Giovanni = layout right-balanced (foto a destra 2×2
-    // centrata, name full-width in alto). Celle da gridPresetRightBalanced.
-    expect(context).toContain('photo cols 2-4, rows 1-3');
-    expect(context).toContain('name cols 0-4, rows 0-1');
+    // v2.8.3: template Giovanni = layout split (foto a sinistra 2×4,
+    // name/title/logo a destra). Celle custom del template.
+    expect(context).toContain('photo cols 0-2, rows 0-4');
+    expect(context).toContain('name cols 2-4, rows 0-1');
   });
 
   it('keeps text areas readable in prompt', () => {
@@ -58,7 +58,7 @@ describe('buildCardCoverBrief', () => {
     const { context } = buildCardCoverBrief(card);
     expect(context).toContain('Layout snapshot');
     expect(context).toContain('"side":"front"');
-    expect(context).toContain('"accent":"#01696F"');
+    expect(context).toContain(`"accent":"${card.style.accentColor}"`);
   });
 
   it('describes font and alignment in context', () => {

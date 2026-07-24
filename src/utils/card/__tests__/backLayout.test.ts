@@ -7,7 +7,7 @@ import {
   alignBoxInCell,
   PREVIEW_REF_H,
 } from '../backLayout';
-import { createEmptyCard, createGiovanniCardTemplate, QR_SIZE_PX } from '../../documentSchemas';
+import { createEmptyCard, createGiovanniCardTemplate, gridPresetBackDefault, QR_SIZE_PX } from '../../documentSchemas';
 import type { CardGrid } from '../../documentSchemas';
 
 describe('backLayout', () => {
@@ -16,8 +16,6 @@ describe('backLayout', () => {
     const pxW = 1024;
     const pad = backPad(pxW, pxH);
     const m = backHeaderMetrics(pxW, pxH, 1, pad);
-    // Old formula was ~ pad + 0.055*pxH + 0.02*pxH + 0.025*pxH ≈ 0.12+ of height
-    // New should be closer to CSS (~0.08–0.10 of height)
     expect(m.bodyTop).toBeLessThan(pxH * 0.12);
     expect(m.bodyTop).toBeGreaterThan(pxH * 0.05);
     expect(m.eyebrowSize).toBeLessThan(pxH * 0.05);
@@ -32,13 +30,12 @@ describe('backLayout', () => {
 
   it('v2.15: collapses short contacts and moves socials up when services are empty', () => {
     const card = createGiovanniCardTemplate();
-    // Giovanni template has phone+email (2 contacts), services empty.
+    // Giovanni template has phone+email (2 contacts). The collapse logic
+    // targets stacked grids with contacts h:2 (default preset) — the
+    // template's own grid is already dense (v2.8.3) and never collapses.
     card.back.services = [];
-    // v2.16: la griglia derivata del template non ha più la cella services
-    // fantasma e socials resta in fondo (y:3, riga 2 libera per eventuali
-    // servizi futuri). Per esercitare il collapse v2.15 serve una griglia
-    // con socials direttamente sotto contacts (stesso scenario logico di
-    // "services vuoto" della v2.15).
+    // Per esercitare il collapse v2.15 serve una griglia con socials
+    // direttamente sotto contacts (stesso scenario logico di "services vuoto").
     const grid: CardGrid = {
       cols: 4,
       rows: 4,
@@ -56,29 +53,22 @@ describe('backLayout', () => {
     expect(effective.elements.socials?.h).toBe(grid.elements.socials!.h);
   });
 
-  it('v2.16: griglia derivata del template senza cella services resta invariata al render', () => {
+  it('v2.8.3: Giovanni template backGrid is already dense — effective grid is unchanged', () => {
     const card = createGiovanniCardTemplate();
-    card.back.services = [];
+    // Template ships services + a balanced grid (contacts h:1 top, services
+    // middle, socials bottom): no collapse, no injection, no pruning.
+    expect(card.back.services.length).toBeGreaterThan(0);
     const grid = card.backGrid!;
-    // Nessuna cella fantasma nella griglia persistita del template.
-    expect(grid.elements.services).toBeUndefined();
-    expect(grid.elements.socials).toBeDefined();
     const effective = effectiveBackGridForRender(grid, card);
-    // Socials non è direttamente sotto contacts (riga 2 riservata ai
-    // servizi): nessun collapse, posizioni invariate.
-    expect(effective.elements.services).toBeUndefined();
-    expect(effective.elements.contacts?.h).toBe(grid.elements.contacts!.h);
-    expect(effective.elements.socials?.y).toBe(grid.elements.socials!.y);
+    expect(effective.elements).toEqual(grid.elements);
   });
 
   it('v2.15: keeps services and collapses short contacts so the left column stays dense', () => {
     const card = createGiovanniCardTemplate();
     card.back.services = ['UX Design'];
-    const grid = card.backGrid!;
-    // v2.16: la griglia persistita non ha la cella services; il renderer la
-    // inietta dal preset di default (x:0, y:2, w:2, h:1) per non perdere il
-    // contenuto, poi applica il collapse.
-    expect(grid.elements.services).toBeUndefined();
+    // Il template Giovanni ha la cella services già presente; per testare il
+    // collapse classico usiamo il preset di default (contacts h:2).
+    const grid = gridPresetBackDefault();
     const effective = effectiveBackGridForRender(grid, card);
     expect(effective.elements.services).toBeDefined();
     // Contacts shrink from h:2 to h:1, services move up one row (2→1),
@@ -90,12 +80,13 @@ describe('backLayout', () => {
 
   it('does not collapse contacts when there are many contact entries', () => {
     const card = createGiovanniCardTemplate();
-    card.back.services = [];
+    // Teniamo i servizi popolati per evitare il collapse v2.16 "services empty".
     card.back.address = 'Via Roma 1, Milano';
     card.back.vatNumber = '12345678901';
     const grid = card.backGrid!;
     const effective = effectiveBackGridForRender(grid, card);
-    // With 4 contact entries contacts needs h:2; socials stay at persisted y.
+    // With 4 contact entries contacts would need h:2, but the template grid
+    // already has h:1 and no collapse path triggers (h < 2, services present).
     expect(effective.elements.contacts?.h).toBe(grid.elements.contacts!.h);
     expect(effective.elements.socials?.y).toBe(grid.elements.socials!.y);
   });

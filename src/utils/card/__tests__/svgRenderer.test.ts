@@ -347,6 +347,9 @@ describe('svgRenderer', () => {
         ...base,
         back: {
           ...base.back,
+          // I bullet dei servizi usano legittimamente '·'; questo test è sul
+          // separatore dei social, quindi svuotiamo i servizi per isolarlo.
+          services: [],
           socials: [
             { platform: 'LinkedIn', url: 'https://linkedin.com/in/giovanni-cidu-16162b212' },
             { platform: 'GitHub', url: 'https://github.com/GiovanniCidu' },

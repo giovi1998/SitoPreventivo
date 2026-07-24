@@ -137,7 +137,10 @@ describe('gridElements', () => {
 
   describe('gridForCollisions', () => {
     it('drops empty services so socials can move into that row', () => {
-      const card = createGiovanniCardTemplate();
+      // Il template Giovanni ora include servizi (v2.8.3); svuotiamoli per
+      // ricreare lo scenario "cella services senza contenuto".
+      const base = createGiovanniCardTemplate();
+      const card = { ...base, back: { ...base.back, services: [] } };
       const filtered = gridForCollisions(card.backGrid!, card, 'back', 'socials');
       expect(filtered.elements.socials).toBeDefined();
       expect(filtered.elements.contacts).toBeDefined();
@@ -146,17 +149,10 @@ describe('gridElements', () => {
     });
 
     it('keeps services when they have content', () => {
-      const base = createGiovanniCardTemplate();
-      const card = {
-        ...base,
-        back: { ...base.back, services: ['SEO'] },
-      };
-      // v2.16: il backGrid del template non include più la cella services
-      // (filtrata alla creazione perché vuota); con contenuto reale la
-      // griglia derivata dal layout la reintroduce (preset back balanced).
-      const backGrid = deriveGridFromLayout(card, 'back');
-      expect(backGrid.elements.services).toBeDefined();
-      const filtered = gridForCollisions(backGrid, card, 'back', 'socials');
+      const card = createGiovanniCardTemplate();
+      // v2.8.3: il template include servizi e la relativa cella in backGrid.
+      expect(card.backGrid!.elements.services).toBeDefined();
+      const filtered = gridForCollisions(card.backGrid!, card, 'back', 'socials');
       expect(filtered.elements.services).toBeDefined();
     });
 
@@ -177,25 +173,14 @@ describe('gridElements', () => {
   });
 
   describe('pruneEmptyGridElements / pruneCardGrids', () => {
-    it('removes grid elements with no content (legacy ghost services cell)', () => {
-      // v2.16: createGiovanniCardTemplate() NON spedisce più la cella
-      // `services` fantasma (back.services vuoto → filtrata alla creazione).
-      const card = createGiovanniCardTemplate();
-      expect(card.back.services).toEqual([]);
-      expect(card.backGrid?.elements.services).toBeUndefined();
-      // Un documento legacy può però averla ancora persistita: prune deve
-      // rimuoverla in save/export senza toccare gli elementi popolati.
-      const legacy: BusinessCard = {
-        ...card,
-        backGrid: {
-          ...card.backGrid!,
-          elements: {
-            ...card.backGrid!.elements,
-            services: { x: 0, y: 2, w: 2, h: 1 },
-          },
-        },
-      };
-      const pruned = pruneCardGrids(legacy);
+    it('removes grid elements with no content (ghost services cell)', () => {
+      // createGiovanniCardTemplate() ships services + a services cell in
+      // backGrid. Emptying the services data leaves a "ghost" cell that
+      // should not survive a save/export.
+      const base = createGiovanniCardTemplate();
+      const card = { ...base, back: { ...base.back, services: [] } };
+      expect(card.backGrid?.elements.services).toBeDefined();
+      const pruned = pruneCardGrids(card);
       expect(pruned.backGrid?.elements.services).toBeUndefined();
       // Populated elements are untouched.
       expect(pruned.backGrid?.elements.contacts).toBeDefined();
@@ -204,19 +189,15 @@ describe('gridElements', () => {
     });
 
     it('keeps services once they have real content', () => {
-      const base = createGiovanniCardTemplate();
-      const card = { ...base, back: { ...base.back, services: ['Siti web'] } };
-      // Con contenuto, la cella services rientra nella griglia derivata...
-      const withGrid: BusinessCard = { ...card, backGrid: deriveGridFromLayout(card, 'back') };
-      expect(withGrid.backGrid?.elements.services).toBeDefined();
-      // ...e prune la conserva.
-      const pruned = pruneCardGrids(withGrid);
+      const card = createGiovanniCardTemplate();
+      // Il template ha già servizi e cella services.
+      expect(card.backGrid?.elements.services).toBeDefined();
+      const pruned = pruneCardGrids(card);
       expect(pruned.backGrid?.elements.services).toBeDefined();
     });
 
     it('does not mutate grids that already have no empty entries', () => {
-      const base = createGiovanniCardTemplate();
-      const card = { ...base, back: { ...base.back, services: ['Siti web'] } };
+      const card = createGiovanniCardTemplate();
       const pruned = pruneCardGrids(card);
       expect(pruned.grid?.elements).toEqual(card.grid?.elements);
       expect(pruned.backGrid?.elements).toEqual(card.backGrid?.elements);

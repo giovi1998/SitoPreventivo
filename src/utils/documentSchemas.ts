@@ -694,22 +694,22 @@ export function createGiovanniCardTemplate(): BusinessCard {
   const phone = '35180008042';
   const email = 'webdevcaglian@gmail.com';
   const linkedInUrl = 'https://www.linkedin.com/in/giovanni-cidu-16162b212';
-  const base: BusinessCard = {
+  return {
     ...createEmptyCard(),
     title: 'Bigliettino Giovanni, Web Developer',
     front: {
       ...createEmptyCard().front,
       name: 'GIOVANNI CIDU',
       title: 'Web Developer',
-      company: 'WebdevCA',
+      company: '',
       photoUrl: '/giovanni-photo.jpg',
       logoUrl: giovanniLogoDataUri(),
       coverImageUrl: null,
-      // v2.16: use the balanced right preset derived from the Giovanni card audit.
-      layout: 'right-balanced',
-      // v2.8.1: the template includes custom front/back grids, so grid-mode
-      // must be active from the start. Otherwise preview and export derive
-      // from the flexbox layout and ignore the custom grids.
+      // v2.8.3: layout split come nel JSON utente; foto a sinistra a tutta
+      // altezza, testo e logo a destra.
+      layout: 'split',
+      // v2.8.1: il template include griglie custom front/back, quindi il
+      // master switch griglia deve essere attivo fin dall'inizio.
       useGrid: true,
     },
     back: {
@@ -719,10 +719,10 @@ export function createGiovanniCardTemplate(): BusinessCard {
       website: GIOVANNI_PERSONAL_URL,
       qrPayload: '',
       qrLabel: 'Scansiona per il mio sito',
+      services: ['Sviluppo Web Frontend', 'Sviluppo Backend', 'Consulenza Tecnica'],
       servicesLabel: 'Servizi che offro',
       qrSize: 'medium',
       coverImageUrl: null,
-      // v2.8.1: grid-mode attivo per usare il backGrid custom del template.
       useGrid: true,
       socials: [
         { platform: 'LinkedIn', url: linkedInUrl },
@@ -734,21 +734,37 @@ export function createGiovanniCardTemplate(): BusinessCard {
       sizePreset: 'eu-85x55',
       bgColor: '#FFFFFF',
       textColor: '#1a1a2e',
-      accentColor: '#01696F',
+      // v2.8.3: navy scelto dall'utente nel JSON.
+      accentColor: '#1e3a5f',
       fontFamily: 'Inter',
       borderStyle: 'accent-strip-left',
-      // v2.17 (REQ-CTRL-003): nuove card neutre — il sizing è per-elemento
-      // (placement.scale); fontScale resta un campo legacy per i documenti
-      // esistenti.
-      fontScale: 1,
+      fontScale: 1.05,
     },
-  };
-  // Derive grids from the chosen layout so the template stays in sync with the
-  // preset factories. Empty cells (company, in this case) are filtered out.
-  return {
-    ...base,
-    grid: deriveGridFromLayout(base, 'front'),
-    backGrid: deriveGridFromLayout(base, 'back'),
+    grid: {
+      cols: 4,
+      rows: 4,
+      elements: {
+        photo: { x: 0, y: 0, w: 2, h: 4, alignH: 'center', alignV: 'center' },
+        // v2.8.3: name ancorato al fondo della riga 0 così nome+titolo
+        // formano un blocco compatto.
+        name: { x: 2, y: 0, w: 2, h: 1, alignH: 'center', alignV: 'bottom' },
+        title: { x: 2, y: 1, w: 2, h: 1, alignH: 'center', alignV: 'top' },
+        logo: { x: 2, y: 2, w: 2, h: 2, alignH: 'center', alignV: 'center' },
+      },
+    },
+    backGrid: {
+      cols: 4,
+      rows: 4,
+      elements: {
+        // v2.8.3: distribuzione verticale bilanciata della colonna sinistra —
+        // contatti in alto, servizi al centro (2 righe per label + 3 voci),
+        // social in basso; QR metà destra a tutta altezza.
+        contacts: { x: 0, y: 0, w: 2, h: 1, alignH: 'left', alignV: 'top' },
+        services: { x: 0, y: 1, w: 2, h: 2, alignH: 'left', alignV: 'center' },
+        socials: { x: 0, y: 3, w: 2, h: 1, alignH: 'left', alignV: 'center' },
+        qr: { x: 2, y: 0, w: 2, h: 4, alignH: 'center', alignV: 'center' },
+      },
+    },
   };
 }
 

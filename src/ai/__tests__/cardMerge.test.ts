@@ -318,10 +318,10 @@ describe('mergeCardAIResponse', () => {
         },
       });
       expect(merged.backGrid).toEqual(originalBackGrid);
-      // v2.17: il template Giovanni usa 'right-balanced' con photo a (2,1,2,2).
-      // La mossa a x=0 è bloccata dalla colonna testi (name/title/company),
-      // il resize a 1×1 è applicato → (2,1,1,1).
-      expect(merged.grid?.elements.photo).toMatchObject({ x: 2, y: 1, w: 1, h: 1 });
+      // v2.8.3: il template Giovanni usa 'split' con photo a (0,0,2,4).
+      // La mossa a (0,0,1,1) è libera (la colonna sinistra è tutta foto);
+      // la foto viene ridimensionata e posizionata come richiesto.
+      expect(merged.grid?.elements.photo).toMatchObject({ x: 0, y: 0, w: 1, h: 1 });
     });
 
     it('preserves existing grid when AI only touches back elements', () => {
@@ -450,7 +450,7 @@ describe('mergeCardAIResponse', () => {
             layout: 'centered',
             useGrid: true,
           },
-          style: { accentColor: '#1e3a5f' },
+          style: { accentColor: '#8b0000' },  // diverso dal template (v2.8.3: ora #1e3a5f)
           grid: {
             cols: 4,
             rows: 4,
