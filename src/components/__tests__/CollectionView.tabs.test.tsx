@@ -261,4 +261,24 @@ describe('CollectionView, tabs (phase 6)', () => {
     expect(within(panel).getByText('QR uno')).toBeInTheDocument();
     expect(within(panel).getByText('Card uno')).toBeInTheDocument();
   });
+
+  it('deduplicates documents by id so duplicate ids do not break tab filtering', async () => {
+    // Regression: if /quotes returns non-quote documents, the merge step
+    // could create duplicate ids. React keys must stay unique.
+    const dup = makeDocument({ id: 'dup1', documentType: 'businessCard', title: 'Card dup' });
+    seedDocumentsLocalStorage([dup, dup, { ...dup, documentType: 'quote' }]);
+    await renderCollection({}, { role: 'admin' });
+    const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
+    const allTab = within(tablist).getByRole('tab', { name: /Tutti/ });
+    fireEvent.click(allTab);
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getAllByText('Card dup')).toHaveLength(1);
+    // BusinessCard tab should show the single deduplicated card.
+    const cardTab = within(tablist).getByRole('tab', { name: /Bigliettini/ });
+    fireEvent.click(cardTab);
+    await waitFor(() => {
+      expect(within(panel).getByText('Card dup')).toBeInTheDocument();
+    });
+    expect(within(tablist).getByRole('tab', { name: /Bigliettini.*1/ })).toBeInTheDocument();
+  });
 });

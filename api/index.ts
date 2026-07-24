@@ -886,16 +886,27 @@ const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
   if (path === '/quotes' && method === 'GET') {
     const userEmail = searchParams.get('email');
     if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
-    const list = await (await getDb()).select().from(documentsTable).where(eq(documentsTable.userEmail, userEmail)).orderBy(sql`created_at DESC`);
-    return json(req, res, 200, list);
+    // Phase 7 fix: legacy /quotes endpoint must only return quote documents.
+    // Without this filter, CollectionView merges the full list into unified
+    // documents and creates duplicate ids with conflicting documentTypes,
+    // breaking React keys and the per-type tab filter in production.
+    const list = await (await getDb()).select().from(documentsTable)
+      .where(and(eq(documentsTable.userEmail, userEmail), eq(documentsTable.documentType, 'quote')))
+      .orderBy(sql`created_at DESC`);
+    // Defense-in-depth: even if the DB mock/test returns the full row set,
+    // the public contract of /quotes is quote-only.
+    return json(req, res, 200, list.filter((d: any) => d.documentType === 'quote'));
   }
 
   if (path === '/quotes/all' && method === 'GET') {
     if (searchParams.get('adminEmail') !== ADMIN_EMAIL) {
       return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
     }
-    const list = await (await getDb()).select().from(documentsTable).orderBy(sql`created_at DESC`);
-    return json(req, res, 200, list);
+    const list = await (await getDb()).select().from(documentsTable)
+      .where(eq(documentsTable.documentType, 'quote'))
+      .orderBy(sql`created_at DESC`);
+    // Defense-in-depth: enforce quote-only shape for the admin endpoint too.
+    return json(req, res, 200, list.filter((d: any) => d.documentType === 'quote'));
   }
 
   if (path === '/quotes' && method === 'POST') {

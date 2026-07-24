@@ -227,6 +227,18 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
         if (migratedIds.has(`migrate_${q.id}`)) continue;
         mergedDocs.push({ ...q, documentType: 'quote', data: null });
       }
+      // Deduplicate by id: keep the first occurrence (unified docs are
+      // merged first, so they win over legacy entries). Duplicate ids
+      // break React keys and can leave stale DOM nodes when switching
+      // per-type tabs, which is what happens when production /quotes
+      // accidentally returns non-quote documents (see server fix).
+      const seenIds = new Set<string>();
+      const uniqueDocs: any[] = [];
+      for (const d of mergedDocs) {
+        if (!d || !d.id || seenIds.has(d.id)) continue;
+        seenIds.add(d.id);
+        uniqueDocs.push(d);
+      }
       // Phase 7 hotfix: non-admin users cannot see preventivi at all
       // (not in the "Tutti" tab, not in any other tab). Phase 5 made
       // the quote editor admin-only, so any quote in a non-admin's
@@ -236,8 +248,8 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
       // `mergedDocs` filter here removes the cards from "Tutti" too.
       // Admin users keep everything as before.
       const visibleDocs = isAdmin
-        ? mergedDocs
-        : mergedDocs.filter((d) => d.documentType !== 'quote');
+        ? uniqueDocs
+        : uniqueDocs.filter((d) => d.documentType !== 'quote');
       setDocuments(visibleDocs);
       setLoading(false);
     });
