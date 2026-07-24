@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect, useContext, useRef, useCallback } from 'react';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 import Icon from './Icon';
 import ConfirmModal from './ConfirmModal';
 import { AppContext, AuthContext } from '../contexts';
@@ -407,6 +409,29 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
     downloadDataUrl(doc.imageData, `${safe}${ext}`);
   }, []);
 
+  const onBulkDownloadImages = useCallback(async () => {
+    const imageDocs = filtered.filter((d) => d.documentType === 'generatedImage' && d.imageData);
+    if (imageDocs.length === 0) return;
+    addToast('info', `Preparazione ZIP: ${imageDocs.length} immagini...`);
+    try {
+      const zip = new JSZip();
+      const seen = new Set<string>();
+      for (const doc of imageDocs) {
+        const base64 = doc.imageData.split(',')[1] || '';
+        const ext = doc.imageData.includes('image/png') ? '.png' : '.jpg';
+        let name = (doc.title || 'image').replace(/[^a-zA-Z0-9\s\-]/g, '').replace(/\s+/g, '_');
+        if (seen.has(name)) name = `${name}_${doc.id.slice(-6)}`;
+        seen.add(name);
+        zip.file(`${name}${ext}`, base64, { base64: true });
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      saveAs(blob, `immagini_ai_${new Date().toISOString().slice(0, 10)}.zip`);
+      addToast('success', `${imageDocs.length} immagini scaricate`);
+    } catch (err: any) {
+      addToast('error', 'Errore durante la creazione del ZIP');
+    }
+  }, [filtered, addToast]);
+
   return (
     <div className="collection-view" data-testid="collection-view">
       <div className="collection-head">
@@ -527,6 +552,17 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                   </>
                 )}
               </div>
+            )}
+            {activeTab === 'generatedImage' && filtered.some((d) => d.imageData) && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={onBulkDownloadImages}
+                data-testid="collection-bulk-download"
+                style={{ marginLeft: 'auto' }}
+              >
+                <Icon name="download" />Scarica ZIP ({filtered.filter((d) => d.imageData).length})
+              </button>
             )}
           </div>
 
