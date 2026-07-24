@@ -574,7 +574,7 @@ export default function GlobalStyles() {
     }
     @media(max-width:767px){
       .collection-grid{grid-template-columns:1fr}
-      .collection-bulk-actions{width:100%;margin-left:0}
+      .collection-bulk-actions{width:100%;margin-left:0;gap:6px}.collection-bulk-actions button{flex:0 0 auto;white-space:nowrap;padding:8px 12px;font-size:.78rem}
       .collection-tabs{width:100%;overflow-x:auto}
       .card-actions{flex-wrap:wrap}
       .card-actions button{min-width:calc(50% - 4px)}
