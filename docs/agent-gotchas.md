@@ -38,6 +38,76 @@ prima):
 
 Regression test: `src/__tests__/vercelConfig.test.ts` (presenza + ordine).
 
+### 1.1 Import cross-boundary `api/` → `src/`
+
+Import statici da `api/index.ts` verso `../src/...` non risolvono su
+Vercel Lambda: il bundler traccia `api/` come entry point separato e
+`src/` resta fuori dal bundle. Sintomo: `ERR_MODULE_NOT_FOUND: Cannot
+find module '/var/task/src/ai/...'`. Fix: inlinare le costanti/funzioni
+necessarie direttamente in `api/index.ts` (es. `OLLAMA_PRO_FLAT_MONTHLY`).
+Non importare MAI da `../src/` in `api/index.ts` in produzione.
+
+### 1.2 Lazy `getDb()` — operator precedence (§1.2)
+
+Quando `getDb()` diventa async (per dynamic import di
+`drizzle-orm/neon-http` ESM-only), il pattern:
+
+```ts
+// ❌ SBAGLIATO — await copre solo getDb(), NON la catena query
+const [row] = (await getDb()).select().from(table).where(cond);
+```
+
+Fallisce con `object is not iterable` perché `.where()` restituisce la
+chain (thenable), non l'array. La distruzione `const [row] = chain`
+cerca `Symbol.iterator` sulla chain, che non ha iteratore.
+
+**Fix**: aggiungere `await` sulla catena query:
+
+```ts
+// ✅ CORRETTO — await risolve la query Drizzle (NeonQueryPromise → Array)
+const [row] = await (await getDb()).select().from(table).where(cond);
+```
+
+**Regola**: OGNI chiamata DB in `api/index.ts` deve avere `await` prima
+della catena query (select, insert.values().returning(),
+update.set().where().returning(), delete.where()). Anche le fire-and-forget
+(devono avere `await` per propagare errori). Pattern corretto:
+
+```ts
+await (await getDb()).update(table).set({...}).where(cond);
+await (await getDb()).delete(table).where(cond);
+const [row] = await (await getDb()).select().from(table).where(cond);
+const list = await (await getDb()).select().from(table).orderBy(cond);
+```
+
+**Test mock**: la select chain mock DEVE avere `then(resolve)` per essere
+thenable (`await chain` → `chain.then(resolve)` → risultato). Senza
+`then()`, `await chain` restituisce la chain stessa e la distruzione fallisce.
+Pattern mock:
+
+```ts
+function makeSelectChain() {
+  const chain: any = {
+    from: vi.fn(function (this: any) { return this; }),
+    where: vi.fn(function (this: any) { return this; }),
+    orderBy: vi.fn(function (this: any) {
+      return mockDbState.selectResults.shift() ?? [];
+    }),
+    then(resolve: any) {
+      const result = mockDbState.selectResults.shift() ?? [];
+      resolve(result);
+    },
+  };
+  return chain;
+}
+```
+
+Se `.orderBy()` è chiamato prima di `then()`, il mock deve fare shift
+una sola volta (`.orderBy()` restituisce direttamente l'array, `then()` non
+viene invocato perché `.orderBy()` rompe la catena con un valore non-chain).
+Verificare che il numero di `selectResults` preparati corrisponda alle
+query effettive nel code path testato.
+
 ## 2. Logo AI / Gemini background gotchas
 
 Due bug distinti hanno bloccato la generazione background per un intero

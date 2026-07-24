@@ -170,8 +170,11 @@ il modulo corrispondente. Sintesi delle regole che non si possono violare:
 **Vercel monolith (§1)**: mai splittare `api/index.ts` (ogni `.ts` in `api/`
 conta come funzione; `api/_lib/` è escluso dal bundle → `ERR_MODULE_NOT_FOUND`).
 Mai rimuovere le rewrite `/api/(.*) → /api` prima della catch-all SPA
-(senza → 405 su ogni POST `/api/*`). Regression test:
-`src/__tests__/vercelConfig.test.ts`.
+(senza → 405 su ogni POST `/api/*`). Mai importare da `../src/` in
+`api/index.ts` (cross-boundary non risolto → `ERR_MODULE_NOT_FOUND` su
+Vercel Lambda). OGNI chiamata DB deve avere `await` sulla catena query:
+`await (await getDb()).select()...` (§1.2 — operator precedence).
+Regression test: `src/__tests__/vercelConfig.test.ts`.
 
 **Gemini/`@google/genai` (§2-3)**: mai import statico in `api/index.ts`
 (ESM-only → `FUNCTION_INVOCATION_FAILED` su TUTTI gli endpoint); solo
