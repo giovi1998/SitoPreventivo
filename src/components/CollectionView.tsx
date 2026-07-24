@@ -195,6 +195,8 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [zipping, setZipping] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   // Re-fetch when user changes or refreshDocuments is invoked.
   useEffect(() => {
@@ -402,35 +404,85 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
     setRenamingId(null);
   }, [renamingId, renameValue, documents, userEmail, addToast, ctx]);
 
+  const onDuplicate = useCallback(async (doc: any) => {
+    if (duplicatingId) return;
+    setDuplicatingId(doc.id);
+    try {
+      const newId = `doc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      const copy = {
+        ...doc,
+        id: newId,
+        title: `${getDocTitle(doc)} (copia)`,
+        userEmail,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const result = await dataService.saveDocument(userEmail, copy);
+      if (result?.error) {
+        addToast('error', 'Duplicazione fallita');
+        return;
+      }
+      addToast('success', 'Documento duplicato');
+      if (ctx?.refreshDocuments) ctx.refreshDocuments();
+      setRefreshKey((k) => k + 1);
+      if (ctx?.openDocument) ctx.openDocument(copy);
+    } catch {
+      addToast('error', 'Duplicazione fallita');
+    } finally {
+      setDuplicatingId(null);
+    }
+  }, [duplicatingId, userEmail, addToast, ctx]);
+
+  const safeImageName = (doc: any): string => {
+    const base = (doc.title || '').replace(/[^a-zA-Z0-9\s\-]/g, '').trim().replace(/\s+/g, '_');
+    return base || `image_${String(doc.id || '').slice(-6) || 'ai'}`;
+  };
+
   const onDownloadImage = useCallback((doc: any) => {
     if (!doc.imageData) return;
     const ext = doc.imageData.includes('image/png') ? '.png' : '.jpg';
-    const safe = (doc.title || 'image').replace(/[^a-zA-Z0-9\s\-]/g, '').replace(/\s+/g, '_');
-    downloadDataUrl(doc.imageData, `${safe}${ext}`);
+    downloadDataUrl(doc.imageData, `${safeImageName(doc)}${ext}`);
   }, []);
 
+  // Only generated images with actual image data can go into the ZIP —
+  // the button label must count THESE, not the whole selection.
+  const selectedImageDocs = useMemo(
+    () => documents.filter((d) => selectedIds.has(d.id) && d.documentType === 'generatedImage' && d.imageData),
+    [documents, selectedIds],
+  );
+
   const onBulkDownloadImages = useCallback(async () => {
-    const imageDocs = documents.filter((d) => selectedIds.has(d.id) && d.documentType === 'generatedImage' && d.imageData);
-    if (imageDocs.length === 0) return;
-    addToast('info', `Preparazione ZIP: ${imageDocs.length} immagini...`);
+    if (zipping) return;
+    if (selectedImageDocs.length === 0) {
+      addToast('info', 'Seleziona almeno un\'immagine da scaricare');
+      return;
+    }
+    setZipping(true);
+    addToast('info', `Preparazione ZIP: ${selectedImageDocs.length} immagini...`);
     try {
       const zip = new JSZip();
-      const seen = new Set<string>();
-      for (const doc of imageDocs) {
+      const usedNames = new Set<string>();
+      for (const doc of selectedImageDocs) {
         const base64 = doc.imageData.split(',')[1] || '';
         const ext = doc.imageData.includes('image/png') ? '.png' : '.jpg';
-        let name = (doc.title || 'image').replace(/[^a-zA-Z0-9\s\-]/g, '').replace(/\s+/g, '_');
-        if (seen.has(name)) name = `${name}_${doc.id.slice(-6)}`;
-        seen.add(name);
+        let name = safeImageName(doc);
+        // Guarantee unique file names inside the archive, even when two
+        // docs share a title (and the id-suffixed variant collides too).
+        while (usedNames.has(`${name}${ext}`)) {
+          name = `${name}_${Math.random().toString(36).slice(2, 6)}`;
+        }
+        usedNames.add(`${name}${ext}`);
         zip.file(`${name}${ext}`, base64, { base64: true });
       }
       const blob = await zip.generateAsync({ type: 'blob' });
       saveAs(blob, `immagini_ai_${new Date().toISOString().slice(0, 10)}.zip`);
-      addToast('success', `${imageDocs.length} immagini scaricate`);
+      addToast('success', `${selectedImageDocs.length} immagini scaricate`);
     } catch (err: any) {
-      addToast('error', 'Errore durante la creazione del ZIP');
+      addToast('error', 'Errore durante la creazione dello ZIP');
+    } finally {
+      setZipping(false);
     }
-  }, [documents, selectedIds, addToast]);
+  }, [zipping, selectedImageDocs, addToast]);
 
   return (
     <div className="collection-view" data-testid="collection-view">
@@ -546,9 +598,12 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                         type="button"
                         className="btn-secondary"
                         onClick={onBulkDownloadImages}
+                        disabled={zipping || selectedImageDocs.length === 0}
                         data-testid="collection-bulk-download"
+                        title={selectedImageDocs.length === 0 ? 'Nessuna immagine tra i documenti selezionati' : undefined}
                       >
-                        <Icon name="download" />Scarica ZIP ({selectedIds.size})
+                        <Icon name="download" />
+                        {zipping ? 'Creazione ZIP…' : `Scarica ZIP (${selectedImageDocs.length})`}
                       </button>
                     )}
                     <button
@@ -603,7 +658,13 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                           }}
                         />
                       ) : (
-                        <span className={`doc-icon doc-icon-${type}`} aria-hidden="true">
+                        <span
+                          className={`doc-icon doc-icon-${type}`}
+                          aria-hidden="true"
+                          onClick={() => onOpen(doc)}
+                          title="Apri documento"
+                          style={{ cursor: 'pointer' }}
+                        >
                           <Icon name={TYPE_ICONS[type] || 'doc'} />
                         </span>
                       )}
@@ -644,15 +705,39 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                     )}
                     <p className="card-meta">{meta}</p>
                     <div className="card-actions">
-                      {type === 'generatedImage' && doc.imageData && (
-                        <button
-                          type="button"
-                          onClick={() => onDownloadImage(doc)}
-                          data-testid={`download-${doc.id}`}
-                          title="Scarica immagine"
-                        >
-                          <Icon name="download" />Scarica
-                        </button>
+                      {type === 'generatedImage' ? (
+                        doc.imageData && (
+                          <button
+                            type="button"
+                            onClick={() => onDownloadImage(doc)}
+                            data-testid={`download-${doc.id}`}
+                            title="Scarica immagine"
+                          >
+                            <Icon name="download" />Scarica
+                          </button>
+                        )
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-card-primary"
+                            onClick={() => onOpen(doc)}
+                            data-testid={`open-${doc.id}`}
+                            title="Apri nell'editor"
+                          >
+                            <Icon name="edit" />Apri
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-card-ghost"
+                            onClick={() => onDuplicate(doc)}
+                            disabled={duplicatingId === doc.id}
+                            data-testid={`duplicate-${doc.id}`}
+                            title="Crea una copia"
+                          >
+                            <Icon name="copy" />{duplicatingId === doc.id ? 'Duplico…' : 'Duplica'}
+                          </button>
+                        </>
                       )}
                       <button
                         type="button"
