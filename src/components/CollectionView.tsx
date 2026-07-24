@@ -263,7 +263,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
     const tab = TABS.find((t) => t.id === activeTab);
     let list = documents.filter((d) => d && d.id);
     if (activeTab !== 'all') {
-      list = list.filter((d) => d.documentType === activeTab);
+      list = list.filter((d) => String(d.documentType || '').trim() === activeTab);
     }
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -568,7 +568,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
           {filtered.length === 0 ? (
             <EmptyState tabId={activeTab} totalCount={documents.length} onOpen={onOpen} ctx={ctx} isAdmin={isAdmin} />
           ) : (
-            <div className="collection-grid" data-testid="collection-grid">
+            <div className="collection-grid" data-testid="collection-grid" data-active-tab={activeTab}>
               {filtered.map((doc) => {
                 const type = doc.documentType as DocumentType;
                 const title = truncate(getDocTitle(doc), 50);
@@ -580,6 +580,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                     key={doc.id}
                     className={`collection-card${isActive ? ' active' : ''}${isSelected ? ' selected' : ''}`}
                     data-type={type}
+                    data-document-type={doc.documentType}
                     data-testid={`card-${doc.id}`}
                   >
                     <div className="card-top">
