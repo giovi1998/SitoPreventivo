@@ -8,6 +8,10 @@
  *
  * DPI / size limits are also gated here so generators can clamp
  * export resolution without re-implementing tier logic.
+ *
+ * TODO (post-phase): apply watermark to AI-generated images saved
+ * in `saveGeneratedImage()` for free-tier users. Currently only
+ * applies to PDF/PNG exports, not to base64 images in collection.
  */
 
 export type Tier = 'free' | 'unlocked';

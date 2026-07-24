@@ -80,11 +80,14 @@ export function useAICard(userEmail?: string): UseAICardReturn {
     }
   }, [userEmail]);
 
-  const trackImageTokens = useCallback(() => {
-    if (userEmail && userEmail !== 'admin@gmail.com') {
-      Promise.resolve(dataService.trackTokens(userEmail, IMAGE_TOKEN_COST) as unknown as Promise<unknown>).catch(() => {});
-    }
-  }, [userEmail]);
+  const trackImageTokens = useCallback(
+    (costUsd?: number) => {
+      if (userEmail && userEmail !== 'admin@gmail.com') {
+        Promise.resolve(dataService.trackTokens(userEmail, IMAGE_TOKEN_COST, costUsd) as unknown as Promise<unknown>).catch(() => {});
+      }
+    },
+    [userEmail]
+  );
 
   const processCardPrompt = useCallback(
     async (
@@ -245,7 +248,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
         const imageCost = calculateCostUsd('gemini-nano-banana', undefined, 1);
         setLastCostUsd(imageCost);
-        trackImageTokens();
+        trackImageTokens(imageCost);
         success(`Cover AI (${side}) generata`, `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd: imageCost, hasImage: true, modelId: imageModel });
         const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
         saveGeneratedImage(userEmail, dataUrl, 'cards', 'cover', coverPrompt).catch(() => {});
@@ -294,7 +297,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
         const imageCost = calculateCostUsd('gemini-nano-banana', undefined, 1);
         setLastCostUsd(imageCost);
-        trackImageTokens();
+        trackImageTokens(imageCost);
         success('Foto AI generata', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd: imageCost, hasImage: true, modelId: imageModel });
         const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
         saveGeneratedImage(userEmail, dataUrl, 'cards', 'photo', prompt).catch(() => {});

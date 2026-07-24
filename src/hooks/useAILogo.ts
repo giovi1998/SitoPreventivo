@@ -56,9 +56,9 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
   const availableModels = getOrchestrator().getProviderList();
 
   const trackImage = useCallback(
-    () => {
+    (costUsd?: number) => {
       if (userEmail && userEmail !== 'admin@gmail.com') {
-        dataService.trackTokens(userEmail, IMAGE_TOKEN_COST).catch(() => {});
+        dataService.trackTokens(userEmail, IMAGE_TOKEN_COST, costUsd).catch(() => {});
       }
     },
     [userEmail]
@@ -169,7 +169,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
             `${result.logo.builder.backgroundImage?.length ?? 0} char base64`,
             { requestId, modelId: imageModel, costUsd: imageCost, hasImage: true }
           );
-          trackImage();
+          trackImage(imageCost);
           const bgImage = result.logo.builder.backgroundImage;
           if (bgImage) saveGeneratedImage(userEmail, bgImage, 'logos', 'background', context.imagePrompt).catch(() => {});
         } else {

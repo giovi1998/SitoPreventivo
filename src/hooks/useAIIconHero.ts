@@ -77,12 +77,11 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
 
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
 
-        if (userEmail && userEmail !== 'admin@gmail.com') {
-          Promise.resolve(dataService.trackTokens(userEmail, IMAGE_TOKEN_COST) as unknown as Promise<unknown>).catch(() => {});
-        }
-
         // Stima costo: ~$0.02 per immagine Gemini Flash
         const costUsd = 0.02;
+        if (userEmail && userEmail !== 'admin@gmail.com') {
+          Promise.resolve(dataService.trackTokens(userEmail, IMAGE_TOKEN_COST, costUsd) as unknown as Promise<unknown>).catch(() => {});
+        }
         const sizeKB = Math.round(data.imageBase64.length * 0.75 / 1024);
         let finalDataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
         if (options?.background === 'transparent') {
