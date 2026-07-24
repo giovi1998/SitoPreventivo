@@ -73,4 +73,29 @@ describe('SocialEditor (spec 12 UI integration)', () => {
     fireEvent.change(select, { target: { value: 'flyer' } });
     expect(screen.getByText('Sagra Flyer')).toBeDefined();
   });
+
+  it('does not crash when card documents are missing front/style/content (prod data shape)', () => {
+    renderWithRouter(
+      <SocialEditor
+        userEmail="t@e.com"
+        cardDocuments={[
+          { id: 'c1', title: 'Card with front' } as never,
+          { id: 'c2', front: undefined, style: undefined, back: undefined } as never,
+          null as never,
+        ]}
+        flyerDocuments={[
+          { id: 'f1', title: 'Flyer with content' } as never,
+          { id: 'f2', content: undefined } as never,
+          null as never,
+        ]}
+      />
+    );
+    expect(screen.getByText('Card with front')).toBeDefined();
+    expect(screen.getByText('c2')).toBeDefined();
+    // switch to flyer
+    const select = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'flyer' } });
+    expect(screen.getByText('Flyer with content')).toBeDefined();
+    expect(screen.getByText('f2')).toBeDefined();
+  });
 });

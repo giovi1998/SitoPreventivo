@@ -47,8 +47,8 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
 
   const availableSources = useMemo(() => {
     return sourceType === 'card'
-      ? cardDocuments.map((c) => ({ id: c.id, label: c.title || c.front.company || c.front.name || c.id }))
-      : flyerDocuments.map((f) => ({ id: f.id, label: f.title || f.content.headline || f.id }));
+      ? cardDocuments.filter(Boolean).map((c) => ({ id: c?.id, label: c?.title || c?.front?.company || c?.front?.name || c?.id }))
+      : flyerDocuments.filter(Boolean).map((f) => ({ id: f?.id, label: f?.title || f?.content?.headline || f?.id }));
   }, [sourceType, cardDocuments, flyerDocuments]);
 
   const handleGenerate = async () => {
@@ -68,21 +68,21 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
           type: 'card',
           sourceId: doc.id,
           data: {
-            name: (doc as BusinessCard).front.name,
-            title: (doc as BusinessCard).front.title,
-            company: (doc as BusinessCard).front.company,
-            accentColor: (doc as BusinessCard).style.accentColor,
-            services: (doc as BusinessCard).back.services,
+            name: (doc as BusinessCard).front?.name,
+            title: (doc as BusinessCard).front?.title,
+            company: (doc as BusinessCard).front?.company,
+            accentColor: (doc as BusinessCard).style?.accentColor,
+            services: (doc as BusinessCard).back?.services,
           },
         }
       : {
           type: 'flyer',
           sourceId: doc.id,
           data: {
-            headline: (doc as Flyer).content.headline,
-            subheadline: (doc as Flyer).content.subheadline,
-            body: (doc as Flyer).content.body,
-            ctaLabel: (doc as Flyer).content.cta.label,
+            headline: (doc as Flyer).content?.headline,
+            subheadline: (doc as Flyer).content?.subheadline,
+            body: (doc as Flyer).content?.body,
+            ctaLabel: (doc as Flyer).content?.cta?.label,
           },
         };
     try {

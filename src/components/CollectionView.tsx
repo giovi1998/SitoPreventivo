@@ -548,7 +548,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                         onClick={onBulkDownloadImages}
                         data-testid="collection-bulk-download"
                       >
-                        <Icon name="download" />Scarica ZIP ({selectedIds.size})
+                        Scarica ZIP ({selectedIds.size})
                       </button>
                     )}
                     <button
