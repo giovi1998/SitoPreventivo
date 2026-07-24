@@ -410,7 +410,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   }, []);
 
   const onBulkDownloadImages = useCallback(async () => {
-    const imageDocs = filtered.filter((d) => d.documentType === 'generatedImage' && d.imageData);
+    const imageDocs = documents.filter((d) => selectedIds.has(d.id) && d.documentType === 'generatedImage' && d.imageData);
     if (imageDocs.length === 0) return;
     addToast('info', `Preparazione ZIP: ${imageDocs.length} immagini...`);
     try {
@@ -430,7 +430,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
     } catch (err: any) {
       addToast('error', 'Errore durante la creazione del ZIP');
     }
-  }, [filtered, addToast]);
+  }, [documents, selectedIds, addToast]);
 
   return (
     <div className="collection-view" data-testid="collection-view">
@@ -541,6 +541,16 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                     <button type="button" className="btn-secondary" onClick={clearSelection} data-testid="collection-clear-selection">
                       Deseleziona
                     </button>
+                    {activeTab === 'generatedImage' && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={onBulkDownloadImages}
+                        data-testid="collection-bulk-download"
+                      >
+                        <Icon name="download" />Scarica ZIP ({selectedIds.size})
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn-danger"
@@ -552,17 +562,6 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                   </>
                 )}
               </div>
-            )}
-            {activeTab === 'generatedImage' && filtered.some((d) => d.imageData) && (
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={onBulkDownloadImages}
-                data-testid="collection-bulk-download"
-                style={{ marginLeft: 'auto' }}
-              >
-                <Icon name="download" />Scarica ZIP ({filtered.filter((d) => d.imageData).length})
-              </button>
             )}
           </div>
 
