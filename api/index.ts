@@ -452,6 +452,10 @@ const flyerDocumentSchema = genericDocumentSchema.extend({
   documentType: z.literal('flyer'),
 });
 
+const generatedImageDocumentSchema = genericDocumentSchema.extend({
+  documentType: z.literal('generatedImage'),
+});
+
 const DocumentBodySchema = z.object({
   email: z.string().email('Email non valida'),
   document: z.discriminatedUnion('documentType', [
@@ -459,6 +463,7 @@ const DocumentBodySchema = z.object({
     businessCardDocumentSchema,
     logoDocumentSchema,
     flyerDocumentSchema,
+    generatedImageDocumentSchema,   // <-- ADD THIS
   ]),
 });
 
