@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { compressImage, loadImage } from '../imageCompress';
+import { compressImage, loadImage, compressDataUrl } from '../imageCompress';
 
 describe('imageCompress', () => {
   beforeEach(() => {
@@ -65,5 +65,65 @@ describe('imageCompress', () => {
     mockCanvasAlwaysFails();
     const file = new File([new Uint8Array(8)], 'a.png', { type: 'image/png' });
     await expect(compressImage(file)).rejects.toThrow(/Canvas 2D non disponibile/i);
+  });
+
+  describe('compressDataUrl', () => {
+    it('returns non-data-url strings unchanged', async () => {
+      const result = await compressDataUrl('https://example.com/img.jpg');
+      expect(result).toBe('https://example.com/img.jpg');
+    });
+
+    it('returns empty/null strings unchanged', async () => {
+      expect(await compressDataUrl('')).toBe('');
+      expect(await compressDataUrl(null as any)).toBeNull();
+    });
+
+    it('returns data URL unchanged when already small enough', async () => {
+      mockImage(100, 100);
+      const smallDataUrl = 'data:image/jpeg;base64,' + 'A'.repeat(100);
+      const result = await compressDataUrl(smallDataUrl);
+      expect(result).toBe(smallDataUrl);
+    });
+
+    it('compresses large image via canvas', async () => {
+      mockImage(1024, 1024);
+      const fakeLarge = 'data:image/jpeg;base64,' + 'A'.repeat(500_000);
+      let capturedQuality: number | undefined;
+      const origCreate = document.createElement.bind(document);
+      const createSpy = vi.spyOn(document, 'createElement');
+      createSpy.mockImplementation((tag: string, opts?: any) => {
+        if (tag === 'canvas') {
+          return {
+            width: 0, height: 0,
+            getContext: () => ({
+              drawImage: vi.fn(),
+            }),
+            toDataURL: (_mime: string, quality?: number) => {
+              capturedQuality = quality;
+              return 'data:image/jpeg;base64,' + 'B'.repeat(100_000);
+            },
+          } as any;
+        }
+        return origCreate(tag, opts);
+      });
+      const result = await compressDataUrl(fakeLarge, 512, 300_000);
+      expect(result).toContain('data:image');
+      expect(result).not.toBe(fakeLarge);
+      createSpy.mockRestore();
+    });
+
+    it('falls back to original when image load fails', async () => {
+      vi.stubGlobal('Image', class {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        _src = '';
+        width = 0;
+        height = 0;
+        set src(_v: string) { queueMicrotask(() => this.onerror?.()); }
+      } as any);
+      const dataUrl = 'data:image/png;base64,' + 'A'.repeat(500_000);
+      const result = await compressDataUrl(dataUrl);
+      expect(result).toBe(dataUrl);
+    });
   });
 });

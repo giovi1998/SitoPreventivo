@@ -11,6 +11,7 @@ import { useToast } from '../hooks/useToast';
 import { logger } from '../utils/logger';
 import './LogoEditor.css';
 import { useDocumentSave } from '../hooks/useDocumentSave';
+import { compressDataUrl } from '../utils/card/imageCompress';
 
 interface LogoEditorProps {
   userEmail: string;
@@ -62,15 +63,26 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
       if (!logoHasContent(logo)) return;
-      const sanitized: Logo = { ...logo, userEmail, updatedAt: new Date().toISOString() };
-      dataService.saveDocument(userEmail, sanitized).then((result) => {
-        if (result?.error) {
-          logger.error('Logo auto-save failed', { err: result.error });
-        } else if (onSaved) {
-          onSaved(sanitized);
-        }
-      }).catch((err) => {
-        logger.error('Logo auto-save failed', { err: (err as Error).message });
+      const bgImage = logo.builder?.backgroundImage;
+      const compress$ = bgImage && bgImage.startsWith('data:')
+        ? compressDataUrl(bgImage).then(c => c || bgImage)
+        : Promise.resolve(bgImage);
+      compress$.then((compressedBg) => {
+        const sanitized: Logo = {
+          ...logo,
+          builder: { ...logo.builder, backgroundImage: compressedBg },
+          userEmail,
+          updatedAt: new Date().toISOString(),
+        };
+        dataService.saveDocument(userEmail, sanitized).then((result) => {
+          if (result?.error) {
+            logger.error('Logo auto-save failed', { err: result.error });
+          } else if (onSaved) {
+            onSaved(sanitized);
+          }
+        }).catch((err) => {
+          logger.error('Logo auto-save failed', { err: (err as Error).message });
+        });
       });
     }, 30000);
     return () => {
@@ -136,9 +148,20 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
     }
   }, [logo, tier, addToast]);
 
-  const handleSave = useCallback((customName: string) => {
+  const handleSave = useCallback(async (customName: string) => {
     const title = customName || logo.title || 'Logo';
-    const toSave: Logo = { ...logo, userEmail, title, updatedAt: new Date().toISOString() };
+    let bgImage = logo.builder?.backgroundImage;
+    if (bgImage && bgImage.startsWith('data:')) {
+      const compressed = await compressDataUrl(bgImage);
+      if (compressed) bgImage = compressed;
+    }
+    const toSave: Logo = {
+      ...logo,
+      builder: { ...logo.builder, backgroundImage: bgImage },
+      userEmail,
+      title,
+      updatedAt: new Date().toISOString(),
+    };
     // Phase 5: use guarded save which checks the free-tier doc limit
     // and triggers the TierLimitModal if reached.
     saveDocumentGuarded(userEmail, toSave)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext, useMemo } from 'react';
 import { Outlet } from 'react-router-dom';
 import GlobalStyles from './GlobalStyles';
 import Layout from './Layout';
@@ -613,7 +613,7 @@ export default function AppShell() {
     setAiModel(providerId);
   }, []);
 
-  const ctxValue = {
+  const ctxValue = useMemo(() => ({
     editingQuote: quote, setEditingQuote: setQuote, saveQuote, quotes,
     setView, openQuote, resetQuote, duplicate, removeQuote: (id: string) => {
       setQuotes((c: any[]) => c.filter((q: any) => q.id !== id));
@@ -644,7 +644,25 @@ export default function AppShell() {
     openDocument,
     refreshDocuments,
     documentsVersion,
-  } as any;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [
+    quote, quotes, user?.email, aiText, aiModel,
+    tier, documentCount, documentTheme,
+    qrDocument, cardDocument, logoDocument, flyerDocument,
+    documentsVersion,
+    isDirty, lastSaveTime, pdfLoading, docxLoading,
+    isProcessing, availableModels, aiLogs,
+    // Stable useCallback refs — included for exhaustive deps compliance
+    setQuote, saveQuote, setView, openQuote, resetQuote, duplicate,
+    updateQuoteStatus, createFromTemplate, runAI, resetChat,
+    handleProviderChange, patch, updateOption, updateOptions, addOption, removeOption,
+    updateClause, addClause, removeClause,
+    exportPDF, exportDOCX, saveCurrentQuote, saveAsTemplate,
+    setDocumentTheme, setAiText, setAiModel,
+    refreshTier, checkDocumentLimit, refreshDocuments,
+    previewRef, setQrDocument, setCardDocument, setLogoDocument, setFlyerDocument,
+    openDocument,
+  ]) as any;
 
   return (
     <ToastProvider>

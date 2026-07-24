@@ -90,6 +90,67 @@ export async function compressImage(
   return dataUrl;
 }
 
+const DATA_URL_PREFIX_RE = /^data:([^;,]+)(?:;base64)?,/;
+
+/**
+ * Compress a data-URL string (base64 image) for localStorage persistence.
+ * Caps output to `maxDim` px on the longest side and `maxBytes` encoded chars.
+ * If the image already fits, returns it unchanged. Returns `null` on failure.
+ */
+export async function compressDataUrl(
+  dataUrl: string,
+  maxDim: number = 512,
+  maxBytes: number = 300_000,
+): Promise<string | null> {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+  try {
+    const img = await loadDataUrlImage(dataUrl);
+    const curBytes = estimateBase64Bytes(dataUrl);
+    if (curBytes <= maxBytes && Math.max(img.width, img.height) <= maxDim) {
+      return dataUrl;
+    }
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return dataUrl;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const isPng = dataUrl.includes('image/png');
+    const mime = isPng ? 'image/png' : 'image/jpeg';
+    const maxChars = Math.floor(maxBytes * 1.37);
+    if (isPng) {
+      return canvas.toDataURL('image/png').length > maxChars
+        ? canvas.toDataURL('image/jpeg', 0.75)
+        : canvas.toDataURL('image/png');
+    }
+    let quality = 0.75;
+    let out = canvas.toDataURL('image/jpeg', quality);
+    while (out.length > maxChars && quality > MIN_QUALITY) {
+      quality -= 0.1;
+      out = canvas.toDataURL('image/jpeg', quality);
+    }
+    return out;
+  } catch {
+    return dataUrl;
+  }
+}
+
+function loadDataUrlImage(dataUrl: string, timeoutMs = 800): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const timer = setTimeout(() => reject(new Error('data-url image load timeout')), timeoutMs);
+    img.onload = () => { clearTimeout(timer); resolve(img); };
+    img.onerror = () => { clearTimeout(timer); reject(new Error('data-url image load failed')); };
+    img.src = dataUrl;
+  });
+}
+
+function estimateBase64Bytes(dataUrl: string): number {
+  const raw = dataUrl.replace(DATA_URL_PREFIX_RE, '');
+  return Math.round(raw.length * 0.75);
+}
+
 export function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);

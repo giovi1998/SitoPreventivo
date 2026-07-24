@@ -13,6 +13,7 @@ import {
 import { logger } from '../utils/logger';
 import { isLocalhost } from '../utils/env';
 import { mapAiError } from '../utils/ai/mapAiError';
+import { saveGeneratedImage } from '../utils/saveGeneratedImage';
 import { buildCardPhotoBrief } from '../utils/card/photoBrief';
 import { newRequestId } from '../utils/ai/requestId';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
@@ -246,7 +247,9 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         setLastCostUsd(imageCost);
         trackImageTokens();
         success(`Cover AI (${side}) generata`, `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd: imageCost, hasImage: true, modelId: imageModel });
-        return `data:${data.mimeType};base64,${data.imageBase64}`;
+        const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
+        saveGeneratedImage(userEmail, dataUrl, 'cards', 'cover', coverPrompt).catch(() => {});
+        return dataUrl;
       } catch (err: any) {
         const hint = mapAiError(err);
         logger.error('Card AI generateCover failed', { route: 'useAICard.generateCover', err: err?.message });
@@ -293,7 +296,9 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         setLastCostUsd(imageCost);
         trackImageTokens();
         success('Foto AI generata', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd: imageCost, hasImage: true, modelId: imageModel });
-        return `data:${data.mimeType};base64,${data.imageBase64}`;
+        const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
+        saveGeneratedImage(userEmail, dataUrl, 'cards', 'photo', prompt).catch(() => {});
+        return dataUrl;
       } catch (err: any) {
         const hint = mapAiError(err);
         logger.error('Card AI generatePhoto failed', { route: 'useAICard.generatePhoto', err: err?.message });

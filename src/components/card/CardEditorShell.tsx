@@ -59,6 +59,7 @@ import {
 import { buildCardPhotoBrief } from '../../utils/card/photoBrief';
 import { buildCardCoverPromptBrief } from '../../utils/card/coverPrompt';
 import { pruneCardGrids } from '../../utils/card/gridElements';
+import { compressCardImages } from '../../utils/card/saveCompression';
 import {
   pushLayoutEvent,
   attachLayoutEventsToWindow,
@@ -509,33 +510,39 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   }, [card, userEmail, addToast]);
 
   const handleSave = useCallback(async (customName?: string) => {
-    if (!userEmail) {
-      addToast('error', 'Devi essere loggato per salvare.');
-      return;
+    try {
+      if (!userEmail) {
+        addToast('error', 'Devi essere loggato per salvare.');
+        return;
+      }
+      const title = (customName?.trim() || defaultCardTitle(card));
+      const pruned = pruneCardGrids(card);
+      const sanitized: BusinessCard = {
+        ...(await compressCardImages(pruned)),
+        title,
+        userEmail,
+        updatedAt: new Date().toISOString(),
+      };
+      const result = await saveDocumentGuarded(userEmail, sanitized);
+      if (result.blocked) {
+        addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
+        return;
+      }
+      if (result.error) {
+        addToast('error', result.error);
+        return;
+      }
+      justSavedRef.current = true;
+      setCard(sanitized);
+      setIsSaved(true);
+      loadedIdRef.current = sanitized.id;
+      setShowSaveDialog(false);
+      addToast('success', `«${title}» salvato. Visibile in Collection.`);
+      if (onSaved) onSaved(sanitized);
+    } catch (err: any) {
+      logger.error('Card save failed', { err: err?.message || String(err) });
+      addToast('error', `Errore durante il salvataggio: ${err?.message || 'sconosciuto'}`);
     }
-    const title = (customName?.trim() || defaultCardTitle(card));
-    const sanitized: BusinessCard = {
-      ...pruneCardGrids(card),
-      title,
-      userEmail,
-      updatedAt: new Date().toISOString(),
-    };
-    const result = await saveDocumentGuarded(userEmail, sanitized);
-    if (result.blocked) {
-      addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
-      return;
-    }
-    if (result.error) {
-      addToast('error', result.error);
-      return;
-    }
-    justSavedRef.current = true;
-    setCard(sanitized);
-    setIsSaved(true);
-    loadedIdRef.current = sanitized.id;
-    setShowSaveDialog(false);
-    addToast('success', `«${title}» salvato. Visibile in Collection.`);
-    if (onSaved) onSaved(sanitized);
   }, [card, userEmail, addToast, saveDocumentGuarded, onSaved]);
 
   const runCardAI = useCallback(async (mode: string = 'custom') => {
@@ -763,29 +770,29 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     autoSaveTimerRef.current = setTimeout(() => {
       pendingAutoSaveRef.current = null;
       const title = defaultCardTitle(card);
-      const sanitized: BusinessCard = {
-        ...pruneCardGrids(card),
-        title,
-        userEmail,
-        updatedAt: new Date().toISOString(),
-      };
-      saveDocumentGuarded(userEmail, sanitized).then((result) => {
-        if (result.blocked) {
-          addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
-        } else if (result.error) {
-          logger.error('Card auto-save failed', { err: result.error });
-          // Mai ingoiare l'errore: senza toast l'utente crede sia salvato
-          // (es. QuotaExceededError con immagini base64).
-          addToast('error', `Salvataggio automatico non riuscito: ${result.error}`);
-        } else {
-          // Keep title in sync if auto-derived (no toast noise).
-          if (card.title !== title) {
-            justSavedRef.current = true;
-            setCard((prev) => (prev.title === title ? prev : { ...prev, title }));
+      const pruned = pruneCardGrids(card);
+      compressCardImages(pruned).then((compressed) => {
+        const sanitized: BusinessCard = {
+          ...compressed,
+          title,
+          userEmail,
+          updatedAt: new Date().toISOString(),
+        };
+        saveDocumentGuarded(userEmail, sanitized).then((result) => {
+          if (result.blocked) {
+            addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
+          } else if (result.error) {
+            logger.error('Card auto-save failed', { err: result.error });
+            addToast('error', `Salvataggio automatico non riuscito: ${result.error}`);
+          } else {
+            if (card.title !== title) {
+              justSavedRef.current = true;
+              setCard((prev) => (prev.title === title ? prev : { ...prev, title }));
+            }
+            setIsSaved(true);
+            if (onSaved && sanitized.id) onSaved(sanitized);
           }
-          setIsSaved(true);
-          if (onSaved && sanitized.id) onSaved(sanitized);
-        }
+        });
       });
     }, AUTO_SAVE_DELAY_MS);
     return () => {
@@ -1249,7 +1256,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         defaultName={defaultCardTitle(card)}
         documentLabel="bigliettino"
         placeholder="Es. Bigliettino Mario Rossi"
-        onSave={(name) => { void handleSave(name); }}
+        onSave={(name) => { handleSave(name).catch((err) => { logger.error('Card save unhandled', { err: err?.message || String(err) }); addToast('error', 'Errore salvataggio'); }); }}
         onCancel={() => setShowSaveDialog(false)}
       />
     </div>

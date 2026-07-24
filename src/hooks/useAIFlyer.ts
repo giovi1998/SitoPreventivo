@@ -7,6 +7,7 @@ import dataService from '../utils/dataService';
 import { isLocalhost } from '../utils/env';
 import { logger } from '../utils/logger';
 import { mapAiError } from '../utils/ai/mapAiError';
+import { saveGeneratedImage } from '../utils/saveGeneratedImage';
 import { newRequestId } from '../utils/ai/requestId';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
@@ -202,6 +203,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         setLastCostUsd(imageCost);
 
         success('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, modelId: imageModel, costUsd: imageCost, hasImage: true });
+        saveGeneratedImage(userEmail, heroImage, 'flyers', 'hero').catch(() => {});
         return { flyer: updated, applied: true };
       } catch (err) {
         const hint = mapAiError(err);

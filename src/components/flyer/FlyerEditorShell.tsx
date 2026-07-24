@@ -13,6 +13,7 @@ import { computeFlyerLayout, getFlyerCopyBudget } from '../../utils/flyer';
 import { generateFlyerPdf, generateFlyerPng } from '../../utils/flyerGenerator';
 import SaveDialog from '../SaveDialog';
 import { logger } from '../../utils/logger';
+import { compressDataUrl } from '../../utils/card/imageCompress';
 import {
   loadPromptLibrary,
   addPromptEntry,
@@ -167,15 +168,24 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
       if (!flyerHasContent(flyer)) return;
-      const sanitized = sanitizeForSave(flyer, userEmail);
-      saveDocumentGuarded(userEmail, sanitized).then((result) => {
-        if (result.blocked) {
-          addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
-        } else if (result.error) {
-          logger.error('Flyer auto-save failed', { err: result.error });
-        } else if (onSaved) {
-          onSaved(sanitized);
-        }
+      const heroImage = flyer.content.heroImage;
+      const compress$ = heroImage && heroImage.startsWith('data:')
+        ? compressDataUrl(heroImage).then(c => c || heroImage)
+        : Promise.resolve(heroImage);
+      compress$.then((compressedHero) => {
+        const flyerToSave = compressedHero !== heroImage
+          ? { ...flyer, content: { ...flyer.content, heroImage: compressedHero } }
+          : flyer;
+        const sanitized = sanitizeForSave(flyerToSave, userEmail);
+        saveDocumentGuarded(userEmail, sanitized).then((result) => {
+          if (result.blocked) {
+            addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');
+          } else if (result.error) {
+            logger.error('Flyer auto-save failed', { err: result.error });
+          } else if (onSaved) {
+            onSaved(sanitized);
+          }
+        });
       });
     }, 30000);
     return () => {
@@ -363,9 +373,14 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
     addToast('info', 'Immagine hero predefinita ripristinata');
   }, [flyer, activeSector, updateContent, addToast]);
 
-  const handleSave = React.useCallback((customName: string) => {
+  const handleSave = React.useCallback(async (customName: string) => {
     const title = customName || flyer.title || 'Volantino';
-    const toSave = sanitizeForSave({ ...flyer, title }, userEmail);
+    let heroImage = flyer.content.heroImage;
+    if (heroImage && heroImage.startsWith('data:')) {
+      const compressed = await compressDataUrl(heroImage);
+      if (compressed) heroImage = compressed;
+    }
+    const toSave = sanitizeForSave({ ...flyer, content: { ...flyer.content, heroImage }, title }, userEmail);
     saveDocumentGuarded(userEmail, toSave).then((result) => {
       if (result.blocked) {
         addToast('info', 'Limite piano free raggiunto. Sblocca per continuare.');

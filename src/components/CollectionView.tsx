@@ -6,7 +6,7 @@ import dataService from '../utils/dataService';
 import type { DocumentType } from '../utils/documentSchemas';
 import { useToast } from '../hooks/useToast';
 
-type TabId = 'all' | 'quote' | 'qrCode' | 'businessCard' | 'flyer' | 'logo';
+type TabId = 'all' | 'quote' | 'qrCode' | 'businessCard' | 'flyer' | 'logo' | 'generatedImage';
 
 interface TabDef {
   id: TabId;
@@ -21,6 +21,7 @@ const TABS: TabDef[] = [
   { id: 'businessCard', label: 'Bigliettini', type: 'businessCard' },
   { id: 'flyer', label: 'Volantini', type: 'flyer' },
   { id: 'logo', label: 'Loghi', type: 'logo' },
+  { id: 'generatedImage', label: 'Immagini Generate', type: 'generatedImage' },
 ];
 
 const TYPE_ICONS: Record<DocumentType, string> = {
@@ -29,6 +30,7 @@ const TYPE_ICONS: Record<DocumentType, string> = {
   businessCard: 'id-card',
   flyer: 'file-text',
   logo: 'sparkle',
+  generatedImage: 'image',
 };
 
 const TYPE_LABELS: Record<DocumentType, string> = {
@@ -37,7 +39,17 @@ const TYPE_LABELS: Record<DocumentType, string> = {
   businessCard: 'Bigliettino',
   flyer: 'Volantino',
   logo: 'Logo',
+  generatedImage: 'Immagine AI',
 };
+
+function downloadDataUrl(dataUrl: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
 
 const QUOTE_STATUSES = ['BOZZA', 'INVIATO', 'ACCETTATO', 'RIFIUTATO', 'ARCHIVIATO'];
 
@@ -178,6 +190,9 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Re-fetch when user changes or refreshDocuments is invoked.
   useEffect(() => {
@@ -233,7 +248,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   }, [ctx?.documentsVersion]);
 
   const counts = useMemo(() => {
-    const c: Record<TabId, number> = { all: documents.length, quote: 0, qrCode: 0, businessCard: 0, flyer: 0, logo: 0 };
+    const c: Record<TabId, number> = { all: documents.length, quote: 0, qrCode: 0, businessCard: 0, flyer: 0, logo: 0, generatedImage: 0 };
     for (const d of documents) {
       if (d && d.documentType && c[d.documentType as DocumentType] !== undefined) {
         c[d.documentType as DocumentType] += 1;
@@ -273,28 +288,6 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
     else {
       addToast('error', 'Apertura documento non disponibile');
     }
-  };
-
-  const onDuplicate = (doc: any) => {
-    const copyId = `${doc.documentType}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const copyTitle = `${getDocTitle(doc)} (copia)`;
-    const copy = {
-      ...doc,
-      id: copyId,
-      title: copyTitle,
-      userEmail,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    dataService.saveDocument(userEmail, copy).then(() => {
-      addToast('success', 'Documento duplicato');
-      if (ctx?.refreshDocuments) ctx.refreshDocuments();
-      setRefreshKey((k) => k + 1);
-      // Open the copy in the matching editor.
-      if (ctx?.openDocument) ctx.openDocument(copy);
-    }).catch(() => {
-      addToast('error', 'Duplicazione fallita');
-    });
   };
 
   const onConfirmDelete = () => {
@@ -379,6 +372,40 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
       setActiveTab(TABS[nextIdx].id);
     }
   };
+
+  const startRename = useCallback((doc: any) => {
+    setRenamingId(doc.id);
+    setRenameValue(getDocTitle(doc));
+    setTimeout(() => renameInputRef.current?.focus(), 50);
+  }, []);
+
+  const commitRename = useCallback(async () => {
+    if (!renamingId || !renameValue.trim()) {
+      setRenamingId(null);
+      return;
+    }
+    const doc = documents.find((d) => d.id === renamingId);
+    if (!doc) { setRenamingId(null); return; }
+    const newTitle = renameValue.trim();
+    if (newTitle === getDocTitle(doc)) { setRenamingId(null); return; }
+    const updated = { ...doc, title: newTitle, updatedAt: new Date().toISOString() };
+    const result = await dataService.saveDocument(userEmail, updated);
+    if (result?.error) {
+      addToast('error', 'Rinomina fallita');
+    } else {
+      addToast('success', 'Documento rinominato');
+      if (ctx?.refreshDocuments) ctx.refreshDocuments();
+      setRefreshKey((k) => k + 1);
+    }
+    setRenamingId(null);
+  }, [renamingId, renameValue, documents, userEmail, addToast, ctx]);
+
+  const onDownloadImage = useCallback((doc: any) => {
+    if (!doc.imageData) return;
+    const ext = doc.imageData.includes('image/png') ? '.png' : '.jpg';
+    const safe = (doc.title || 'image').replace(/[^a-zA-Z0-9\s\-]/g, '').replace(/\s+/g, '_');
+    downloadDataUrl(doc.imageData, `${safe}${ext}`);
+  }, []);
 
   return (
     <div className="collection-view" data-testid="collection-view">
@@ -530,9 +557,21 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                           data-testid={`select-${doc.id}`}
                         />
                       </label>
-                      <span className={`doc-icon doc-icon-${type}`} aria-hidden="true">
-                        <Icon name={TYPE_ICONS[type] || 'doc'} />
-                      </span>
+                      {type === 'generatedImage' && doc.imageData ? (
+                        <img
+                          src={doc.imageData}
+                          alt={title}
+                          className="collection-thumb"
+                          style={{
+                            width: '100%', height: '120px', objectFit: 'cover',
+                            borderRadius: '8px', marginBottom: '8px',
+                          }}
+                        />
+                      ) : (
+                        <span className={`doc-icon doc-icon-${type}`} aria-hidden="true">
+                          <Icon name={TYPE_ICONS[type] || 'doc'} />
+                        </span>
+                      )}
                       {tier === 'free' && (
                         <span className="tier-badge tier-free" data-testid="tier-free">Free</span>
                       )}
@@ -540,15 +579,46 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                         <span className="tier-badge tier-pro" data-testid="tier-pro">Pro</span>
                       )}
                     </div>
-                    <h3 className="card-title" title={getDocTitle(doc)}>{title}</h3>
+                    {renamingId === doc.id ? (
+                      <input
+                        ref={renameInputRef}
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitRename();
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        className="collection-rename-input"
+                        data-testid={`rename-input-${doc.id}`}
+                        style={{
+                          width: '100%', padding: '4px 8px', fontSize: '.85rem',
+                          border: '2px solid var(--accent)', borderRadius: '6px',
+                          outline: 'none', boxSizing: 'border-box',
+                        }}
+                      />
+                    ) : (
+                      <h3
+                        className="card-title"
+                        title={`${getDocTitle(doc)} (clicca per rinominare)`}
+                        onClick={() => startRename(doc)}
+                        style={{ cursor: 'text' }}
+                        data-testid={`title-${doc.id}`}
+                      >{title}</h3>
+                    )}
                     <p className="card-meta">{meta}</p>
                     <div className="card-actions">
-                      <button type="button" onClick={() => onOpen(doc)} data-testid={`open-${doc.id}`}>
-                        <Icon name="edit" />Apri
-                      </button>
-                      <button type="button" onClick={() => onDuplicate(doc)} data-testid={`duplicate-${doc.id}`}>
-                        <Icon name="copy" />Duplica
-                      </button>
+                      {type === 'generatedImage' && doc.imageData && (
+                        <button
+                          type="button"
+                          onClick={() => onDownloadImage(doc)}
+                          data-testid={`download-${doc.id}`}
+                          title="Scarica immagine"
+                        >
+                          <Icon name="download" />Scarica
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn-danger"
@@ -606,6 +676,7 @@ function EmptyState({ tabId, totalCount, onOpen, ctx, isAdmin }: { tabId: TabId;
         businessCard: { title: 'Nessun bigliettino ancora', cta: 'Crea un bigliettino', docType: 'businessCard' },
         flyer: { title: 'Nessun volantino ancora', cta: 'Crea un volantino', docType: 'flyer' },
         logo: { title: 'Nessun logo ancora', cta: 'Crea un logo', docType: 'logo' },
+        generatedImage: { title: 'Nessuna immagine AI ancora', cta: 'Genera un\'immagine', docType: null },
       }
     : {
         all: { title: 'Nessun documento ancora', cta: 'Crea un QR Code', docType: 'qrCode' },
@@ -614,6 +685,7 @@ function EmptyState({ tabId, totalCount, onOpen, ctx, isAdmin }: { tabId: TabId;
         businessCard: { title: 'Nessun bigliettino ancora', cta: 'Crea un bigliettino', docType: 'businessCard' },
         flyer: { title: 'Nessun volantino ancora', cta: 'Crea un volantino', docType: 'flyer' },
         logo: { title: 'Nessun logo ancora', cta: 'Crea un logo', docType: 'logo' },
+        generatedImage: { title: 'Nessuna immagine AI ancora', cta: 'Genera un\'immagine', docType: null },
       };
   const msg = emptyMessages[tabId];
   // The "quote" tab is hidden for non-admin via the TABS filter above,

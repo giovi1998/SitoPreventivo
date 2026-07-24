@@ -301,7 +301,7 @@ describe('CardEditorShell', () => {
           mockSave.mockClear();
           const initial = { ...createEmptyCard(), ...overrides };
           const { unmount } = render(<CardAIFloatingProvider><CardEditorShell {...baseProps} initialCard={initial} /></CardAIFloatingProvider>);
-          await act(async () => { vi.advanceTimersByTime(AUTO_SAVE_DELAY); });
+          await act(async () => { vi.advanceTimersByTime(AUTO_SAVE_DELAY + 1000); });
           expect(mockSave).toHaveBeenCalled();
           unmount();
         }

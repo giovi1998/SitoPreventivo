@@ -3,7 +3,7 @@ import { hasElementContent, type GridElementKey } from './card/gridElements';
 import { FLYER_TEMPLATES_BY_SECTOR_LAYOUT, heroBoxMmForLayout } from './flyer/templateCatalog';
 import { DECORATIVE_PATTERN_IDS, type DecorativePatternId } from './decorations/patterns';
 
-export const documentTypeSchema = z.enum(['quote', 'qrCode', 'businessCard', 'flyer', 'logo']);
+export const documentTypeSchema = z.enum(['quote', 'qrCode', 'businessCard', 'flyer', 'logo', 'generatedImage']);
 export type DocumentType = z.infer<typeof documentTypeSchema>;
 
 export const qrDataTypeSchema = z.enum(['url', 'text', 'email', 'phone', 'vcard', 'wifi', 'sms']);

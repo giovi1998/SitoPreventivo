@@ -3,6 +3,7 @@ import type { Logo } from '../utils/documentSchemas';
 import { LogoAIOrchestrator, type LogoProcessResult } from '../ai/logoOrchestrator';
 import { useAILogs } from './useAILogs';
 import { mapAiError } from '../utils/ai/mapAiError';
+import { saveGeneratedImage } from '../utils/saveGeneratedImage';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
 import { newRequestId } from '../utils/ai/requestId';
 import dataService from '../utils/dataService';
@@ -169,6 +170,8 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
             { requestId, modelId: imageModel, costUsd: imageCost, hasImage: true }
           );
           trackImage();
+          const bgImage = result.logo.builder.backgroundImage;
+          if (bgImage) saveGeneratedImage(userEmail, bgImage, 'logos', 'background', context.imagePrompt).catch(() => {});
         } else {
           error(mapAiError(result.error ?? 'Background non generato'), undefined, { requestId });
         }
