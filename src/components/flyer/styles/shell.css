@@ -1,0 +1,50 @@
+.flyer-editor-shell {
+  display: contents;
+}
+
+.flyer-editor-shell .editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 420px auto;
+  /* Phase 14 (REQ-AI-002): l'AI sta nella rail a destra */
+  grid-template-areas: "manual preview ai";
+  gap: 16px;
+  align-items: start;
+  padding: 16px;
+  min-height: calc(100vh - var(--topbar-height, 64px));
+}
+
+.flyer-editor-shell .editor-col.ai-col {
+  grid-area: ai;
+}
+
+.flyer-editor-shell .editor-col.manual-col {
+  grid-area: manual;
+}
+
+.flyer-editor-shell .preview-wrap {
+  grid-area: preview;
+  position: sticky;
+  top: 16px;
+}
+
+@media (max-width: 1279px) {
+  .flyer-editor-shell .editor-grid {
+    grid-template-columns: 1fr 360px auto;
+    gap: 12px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 899px) {
+  .flyer-editor-shell .editor-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 12px;
+  }
+
+  .flyer-editor-shell .preview-wrap {
+    position: relative;
+    top: 0;
+  }
+}

@@ -1,0 +1,139 @@
+import { describe, it, expect } from 'vitest';
+import {
+  isGridModeFor,
+  gridPlacement,
+  clampFontScale,
+  qrSizePxFor,
+  SIZE_CLASS,
+  sideGrid,
+} from '../previewHelpers';
+import { createEmptyCard, createGiovanniCardTemplate, gridPresetLeft } from '../../documentSchemas';
+import type { BusinessCard } from '../../documentSchemas';
+
+describe('previewHelpers', () => {
+  describe('isGridModeFor', () => {
+    it('returns true only when useGrid and grid elements exist for side', () => {
+      const base = createGiovanniCardTemplate();
+      // v2.8.1: Giovanni template now enables grid-mode by default.
+      expect(isGridModeFor('front', base)).toBe(true);
+
+      const noGrid: BusinessCard = {
+        ...base,
+        front: { ...base.front, useGrid: true },
+        grid: { cols: 4, rows: 4, elements: {} },
+      };
+      expect(isGridModeFor('front', noGrid)).toBe(false);
+
+      const gridOff: BusinessCard = {
+        ...base,
+        front: { ...base.front, useGrid: false },
+      };
+      expect(isGridModeFor('front', gridOff)).toBe(false);
+    });
+
+    it('respects per-side useGrid independently', () => {
+      const base = createGiovanniCardTemplate();
+      const onlyBack: BusinessCard = {
+        ...base,
+        front: { ...base.front, useGrid: false },
+        back: { ...base.back, useGrid: true },
+      };
+      expect(isGridModeFor('front', onlyBack)).toBe(false);
+      expect(isGridModeFor('back', onlyBack)).toBe(true);
+    });
+  });
+
+  describe('gridPlacement', () => {
+    it('returns correct gridColumn, gridRow and default center alignment', () => {
+      expect(gridPlacement({ x: 0, y: 0, w: 1, h: 1 })).toEqual({
+        gridColumn: '1 / span 1',
+        gridRow: '1 / span 1',
+        justifyContent: 'center',
+        alignItems: 'center',
+        textAlign: 'center',
+      });
+      expect(gridPlacement({ x: 2, y: 1, w: 2, h: 3 })).toEqual({
+        gridColumn: '3 / span 2',
+        gridRow: '2 / span 3',
+        justifyContent: 'center',
+        alignItems: 'center',
+        textAlign: 'center',
+      });
+    });
+
+    it('returns undefined for missing element', () => {
+      expect(gridPlacement(undefined)).toBeUndefined();
+    });
+
+    it('applies custom alignH and alignV', () => {
+      expect(gridPlacement({ x: 0, y: 0, w: 1, h: 1, alignH: 'left', alignV: 'top' })).toEqual({
+        gridColumn: '1 / span 1',
+        gridRow: '1 / span 1',
+        justifyContent: 'flex-start',
+        alignItems: 'flex-start',
+        textAlign: 'left',
+      });
+    });
+
+    // v2.14 regression: text cells use flex-direction:column. In column mode
+    // the flex main axis is VERTICAL, so justifyContent must map to alignV
+    // and alignItems to alignH. Before this fix, alignV='top' had no effect
+    // on text cells because it was mapped to alignItems (cross axis =
+    // horizontal), making the 3×3 vertical alignment invisible.
+    it('column direction swaps justifyContent/alignItems for text cells', () => {
+      expect(gridPlacement({ x: 0, y: 0, w: 1, h: 1, alignH: 'left', alignV: 'top' }, 'column')).toEqual({
+        gridColumn: '1 / span 1',
+        gridRow: '1 / span 1',
+        justifyContent: 'flex-start', // from alignV='top' (main axis = vertical)
+        alignItems: 'flex-start',     // from alignH='left' (cross axis = horizontal)
+        textAlign: 'left',
+      });
+      // alignV='bottom' should put content at bottom (justifyContent=flex-end)
+      expect(gridPlacement({ x: 0, y: 0, w: 1, h: 1, alignH: 'center', alignV: 'bottom' }, 'column'))
+        .toMatchObject({ justifyContent: 'flex-end', alignItems: 'center' });
+      // alignH='right' should put content at right (alignItems=flex-end)
+      expect(gridPlacement({ x: 0, y: 0, w: 1, h: 1, alignH: 'right', alignV: 'center' }, 'column'))
+        .toMatchObject({ justifyContent: 'center', alignItems: 'flex-end' });
+    });
+  });
+
+  describe('clampFontScale', () => {
+    it('clamps values to [0.7, 1.5]', () => {
+      expect(clampFontScale(0.5)).toBe(0.7);
+      expect(clampFontScale(2)).toBe(1.5);
+      expect(clampFontScale(1)).toBe(1);
+      expect(clampFontScale(1.2)).toBe(1.2);
+    });
+
+    it('returns 1 for invalid input', () => {
+      expect(clampFontScale(NaN)).toBe(1);
+      expect(clampFontScale(undefined as any)).toBe(1);
+    });
+  });
+
+  describe('qrSizePxFor', () => {
+    it('returns correct pixel size for each enum', () => {
+      const small = { ...createEmptyCard(), back: { ...createEmptyCard().back, qrSize: 'small' as const } };
+      expect(qrSizePxFor(small)).toBe(84);
+      expect(qrSizePxFor(createEmptyCard())).toBe(120);
+      const large = { ...createEmptyCard(), back: { ...createEmptyCard().back, qrSize: 'large' as const } };
+      expect(qrSizePxFor(large)).toBe(160);
+    });
+  });
+
+  describe('sideGrid', () => {
+    it('returns front grid for front and backGrid for back', () => {
+      const card = createGiovanniCardTemplate();
+      expect(sideGrid('front', card)).toBe(card.grid);
+      expect(sideGrid('back', card)).toBe(card.backGrid);
+    });
+  });
+
+  describe('SIZE_CLASS', () => {
+    it('maps each preset to expected class name', () => {
+      expect(SIZE_CLASS['eu-85x55']).toBe('size-eu-85x55');
+      expect(SIZE_CLASS['us-89x51']).toBe('size-us-89x51');
+      expect(SIZE_CLASS['square-65x65']).toBe('size-square-65x65');
+    });
+  });
+});

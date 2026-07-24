@@ -1,0 +1,134 @@
+/* Flyer editor specific overrides and components.
+ * Imported after QREditor.css so it can refine shared patterns. */
+
+/* Title input: less aggressive than the global .option-title-input */
+.flyer-title-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
+.flyer-title-input::placeholder {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Template banner: clean card with organized rows */
+.flyer-template-banner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+}
+
+.flyer-template-banner__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.flyer-template-banner__label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.flyer-template-banner__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.flyer-template-banner__close:hover {
+  background: var(--danger-bg, #fee2e2);
+  border-color: var(--danger-border, #fecaca);
+}
+
+.flyer-template-banner__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.flyer-template-banner__row span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+.flyer-template-banner__row button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.flyer-template-banner__row button:hover {
+  background: var(--accent-bg, var(--surface));
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Format section: stack fields so they never get clipped */
+.flyer-format-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.flyer-format-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flyer-format-grid select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+/* Softer badge for the Format section */
+.flyer-editor .collapsible-badge {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font-weight: 700;
+}

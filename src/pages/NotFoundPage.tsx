@@ -17,9 +17,9 @@ export default function NotFoundPage() {
           <span className="digit-4a">4</span>
           <div className="notfound-circle">
             <svg viewBox="0 0 120 120" fill="none">
-              <circle cx="60" cy="60" r="56" stroke="rgba(11,87,208,0.15)" strokeWidth="3" strokeDasharray="8 6"/>
-              <circle cx="60" cy="60" r="40" stroke="rgba(11,87,208,0.08)" strokeWidth="2"/>
-              <text x="60" y="68" textAnchor="middle" fill="#0B57D0" fontSize="36" fontWeight="900" fontFamily="ui-sans-serif,system-ui,sans-serif">?</text>
+              <circle cx="60" cy="60" r="56" stroke="rgba(26,26,26,0.15)" strokeWidth="3" strokeDasharray="8 6"/>
+              <circle cx="60" cy="60" r="40" stroke="rgba(26,26,26,0.08)" strokeWidth="2"/>
+              <text x="60" y="68" textAnchor="middle" fill="#1A1A1A" fontSize="36" fontWeight="900" fontFamily="ui-sans-serif,system-ui,sans-serif">?</text>
             </svg>
           </div>
           <span className="digit-4b">4</span>
@@ -28,7 +28,7 @@ export default function NotFoundPage() {
         <h1 className="notfound-title">Pagina persa nel vuoto</h1>
         <p className="notfound-desc">
           La pagina che cerchi non esiste, è stata spostata, o forse non è mai esistita.
-          <br />Nessun preventivo può salvare questa situazione.
+          <br />Torna alla home e ricomincia.
         </p>
 
         <div className="notfound-actions">
@@ -52,11 +52,11 @@ export default function NotFoundPage() {
         [data-theme="dark"] .notfound-page{background:linear-gradient(160deg,#0f1117 0%,#1a1d27 50%,#151821 100%);color:#e8eaf0}
         .notfound-shapes{position:absolute;inset:0;pointer-events:none}
         .notfound-shape{position:absolute;border-radius:50%;opacity:0.06}
-        .shape-1{width:400px;height:400px;background:#0B57D0;top:-100px;right:-80px;animation:float-shape 20s ease-in-out infinite}
-        .shape-2{width:200px;height:200px;background:#3b82f6;bottom:-50px;left:-60px;animation:float-shape 15s ease-in-out infinite reverse}
-        .shape-3{width:120px;height:120px;background:#0B57D0;top:30%;left:10%;animation:float-shape 18s ease-in-out infinite 2s}
-        .shape-4{width:80px;height:80px;background:#60a5fa;top:20%;right:20%;animation:float-shape 12s ease-in-out infinite 1s}
-        .shape-5{width:160px;height:160px;background:#1d4ed8;bottom:20%;right:10%;animation:float-shape 22s ease-in-out infinite 3s}
+        .shape-1{width:400px;height:400px;background:#1A1A1A;top:-100px;right:-80px;animation:float-shape 20s ease-in-out infinite}
+        .shape-2{width:200px;height:200px;background:#475569;bottom:-50px;left:-60px;animation:float-shape 15s ease-in-out infinite reverse}
+        .shape-3{width:120px;height:120px;background:#1A1A1A;top:30%;left:10%;animation:float-shape 18s ease-in-out infinite 2s}
+        .shape-4{width:80px;height:80px;background:#94a3b8;top:20%;right:20%;animation:float-shape 12s ease-in-out infinite 1s}
+        .shape-5{width:160px;height:160px;background:#475569;bottom:20%;right:10%;animation:float-shape 22s ease-in-out infinite 3s}
         @keyframes float-shape{0%,100%{transform:translate(0,0) scale(1)}25%{transform:translate(20px,-30px) scale(1.05)}50%{transform:translate(-10px,20px) scale(0.95)}75%{transform:translate(15px,10px) scale(1.02)}}
         .notfound-content{text-align:center;position:relative;z-index:2;max-width:520px}
         .notfound-number{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:32px}
@@ -71,11 +71,11 @@ export default function NotFoundPage() {
         [data-theme="dark"] .notfound-desc{color:#8892a8}
         .notfound-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
         .notfound-btn{display:inline-flex;align-items:center;gap:10px;padding:14px 28px;border-radius:14px;font-size:.95rem;font-weight:700;text-decoration:none;cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s}
-        .notfound-btn.primary{background:#0B57D0;color:#fff;border:2px solid #0B57D0;box-shadow:0 4px 14px rgba(11,87,208,0.25)}
-        .notfound-btn.primary:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(11,87,208,0.35)}
+        .notfound-btn.primary{background:#E62020;color:#fff;border:2px solid #E62020;box-shadow:0 4px 14px rgba(230,32,32,0.25)}
+        .notfound-btn.primary:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(230,32,32,0.35)}
         .notfound-btn.secondary{background:#fff;color:#475569;border:2px solid #e2e8f0}
         [data-theme="dark"] .notfound-btn.secondary{background:#1a1d27;color:#8892a8;border-color:#2d3044}
-        .notfound-btn.secondary:hover{border-color:#0B57D0;color:#0B57D0;transform:translateY(-2px)}
+        .notfound-btn.secondary:hover{border-color:#E62020;color:#E62020;transform:translateY(-2px)}
         .notfound-footer{margin-top:48px;padding:16px 24px;background:rgba(255,255,255,0.7);border-radius:14px;border:1px solid #e2e8f0;backdrop-filter:blur(12px);display:inline-block}
         [data-theme="dark"] .notfound-footer{background:rgba(26,29,39,0.7);border-color:#2d3044}
         .notfound-footer p{margin:0;font-size:.88rem;color:#647086}

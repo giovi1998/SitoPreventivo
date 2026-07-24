@@ -1,0 +1,85 @@
+.flyer-layout-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.flyer-layout-buttons button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.82rem;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.flyer-layout-buttons button:hover {
+  background: var(--accent-bg, var(--surface));
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.flyer-layout-buttons button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.flyer-ai-chip {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.flyer-ai-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.flyer-ai-quick-grid-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.flyer-ai-quick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.flyer-ai-quick-card:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.flyer-ai-quick-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flyer-ai-quick-icon {
+  font-size: 1rem;
+}
+
+.flyer-ai-quick-label {
+  font-size: 0.72rem;
+}

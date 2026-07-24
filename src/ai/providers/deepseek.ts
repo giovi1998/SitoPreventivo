@@ -3,7 +3,18 @@ import type { ChatMessage, ChatOptions, AIResponse, AIStreamChunk } from '../typ
 import dataService from '../../utils/dataService';
 
 const API_URL = 'https://api.deepseek.com/v1/chat/completions';
-const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+function isLocalhost() {
+  if (typeof window !== 'undefined') {
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  }
+  return false;
+}
+const IS_LOCAL = isLocalhost();
+
+function newRequestId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
 
 export class DeepSeekProvider extends BaseAIProvider {
   readonly name = 'DeepSeek';
@@ -18,25 +29,27 @@ export class DeepSeekProvider extends BaseAIProvider {
 
   async chat(messages: ChatMessage[], options?: ChatOptions): Promise<AIResponse> {
     const body = this.buildRequestBody(messages, options);
+    const requestId = options?.requestId ?? newRequestId();
 
     if (IS_LOCAL) {
-      return this.callLocal(body);
+      return this.callLocal(body, requestId);
     }
 
-    return this.callProxy(body);
+    return this.callProxy(body, requestId);
   }
 
   async *stream(messages: ChatMessage[], options?: ChatOptions): AsyncGenerator<AIStreamChunk> {
     const body = this.buildRequestBody(messages, { ...options, stream: true });
+    const requestId = options?.requestId ?? newRequestId();
 
     if (IS_LOCAL) {
-      yield* this.streamLocal(body);
+      yield* this.streamLocal(body, requestId);
     } else {
-      yield* this.streamProxy(body);
+      yield* this.streamProxy(body, requestId);
     }
   }
 
-  private async callLocal(body: Record<string, unknown>): Promise<AIResponse> {
+  private async callLocal(body: Record<string, unknown>, requestId: string): Promise<AIResponse> {
     const key = await dataService.getDeepseekKey();
     if (!key) {
       return {
@@ -48,15 +61,15 @@ export class DeepSeekProvider extends BaseAIProvider {
 
     const res = await fetch(API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId, Authorization: `Bearer ${key}` },
       body: JSON.stringify(body),
     });
 
     return this.handleResponse(res);
   }
 
-  private async callProxy(body: Record<string, unknown>): Promise<AIResponse> {
-    const result = await dataService.chatWithAI(body as any);
+  private async callProxy(body: Record<string, unknown>, requestId: string): Promise<AIResponse> {
+    const result = await dataService.chatWithAI({ ...(body as any), requestId });
     if (result.error) throw new Error(result.error);
     return this.parseResult(result);
   }
@@ -82,26 +95,49 @@ export class DeepSeekProvider extends BaseAIProvider {
     };
   }
 
-  private async *streamLocal(body: Record<string, unknown>): AsyncGenerator<AIStreamChunk> {
+  private async *streamLocal(body: Record<string, unknown>, requestId: string): AsyncGenerator<AIStreamChunk> {
     const key = await dataService.getDeepseekKey();
     if (!key) {
       yield { type: 'error', error: 'Chiave DeepSeek non configurata' };
       return;
     }
 
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId, Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      console.error('[DeepSeek] Errore di rete:', err);
+      yield { type: 'error', error: `Errore di rete: ${err instanceof Error ? err.message : 'sconosciuto'}` };
+      return;
+    }
 
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      console.error(`[DeepSeek] HTTP ${res.status}: ${errBody.substring(0, 500)}`);
+      if (res.status === 401) {
+        yield { type: 'error', error: 'Chiave API DeepSeek non valida (401). Aggiorna la chiave.' };
+      } else if (res.status === 402) {
+        yield { type: 'error', error: 'Credito DeepSeek esaurito (402). Ricarica su platform.deepseek.com' };
+      } else if (res.status === 429) {
+        yield { type: 'error', error: 'Troppe richieste (429). Attendi qualche secondo.' };
+      } else {
+        yield { type: 'error', error: `DeepSeek HTTP ${res.status}: ${errBody.substring(0, 200)}` };
+      }
+      return;
+    }
+
+    console.info(`[DeepSeek] Stream HTTP ${res.status} avviato, content-type=${res.headers.get('content-type')}`);
     yield* this.parseSSEStream(res);
   }
 
-  private async *streamProxy(body: Record<string, unknown>): AsyncGenerator<AIStreamChunk> {
+  private async *streamProxy(body: Record<string, unknown>, requestId: string): AsyncGenerator<AIStreamChunk> {
     const res = await fetch('/api/ai/chat/stream', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
       body: JSON.stringify(body),
     });
 
@@ -124,6 +160,8 @@ export class DeepSeekProvider extends BaseAIProvider {
     const decoder = new TextDecoder();
     let buffer = '';
     let toolCallBuffer: Record<string, string> = {};
+    let chunkCount = 0;
+    let totalContentLength = 0;
 
     const flushToolCalls = function* (): Generator<AIStreamChunk> {
       const toolCalls = Object.entries(toolCallBuffer).reduce<
@@ -158,6 +196,7 @@ export class DeepSeekProvider extends BaseAIProvider {
     };
 
     try {
+      let finalUsage: AIStreamChunk['usage'] | undefined;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -172,8 +211,9 @@ export class DeepSeekProvider extends BaseAIProvider {
 
           const data = trimmed.slice(5).trim();
           if (data === '[DONE]') {
+            console.info(`[DeepSeek] Stream completato: ${chunkCount} chunk, ${totalContentLength} caratteri ricevuti`);
             yield* flushToolCalls();
-            yield { type: 'done' };
+            yield { type: 'done', usage: finalUsage };
             return;
           }
 
@@ -181,9 +221,19 @@ export class DeepSeekProvider extends BaseAIProvider {
             const parsed = JSON.parse(data);
             const delta = parsed.choices?.[0]?.delta;
 
+            if (parsed.usage) {
+              finalUsage = {
+                promptTokens: parsed.usage.prompt_tokens ?? 0,
+                completionTokens: parsed.usage.completion_tokens ?? 0,
+                totalTokens: parsed.usage.total_tokens ?? 0,
+              };
+            }
+
             if (!delta) continue;
 
             if (delta.content) {
+              chunkCount++;
+              totalContentLength += delta.content.length;
               yield { type: 'content', content: delta.content };
             }
 
@@ -210,7 +260,7 @@ export class DeepSeekProvider extends BaseAIProvider {
       }
 
       yield* flushToolCalls();
-      yield { type: 'done' };
+      yield { type: 'done', usage: finalUsage };
     } catch (err) {
       yield { type: 'error', error: err instanceof Error ? err.message : 'Errore stream' };
     }

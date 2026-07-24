@@ -1,0 +1,12 @@
+/* CardEditor.css, Phase 2.2 refactor.
+ * Le regole sono state spostate in moduli sotto ./card/ per ridurre la
+ * dimensione del file (era 1752 righe). Gli @import sono nello STESSO
+ * ordine delle sezioni originali, così la cascade CSS è identica. */
+@import './card/cardBase.css';
+@import './card/cardResponsive.css';
+@import './card/cardGridForm.css';
+@import './card/cardAiLayout.css';
+@import './card/cardGridOverlay.css';
+@import './card/cardPreviewSide.css';
+@import './card/cardMobileToolbar.css';
+@import './card/cardAIDecoration.css';

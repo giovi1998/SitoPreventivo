@@ -12,7 +12,127 @@ function lsGet(key) {
 }
 
 function lsSet(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+  try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) {
+    return { error: e?.name === 'QuotaExceededError' ? 'Spazio locale esaurito (immagine troppo grande)' : 'Errore scrittura locale' };
+  }
+}
+
+// Metadata columns stored beside jsonb `data` on the server.
+const DOC_META_KEYS = new Set([
+  'id', 'documentType', 'title', 'userEmail', 'createdAt', 'updatedAt',
+  'isTemplate', 'data',
+]);
+
+/**
+ * Client editors send a FLAT document (builder/front/content at top level).
+ * The API stores payload in jsonb `data`. Convert flat → API envelope so
+ * production never persists `data: null`.
+ */
+function toApiDocument(document) {
+  if (!document || typeof document !== 'object') return document;
+  const {
+    id,
+    documentType,
+    title = '',
+    createdAt,
+    updatedAt,
+    data,
+    style,
+    ...rest
+  } = document;
+
+  if (documentType === 'qrCode') {
+    // QR keeps payload in `data` and style as sibling (API schema).
+    return {
+      id,
+      documentType,
+      title,
+      data: data ?? { type: 'url', payload: '' },
+      style,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  // Strip meta from rest; whatever remains is domain payload.
+  const domain = { ...rest };
+  delete domain.userEmail;
+  delete domain.isTemplate;
+
+  // Already wrapped (tests / older clients): only `data`, no flat fields.
+  if (data != null && Object.keys(domain).length === 0) {
+    return { id, documentType, title, data, createdAt, updatedAt };
+  }
+
+  // Flat client shape (logo/card/flyer): nest domain under `data`.
+  // If both exist, prefer flat fields and merge optional `data`.
+  const payload = data && typeof data === 'object' && !Array.isArray(data)
+    ? { ...data, ...domain }
+    : domain;
+
+  return { id, documentType, title, data: payload, createdAt, updatedAt };
+}
+
+/**
+ * Rehydrate a DB row (or already-flat local doc) into the flat shape
+ * editors and CollectionView expect.
+ */
+function hydrateDocument(row) {
+  if (!row || typeof row !== 'object') return row;
+  const {
+    id,
+    userEmail,
+    documentType,
+    title,
+    data,
+    createdAt,
+    updatedAt,
+    ...rest
+  } = row;
+
+  // Already flat (localStorage path): domain fields live on the row.
+  const hasFlatDomain = Object.keys(rest).some((k) => !DOC_META_KEYS.has(k));
+  if (hasFlatDomain && (rest.builder || rest.front || rest.content || rest.data?.payload !== undefined || rest.style)) {
+    return {
+      id,
+      userEmail,
+      documentType,
+      title: title ?? '',
+      ...rest,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  if (documentType === 'qrCode') {
+    // Stored as { type, payload } or { type, payload, style } or nested data.
+    const payload = data && typeof data === 'object' ? data : {};
+    const qrData = payload.type != null || payload.payload != null
+      ? { type: payload.type ?? 'url', payload: payload.payload ?? '' }
+      : (payload.data ?? { type: 'url', payload: '' });
+    return {
+      documentType: 'qrCode',
+      id,
+      userEmail,
+      title: title ?? '',
+      data: qrData,
+      style: payload.style ?? rest.style,
+      createdAt,
+      updatedAt,
+    };
+  }
+
+  // logo / businessCard / flyer / quote: spread jsonb data onto top level
+  const body = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+  return {
+    documentType,
+    id,
+    userEmail,
+    title: title ?? '',
+    ...body,
+    createdAt: createdAt ?? body.createdAt,
+    updatedAt: updatedAt ?? body.updatedAt,
+  };
 }
 
 // ─── API CALL ─────────────────────────────────────────
@@ -22,9 +142,12 @@ async function api(method, path, body, options = {}) {
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const url = `${API_BASE}${path}`;
+    const headers = {};
+    if (body) headers['Content-Type'] = 'application/json';
+    if (options.requestId) headers['X-Request-Id'] = options.requestId;
     const res = await fetch(url, {
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
@@ -128,7 +251,8 @@ const dataService = {
   async getQuotes(email, page = 1, limit = 50) {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_quotes') || [];
-      const filtered = all.filter(q => q.owner === email);
+      // Match by owner OR userEmail (owner used to be issuer display name).
+      const filtered = all.filter(q => q.owner === email || q.userEmail === email);
       const start = (page - 1) * limit;
       return { quotes: filtered.slice(start, start + limit), total: filtered.length, page, limit };
     }
@@ -139,20 +263,23 @@ const dataService = {
 
   // ─── SAVE QUOTE ─────────────────────────────────
   async saveQuote(email, quote) {
+    // Always stamp owner/userEmail as the account email so local
+    // getQuotes filter works (toLegacyFormat used issuer.name as owner).
+    const owned = { ...quote, owner: email, userEmail: email };
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_quotes') || [];
-      const existing = all.findIndex(q => q.id === quote.id);
+      const existing = all.findIndex(q => q.id === owned.id);
       if (existing >= 0) {
-        all[existing] = { ...all[existing], ...quote };
+        all[existing] = { ...all[existing], ...owned };
       } else {
-        all.push(quote);
+        all.push(owned);
       }
       lsSet('precisionQuote_quotes', all);
-      return { success: true, ...quote };
+      return { success: true, ...owned };
     }
-    const result = await api('POST', '/quotes', { email, quote });
+    const result = await api('POST', '/quotes', { email, quote: owned });
     if (result.error) return { success: false, error: result.error };
-    return { success: true, ...quote };
+    return { success: true, ...owned };
   },
 
   // ─── DELETE QUOTE ───────────────────────────────
@@ -163,6 +290,120 @@ const dataService = {
       return { success: true };
     }
     const result = await api('DELETE', `/quotes/${quoteId}`, { email });
+    if (result.error) return { success: false, error: result.error };
+    return { success: true };
+  },
+
+  // ─── DOCUMENTS (QR, card, flyer, logo) ───────
+  async getDocument(email, docId, documentType) {
+    if (!email || !docId) return null;
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_documents:v1') || [];
+      const doc = all.find(d => d.id === docId && d.userEmail === email && d.documentType === documentType);
+      return doc ? hydrateDocument(doc) : null;
+    }
+    const qs = new URLSearchParams({ email });
+    if (documentType) qs.set('type', documentType);
+    const result = await api('GET', `/documents/${encodeURIComponent(docId)}?${qs.toString()}`);
+    if (result.error) return null;
+    return hydrateDocument(result.data || result);
+  },
+
+  async saveDocument(email, document) {
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_documents:v1') || [];
+      const ownerEmail = email || document.userEmail;
+      // Always stamp userEmail so Collection filter works even if caller forgot.
+      const toStore = { ...document, userEmail: ownerEmail };
+      const isNew = !all.some(d => d.id === toStore.id);
+      const owned = all.filter(d => d.userEmail === ownerEmail);
+      const others = all.filter(d => d.userEmail !== ownerEmail);
+      const updated = [toStore, ...owned.filter(d => d.id !== toStore.id), ...others];
+      const write = lsSet('precisionQuote_documents:v1', updated);
+      if (write && write.error) {
+        return { success: false, error: write.error };
+      }
+      if (isNew) {
+        // fire-and-forget; failure here is non-fatal (best-effort counting)
+        dataService.incrementDocumentCount(ownerEmail).catch(() => {});
+      }
+      return { success: true, data: toStore };
+    }
+    // Production: wrap flat editor payload → { id, documentType, title, data }
+    // so API never stores null for logo/card/flyer content.
+    const apiDoc = toApiDocument({ ...document, userEmail: email || document.userEmail });
+    const result = await api('POST', '/documents', { email, document: apiDoc });
+    if (result.error) return { success: false, error: result.error };
+    const row = result.data || result;
+    return { success: true, data: hydrateDocument(row) };
+  },
+
+  async getDocuments(email, documentType) {
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_documents:v1') || [];
+      let filtered = all.filter(d => d.userEmail === email);
+      if (documentType) {
+        filtered = filtered.filter(d => d.documentType === documentType);
+      }
+      return { documents: filtered };
+    }
+    const qs = new URLSearchParams({ email });
+    if (documentType) qs.set('type', documentType);
+    const result = await api('GET', `/documents?${qs.toString()}`);
+    if (result.error) return { documents: [] };
+    const rows = Array.isArray(result) ? result : (result.data || []);
+    // Rehydrate DB rows (data jsonb) → flat editor shape.
+    return { documents: rows.map(hydrateDocument) };
+  },
+
+  // ─── MIGRATION (phase 6) ───────────────────────
+  // Copy legacy quotes from `precisionQuote_quotes` to the unified
+  // `precisionQuote_documents:v1` storage with `documentType='quote'`.
+  // Idempotent: uses stable `migrate_<oldid>` IDs (no timestamp) so
+  // re-runs never duplicate. Flag `pq_migration_v1_done_<email>` skips
+  // already-migrated users. On `QuotaExceeded` the function throws so
+  // the caller can decide (e.g. AppShell shows a recovery toast).
+  async migrateLegacyQuotes(email) {
+    if (!email) return { migrated: 0, skipped: true };
+    if (IS_LOCAL) {
+      const flag = `pq_migration_v1_done_${email}`;
+      if (localStorage.getItem(flag)) return { migrated: 0, skipped: true };
+      const legacy = lsGet('precisionQuote_quotes') || [];
+      const mine = legacy.filter((q) => q && q.owner === email);
+      const docs = lsGet('precisionQuote_documents:v1') || [];
+      const existingIds = new Set(docs.map((d) => d && d.id));
+      let migrated = 0;
+      for (const q of mine) {
+        const newId = `migrate_${q.id}`;
+        if (existingIds.has(newId)) continue;
+        docs.push({
+          ...q,
+          id: newId,
+          userEmail: email,
+          documentType: 'quote',
+          data: null,
+        });
+        migrated += 1;
+      }
+      // Direct setItem (not lsSet) so QuotaExceeded propagates and the
+      // caller can show a recovery toast instead of silently losing data.
+      localStorage.setItem('precisionQuote_documents:v1', JSON.stringify(docs));
+      localStorage.setItem(flag, '1');
+      return { migrated, skipped: false };
+    }
+    // Production: DB was already migrated in phase 1 (rename
+    // `quotes` → `documents`). Just mark flag for consistency.
+    try { localStorage.setItem(`pq_migration_v1_done_${email}`, '1'); } catch {}
+    return { migrated: 0, skipped: true };
+  },
+
+  async deleteDocument(documentId, email) {
+    if (IS_LOCAL) {
+      const all = lsGet('precisionQuote_documents:v1') || [];
+      lsSet('precisionQuote_documents:v1', all.filter(d => d.id !== documentId));
+      return { success: true };
+    }
+    const result = await api('DELETE', `/documents/${documentId}`, { email });
     if (result.error) return { success: false, error: result.error };
     return { success: true };
   },
@@ -194,7 +435,7 @@ const dataService = {
       const users = (lsGet('registeredUsers') || []).map(({ password, ...user }) => user);
       result = { users };
     } else {
-      const res = await api('GET', '/users');
+      const res = await api('GET', '/users?adminEmail=admin%40gmail.com');
       result = res.error ? { users: [] } : { users: Array.isArray(res) ? res : [] };
     }
     setCache(cacheKey, result);
@@ -213,7 +454,7 @@ const dataService = {
       const start = (page - 1) * limit;
       result = { quotes: all.slice(start, start + limit), total: all.length, page, limit };
     } else {
-      const res = await api('GET', `/quotes/all?page=${page}&limit=${limit}`);
+      const res = await api('GET', `/quotes/all?page=${page}&limit=${limit}&adminEmail=admin%40gmail.com`);
       result = res.error ? { quotes: [], total: 0, page, limit } : { quotes: Array.isArray(res) ? res : (res.data || []), total: res.total || 0, page, limit };
     }
     if (page === 1) setCache(cacheKey, result);
@@ -231,22 +472,30 @@ const dataService = {
       }
       return { success: true };
     }
-    const result = await api('PATCH', '/users/limits', { email, tokenLimit });
+    const result = await api('PATCH', '/users/limits', { email, tokenLimit, adminEmail: 'admin@gmail.com' });
     return result.error ? { success: false, error: result.error } : { success: true };
   },
 
   // ─── TRACK AI TOKENS ────────────────────────────
-  async trackTokens(email, tokens) {
+  async trackTokens(email, tokens, costUsd) {
     if (IS_LOCAL) {
       const users = lsGet('registeredUsers') || [];
       const idx = users.findIndex(u => u.email === email);
       if (idx >= 0) {
         users[idx].tokensUsed = (users[idx].tokensUsed || 0) + tokens;
+        // TB-023: traccia costo USD (opzionale, backward compatible)
+        if (typeof costUsd === 'number' && costUsd > 0) {
+          users[idx].tokensCostUsd = (users[idx].tokensCostUsd || 0) + costUsd;
+        }
         lsSet('registeredUsers', users);
       }
       return;
     }
-    api('POST', '/users/tokens', { email, tokens }).catch(() => {});
+    const payload = { email, tokens };
+    if (typeof costUsd === 'number' && costUsd > 0) {
+      payload.costUsd = costUsd;
+    }
+    api('POST', '/users/tokens', payload).catch(() => {});
   },
 
   // ─── GET USER PROFILE (with token info) ─────────
@@ -266,20 +515,22 @@ const dataService = {
   },
 
   // ─── AI STREAM CHAT ──────────────────────────────
-  async streamChat(params) {
+  async streamChat(params, options = {}) {
+    const { requestId } = options;
+    const streamHeaders = requestId ? { 'Content-Type': 'application/json', 'X-Request-Id': requestId } : { 'Content-Type': 'application/json' };
     if (IS_LOCAL) {
-      const key = lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+      const key = import.meta.env.VITE_DEEPSEEK_API_KEY || lsGet('deepseekApiKey') || '';
       if (!key) return { error: 'Chiave DeepSeek non configurata.' };
       const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        headers: { ...streamHeaders, 'Authorization': `Bearer ${key}` },
         body: JSON.stringify({ ...params, stream: true }),
       });
       return res;
     }
     const res = await fetch('/api/ai/chat/stream', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: streamHeaders,
       body: JSON.stringify(params),
     });
     return res;
@@ -288,7 +539,10 @@ const dataService = {
   // ─── SHARED DEEPSEEK API KEY ────────────────────
   async getDeepseekKey() {
     if (IS_LOCAL) {
-      return lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+      // Env var has priority over localStorage: if the user updates .env,
+      // the new key takes effect immediately (after dev server restart).
+      // localStorage is only used as fallback for keys saved via the admin UI.
+      return import.meta.env.VITE_DEEPSEEK_API_KEY || lsGet('deepseekApiKey') || '';
     }
     // In production, key is set via Vercel env var (DEEPSEEK_API_KEY)
     // The frontend never reads it — use chatWithAI() instead
@@ -307,21 +561,23 @@ const dataService = {
   // ─── CHECK DEEPSEEK STATUS (production debug) ────
   async checkDeepSeekStatus() {
     if (IS_LOCAL) {
-      const key = lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+      const key = import.meta.env.VITE_DEEPSEEK_API_KEY || lsGet('deepseekApiKey') || '';
       return { configured: !!key, envVarSet: false, localKeySet: !!key };
     }
     return await api('GET', '/admin/deepseek-status');
   },
 
   // ─── AI CHAT (proxy in prod, direct in local) ────
-  async chatWithAI({ model, messages, response_format, temperature }) {
+  async chatWithAI({ model, messages, response_format, temperature, requestId } = {}) {
     if (IS_LOCAL) {
-      const key = lsGet('deepseekApiKey') || import.meta.env.VITE_DEEPSEEK_API_KEY || '';
+      const key = import.meta.env.VITE_DEEPSEEK_API_KEY || lsGet('deepseekApiKey') || '';
       if (!key) return { error: 'Chiave DeepSeek non configurata. Inseriscila nella Dashboard Admin (solo sviluppo locale).' };
       try {
+        const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` };
+        if (requestId) headers['X-Request-Id'] = requestId;
         const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+          headers,
           body: JSON.stringify({
             model: model || 'deepseek-chat',
             messages,
@@ -341,40 +597,30 @@ const dataService = {
       }
     }
     // Production: use Vercel Serverless Function proxy (key stays server-side)
-    return await api('POST', '/ai/chat', { model, messages, response_format, temperature }, { timeoutMs: 30000 });
+    return await api('POST', '/ai/chat', { model, messages, response_format, temperature }, { timeoutMs: 30000, requestId });
   },
 
   // ─── TEMPLATES ──────────────────────────────────
   async getTemplates(email) {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_quotes') || [];
-      return { quotes: all.filter(q => q.userEmail === email && q.isTemplate) };
+      return { quotes: all.filter(q => q.isTemplate && (q.isGlobal || q.owner === email)) };
     }
     const result = await api('GET', `/quotes/templates?email=${encodeURIComponent(email)}`);
     if (result.error) return { quotes: [] };
     return { quotes: Array.isArray(result) ? result : [] };
   },
 
-  // ─── PUBLIC QUOTE (no auth) ─────────────────────
-  async getPublicQuote(shareToken) {
-    if (IS_LOCAL) {
-      const all = lsGet('precisionQuote_quotes') || [];
-      const found = all.find(q => q.shareToken === shareToken && q.isShared);
-      if (!found) return { error: 'Preventivo non trovato o non condiviso' };
-      return { quote: found };
-    }
-    const result = await api('GET', `/quotes/public/${shareToken}`);
-    if (result.error) return { error: result.error };
-    return { quote: result };
-  },
-
   // ─── USER SETTINGS ──────────────────────────────
   async getUserSettings(email) {
     if (IS_LOCAL) {
+      if (email === 'admin@gmail.com') {
+        return { userEmail: email, onboardingDone: true };
+      }
       return lsGet(`userSettings_${email}`) || { userEmail: email, onboardingDone: false };
     }
     const result = await api('GET', `/user-settings?email=${encodeURIComponent(email)}`);
-    if (result.error) return { userEmail: email, onboardingDone: false };
+    if (result.error) return { error: result.error, userEmail: email, onboardingDone: false };
     return result;
   },
 
@@ -389,6 +635,133 @@ const dataService = {
     if (result.error) return { success: false, error: result.error };
     return { success: true, ...result };
   },
+
+  // ─── TIER SYSTEM (phase 5) ─────────────────────
+  // Admin has implicit `unlocked` tier — short-circuit before any
+  // DB / localStorage access. This mirrors the admin pattern in
+  // AGENTS.md "Admin User".
+
+  isAdmin(email) {
+    return email === 'admin@gmail.com';
+  },
+
+  async getUserTier(email) {
+    if (dataService.isAdmin(email)) {
+      return { tier: 'unlocked', documentCount: 0, documentLimit: null };
+    }
+    if (IS_LOCAL) {
+      const settings = lsGet(`userSettings_${email}`) || {};
+      const tier = settings.tier === 'unlocked' ? 'unlocked' : 'free';
+      return {
+        tier,
+        documentCount: settings.documentCount || 0,
+        documentLimit: 3,
+      };
+    }
+    return api('GET', `/users/tier?email=${encodeURIComponent(email)}`);
+  },
+
+  async redeemUnlockCode(email, code) {
+    if (dataService.isAdmin(email)) {
+      return { success: true, tier: 'unlocked' };
+    }
+    const normalized = String(code || '').trim().toUpperCase();
+    if (IS_LOCAL) {
+      const codes = lsGet('unlock_codes') || [];
+      const found = codes.find(c => String(c.code || '').toUpperCase() === normalized);
+      if (!found) {
+        if (normalized === 'TEST-UNLOCK') {
+          // magic: per spec edge case 3 (locale dev fallback)
+          const settings = lsGet(`userSettings_${email}`) || {};
+          settings.tier = 'unlocked';
+          settings.unlockCode = normalized;
+          settings.unlockedAt = new Date().toISOString();
+          lsSet(`userSettings_${email}`, settings);
+          return { success: true, tier: 'unlocked' };
+        }
+        return { error: 'Codice non valido' };
+      }
+      if (found.usedBy) {
+        return { error: 'Codice già utilizzato' };
+      }
+      found.usedBy = email;
+      found.usedAt = new Date().toISOString();
+      lsSet('unlock_codes', codes);
+      const settings = lsGet(`userSettings_${email}`) || {};
+      settings.tier = 'unlocked';
+      settings.unlockCode = normalized;
+      settings.unlockedAt = new Date().toISOString();
+      lsSet(`userSettings_${email}`, settings);
+      return { success: true, tier: 'unlocked' };
+    }
+    return api('POST', '/users/redeem-code', { email, code: normalized });
+  },
+
+  async incrementDocumentCount(email, delta = 1) {
+    if (dataService.isAdmin(email)) return { documentCount: 0 };
+    if (IS_LOCAL) {
+      const settings = lsGet(`userSettings_${email}`) || {};
+      settings.documentCount = (settings.documentCount || 0) + delta;
+      lsSet(`userSettings_${email}`, settings);
+      return { documentCount: settings.documentCount };
+    }
+    return api('PATCH', '/users/document-count', { email, delta });
+  },
+
+  async adminGenerateUnlockCode(packageName) {
+    const code = generateUnlockCode();
+    if (IS_LOCAL) {
+      const codes = lsGet('unlock_codes') || [];
+      codes.push({
+        code,
+        package: packageName,
+        usedBy: null,
+        usedAt: null,
+        createdBy: 'admin@gmail.com',
+        createdAt: new Date().toISOString(),
+      });
+      lsSet('unlock_codes', codes);
+      return { success: true, code };
+    }
+    return api('POST', '/admin/generate-unlock-code', {
+      adminEmail: 'admin@gmail.com',
+      package: packageName,
+    });
+  },
+
+  async adminListUnlockCodes() {
+    if (IS_LOCAL) {
+      return { codes: lsGet('unlock_codes') || [] };
+    }
+    return api('GET', '/admin/unlock-codes?adminEmail=admin%40gmail.com');
+  },
+
+  async adminUnlockUser(userEmail) {
+    if (IS_LOCAL) {
+      const settings = lsGet(`userSettings_${userEmail}`) || {};
+      settings.tier = 'unlocked';
+      settings.unlockedAt = new Date().toISOString();
+      lsSet(`userSettings_${userEmail}`, settings);
+      return { success: true, tier: 'unlocked' };
+    }
+    return api('POST', '/admin/unlock-user', { adminEmail: 'admin@gmail.com', userEmail });
+  },
+
+
 };
+
+// ─── HELPERS ─────────────────────────────────────────
+function randomHex(n) {
+  let s = '';
+  const chars = '0123456789ABCDEF';
+  for (let i = 0; i < n; i++) s += chars[Math.floor(Math.random() * 16)];
+  return s;
+}
+
+function generateUnlockCode() {
+  // Phase 13b: prefisso QB- per i nuovi codici. I codici PQ- esistenti
+  // restano validi (redeem confronta solo la stringa normalizzata).
+  return `QB-${randomHex(8)}-${randomHex(8)}-${randomHex(8)}`;
+}
 
 export default dataService;

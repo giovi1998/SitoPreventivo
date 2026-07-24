@@ -251,7 +251,7 @@ export function calculateOptionSummary(items: QuoteItem[]): {
   return { subtotalNet, discountsTotal, taxTotal, totalNet, totalGross };
 }
 
-export function calculateGlobalTotals(options: QuoteOption[], selectedOptionIds: string[]): globalTotalsSchema._type {
+export function calculateGlobalTotals(options: QuoteOption[], selectedOptionIds: string[]): z.infer<typeof globalTotalsSchema> {
   const selected = options.filter((o) => selectedOptionIds.includes(o.id));
   const subtotalNet = selected.reduce((s, o) => s + o.summary.subtotalNet, 0);
   const discountsTotal = selected.reduce((s, o) => s + o.summary.discountsTotal, 0);
@@ -271,9 +271,8 @@ export function calculateGlobalTotals(options: QuoteOption[], selectedOptionIds:
 }
 
 export function recalculateQuote(quote: PremiumQuote): PremiumQuote {
-  const options = quote.options.map((opt) => ({
-    ...opt,
-    items: opt.items.map((item) => ({
+  const options = quote.options.map((opt) => {
+    const items = opt.items.map((item) => ({
       ...item,
       total: calculateItemTotal(
         item.quantity,
@@ -282,9 +281,13 @@ export function recalculateQuote(quote: PremiumQuote): PremiumQuote {
         item.discount.value,
         item.tax.rate
       ),
-    })),
-    summary: calculateOptionSummary(opt.items),
-  }));
+    }));
+    return {
+      ...opt,
+      items,
+      summary: calculateOptionSummary(items),
+    };
+  });
   const globalTotals = calculateGlobalTotals(options, quote.globalTotals.optionsSelected);
   return { ...quote, options, globalTotals, updatedAt: new Date().toISOString() };
 }
@@ -426,8 +429,8 @@ interface LegacyQuote {
   options?: LegacyOption[];
   clauses?: LegacyClause[];
   isTemplate?: boolean;
-  shareToken?: string;
-  isShared?: boolean;
+  isGlobal?: boolean;
+  profession?: string;
   _premium?: Record<string, unknown>;
 }
 
@@ -497,7 +500,7 @@ export function migrateFromLegacy(legacy: LegacyQuote): PremiumQuote {
     }
     const summary = calculateOptionSummary(items);
     return {
-      id: String(opt.id ?? '') || generateId('opt'),
+      id: opt.id ? String(opt.id) : generateId('opt'),
       label: opt.title || `Opzione ${i + 1}`,
       description: opt.description || '',
       isDefault: i === 0,
@@ -611,6 +614,8 @@ export function toLegacyFormat(quote: PremiumQuote): LegacyQuote {
       title: c.title,
       body: c.body,
     })),
+    isGlobal: (quote as any).isGlobal,
+    profession: (quote as any).profession,
     _premium: quote as unknown as Record<string, unknown>,
   };
 }

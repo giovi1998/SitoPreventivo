@@ -44,7 +44,7 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
     } as React.CSSProperties;
 
     return (
-      <article ref={ref} className={`document ${themeClass}`} style={style}>
+      <article ref={ref} className={`document ${themeClass}`} style={style} data-quote-preview="true">
 
         <div className="doc-title-section">
           <h1 className="doc-main-title" style={{ color: accent }}>
@@ -80,46 +80,49 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
               {items.length > 0 && (
                 <>
                   <p className="doc-table-label"><strong>Costi</strong></p>
-                  <table className="doc-cost-table">
-                    <thead>
-                      <tr>
-                        <th>Voce</th>
-                        <th>Q.tà</th>
-                        <th>Prezzo</th>
-                        <th>Totale</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.label}</td>
-                          <td>{item.quantity} {item.unit}</td>
-                          <td>{money(item.unitPrice)}</td>
-                          <td>{money(item.total?.gross || 0)}</td>
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table className="doc-cost-table">
+                      <thead>
+                        <tr>
+                          <th>Voce</th>
+                          <th>Q.tà</th>
+                          <th>Prezzo</th>
+                          <th>Totale</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {items.map((item) => (
+                          <tr key={item.id}>
+                            <td>{item.label}</td>
+                            <td>{item.quantity} {item.unit}</td>
+                            <td>{money(item.unitPrice)}</td>
+                            <td>{money(item.total?.gross || 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
                   <p className="doc-table-label"><strong>Riepilogo economico</strong></p>
-                  <table className="doc-summary-table">
-                    <thead>
-                      <tr>
-                        <th>Voce</th>
-                        <th>Imponibile</th>
-                        <th>IVA {vat}%</th>
-                        <th>Totale IVA inclusa</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.label}</td>
-                          <td>{money(item.total?.net || 0)}</td>
-                          <td>{money(item.total?.tax || 0)}</td>
-                          <td>{money(item.total?.gross || 0)}</td>
+                  <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    <table className="doc-summary-table">
+                      <thead>
+                        <tr>
+                          <th>Voce</th>
+                          <th>Imponibile</th>
+                          <th>IVA {vat}%</th>
+                          <th>Totale IVA inclusa</th>
                         </tr>
-                      ))}
+                      </thead>
+                      <tbody>
+                        {items.map((item) => (
+                          <tr key={item.id}>
+                            <td>{item.label}</td>
+                            <td>{money(item.total?.net || 0)}</td>
+                            <td>{money(item.total?.tax || 0)}</td>
+                            <td>{money(item.total?.gross || 0)}</td>
+                          </tr>
+                        ))}
                       <tr>
                         <td><strong>Totale opzione</strong></td>
                         <td><strong>{money(option.summary?.totalNet || 0)}</strong></td>
@@ -127,7 +130,8 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
                         <td><strong>{money(option.summary?.totalGross || 0)}</strong></td>
                       </tr>
                     </tbody>
-                  </table>
+                    </table>
+                  </div>
                 </>
               )}
 
@@ -137,7 +141,7 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
                     <p key={i}>
                       <strong style={{ color: accent }}>{ps.label} ({ps.percentage}%):</strong>{' '}
                       {money((option.summary?.totalGross || 0) * ps.percentage / 100)} IVA inclusa
-                      {' — '}{ps.notes || `Entro ${ps.dueDaysFromIssue} giorni`}
+                      {', '}{ps.notes || `Entro ${ps.dueDaysFromIssue} giorni`}
                     </p>
                   ))}
                 </div>
@@ -166,7 +170,7 @@ const DocumentPreview = React.memo(React.forwardRef<HTMLElement, DocumentPreview
                 <thead>
                   <tr>
                     <th>Caratteristica</th>
-                    {opts.map((o) => <th key={o.id}>{o.label.split('—')[0].trim()}</th>)}
+                    {opts.map((o) => <th key={o.id}>{o.label.split(':')[0].trim()}</th>)}
                   </tr>
                 </thead>
                 <tbody>

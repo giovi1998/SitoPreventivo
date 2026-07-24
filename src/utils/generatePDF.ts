@@ -2,17 +2,14 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { PremiumQuote, DocumentTemplateId } from './quoteSchema';
 import { getPdfMakeStyle } from './documentThemes';
+import { applyWatermarkToPdf, type Tier } from './watermark';
 
-if (pdfFonts.pdfMake) {
-  pdfMake.vfs = pdfFonts.pdfMake.vfs;
-} else {
-  pdfMake.vfs = pdfFonts.vfs || pdfFonts;
-}
+pdfMake.vfs = pdfFonts;
 
 const money = (v: number) =>
   new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Number(v || 0));
 
-export default function generatePDF(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate') {
+function buildDocDefinition(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate') {
   const theme = getPdfMakeStyle(themeId);
   const accent = quote.uiPreferences?.accentColor || '#01696F';
   const opts = quote.options || [];
@@ -75,7 +72,7 @@ export default function generatePDF(quote: PremiumQuote, themeId: DocumentTempla
       const costHeader = ['Voce', 'Q.tà', 'Prezzo', 'Totale'].map((h) => ({
         text: h, style: 'tableHeader', alignment: (h === 'Voce' ? 'left' : 'right') as any,
       }));
-      const costRows = [costHeader];
+      const costRows: any[][] = [costHeader];
       items.forEach((item) => {
         costRows.push([
           { text: item.label },
@@ -94,7 +91,7 @@ export default function generatePDF(quote: PremiumQuote, themeId: DocumentTempla
       const sumHeader = ['Voce', 'Imponibile', `IVA ${vat}%`, 'Totale IVA inclusa'].map((h) => ({
         text: h, style: 'tableHeader', alignment: (h === 'Voce' ? 'left' : 'right') as any,
       }));
-      const sumRows = [sumHeader];
+      const sumRows: any[][] = [sumHeader];
       items.forEach((item) => {
         sumRows.push([
           { text: item.label },
@@ -126,7 +123,7 @@ export default function generatePDF(quote: PremiumQuote, themeId: DocumentTempla
           text: [
             { text: `${ps.label} (${ps.percentage}%): `, bold: true },
             { text: money((option.summary?.totalGross || 0) * ps.percentage / 100), color: accent, bold: true },
-            { text: ` IVA inclusa — ${ps.notes || `Entro ${ps.dueDaysFromIssue} giorni`}` },
+            { text: ` IVA inclusa, ${ps.notes || `Entro ${ps.dueDaysFromIssue} giorni`}` },
           ],
           style: 'accontoText',
           margin: [0, 0, 0, 4],
@@ -163,10 +160,10 @@ export default function generatePDF(quote: PremiumQuote, themeId: DocumentTempla
 
     const compHeader = [
       { text: 'Caratteristica', style: 'tableHeader' },
-      ...opts.map((o) => ({ text: o.label.split('—')[0].trim(), style: 'tableHeader' })),
+      ...opts.map((o) => ({ text: o.label.split(':')[0].trim(), style: 'tableHeader' })),
     ];
 
-    const compRows = [
+    const compRows: any[][] = [
       compHeader,
       [
         { text: 'Totale NET', bold: true },
@@ -220,9 +217,21 @@ export default function generatePDF(quote: PremiumQuote, themeId: DocumentTempla
     pageMargins: [40, 40, 40, 50],
     info: {
       title: `Preventivo - ${quote.client?.name || 'preventivo'}`,
-      author: quote.issuer?.name || 'PrecisionQuote',
+      author: quote.issuer?.name || 'Quickbrand',
     },
   };
 
-  pdfMake.createPdf(docDefinition).download(`${quote.quoteId}_${quote.client?.name || 'preventivo'}.pdf`);
+  return docDefinition;
+}
+
+export function generatePDFBlob(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate', tier: Tier = 'unlocked'): Promise<Uint8Array> {
+  const docDefinition = buildDocDefinition(quote, themeId);
+  const watermarked = applyWatermarkToPdf(docDefinition, tier);
+  return pdfMake.createPdf(watermarked).getBuffer();
+}
+
+export default function generatePDF(quote: PremiumQuote, themeId: DocumentTemplateId = 'corporate', tier: Tier = 'unlocked') {
+  const docDefinition = buildDocDefinition(quote, themeId);
+  const watermarked = applyWatermarkToPdf(docDefinition, tier);
+  pdfMake.createPdf(watermarked).download(`${quote.quoteId || quote.project?.title || 'preventivo'}_${quote.client?.name || 'preventivo'}.pdf`);
 }

@@ -1,0 +1,172 @@
+.flyer-budget-warning {
+  padding: 8px 10px;
+  margin: 8px 0;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-md);
+  color: #d97706;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.flyer-preview-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 0.76rem;
+}
+
+.flyer-warning-info {
+  color: #0ea5e9;
+}
+
+.flyer-warning-warning {
+  color: #f59e0b;
+}
+
+.flyer-warning-error {
+  color: #ef4444;
+}
+
+.flyer-truncation-warning {
+  color: #ef4444;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* Style panel: swatches, font select, scale slider */
+.flyer-style-fields .swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.flyer-style-fields .swatches button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.flyer-style-fields .swatches button.selected {
+  border-color: var(--accent);
+  transform: scale(1.08);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
+
+.flyer-style-fields .flyer-font-label select,
+.flyer-style-fields .flyer-font-custom input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 0.88rem;
+}
+
+.flyer-scale-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.flyer-scale-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flyer-scale-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.flyer-scale-control input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.flyer-scale-value {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+  min-width: 38px;
+  text-align: right;
+}
+
+/* ─── Hero AI prompt editor (v2.4) ───────────────────────────── */
+
+.flyer-hero-prompt-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2, rgba(0, 0, 0, 0.02));
+}
+
+.flyer-hero-prompt-editor textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 6px);
+  box-sizing: border-box;
+}
+
+.flyer-hero-prompt-hint {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .flyer-editor .editor-actions-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .flyer-editor .editor-actions-row button {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+  .flyer-editor .swatches {
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 8px !important;
+  }
+  .flyer-editor .swatches button {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  .flyer-editor .flyer-format-grid,
+  .flyer-editor .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .flyer-editor .flyer-layout-buttons {
+    gap: 4px;
+  }
+  .flyer-editor .flyer-layout-buttons button {
+    padding: 6px 8px;
+    font-size: 0.78rem;
+    flex: 1 1 calc(50% - 4px);
+  }
+  .flyer-editor select,
+  .flyer-editor input,
+  .flyer-editor textarea {
+    font-size: 16px;
+  }
+  .flyer-editor .mini-row {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+}

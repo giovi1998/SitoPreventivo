@@ -1,0 +1,333 @@
+import { z } from 'zod';
+import type { Flyer, FlyerTone, FlyerLayout, FlyerSize } from '../utils/documentSchemas';
+import { FLYER_HEADLINE_MAX, FLYER_SUBHEADLINE_MAX, FLYER_BODY_MAX, FLYER_CTA_LABEL_MAX } from '../utils/documentSchemas';
+import { getFlyerCopyBudget } from '../utils/flyer';
+import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall } from './types';
+import { providerRegistry } from './providers/registry';
+import { chatStore } from './chat/store';
+import { buildFlyerSystemPrompt, buildFlyerCopyPrompt, type FlyerCopyContext } from './prompts/flyerSystem';
+import { ToolAwareOrchestrator } from './BaseOrchestrator';
+import {
+  executeFlyerShortenBody,
+  executeFlyerAddUrgency,
+} from './tools/cardFlyerExecutors';
+import type { ToolRegistry } from './tools/registry';
+import { needsFlyerTools } from './promptUtils';
+
+/**
+ * Zod schema for the AI response shape. Used to validate the LLM JSON
+ * output and surface clear errors to the user (vs. letting a partial /
+ * malformed payload silently overwrite the flyer).
+ *
+ * Intentionally permissive: only what's strictly needed for the copy
+ * fields. `url` is user-supplied, never AI-generated, so it's not in
+ * the AI input/output schema. Lengths match the file's zod field caps
+ * to keep the merge step lossless.
+ */
+export const flyerAIOutputSchema = z.object({
+  headline: z.string().max(FLYER_HEADLINE_MAX).default(''),
+  subheadline: z.string().max(FLYER_SUBHEADLINE_MAX).default(''),
+  body: z.string().max(FLYER_BODY_MAX).default(''),
+  cta: z.object({
+    label: z.string().max(FLYER_CTA_LABEL_MAX).default(''),
+  }).strict(),
+});
+export type FlyerAIOutput = z.infer<typeof flyerAIOutputSchema>;
+
+export interface FlyerProcessResult {
+  flyer: Flyer;
+  response: AIResponse;
+  sessionId: string;
+  changes: string[];
+  rawResponse?: string;
+  /** True when the AI produced a parseable JSON payload (vs analysis text). */
+  applied: boolean;
+}
+
+export type FlyerRefineAction = 'simplify' | 'formal' | 'young' | 'urgent';
+
+const REFINE_INSTRUCTIONS: Record<FlyerRefineAction, string> = {
+  simplify:
+    'Semplifica il copy: riduci il body a max 200 caratteri mantenendo il messaggio principale. Lascia headline e subheadline invariate se possibile.',
+  formal:
+    'Riformula in tono formale e professionale: lessico curato, niente contrazioni, niente espressioni colloquiali. Mantieni la struttura.',
+  young:
+    'Riformula in tono giovane e diretto: contrazioni ammesse, frasi brevi, energico. Mantieni la struttura.',
+  urgent:
+    'Aggiungi un senso di urgenza: usa "solo oggi", "ultimi posti", "offerta limitata", "non perdere" nel body e nella CTA label. Mantieni la struttura.',
+};
+
+const REFINE_CHANGE_LABEL: Record<FlyerRefineAction, string> = {
+  simplify: 'Semplificato',
+  formal: 'Più formale',
+  young: 'Più giovanile',
+  urgent: 'Aggiunta urgenza',
+};
+
+function bodyCharBudgetFor(size: FlyerSize): number {
+  // Larger formats get more body budget. Square gets slightly more
+  // (equal aspect means more vertical room). A5 default = 500.
+  if (size === 'A4' || size === 'Letter') return 800;
+  if (size === 'Square') return 600;
+  if (size === 'A6') return 300;
+  return 500;
+}
+
+const FLYER_TOOLS = ['flyer_shorten_body', 'flyer_add_urgency'];
+
+export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
+  protected applicableTools(): string[] {
+    return FLYER_TOOLS;
+  }
+
+  protected registerExecutors(registry: ToolRegistry<Flyer>): void {
+    registry.register('flyer_shorten_body', executeFlyerShortenBody);
+    registry.register('flyer_add_urgency', executeFlyerAddUrgency);
+  }
+
+  async generateCopy(
+    flyer: Flyer,
+    brief: string,
+    tone: FlyerTone,
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string }
+  ): Promise<FlyerProcessResult> {
+    return this.runPrompt(flyer, () => {
+      const budget = getFlyerCopyBudget(flyer);
+      const ctx: FlyerCopyContext = {
+        layout: flyer.style.layout,
+        size: flyer.size,
+        bodyCharBudget: budget.bodyMaxChars,
+        headlineMaxChars: budget.headlineMaxChars,
+        subheadlineMaxChars: budget.subheadlineMaxChars,
+        ctaMaxChars: budget.ctaMaxChars,
+        densityTarget: budget.densityTarget,
+        layoutAdvice: budget.warning,
+      };
+      return buildFlyerCopyPrompt(brief, tone, ctx);
+    }, options);
+  }
+
+  /**
+   * Refine the current copy using a preset action. Builds a prompt that
+   * embeds the current flyer's copy and asks the model to rewrite it
+   * according to the action.
+   */
+  async refineCopy(
+    flyer: Flyer,
+    action: FlyerRefineAction,
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string }
+  ): Promise<FlyerProcessResult> {
+    return this.runPrompt(flyer, () => {
+      const currentJson = JSON.stringify({
+        headline: flyer.content.headline,
+        subheadline: flyer.content.subheadline,
+        body: flyer.content.body,
+        cta: { label: flyer.content.cta.label },
+      }, null, 2);
+      return `Copy attuale del volantino:
+${currentJson}
+
+Azione richiesta: ${REFINE_INSTRUCTIONS[action]}
+
+Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
+    }, options, REFINE_CHANGE_LABEL[action]);
+  }
+
+  /**
+   * Internal: shared prompt→stream→parse→merge pipeline. Both generate
+   * and refine use this so the merge + validation logic lives in one
+   * place.
+   */
+  private async runPrompt(
+    flyer: Flyer,
+    buildPrompt: () => string,
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string },
+    changeLabel?: string
+  ): Promise<FlyerProcessResult> {
+    const primaryProviderId = options?.modelId || providerRegistry.getDefaultId();
+    const provider: AIProvider = providerRegistry.getProvider(primaryProviderId);
+    const hasImagePreview = !!options?.imagePreviewBase64;
+    const useVision = hasImagePreview && (provider as { supportsVision?: boolean }).supportsVision;
+    const prompt = buildPrompt();
+    const changes: string[] = [];
+
+    if (!this.activeSessionId) {
+      this.activeSessionId = chatStore.createSession().id;
+    }
+    const session = chatStore.getSession(this.activeSessionId)!;
+    if (session.messages.length === 0) {
+      session.messages.push({
+        role: 'system',
+        content: buildFlyerSystemPrompt(),
+      });
+    }
+    const userContentParts: string[] = [];
+    if (useVision && options?.imagePreviewBase64) {
+      userContentParts.push(`Anteprima volantino allegata (base64 JPEG): ${options.imagePreviewBase64}`);
+    }
+    userContentParts.push(prompt);
+    chatStore.addMessage(this.activeSessionId, { role: 'user', content: userContentParts.join('\n\n') });
+
+    const wantsTools = provider.supportsTools && needsFlyerTools(prompt);
+    const toolsDefs = wantsTools ? this.toolRegistry.getDefinitions() : undefined;
+
+    const { response: aiResponse, providerId: finalProviderId } = await this.executeWithFallback(
+      primaryProviderId,
+      session.messages,
+      {
+        temperature: 0.7,
+        tools: toolsDefs,
+        responseFormat: wantsTools ? undefined : { type: 'json_object' },
+        requestId: options?.requestId,
+      },
+      { onStream: options?.onStream }
+    );
+
+    let currentFlyer: Flyer = { ...flyer };
+    let applied = false;
+
+    // ─── TOOL MODE ─────────────────────────────────────
+    if (aiResponse.toolCalls && aiResponse.toolCalls.length > 0) {
+      chatStore.addMessage(this.activeSessionId!, {
+        role: 'assistant',
+        content: aiResponse.content || '',
+        toolCalls: aiResponse.toolCalls,
+      });
+
+      for (const toolCall of aiResponse.toolCalls) {
+        const result = this.executeTool(toolCall, currentFlyer);
+        chatStore.addMessage(this.activeSessionId!, {
+          role: 'tool',
+          content: result.changes,
+          name: toolCall.function.name,
+          toolCallId: toolCall.id,
+        });
+        if (result.changes && !result.changes.startsWith('error:')) {
+          changes.push(`tool:${toolCall.function.name}`);
+        }
+        currentFlyer = result.payload as Flyer;
+      }
+
+      // Multi-turn: ask AI to produce final JSON after tools executed.
+      try {
+        const currentJson = JSON.stringify({
+          headline: currentFlyer.content.headline,
+          subheadline: currentFlyer.content.subheadline,
+          body: currentFlyer.content.body,
+          cta: { label: currentFlyer.content.cta.label },
+        }, null, 2);
+        chatStore.addMessage(this.activeSessionId!, {
+          role: 'user',
+          content: `Copy AGGIORNATO dopo i tool (usa QUESTO stato come base):\n${currentJson}\n\nRestituisci SOLO il JSON aggiornato con la stessa struttura.`,
+        });
+
+        const followUpProvider = providerRegistry.getProvider(finalProviderId);
+        const followUp = await followUpProvider.chat(session.messages, {
+          temperature: 0.4,
+          responseFormat: { type: 'json_object' },
+        });
+
+        if (followUp.usage && aiResponse.usage) {
+          aiResponse.usage = {
+            promptTokens: aiResponse.usage.promptTokens + followUp.usage.promptTokens,
+            completionTokens: aiResponse.usage.completionTokens + followUp.usage.completionTokens,
+            totalTokens: aiResponse.usage.totalTokens + followUp.usage.totalTokens,
+          };
+        }
+
+        if (followUp.content) {
+          chatStore.addMessage(this.activeSessionId!, {
+            role: 'assistant',
+            content: followUp.content,
+          });
+          const clean = this.sanitizeAIResponse(followUp.content);
+          try {
+            const parsed = JSON.parse(clean);
+            const validation = flyerAIOutputSchema.safeParse(parsed);
+            if (!validation.success) {
+              changes.push(`error:invalid_flyer_followup:${validation.error.issues.length}`);
+            } else {
+              const out = validation.data;
+              currentFlyer = {
+                ...currentFlyer,
+                content: {
+                  ...currentFlyer.content,
+                  headline: out.headline,
+                  subheadline: out.subheadline,
+                  body: out.body,
+                  cta: {
+                    ...currentFlyer.content.cta,
+                    label: out.cta.label,
+                  },
+                },
+                updatedAt: new Date().toISOString(),
+              };
+              applied = true;
+              changes.push(changeLabel || 'copy_generated');
+            }
+          } catch {
+            changes.push('error:followup_not_json');
+          }
+        }
+      } catch (err) {
+        changes.push(`error:followup_failed:${(err as Error).message?.slice(0, 100) || 'unknown'}`);
+      }
+
+      return {
+        flyer: currentFlyer,
+        response: aiResponse,
+        sessionId: this.activeSessionId!,
+        changes,
+        rawResponse: aiResponse.content || undefined,
+        applied,
+      };
+    }
+
+    chatStore.addMessage(this.activeSessionId!, {
+      role: 'assistant',
+      content: aiResponse.content || '',
+    });
+
+    if (aiResponse.content) {
+      const clean = this.sanitizeAIResponse(aiResponse.content);
+      try {
+        const parsed = JSON.parse(clean);
+        const validation = flyerAIOutputSchema.safeParse(parsed);
+        if (!validation.success) {
+          changes.push(`error:invalid_flyer:${validation.error.issues.length}`);
+        } else {
+          const out = validation.data;
+          currentFlyer = {
+            ...currentFlyer,
+            content: {
+              ...currentFlyer.content,
+              headline: out.headline,
+              subheadline: out.subheadline,
+              body: out.body,
+              cta: {
+                ...currentFlyer.content.cta,
+                label: out.cta.label,
+              },
+            },
+            updatedAt: new Date().toISOString(),
+          };
+          applied = true;
+          changes.push(changeLabel || 'copy_generated');
+        }
+      } catch {
+        changes.push('error:not_json');
+      }
+    } else {
+      changes.push('error:empty');
+    }
+
+    return {
+      flyer: currentFlyer,
+      response: aiResponse,
+      sessionId: this.activeSessionId!,
+      changes,
+      rawResponse: aiResponse.content || undefined,
+      applied,
+    };
+  }
+}

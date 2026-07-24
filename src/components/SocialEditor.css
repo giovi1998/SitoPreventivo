@@ -1,0 +1,324 @@
+.social-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.social-editor-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  color: var(--ink);
+  font-weight: var(--weight-black);
+  letter-spacing: -0.02em;
+}
+
+.social-editor-header p {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ── Empty state ─────────────────────────────── */
+.social-empty {
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  padding: 48px 32px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.social-empty svg {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.social-empty-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: var(--weight-bold);
+  color: var(--ink);
+}
+
+.social-empty-text {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+  max-width: 460px;
+  line-height: 1.55;
+}
+
+.social-empty-ctas {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.social-empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: var(--weight-extrabold);
+  text-decoration: none;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.social-empty-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(8, 32, 51, 0.12);
+}
+
+.social-empty-cta.secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+/* ── Main grid ───────────────────────────────── */
+.social-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .social-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Phase 14 (REQ-AI-002): layout con rail AI a destra */
+.social-editor-grid--with-rail {
+  grid-template-columns: 1fr auto;
+  align-items: start;
+}
+
+.social-results-hint {
+  margin: 0;
+  padding: 24px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+  background: var(--surface);
+}
+
+@media (max-width: 900px) {
+  .social-editor-grid--with-rail {
+    grid-template-columns: 1fr;
+  }
+}
+
+.social-editor-form {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Il form dentro la rail AIConsole non è una card separata */
+.ai-console .social-editor-form {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.social-form-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: var(--weight-black);
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.social-form-hint {
+  margin: -8px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.social-editor-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--line-lt, #f1f5f9);
+  padding-top: 14px;
+}
+
+.social-editor-actions .ai-generate-btn {
+  flex: 1;
+}
+
+.social-reset-btn {
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.social-reset-btn:hover:not(:disabled) {
+  background: var(--surface-hov);
+  color: var(--ink);
+}
+
+.social-reset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Results ─────────────────────────────────── */
+.social-results {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.social-posts-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.social-post-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.social-post-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.social-platform-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  font-weight: var(--weight-extrabold);
+  text-transform: capitalize;
+  color: var(--ink);
+}
+
+.social-platform-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.platform-instagram .social-platform-dot {
+  background: linear-gradient(45deg, #f9ce34, #ee2a7b, #6228d7);
+}
+
+.platform-facebook .social-platform-dot {
+  background: #1877f2;
+}
+
+.platform-linkedin .social-platform-dot {
+  background: #0a66c2;
+}
+
+.social-post-caption {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.social-post-hashtags {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--accent);
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+.social-post-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--line-lt, #f1f5f9);
+  padding-top: 10px;
+}
+
+.social-post-tone {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.social-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.social-copy-btn:hover {
+  background: var(--surface-hov);
+  border-color: var(--accent);
+}
+
+.social-loading {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 900px) {
+  .social-editor {
+    padding: 16px;
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "user_settings" ADD COLUMN "document_theme" varchar(50) DEFAULT 'corporate';

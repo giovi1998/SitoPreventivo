@@ -1,20 +1,32 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DocumentPreview from './DocumentPreview';
+import AILogPanel from './AILogPanel';
+import AIHarnessConsole from './ai/AIHarnessConsole';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { PremiumQuote, DocumentTemplateId, QuoteOption } from '../utils/quoteSchema';
 import { getTheme } from '../utils/documentThemes';
+import {
+  AiSection,
+  AiPromptTextarea,
+  AiGenerateButton,
+  AiActionChip,
+  AiActionGrid,
+} from './ai-ui';
 
-function Section({ title, defaultOpen = true, children, extra }: { title: string; defaultOpen?: boolean; children: React.ReactNode; extra?: React.ReactNode }) {
+function Section({ title, defaultOpen = false, children, extra, badge }: { title: string; defaultOpen?: boolean; children: React.ReactNode; extra?: React.ReactNode; badge?: string | number }) {
   const [open, setOpen] = React.useState(defaultOpen);
   return (
     <div className={`collapsible ${open ? 'open' : ''}`}>
-      <div className="collapsible-head" onClick={() => setOpen(!open)}>
-        <span>{title}</span>
+      <div className="collapsible-head" onClick={() => setOpen(!open)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!open); }}}>
+        <span className="collapsible-title">
+          {title}
+          {badge !== undefined && <span className="collapsible-badge">{badge}</span>}
+        </span>
         <div className="collapsible-head-right">
-          {extra}
-          <svg className="collapsible-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+          {extra && <span onClick={(e) => e.stopPropagation()}>{extra}</span>}
+          <svg className="collapsible-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
       {open && <div className="collapsible-body">{children}</div>}
@@ -77,40 +89,64 @@ interface EditorViewProps {
   addClause: () => void;
   removeClause: (id: string) => void;
   onRunAI: (mode?: string) => void;
-  aiModel: string;
-  onAiModelChange: (m: string) => void;
   previewRef: React.Ref<HTMLElement>;
   aiLogs: any[];
   isProcessing: boolean;
-  availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean }[];
   onResetChat: () => void;
+  onReset?: () => void;
   isDirty: boolean;
-  saveQuote: () => void;
-  shareInfo: { link: string; token: string } | null;
-  toggleShare: (enabled: boolean) => void;
+  saveQuote: (opts?: { title?: string; silent?: boolean } | string) => void;
   documentTheme?: DocumentTemplateId;
+  onSave: () => void;
+  onExportPDF: () => void;
+  onExportDOCX?: () => void;
+  onImportPDF?: () => void;
+  onSaveAsTemplate?: () => void;
+  lastSaveTime: Date | null;
+  pdfLoading: boolean;
+  docxLoading?: boolean;
+  lastCostUsd?: number;
+  /** TB-023: callback quando l'utente cambia provider dal badge. */
+  onProviderChange?: (providerId: string) => void;
 }
 
 export default function EditorView({
   quote, aiText, setAiText, patch, updateOption, addOption, removeOption,
-  updateOptions, updateClause, addClause, removeClause, onRunAI, aiModel, onAiModelChange,
-  previewRef, aiLogs, isProcessing, availableModels, onResetChat,
-  isDirty, saveQuote, shareInfo, toggleShare, documentTheme = 'corporate',
+  updateOptions, updateClause, addClause, removeClause,   onRunAI, previewRef, aiLogs, isProcessing, onResetChat, onReset,
+  isDirty, saveQuote, documentTheme = 'corporate',
+  onSave, onExportPDF, onExportDOCX, onImportPDF, onSaveAsTemplate,
+  lastSaveTime, pdfLoading, docxLoading, lastCostUsd,
+  onProviderChange,
 }: EditorViewProps) {
   const [showAi, setShowAi] = React.useState(true);
   const [showManual, setShowManual] = React.useState(true);
   const [mobileTab, setMobileTab] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState(false);
+  const [previewFocus, setPreviewFocus] = React.useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const saveRef = React.useRef(saveQuote);
   const dirtyRef = React.useRef(isDirty);
+  const processingRef = React.useRef(isProcessing);
+  const cooldownRef = React.useRef(0);
+  const prevProcessingRef = React.useRef(isProcessing);
   saveRef.current = saveQuote;
   dirtyRef.current = isDirty;
+  processingRef.current = isProcessing;
+
+  React.useEffect(() => {
+    if (prevProcessingRef.current && !isProcessing) {
+      cooldownRef.current = Date.now() + 5000;
+    }
+    prevProcessingRef.current = isProcessing;
+  }, [isProcessing]);
+
   React.useEffect(() => {
     const timer = setInterval(() => {
-      if (dirtyRef.current) saveRef.current();
+      if (!dirtyRef.current) return;
+      if (processingRef.current) return;
+      if (Date.now() < cooldownRef.current) return;
+      saveRef.current({ silent: true });
     }, 30000);
     return () => clearInterval(timer);
   }, []);
@@ -125,19 +161,10 @@ export default function EditorView({
     }
   };
 
-  const copyShareLink = () => {
-    if (shareInfo?.link) {
-      navigator.clipboard.writeText(shareInfo.link).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      });
-    }
-  };
-
   const theme = getTheme(documentTheme);
 
   const themeSelector = (
-    <Section title="Tema documento">
+    <Section title="Tema documento" defaultOpen={false}>
       <div className="theme-selector">
         {(['minimal', 'corporate', 'creative'] as DocumentTemplateId[]).map((tid) => {
           const t = getTheme(tid);
@@ -160,79 +187,106 @@ export default function EditorView({
     </Section>
   );
 
-  const aiPanel = (
-    <section className="panel ai-panel">
-      <div className="panel-kicker">
-        <span>AI Design mode</span>
-        <button className="panel-toggle" onClick={() => setShowAi(false)} title="Collassa pannello">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-      </div>
-      <h2>AI che modifica il preventivo</h2>
-      <Section title="Configurazione AI" defaultOpen={true}>
-        <div className="api-key-section">
-          <div className="ai-model-selector">
-            <label>Modello AI</label>
-            <select value={aiModel} onChange={(e) => onAiModelChange(e.target.value)}>
-              {availableModels.length > 0 ? availableModels.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} — {m.model}
-                </option>
-              )) : (
-                <option value="deepseek-chat">DeepSeek Chat</option>
-              )}
-            </select>
-          </div>
-          <span className="api-key-status ok">● Chiave via server (env var)</span>
-        </div>
-      </Section>
-      <Section title="Prompt e azioni rapide">
-        <textarea value={aiText} onChange={(e) => setAiText(e.target.value)} aria-label="Prompt modifica AI" placeholder="Es. Rendi il preventivo più premium, aggiungi FAQ, applica sconto 10%..." />
-        <div className="ai-actions">
-          <button onClick={() => onRunAI("premium")}>Rendi premium</button>
-          <button onClick={() => onRunAI("faq")}>Aggiungi FAQ</button>
-          <button onClick={() => onRunAI("discount")}>Sconto finale</button>
-          <button onClick={() => onRunAI("simple")}>Semplifica</button>
-        </div>
-        {isProcessing && (
-          <div className="activity-log">
-            <span>Attività</span>
-            <b>🤖 Richiesta AI in corso...</b>
-          </div>
-        )}
-        <div className="ai-extra-actions">
-          <button className="primary wide" onClick={() => onRunAI("custom")} disabled={isProcessing}>
-            {isProcessing ? 'Elaborazione...' : 'Applica prompt personalizzato'}
-          </button>
-          <button className="btn-ghost" onClick={onResetChat} style={{ width: '100%', marginTop: '4px', fontSize: '.75rem' }}>
+  const QUICK_ACTIONS = [
+    { mode: 'premium', label: 'Rendi premium' },
+    { mode: 'faq', label: 'Aggiungi FAQ' },
+    { mode: 'discount', label: 'Sconto finale' },
+    { mode: 'simple', label: 'Semplifica' },
+  ];
+
+  // Phase 14 (REQ-AI-002): `bare` nasconde kicker/collapse/Log AI quando il
+  // pannello è dentro la AIConsole rail (li fornisce la console).
+  const aiPanelSections = (
+    <>
+      <AiSection title="Prompt e azioni rapide" collapsible defaultOpen hint='Descrivi cosa vuoi cambiare. Es. "Rendi il preventivo più premium, aggiungi FAQ".'>
+        <AiPromptTextarea
+          value={aiText}
+          onChange={(e) => setAiText(e.target.value)}
+          aria-label="Prompt modifica AI"
+          placeholder='Es. "Rendi il preventivo più premium, aggiungi FAQ, applica sconto 10%..."'
+          rows={3}
+        />
+        <AiActionGrid groupLabel="Azioni rapide">
+          {QUICK_ACTIONS.map((a) => (
+            <AiActionChip
+              key={a.mode}
+              label={a.label}
+              onClick={() => onRunAI(a.mode)}
+              disabled={isProcessing}
+            />
+          ))}
+        </AiActionGrid>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+          <AiGenerateButton
+            isProcessing={isProcessing}
+            onClick={() => onRunAI('custom')}
+            disabled={!aiText.trim()}
+          >
+            {isProcessing ? 'Elaborazione...' : 'Applica prompt'}
+          </AiGenerateButton>
+          <button
+            type="button"
+            className="card-ai-reset"
+            onClick={onResetChat}
+            disabled={isProcessing}
+            style={{ flexShrink: 0 }}
+          >
             Nuova conversazione
           </button>
         </div>
-      </Section>
-      <Section title="Log AI" defaultOpen={true}>
-        <div className="ai-log-panel" style={{ border: 'none', padding: 0, margin: 0 }}>
-          {aiLogs.length === 0 && <div className="ai-log-entry empty">Nessuna attività ancora...</div>}
-          {aiLogs.map((log: any, i: number) => (
-            <div key={i} className={`ai-log-entry ${log.type}`}>
-              <span className="ai-log-time">{log.time}</span> {log.msg}
-            </div>
-          ))}
-        </div>
-      </Section>
+      </AiSection>
+    </>
+  );
+
+  const aiPanel = (
+    <section className="panel ai-panel" aria-label="AI del preventivo">
+      <div className="panel-kicker">
+        <span>AI Assist</span>
+        <button className="panel-toggle" onClick={() => setShowAi(false)} title="Collassa pannello" aria-label="Collassa AI">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      </div>
+      {aiPanelSections}
+      <AiSection title="Log AI" collapsible defaultOpen>
+        <AILogPanel logs={aiLogs} isProcessing={isProcessing} />
+      </AiSection>
     </section>
+  );
+
+  // Phase 14 (REQ-AI-002): rail AIConsole a destra (un solo modello
+  // mentale). Quote è admin-only → tier unlocked.
+  const aiConsoleRail = (
+    <AIHarnessConsole
+      editorKind="editor"
+      isProcessing={isProcessing}
+      logs={aiLogs}
+      tier="unlocked"
+      onSubmitPrompt={(text: string) => setAiText(text)}
+      hidePrompt
+      onProviderChange={onProviderChange}
+      quickActions={
+        <button type="button" className="card-ai-reset" onClick={onResetChat} disabled={isProcessing}>
+          Nuova conversazione
+        </button>
+      }
+    >
+      <section className="panel ai-panel" aria-label="AI del preventivo">
+        {aiPanelSections}
+      </section>
+    </AIHarnessConsole>
   );
 
   const manualPanel = (
     <section className="panel manual-panel" aria-labelledby="manual-title">
       <div className="panel-kicker">
         <span>Controllo manuale</span>
-        <button className="panel-toggle" onClick={() => setShowManual(false)} title="Collassa pannello">
+        <button className="panel-toggle" onClick={() => setShowManual(false)} title="Collassa pannello" aria-label="Collassa Manuale">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
       </div>
       <h2 id="manual-title">Dati preventivo</h2>
       {themeSelector}
-      <Section title="Informazioni base">
+      <Section title="Informazioni base" defaultOpen={true}>
         <div className="stack">
           <div className="form-grid">
             <label>Titolo preventivo
@@ -253,14 +307,14 @@ export default function EditorView({
           </label>
         </div>
       </Section>
-      <Section title="Colori brand">
+      <Section title="Colori brand" defaultOpen={false}>
         <div className="swatches">
           {["#0B57D0","#11845B","#6D3FD1","#A66200","#D64545","#B83280","#0F766E","#334155","#4F46E5","#5B7F22"].map((c) => (
             <button key={c} className={quote.uiPreferences?.accentColor === c ? "selected" : ""} style={{ background: c }} onClick={() => patch("color", c)} aria-label={c} />
           ))}
         </div>
       </Section>
-      <Section title="Opzioni commerciali" extra={<button onClick={addOption} className="btn-add">+ Opzione</button>}>
+      <Section title="Opzioni commerciali" badge={quote.options.length} defaultOpen={quote.options.length <= 2} extra={<button onClick={addOption} className="btn-add">+ Opzione</button>}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={quote.options.map((o) => o.id)} strategy={verticalListSortingStrategy}>
             {quote.options.map((option) => (
@@ -269,7 +323,7 @@ export default function EditorView({
           </SortableContext>
         </DndContext>
       </Section>
-      <Section title="Clausole e condizioni" extra={<button onClick={addClause} className="btn-add">+ Clausola</button>}>
+      <Section title="Clausole e condizioni" badge={quote.legalClauses?.length || 0} defaultOpen={false} extra={<button onClick={addClause} className="btn-add">+ Clausola</button>}>
         {quote.legalClauses?.map((clause) => (
           <div className="clause-editor" key={clause.id}>
             <input value={clause.title} onChange={(e) => updateClause(clause.id, "title", e.target.value)} />
@@ -278,43 +332,82 @@ export default function EditorView({
           </div>
         ))}
       </Section>
-      <Section title="Condivisione">
-        <div className="share-section">
-          <label className="checkbox-label" style={{ marginBottom: '12px' }}>
-            <input type="checkbox" checked={!!shareInfo} onChange={(e) => toggleShare(e.target.checked)} />
-            Condividi link pubblico
-          </label>
-          {shareInfo?.link && (
-            <div className="share-link-row">
-              <input type="text" readOnly value={shareInfo.link} style={{ flex: 1, fontSize: '.8rem', fontFamily: 'monospace' }} onClick={(e) => (e.target as HTMLInputElement).select()} />
-              <button onClick={copyShareLink} style={{ padding: '8px 14px', fontSize: '.8rem', whiteSpace: 'nowrap' }}>
-                {copied ? 'Copiato!' : 'Copia'}
-              </button>
-            </div>
-          )}
-        </div>
-      </Section>
     </section>
   );
 
-  return (
-    <div className="editor-grid">
-      <div className={`editor-col ${showAi ? '' : 'collapsed'}`}>
-        {showAi ? aiPanel : (
-          <div className="panel-tab" onClick={() => setShowAi(true)} title="Mostra pannello AI">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-            <span>AI</span>
-          </div>
-        )}
-      </div>
+  const focusModeToggle = (
+    <button
+      data-testid="focus-toggle"
+      className="focus-toggle"
+      onClick={() => setPreviewFocus(!previewFocus)}
+      title={previewFocus ? 'Esci da focus mode' : 'Focus mode anteprima'}
+      aria-label={previewFocus ? 'Esci da focus mode' : 'Focus mode anteprima'}
+    >
+      {previewFocus ? (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M15 21h4a2 2 0 0 0 2-2v-4"/></svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
+      )}
+      <span>{previewFocus ? 'Esci' : 'Focus'}</span>
+    </button>
+  );
 
-      <div className={`editor-col ${showManual ? '' : 'collapsed'}`}>
+  return (
+    <div className={`editor-grid ${previewFocus ? 'focus-mode' : ''} ${!showAi && !showManual ? 'both-collapsed' : ''} ${!showAi || !showManual ? 'one-collapsed' : ''}`}>
+      <div className={`editor-col manual-col ${showManual ? '' : 'collapsed'}`}>
         {showManual ? manualPanel : (
           <div className="panel-tab" onClick={() => setShowManual(true)} title="Mostra pannello controllo">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
             <span>Man</span>
           </div>
         )}
+      </div>
+
+      <div className="editor-mobile-actions">
+        {isDirty ? (
+          <span className="save-status-mobile" style={{ color: 'var(--amber)', fontSize: '.7rem', fontWeight: 600 }}>● Modifiche non salvate</span>
+        ) : lastSaveTime ? (
+          <span className="save-status-mobile" style={{ color: 'var(--green)', fontSize: '.7rem', fontWeight: 600 }}>● Salvato alle {lastSaveTime.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+        ) : null}
+        <div className="editor-mobile-actions-buttons">
+          {onImportPDF && (
+            <button onClick={onImportPDF} className="mobile-action-btn" title="Importa PDF" aria-label="Importa PDF">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </button>
+          )}
+          <button onClick={onSave} className="mobile-action-btn mobile-action-btn-save" title="Salva (Ctrl+S)" aria-label="Salva">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          </button>
+          {onSaveAsTemplate && (
+            <button onClick={onSaveAsTemplate} className="mobile-action-btn" title="Salva come template" aria-label="Salva come template">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+            </button>
+          )}
+          {onReset && (
+            <button onClick={onReset} className="mobile-action-btn" title="Nuovo preventivo" aria-label="Nuovo preventivo">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            </button>
+          )}
+          <button onClick={onExportPDF} className="mobile-action-btn mobile-action-btn-export" title="Esporta PDF (Ctrl+P)" aria-label="Esporta PDF" disabled={pdfLoading}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          {onExportDOCX && (
+            <button onClick={onExportDOCX} className="mobile-action-btn" title="Esporta DOCX (Ctrl+D)" aria-label="Esporta DOCX" disabled={docxLoading}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="editor-mobile-bar">
@@ -326,6 +419,18 @@ export default function EditorView({
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Manuale
         </button>
+        {onReset && (
+          <button data-testid="reset-quote" onClick={onReset} aria-label="Nuovo preventivo">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Nuovo
+          </button>
+        )}
+        {!previewFocus && (
+          <button data-testid="focus-toggle-mobile" onClick={() => setPreviewFocus(true)} aria-pressed={false} className="">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
+            Focus
+          </button>
+        )}
       </div>
 
       {mobileTab && (
@@ -334,9 +439,22 @@ export default function EditorView({
         </div>
       )}
 
-      <section className={`preview-wrap ${!showAi && !showManual ? 'full' : !showAi || !showManual ? 'wide' : ''}`} aria-label="Anteprima preventivo">
+      <section className={`preview-wrap ${!showAi && !showManual ? 'full' : !showAi || !showManual ? 'wide' : ''} ${previewFocus ? 'preview-focus' : ''}`} aria-label="Anteprima preventivo">
+        <div className="preview-toolbar">
+          {previewFocus && focusModeToggle}
+        </div>
         <DocumentPreview ref={previewRef as React.Ref<HTMLElement>} quote={quote} documentTheme={documentTheme} />
       </section>
+
+      {/* Phase 14 (REQ-AI-002): l'AI sta nella rail a destra */}
+      <div className={`editor-col ai-col ${showAi ? '' : 'collapsed'}`}>
+        {showAi ? aiConsoleRail : (
+          <div className="panel-tab" onClick={() => setShowAi(true)} title="Mostra pannello AI">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            <span>AI</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

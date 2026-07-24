@@ -1,0 +1,101 @@
+import { z } from 'zod';
+
+const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colore non valido (formato #RRGGBB)');
+
+const gridElementShape = z.object({
+  x: z.number(),
+  y: z.number(),
+  w: z.number(),
+  h: z.number(),
+  alignH: z.enum(['left', 'center', 'right']).optional(),
+  alignV: z.enum(['top', 'center', 'bottom']).optional(),
+  // Spec card-nudge v2.0 (REQ-AI-001): nudge fine dentro la cella.
+  // x,y ∈ [-1,1] = offset; scale ∈ [0.5,2] = zoom (photo/qr/logo) o
+  // fattore dimensione font (elementi testo). Range stretto: valori fuori
+  // range fanno fallire il safeParse (l'AI deve omettere placement se non
+  // sa cosa mettere, non inventare numeri).
+  placement: z.object({
+    x: z.number().min(-1).max(1),
+    y: z.number().min(-1).max(1),
+    scale: z.number().min(0.5).max(2),
+  }).optional(),
+});
+
+// Phase 2.2 REQ-I01: schema di input AI per il bigliettino. Allineato
+// a `businessCardSchema` (vedi `documentSchemas.ts`) ma con tutti i campi
+// opzionali (l'AI invia solo ciò che vuole modificare).
+//
+// Rispetto alla versione 2.1 aggiungiamo:
+//   - back.services (array string)
+//   - back.servicesLabel (string)
+//   - back.qrSize ('small' | 'medium' | 'large')
+//   - style.fontScale (number; il merge lo clampa a [0.7, 1.5])
+//   - grid.elements.logo (prima mancante: l'AI non poteva posizionare
+//     il logo nel grid, incoerente con cardMerge che lo gestisce)
+// Spec card-nudge v2.0 (REQ-AI-001):
+//   - grid.elements.*.placement {x∈[-1,1], y∈[-1,1], scale∈[0.5,2]}
+//   - front.layout include 'right-balanced' (già in documentSchemas.ts)
+export const aiCardInputSchema = z.object({
+  front: z.object({
+    name: z.string().optional(),
+    title: z.string().optional(),
+    company: z.string().optional(),
+    photoUrl: z.string().nullable().optional(),
+    logoUrl: z.string().nullable().optional(),
+    // Spec v2.4: AI cover image for the front side. The AI never sets this
+    // directly (it is generated via GeminiImageProvider), but we keep it
+    // in the schema so the client can merge/preserve it safely.
+    coverImageUrl: z.string().nullable().optional(),
+    layout: z.enum(['centered', 'left', 'split', 'right', 'right-balanced', 'top', 'bottom', 'minimal', 'photo-circle', 'compact']).optional(),
+    useGrid: z.boolean().optional(),
+  }).optional(),
+
+  back: z.object({
+    phone: z.string().optional(),
+    email: z.string().optional(),
+    website: z.string().optional(),
+    address: z.string().optional(),
+    vatNumber: z.string().optional(),
+    services: z.array(z.string()).optional(),
+    servicesLabel: z.string().optional(),
+    socials: z.array(z.object({
+      platform: z.string(),
+      url: z.string(),
+    })).optional(),
+    qrPayload: z.string().optional(),
+    qrLabel: z.string().optional(),
+    qrSize: z.enum(['small', 'medium', 'large']).optional(),
+    useGrid: z.boolean().optional(),
+  }).optional(),
+
+  style: z.object({
+    sizePreset: z.enum(['eu-85x55', 'us-89x51', 'square-65x65']).optional(),
+    bgColor: hexColorSchema.optional(),
+    textColor: hexColorSchema.optional(),
+    accentColor: hexColorSchema.optional(),
+    fontFamily: z.string().optional(),
+    borderStyle: z.enum(['none', 'thin', 'accent-strip-left', 'accent-strip-bottom']).optional(),
+    // Phase 2.2 REQ-I01: accetta un range ampio (l'AI può mandare numeri
+    // fuori range); il clamp a [0.7, 1.5] è fatto nel merge (cardMerge.ts).
+    // Usare il range stretto qui farebbe scartare l'intero safeParse.
+    fontScale: z.number().min(0).max(10).optional(),
+  }).optional(),
+
+  grid: z.object({
+    cols: z.number().min(2).max(8).optional(),
+    rows: z.number().min(2).max(8).optional(),
+    elements: z.object({
+      photo: gridElementShape.optional(),
+      name: gridElementShape.optional(),
+      title: gridElementShape.optional(),
+      company: gridElementShape.optional(),
+      logo: gridElementShape.optional(),
+      qr: gridElementShape.optional(),
+      contacts: gridElementShape.optional(),
+      socials: gridElementShape.optional(),
+      services: gridElementShape.optional(),
+    }).optional(),
+  }).optional(),
+});
+
+export type AICardInput = z.infer<typeof aiCardInputSchema>;

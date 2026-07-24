@@ -96,3 +96,10 @@ coverage/
 
 # Storybook
 storybook-static/
+
+# Playwright CLI working directory (snapshots, traces, videos)
+.playwright-cli/
+
+# Playwright test artifacts
+test-results/
+playwright-report/

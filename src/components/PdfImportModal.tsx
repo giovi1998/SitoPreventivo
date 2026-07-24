@@ -194,8 +194,8 @@ export default function PdfImportModal({ onClose, onImport, chatWithAI }: PdfImp
                 <div className="pdf-preview-col">
                   <h4>Preventivo generato</h4>
                   <div style={{ fontSize: '.72rem', lineHeight: 1.5 }}>
-                    <p><strong>Titolo:</strong> {importedQuote.project?.title || '—'}</p>
-                    <p><strong>Cliente:</strong> {importedQuote.client?.name || '—'}</p>
+                    <p><strong>Titolo:</strong> {importedQuote.project?.title || ':'}</p>
+                    <p><strong>Cliente:</strong> {importedQuote.client?.name || ':'}</p>
                     <p><strong>Opzioni:</strong> {importedQuote.options?.length || 0}</p>
                     <p><strong>Voci di costo:</strong> {importedQuote.options?.reduce((s, o) => s + o.items.length, 0) || 0}</p>
                     <p><strong>Totale:</strong> {new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(importedQuote.globalTotals?.totalGross || 0)}</p>

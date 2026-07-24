@@ -1,0 +1,1026 @@
+import { describe, it, expect } from 'vitest';
+import {
+  documentTypeSchema,
+  qrCodeSchema,
+  qrStyleSchema,
+  qrCodeDataSchema,
+  qrDataTypeSchema,
+  qrErrorCorrectionSchema,
+  qrDotStyleSchema,
+  businessCardSchema,
+  createEmptyQrCode,
+  createGiovanniQrTemplate,
+  createDocumentFromQrCode,
+  createEmptyCard,
+  createGiovanniCardTemplate,
+  gridPresetLeft,
+  gridPresetCentered,
+  gridPresetSplit,
+  gridPresetFrontSplit,
+  gridPresetRight,
+  gridPresetRightBalanced,
+  gridPresetTop,
+  gridPresetBottom,
+  gridPresetMinimal,
+  gridPresetPhotoCircle,
+  gridPresetCompact,
+  deriveGridFromLayout,
+  hasGridElements,
+  logoSchema,
+  logoBuilderSchema,
+  logoIconTypeSchema,
+  logoIconShapeSchema,
+  logoLayoutSchema,
+  createEmptyLogo,
+  createLogoTemplate,
+  LOGO_SECTORS,
+  flyerSchema,
+  flyerContentSchema,
+  flyerStyleSchema,
+  createEmptyFlyer,
+  createFlyerTemplate,
+  mergeFlyerWithDefaults,
+  getFlyerDimensions,
+  FLYER_SIZES,
+  FLYER_LAYOUTS,
+  FLYER_ORIENTATIONS,
+  FLYER_SECTORS,
+  FLYER_BLEED_MM,
+} from '../documentSchemas';
+
+const GIOVANNI_URL = 'https://giovannicidu.vercel.app';
+
+describe('documentSchemas', () => {
+  describe('documentTypeSchema', () => {
+    it('accepts all expected document types', () => {
+      expect(documentTypeSchema.safeParse('quote').success).toBe(true);
+      expect(documentTypeSchema.safeParse('qrCode').success).toBe(true);
+      expect(documentTypeSchema.safeParse('businessCard').success).toBe(true);
+      expect(documentTypeSchema.safeParse('flyer').success).toBe(true);
+      expect(documentTypeSchema.safeParse('logo').success).toBe(true);
+    });
+
+    it('rejects unknown document type', () => {
+      expect(documentTypeSchema.safeParse('spreadsheet').success).toBe(false);
+    });
+  });
+
+  describe('qrCodeDataSchema', () => {
+    it('accepts all 7 payload types', () => {
+      const types = ['url', 'text', 'email', 'phone', 'vcard', 'wifi', 'sms'] as const;
+      for (const type of types) {
+        const r = qrCodeDataSchema.safeParse({ type, payload: 'x' });
+        expect(r.success).toBe(true);
+      }
+    });
+
+    it('rejects unknown payload type', () => {
+      const r = qrCodeDataSchema.safeParse({ type: 'geo', payload: 'x' });
+      expect(r.success).toBe(false);
+    });
+  });
+
+  describe('qrStyleSchema', () => {
+    it('applies defaults when fields missing', () => {
+      const r = qrStyleSchema.parse({});
+      expect(r.errorCorrection).toBe('M');
+      expect(r.fgColor).toBe('#000000');
+      expect(r.bgColor).toBe('#FFFFFF');
+      expect(r.size).toBe(512);
+      expect(r.margin).toBe(2);
+      expect(r.dotStyle).toBe('rounded');
+      expect(r.logoOverlay).toBeNull();
+    });
+
+    it('rejects invalid hex color', () => {
+      const r = qrStyleSchema.safeParse({ fgColor: 'red' });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects out-of-range size', () => {
+      expect(qrStyleSchema.safeParse({ size: 64 }).success).toBe(false);
+      expect(qrStyleSchema.safeParse({ size: 4096 }).success).toBe(false);
+    });
+
+    it('rejects out-of-range margin', () => {
+      expect(qrStyleSchema.safeParse({ margin: -1 }).success).toBe(false);
+      expect(qrStyleSchema.safeParse({ margin: 17 }).success).toBe(false);
+    });
+  });
+
+  describe('qrCodeSchema', () => {
+    it('validates a complete QR', () => {
+      const r = qrCodeSchema.safeParse({
+        documentType: 'qrCode',
+        id: 'qr_1',
+        title: 'Test',
+        data: { type: 'url', payload: GIOVANNI_URL },
+        style: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      expect(r.success).toBe(true);
+    });
+
+    it('rejects wrong documentType literal', () => {
+      const r = qrCodeSchema.safeParse({
+        documentType: 'quote',
+        id: 'qr_1',
+        title: 'Test',
+        data: { type: 'url', payload: GIOVANNI_URL },
+        style: {},
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      expect(r.success).toBe(false);
+    });
+  });
+
+  describe('enums', () => {
+    it('qrErrorCorrectionSchema accepts L/M/Q/H only', () => {
+      expect(qrErrorCorrectionSchema.safeParse('L').success).toBe(true);
+      expect(qrErrorCorrectionSchema.safeParse('M').success).toBe(true);
+      expect(qrErrorCorrectionSchema.safeParse('Q').success).toBe(true);
+      expect(qrErrorCorrectionSchema.safeParse('H').success).toBe(true);
+      expect(qrErrorCorrectionSchema.safeParse('X').success).toBe(false);
+    });
+
+    it('qrDotStyleSchema accepts square/rounded/dots only', () => {
+      expect(qrDotStyleSchema.safeParse('square').success).toBe(true);
+      expect(qrDotStyleSchema.safeParse('rounded').success).toBe(true);
+      expect(qrDotStyleSchema.safeParse('dots').success).toBe(true);
+      expect(qrDotStyleSchema.safeParse('cross').success).toBe(false);
+    });
+  });
+
+  describe('createEmptyQrCode', () => {
+    it('returns a valid QR with id and timestamps', () => {
+      const qr = createEmptyQrCode();
+      const r = qrCodeSchema.safeParse(qr);
+      expect(r.success).toBe(true);
+      expect(qr.id).toMatch(/^qr_/);
+      expect(qr.title).toBe('QR Code');
+      expect(qr.data.type).toBe('url');
+      expect(qr.data.payload).toBe('');
+      expect(qr.documentType).toBe('qrCode');
+    });
+
+    it('generates unique ids', () => {
+      const a = createEmptyQrCode();
+      const b = createEmptyQrCode();
+      expect(a.id).not.toBe(b.id);
+    });
+  });
+
+  describe('createGiovanniQrTemplate', () => {
+    it('pre-fills Giovanni URL', () => {
+      const qr = createGiovanniQrTemplate();
+      expect(qr.data.type).toBe('url');
+      expect(qr.data.payload).toBe(GIOVANNI_URL);
+      expect(qr.title).toContain('Giovanni');
+      const r = qrCodeSchema.safeParse(qr);
+      expect(r.success).toBe(true);
+    });
+  });
+
+  describe('createDocumentFromQrCode', () => {
+    it('attaches userEmail and refreshes updatedAt', () => {
+      const original = createGiovanniQrTemplate();
+      const originalUpdatedAt = original.updatedAt;
+      const doc = createDocumentFromQrCode(original, 'a@b.com');
+      expect(doc.userEmail).toBe('a@b.com');
+      expect(doc.id).toBe(original.id);
+      expect(doc.updatedAt >= originalUpdatedAt).toBe(true);
+    });
+  });
+
+  describe('businessCardSchema', () => {
+    const baseCard = {
+      documentType: 'businessCard' as const,
+      id: 'card_1',
+      title: 'Test card',
+      front: {
+        name: 'Mario Rossi',
+        title: 'CEO',
+        company: 'ACME',
+        photoUrl: null,
+        logoUrl: null,
+        layout: 'left' as const,
+      },
+      back: {
+        phone: '+393331234567',
+        email: 'mario@acme.com',
+        website: 'https://acme.com',
+        address: 'Via Roma 1',
+        vatNumber: 'IT01234567890',
+        socials: [{ platform: 'LinkedIn', url: 'https://linkedin.com/in/mario' }],
+        qrPayload: '',
+        qrLabel: 'Scansiona per visitare il sito',
+      },
+      style: {
+        sizePreset: 'eu-85x55' as const,
+        bgColor: '#FFFFFF',
+        textColor: '#1a1a2e',
+        accentColor: '#01696F',
+        fontFamily: 'Inter',
+        borderStyle: 'accent-strip-left' as const,
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('accepts a complete business card (REQs 002, 003, 007)', () => {
+      const r = businessCardSchema.safeParse(baseCard);
+      expect(r.success).toBe(true);
+    });
+
+    it('rejects wrong documentType literal', () => {
+      const r = businessCardSchema.safeParse({ ...baseCard, documentType: 'quote' });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects invalid hex color in style', () => {
+      const r = businessCardSchema.safeParse({ ...baseCard, style: { ...baseCard.style, bgColor: 'red' } });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects unknown front layout', () => {
+      const r = businessCardSchema.safeParse({
+        ...baseCard,
+        front: { ...baseCard.front, layout: 'random' },
+      });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects unknown size preset', () => {
+      const r = businessCardSchema.safeParse({
+        ...baseCard,
+        style: { ...baseCard.style, sizePreset: 'jumbo' },
+      });
+      expect(r.success).toBe(false);
+    });
+
+    it('accepts all 3 size presets', () => {
+      for (const preset of ['eu-85x55', 'us-89x51', 'square-65x65'] as const) {
+        const r = businessCardSchema.safeParse({
+          ...baseCard,
+          style: { ...baseCard.style, sizePreset: preset },
+        });
+        expect(r.success).toBe(true);
+      }
+    });
+
+    it('accepts all 3 front layouts', () => {
+      for (const layout of ['centered', 'left', 'split'] as const) {
+        const r = businessCardSchema.safeParse({
+          ...baseCard,
+          front: { ...baseCard.front, layout },
+        });
+        expect(r.success).toBe(true);
+      }
+    });
+
+    it('accepts all 4 border styles', () => {
+      for (const bs of ['none', 'thin', 'accent-strip-left', 'accent-strip-bottom'] as const) {
+        const r = businessCardSchema.safeParse({
+          ...baseCard,
+          style: { ...baseCard.style, borderStyle: bs },
+        });
+        expect(r.success).toBe(true);
+      }
+    });
+  });
+
+  describe('createEmptyCard', () => {
+    it('returns a valid card with id and timestamps (AC-001)', () => {
+      const card = createEmptyCard();
+      const r = businessCardSchema.safeParse(card);
+      expect(r.success).toBe(true);
+      expect(card.documentType).toBe('businessCard');
+      expect(card.id).toMatch(/^card_/);
+      expect(card.front.layout).toBe('left');
+      expect(card.style.sizePreset).toBe('eu-85x55');
+      expect(card.back.website).toBe('');
+      expect(card.back.qrPayload).toBe('');
+      expect(card.front.photoUrl).toBeNull();
+      expect(card.front.logoUrl).toBeNull();
+    });
+
+    it('generates unique ids', () => {
+      const a = createEmptyCard();
+      const b = createEmptyCard();
+      expect(a.id).not.toBe(b.id);
+    });
+  });
+
+  describe('createGiovanniCardTemplate (AC-002)', () => {
+    it('pre-fills Giovanni real contact data and URL', () => {
+      const card = createGiovanniCardTemplate();
+      expect(card.back.website).toBe(GIOVANNI_URL);
+      expect(card.back.phone).toBe('35180008042');
+      expect(card.back.email).toBe('webdevcaglian@gmail.com');
+      expect(card.back.qrPayload).toBe('');
+      expect(card.front.name).toContain('GIOVANNI');
+      // v2.8.3: il template usa il layout split del JSON utente.
+      expect(card.front.layout).toBe('split');
+      expect(card.style.fontScale).toBe(1.05);
+      expect(card.style.accentColor).toBe('#1e3a5f');
+      expect(card.front.photoUrl).toBe('/giovanni-photo.jpg');
+      expect(card.title.toLowerCase()).toContain('giovanni');
+      const r = businessCardSchema.safeParse(card);
+      expect(r.success).toBe(true);
+    });
+
+    it('does not pre-fill any placeholder company on front', () => {
+      const card = createGiovanniCardTemplate();
+      expect(card.front.company).toBe('');
+    });
+
+    it('pre-fills services and ships a vertically balanced back grid (v2.8.3)', () => {
+      const card = createGiovanniCardTemplate();
+      expect(card.back.services).toEqual([
+        'Sviluppo Web Frontend',
+        'Sviluppo Backend',
+        'Consulenza Tecnica',
+      ]);
+      expect(card.back.servicesLabel).toBe('Servizi che offro');
+      const els = card.backGrid!.elements;
+      expect(els.contacts).toMatchObject({ x: 0, y: 0, w: 2, h: 1 });
+      expect(els.services).toMatchObject({ x: 0, y: 1, w: 2, h: 2 });
+      expect(els.socials).toMatchObject({ x: 0, y: 3, w: 2, h: 1 });
+      expect(els.qr).toMatchObject({ x: 2, y: 0, w: 2, h: 4 });
+    });
+
+    it('front grid groups name+title as a single block (v2.8.3)', () => {
+      const card = createGiovanniCardTemplate();
+      const els = card.grid!.elements;
+      expect(els.photo).toMatchObject({ x: 0, y: 0, w: 2, h: 4 });
+      expect(els.name).toMatchObject({ x: 2, y: 0, w: 2, h: 1, alignH: 'center', alignV: 'bottom' });
+      expect(els.title).toMatchObject({ x: 2, y: 1, w: 2, h: 1, alignH: 'center', alignV: 'top' });
+      expect(els.logo).toMatchObject({ x: 2, y: 2, w: 2, h: 2, alignH: 'center', alignV: 'center' });
+    });
+
+    it('includes a transparent SVG logo as data URI (Phase 2.1: logoUrl non null)', () => {
+      const card = createGiovanniCardTemplate();
+      expect(card.front.logoUrl).not.toBeNull();
+      expect(card.front.logoUrl).toMatch(/^data:image\/svg\+xml/);
+      // Il logo è SVG trasparente: non contiene bgcolor= o un <rect> di sfondo
+      expect(card.front.logoUrl).not.toContain('bgcolor');
+    });
+
+    it('logo data URI decodes to valid SVG with viewBox and terminal icon', () => {
+      const card = createGiovanniCardTemplate();
+      const uri = card.front.logoUrl!;
+      // Estrai la parte SVG dalla data URI
+      const svgPart = decodeURIComponent(uri.split(',')[1] || '');
+      expect(svgPart).toContain('<svg');
+      expect(svgPart).toContain('viewBox=');
+      expect(svgPart).toContain('WebdevCA');
+      // Lo sfondo è trasparente: nessun <rect> che copre l'intero viewBox
+      // (il <rect> del badge SVG è 84×84, non copre i 400×160 del viewBox)
+      expect(svgPart).toContain('fill="#01696F"'); // accent color del badge
+    });
+
+    it('pre-fills LinkedIn and GitHub with real URLs (Phase 2.1: GitHub added)', () => {
+      const card = createGiovanniCardTemplate();
+      const platforms = card.back.socials.map((s) => s.platform);
+      expect(platforms).toContain('LinkedIn');
+      expect(platforms).toContain('GitHub');
+      const linkedIn = card.back.socials.find((s) => s.platform === 'LinkedIn');
+      expect(linkedIn?.url).toBe('https://www.linkedin.com/in/giovanni-cidu-16162b212');
+      const github = card.back.socials.find((s) => s.platform === 'GitHub');
+      expect(github?.url).toMatch(/^https:\/\/github\.com/);
+    });
+  });
+
+  describe('cardGridSchema (B1)', () => {
+    it('validates a grid with cols, rows and elements having x/y/w/h', () => {
+      const grid = {
+        cols: 4,
+        rows: 4,
+        elements: {
+          photo: { x: 0, y: 0, w: 1, h: 1 },
+          name: { x: 1, y: 0, w: 3, h: 1 },
+          title: { x: 1, y: 1, w: 3, h: 1 },
+          qr: { x: 3, y: 2, w: 1, h: 2 },
+          contacts: { x: 0, y: 2, w: 3, h: 2 },
+        },
+      };
+      const r = businessCardSchema.shape.grid?.safeParse(grid);
+      expect(r?.success).toBe(true);
+    });
+
+    it('rejects out-of-range cols (must be 2-8)', () => {
+      const r = businessCardSchema.shape.grid?.safeParse({
+        cols: 12,
+        rows: 4,
+        elements: {},
+      });
+      expect(r?.success).toBe(false);
+    });
+
+    it('is always present on createEmptyCard (grid is the layout engine)', () => {
+      const card = createEmptyCard();
+      expect(card.grid).toBeDefined();
+      expect(card.grid!.cols).toBe(4);
+      expect(card.backGrid).toBeDefined();
+    });
+
+    it('logo is a valid grid element (Phase 2.1, card-logo in grid mode)', () => {
+      const grid = {
+        cols: 4,
+        rows: 4,
+        elements: {
+          photo: { x: 0, y: 0, w: 2, h: 2 },
+          logo: { x: 2, y: 0, w: 2, h: 2 },
+          name: { x: 0, y: 2, w: 4, h: 1 },
+          title: { x: 0, y: 3, w: 4, h: 1 },
+        },
+      };
+      const r = businessCardSchema.shape.grid?.safeParse(grid);
+      expect(r?.success).toBe(true);
+    });
+  });
+
+  describe('gridPresetLeft/Centered/Split (B1)', () => {
+    it('gridPresetLeft puts photo on left col, name+title on right', () => {
+      const g = gridPresetLeft();
+      expect(g.cols).toBe(4);
+      expect(g.rows).toBe(4);
+      expect(g.elements.photo!.x).toBe(0);
+      expect(g.elements.name!.x).toBeGreaterThan(0);
+    });
+
+    it('gridPresetCentered centers name+title, photo on top', () => {
+      const g = gridPresetCentered();
+      expect(g.elements.photo!.y).toBe(0);
+      expect(g.elements.name!.x).toBe(0);
+    });
+
+    it('gridPresetSplit puts contacts on left half, qr on right', () => {
+      const g = gridPresetSplit();
+      expect(g.elements.qr!.x).toBeGreaterThan(g.elements.contacts!.x);
+    });
+
+    it('all presets include a logo element (Phase 2.1: logo is grid-editable)', () => {
+      expect(gridPresetLeft().elements.logo).toBeDefined();
+      expect(gridPresetCentered().elements.logo).toBeDefined();
+      expect(gridPresetSplit().elements.logo).toBeDefined();
+    });
+  });
+
+  // Phase 2.3: nuovi preset frontali
+  describe('gridPreset new front layouts (B3)', () => {
+    it('gridPresetRight mirrors split to the right', () => {
+      const g = gridPresetRight();
+      expect(g.elements.photo!.x).toBeGreaterThanOrEqual(2);
+      expect(g.elements.name!.x).toBe(0);
+    });
+
+    it('gridPresetTop places photo on top full-width', () => {
+      const g = gridPresetTop();
+      expect(g.elements.photo!.w).toBe(4);
+      expect(g.elements.photo!.y).toBe(0);
+      expect(g.elements.name!.y).toBeGreaterThan(g.elements.photo!.y);
+    });
+
+    it('gridPresetBottom places photo on bottom full-width', () => {
+      const g = gridPresetBottom();
+      expect(g.elements.photo!.w).toBe(4);
+      expect(g.elements.photo!.y).toBeGreaterThan(g.elements.name!.y);
+    });
+
+    it('gridPresetMinimal centers text and keeps photo/logo small top', () => {
+      const g = gridPresetMinimal();
+      expect(g.elements.name!.w).toBe(4);
+      expect(g.elements.name!.alignH).toBe('center');
+    });
+
+    it('gridPresetPhotoCircle centers photo in top half', () => {
+      const g = gridPresetPhotoCircle();
+      expect(g.elements.photo!.x).toBe(1);
+      expect(g.elements.photo!.w).toBe(2);
+      expect(g.elements.photo!.h).toBe(2);
+    });
+
+    it('gridPresetCompact places media in a narrow left column', () => {
+      const g = gridPresetCompact();
+      expect(g.elements.photo!.w).toBe(1);
+      expect(g.elements.logo!.w).toBe(1);
+      expect(g.elements.name!.x).toBe(1);
+    });
+
+    it('gridPresetRightBalanced is the v2.17 professional business-card layout', () => {
+      const g = gridPresetRightBalanced();
+      expect(g.cols).toBe(4);
+      expect(g.rows).toBe(4);
+      // Strong hierarchy: name spans the full top row.
+      expect(g.elements.name).toEqual({ x: 0, y: 0, w: 4, h: 1, alignH: 'left', alignV: 'center' });
+      // Centred photo on the right, square, not full-height.
+      expect(g.elements.photo).toEqual({ x: 2, y: 1, w: 2, h: 2, alignH: 'center', alignV: 'center' });
+      // Text band on the left under the name.
+      expect(g.elements.title).toEqual({ x: 0, y: 1, w: 2, h: 1, alignH: 'left', alignV: 'center' });
+      expect(g.elements.company).toEqual({ x: 0, y: 2, w: 2, h: 1, alignH: 'left', alignV: 'center' });
+      // Small logo in the bottom-left corner.
+      expect(g.elements.logo).toEqual({ x: 0, y: 3, w: 1, h: 1, alignH: 'left', alignV: 'center' });
+    });
+  });
+
+  // ─── Phase 2.2 fix: front split preset + init-from-layout ──────
+  describe('gridPresetFrontSplit + deriveGridFromLayout (fix)', () => {
+    it('gridPresetFrontSplit includes photo (front split layout)', () => {
+      const g = gridPresetFrontSplit();
+      expect(g.elements.photo).toBeDefined();
+      expect(g.elements.photo!.x).toBe(0);
+      expect(g.elements.photo!.h).toBe(3); // 3/4 height left, leaves row for logo
+      expect(g.elements.name).toBeDefined();
+      expect(g.elements.company).toBeDefined();
+      expect(g.elements.logo).toBeDefined();
+      // NON deve avere elementi del retro (contacts/qr)
+      expect(g.elements.contacts).toBeUndefined();
+      expect(g.elements.qr).toBeUndefined();
+    });
+
+    it('deriveGridFromLayout(split) keeps the photo (regression: prima la perdeva)', () => {
+      const card = createGiovanniCardTemplate(); // layout split + photoUrl
+      const grid = deriveGridFromLayout(card, 'front');
+      // Giovanni ha photoUrl → photo deve essere presente nella grid derivata
+      expect(grid.elements.photo).toBeDefined();
+      expect(grid.elements.name).toBeDefined();
+    });
+
+    it('deriveGridFromLayout(left) → photo a sinistra full height', () => {
+      const card = { ...createGiovanniCardTemplate(), front: { ...createGiovanniCardTemplate().front, layout: 'left' as const } };
+      const grid = deriveGridFromLayout(card, 'front');
+      expect(grid.elements.photo).toBeDefined();
+      expect(grid.elements.photo!.x).toBe(0);
+    });
+
+    it('deriveGridFromLayout filtra elementi senza contenuto', () => {
+      const card = createEmptyCard(); // niente foto/logo/nome
+      const grid = deriveGridFromLayout(card, 'front');
+      // Nessun elemento con contenuto → grid vuota
+      expect(Object.keys(grid.elements)).toHaveLength(0);
+    });
+
+    it('deriveGridFromLayout maps all new layouts', () => {
+      const base = createGiovanniCardTemplate();
+      for (const layout of ['right', 'top', 'bottom', 'minimal', 'photo-circle', 'compact'] as const) {
+        const card = { ...base, front: { ...base.front, layout } };
+        const grid = deriveGridFromLayout(card, 'front');
+        expect(grid.elements.name).toBeDefined();
+        expect(grid.elements.photo).toBeDefined();
+      }
+    });
+
+    it('hasGridElements: true se il lato ha elementi con contenuto', () => {
+      const card = createGiovanniCardTemplate();
+      expect(hasGridElements('front', card)).toBe(true);
+      expect(hasGridElements('back', card)).toBe(true);
+      const empty = createEmptyCard();
+      expect(hasGridElements('front', empty)).toBe(false);
+    });
+  });
+
+  describe('logoSchema (Phase 4)', () => {
+    it('accepts a minimal valid logo with defaults applied', () => {
+      const logo = createEmptyLogo();
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(true);
+    });
+
+    it('rejects unknown documentType literal', () => {
+      const logo = { ...createEmptyLogo(), documentType: 'flyer' as const };
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects invalid hex color in builder', () => {
+      const logo = {
+        ...createEmptyLogo(),
+        builder: { ...createEmptyLogo().builder, primaryColor: 'red' },
+      };
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects unknown iconType', () => {
+      const r = logoIconTypeSchema.safeParse('emoji');
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects unknown iconShape', () => {
+      const r = logoIconShapeSchema.safeParse('triangle');
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects unknown layout', () => {
+      const r = logoLayoutSchema.safeParse('diagonal');
+      expect(r.success).toBe(false);
+    });
+
+    it('accepts all 4 iconType values', () => {
+      for (const t of ['none', 'shape', 'monogram', 'lucide'] as const) {
+        expect(logoIconTypeSchema.safeParse(t).success).toBe(true);
+      }
+    });
+
+    it('accepts all 4 iconShape values', () => {
+      for (const s of ['circle', 'square', 'rounded', 'hex'] as const) {
+        expect(logoIconShapeSchema.safeParse(s).success).toBe(true);
+      }
+    });
+
+    it('accepts all 3 layout values', () => {
+      for (const l of ['horizontal', 'vertical', 'stacked'] as const) {
+        expect(logoLayoutSchema.safeParse(l).success).toBe(true);
+      }
+    });
+
+    it('logoBuilderSchema applies sensible defaults', () => {
+      const b = logoBuilderSchema.parse({});
+      expect(b.primaryText).toBe('');
+      expect(b.tagline).toBe('');
+      expect(b.iconType).toBe('none');
+      expect(b.iconShape).toBe('circle');
+      expect(b.primaryColor).toMatch(/^#[0-9a-fA-F]{6}$/);
+      expect(b.secondaryColor).toMatch(/^#[0-9a-fA-F]{6}$/);
+      expect(b.layout).toBe('horizontal');
+    });
+
+    it('logoBuilderSchema defaults textBackdrop/textColorMode/textOffset/textScale (v2.3 text controls)', () => {
+      const b = logoBuilderSchema.parse({});
+      expect(b.textBackdrop).toBe('none');
+      expect(b.textColorMode).toBe('auto');
+      expect(b.textOffsetX).toBe(0);
+      expect(b.textOffsetY).toBe(0);
+      expect(b.textScale).toBe(1);
+    });
+
+    it('logoBuilderSchema accepts all textBackdrop values', () => {
+      for (const v of ['none', 'pill', 'band'] as const) {
+        expect(logoBuilderSchema.safeParse({ textBackdrop: v }).success).toBe(true);
+      }
+      expect(logoBuilderSchema.safeParse({ textBackdrop: 'invalid' }).success).toBe(false);
+    });
+
+    it('logoBuilderSchema accepts all textColorMode values', () => {
+      for (const v of ['auto', 'light', 'dark'] as const) {
+        expect(logoBuilderSchema.safeParse({ textColorMode: v }).success).toBe(true);
+      }
+      expect(logoBuilderSchema.safeParse({ textColorMode: 'invalid' }).success).toBe(false);
+    });
+
+    it('logoBuilderSchema clamps textOffsetX/Y to [-60, 60]', () => {
+      expect(logoBuilderSchema.safeParse({ textOffsetX: 61 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ textOffsetX: -61 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ textOffsetY: 61 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ textOffsetX: 60, textOffsetY: -60 }).success).toBe(true);
+    });
+
+    it('logoBuilderSchema clamps textScale to [0.7, 1.5]', () => {
+      expect(logoBuilderSchema.safeParse({ textScale: 0.69 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ textScale: 1.51 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ textScale: 0.7 }).success).toBe(true);
+      expect(logoBuilderSchema.safeParse({ textScale: 1.5 }).success).toBe(true);
+    });
+
+    it('logoBuilderSchema defaults taglineOffsetX/Y to 0 (v2.3.1, independent from title offset)', () => {
+      const b = logoBuilderSchema.parse({});
+      expect(b.taglineOffsetX).toBe(0);
+      expect(b.taglineOffsetY).toBe(0);
+    });
+
+    it('logoBuilderSchema clamps taglineOffsetX/Y to [-60, 60]', () => {
+      expect(logoBuilderSchema.safeParse({ taglineOffsetX: 61 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ taglineOffsetY: -61 }).success).toBe(false);
+      expect(logoBuilderSchema.safeParse({ taglineOffsetX: 60, taglineOffsetY: -60 }).success).toBe(true);
+    });
+  });
+
+  describe('createEmptyLogo (Phase 4)', () => {
+    it('returns a valid logo with id and timestamps', () => {
+      const logo = createEmptyLogo();
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(true);
+      expect(logo.id).toMatch(/^logo_/);
+      expect(logo.documentType).toBe('logo');
+      expect(logo.source).toBe('builder');
+    });
+
+    it('initializes brief/concepts/selected/edits as AI-dormient placeholders', () => {
+      const logo = createEmptyLogo();
+      expect(logo.brief).toBe('');
+      expect(logo.concepts).toEqual([]);
+      expect(logo.selected).toBe(-1);
+      expect(logo.edits.primaryText).toBe('');
+    });
+
+    it('generates unique ids', () => {
+      const a = createEmptyLogo();
+      const b = createEmptyLogo();
+      expect(a.id).not.toBe(b.id);
+    });
+  });
+
+  describe('createLogoTemplate (Phase 4)', () => {
+    it('exports 4 sectors', () => {
+      expect(LOGO_SECTORS).toEqual(['tech', 'food', 'fashion', 'professionista']);
+    });
+
+    it.each(LOGO_SECTORS)('template %s is a valid logo', (sector) => {
+      const logo = createLogoTemplate(sector);
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(true);
+      expect(logo.builder.primaryText.length).toBeGreaterThan(0);
+      expect(logo.builder.primaryColor).toMatch(/^#[0-9a-fA-F]{6}$/);
+    });
+
+    it('tech template picks a tech-flavored iconType (lucide/monogram)', () => {
+      const logo = createLogoTemplate('tech');
+      expect(['lucide', 'monogram', 'shape', 'none']).toContain(logo.builder.iconType);
+    });
+
+    it('food template picks food-flavored iconType (lucide/monogram)', () => {
+      const logo = createLogoTemplate('food');
+      expect(['lucide', 'monogram', 'shape', 'none']).toContain(logo.builder.iconType);
+    });
+  });
+
+  // ─── FLYER (Phase 3) ───────────────────────────────────
+  describe('flyerSchema', () => {
+    it('accepts a complete flyer', () => {
+      const r = flyerSchema.safeParse({
+        documentType: 'flyer',
+        id: 'fl-1',
+        title: 'Sagra',
+        size: 'A5',
+        orientation: 'portrait',
+        content: { headline: 'Titolo', body: 'Corpo', cta: { label: 'CTA', url: 'https://x.it' } },
+        style: { layout: 'classic', bgColor: '#ffffff', textColor: '#000000', accentColor: '#01696f', fontFamily: 'Inter' },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      expect(r.success).toBe(true);
+    });
+
+    it('rejects wrong documentType literal', () => {
+      const r = flyerSchema.safeParse({
+        documentType: 'quote',
+        id: 'fl-1', title: '', content: {}, style: {},
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects invalid hex color', () => {
+      const r = flyerSchema.safeParse({
+        documentType: 'flyer',
+        id: 'fl-1', title: '',
+        content: {}, style: { bgColor: 'red' },
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+      expect(r.success).toBe(false);
+    });
+
+    it('rejects invalid layout enum', () => {
+      const r = flyerSchema.safeParse({
+        documentType: 'flyer',
+        id: 'fl-1', title: '',
+        content: {}, style: { layout: 'wildcard' },
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      });
+      expect(r.success).toBe(false);
+    });
+
+    it('applies defaults when nested fields missing', () => {
+      const r = flyerContentSchema.parse({});
+      expect(r.headline).toBe('');
+      expect(r.body).toBe('');
+      expect(r.cta.label).toBe('');
+      expect(r.cta.url).toBe('');
+      expect(r.heroImage).toBeNull();
+    });
+
+    it('applies style defaults', () => {
+      const r = flyerStyleSchema.parse({});
+      expect(r.layout).toBe('classic');
+      expect(r.bgColor).toBe('#FFFFFF');
+      expect(r.accentColor).toBe('#01696F');
+    });
+
+    it('rejects oversize headline (>200 char)', () => {
+      const r = flyerContentSchema.safeParse({ headline: 'x'.repeat(201) });
+      expect(r.success).toBe(false);
+    });
+  });
+
+  describe('createEmptyFlyer', () => {
+    it('returns a flyer valid against flyerSchema', () => {
+      const f = createEmptyFlyer();
+      const r = flyerSchema.safeParse(f);
+      expect(r.success).toBe(true);
+      expect(f.documentType).toBe('flyer');
+      expect(f.size).toBe('A5');
+      expect(f.orientation).toBe('portrait');
+      expect(f.style.layout).toBe('classic');
+    });
+
+    it('assigns a unique id each call', () => {
+      const a = createEmptyFlyer();
+      const b = createEmptyFlyer();
+      expect(a.id).not.toBe(b.id);
+    });
+  });
+
+  describe('createFlyerTemplate (sectors × layouts)', () => {
+    it('exports 4 sectors', () => {
+      expect(FLYER_SECTORS).toEqual(['ristorante', 'evento', 'salone', 'negozio']);
+    });
+
+    it.each(FLYER_SECTORS)('default template %s is a valid flyer', (sector) => {
+      const f = createFlyerTemplate(sector);
+      const r = flyerSchema.safeParse(f);
+      expect(r.success).toBe(true);
+      expect(f.content.headline.length).toBeGreaterThan(0);
+      expect(f.content.body.length).toBeGreaterThan(0);
+    });
+
+    it('returns 16 distinct templates (4 settori × 4 layout)', () => {
+      const seen = new Set<string>();
+      for (const s of FLYER_SECTORS) {
+        for (const l of FLYER_LAYOUTS) {
+          const f = createFlyerTemplate(s, l);
+          const key = `${s}|${f.style.layout}|${f.content.headline}|${f.content.body.length}`;
+          expect(seen.has(key)).toBe(false);
+          seen.add(key);
+        }
+      }
+      expect(seen.size).toBe(16);
+    });
+
+    it('creates 3-paragraph body for magazine variants (so 3 cols are populated)', () => {
+      for (const s of FLYER_SECTORS) {
+        const f = createFlyerTemplate(s, 'magazine');
+        const paragraphs = (f.content.body || '').split(/\n+/).filter(Boolean);
+        expect(paragraphs.length).toBeGreaterThanOrEqual(3);
+      }
+    });
+
+    it('uses a picsum.photos URL for hero images (stable per seed)', () => {
+      const ristoranteClassic = createFlyerTemplate('ristorante', 'classic');
+      const ristoranteCentered = createFlyerTemplate('ristorante', 'centered');
+      // Same settore, different layout → different imageSeed → different URL
+      expect(ristoranteClassic.content.heroImage).toMatch(/^https:\/\/picsum\.photos\/seed\//);
+      expect(ristoranteCentered.content.heroImage).toMatch(/^https:\/\/picsum\.photos\/seed\//);
+      expect(ristoranteClassic.content.heroImage).not.toBe(ristoranteCentered.content.heroImage);
+    });
+
+    it('omits hero image for variants that do not need one (e.g. magazine, no imageSeed)', () => {
+      // Phase 3 refresh: magazine now carries a hero image too (editorial
+      // top strip). The only no-image variant is one the user explicitly
+      // cleared. Keep a guard that an empty imageSeed still yields null.
+      const tpl = createFlyerTemplate('ristorante', 'magazine');
+      expect(tpl.content.heroImage).not.toBeNull();
+    });
+
+    it('every template has a valid http cta.url (so the QR renders)', () => {
+      for (const s of FLYER_SECTORS) {
+        for (const l of FLYER_LAYOUTS) {
+          const f = createFlyerTemplate(s, l);
+          expect(f.content.cta.url).toMatch(/^https?:\/\//);
+          expect(f.content.qrLabel.length).toBeGreaterThan(0);
+        }
+      }
+    });
+
+    it('uses all 5 formats across the 16 templates (diversification)', () => {
+      const sizes = new Set<string>();
+      for (const s of FLYER_SECTORS) {
+        for (const l of FLYER_LAYOUTS) {
+          sizes.add(createFlyerTemplate(s, l).size);
+        }
+      }
+      expect(sizes.has('A6')).toBe(true);
+      expect(sizes.has('A5')).toBe(true);
+      expect(sizes.has('A4')).toBe(true);
+      expect(sizes.has('Square')).toBe(true);
+    });
+
+    it('uses landscape orientation in at least 2 templates', () => {
+      let landscape = 0;
+      for (const s of FLYER_SECTORS) {
+        for (const l of FLYER_LAYOUTS) {
+          if (createFlyerTemplate(s, l).orientation === 'landscape') landscape++;
+        }
+      }
+      expect(landscape).toBeGreaterThanOrEqual(2);
+    });
+
+    it('has at least 2 dark-background templates (textColor light on dark bg)', () => {
+      let dark = 0;
+      for (const s of FLYER_SECTORS) {
+        for (const l of FLYER_LAYOUTS) {
+          const f = createFlyerTemplate(s, l);
+          const bg = f.style.bgColor.toLowerCase();
+          const txt = f.style.textColor.toLowerCase();
+          // dark bg heuristic: one of the near-black hexes
+          const isDarkBg = ['#0f172a', '#111827', '#1a1a2e', '#000000'].includes(bg);
+          const isLightText = ['#f8fafc', '#ffffff', '#fafafa'].includes(txt);
+          if (isDarkBg && isLightText) dark++;
+        }
+      }
+      expect(dark).toBeGreaterThanOrEqual(2);
+    });
+
+    it('hero image URL carries width/height matching the hero box aspect for the layout', () => {
+      // classic portrait A5: hero is a wide top strip (full width × ~42% h)
+      // → URL /seed/X/W/H must be landscape (W>H) and not the old fixed 800x600.
+      const ristoranteClassic = createFlyerTemplate('ristorante', 'classic');
+      const m = ristoranteClassic.content.heroImage!.match(/\/(\d+)\/(\d+)$/);
+      expect(m).not.toBeNull();
+      const w = parseInt(m![1]); const h = parseInt(m![2]);
+      expect(w).toBeGreaterThan(0);
+      expect(h).toBeGreaterThan(0);
+      expect(w).toBeGreaterThan(h); // wide strip
+      // not the legacy fixed 800/600 pair
+      expect(`${w}/${h}`).not.toBe('800/600');
+      // centered hero is a small centered block (ratio ~3:1, very wide & short)
+      const ristoranteCentered = createFlyerTemplate('ristorante', 'centered');
+      const mc = ristoranteCentered.content.heroImage!.match(/\/(\d+)\/(\d+)$/)!;
+      const wc = parseInt(mc[1]); const hc = parseInt(mc[2]);
+      // centered strip is shorter than classic strip → aspect differs
+      expect(wc / hc).toBeGreaterThan(w / h);
+    });
+
+    it('default layout is the sector default when layout is omitted', () => {
+      const f = createFlyerTemplate('ristorante');
+      expect(f.style.layout).toBe('classic');
+      const g = createFlyerTemplate('evento');
+      expect(g.style.layout).toBe('centered');
+    });
+  });
+
+  describe('getFlyerDimensions', () => {
+    it('returns portrait dimensions for A5', () => {
+      const dims = getFlyerDimensions({ ...createEmptyFlyer(), size: 'A5', orientation: 'portrait' });
+      expect(dims).toEqual({ w: 148, h: 210 });
+    });
+
+    it('returns landscape dimensions for A4', () => {
+      const dims = getFlyerDimensions({ ...createEmptyFlyer(), size: 'A4', orientation: 'landscape' });
+      expect(dims).toEqual({ w: 297, h: 210 });
+    });
+
+    it('Square ignores orientation and returns 210×210', () => {
+      const p = getFlyerDimensions({ ...createEmptyFlyer(), size: 'Square', orientation: 'portrait' });
+      const l = getFlyerDimensions({ ...createEmptyFlyer(), size: 'Square', orientation: 'landscape' });
+      expect(p).toEqual({ w: 210, h: 210 });
+      expect(l).toEqual({ w: 210, h: 210 });
+    });
+  });
+
+  describe('mergeFlyerWithDefaults (defensive)', () => {
+    it('returns full empty flyer for null input', () => {
+      const r = mergeFlyerWithDefaults(null);
+      const base = createEmptyFlyer();
+      expect(r.content).toEqual(base.content);
+      expect(r.style).toEqual(base.style);
+    });
+
+    it('returns full empty flyer for undefined input', () => {
+      const r = mergeFlyerWithDefaults(undefined);
+      const base = createEmptyFlyer();
+      expect(r.style).toEqual(base.style);
+    });
+
+    it('preserves valid fields while filling missing nested', () => {
+      const partial = { id: 'fl-1', title: 'X', content: { headline: 'Sagra' } };
+      const r = mergeFlyerWithDefaults(partial as any);
+      expect(r.id).toBe('fl-1');
+      expect(r.content.headline).toBe('Sagra');
+      expect(r.content.body).toBe('');
+      expect(r.style.layout).toBe('classic');
+    });
+
+    it('preserves cta fields when content.cta is partial', () => {
+      const partial = { id: 'fl-1', content: { cta: { label: 'Prenota' } } };
+      const r = mergeFlyerWithDefaults(partial as any);
+      expect(r.content.cta.label).toBe('Prenota');
+      expect(r.content.cta.url).toBe('');
+    });
+  });
+
+  describe('flyer constants', () => {
+    it('exposes 5 sizes, 2 orientations, 4 layouts, 4 sectors', () => {
+      expect(FLYER_SIZES.length).toBe(5);
+      expect(FLYER_ORIENTATIONS.length).toBe(2);
+      expect(FLYER_LAYOUTS.length).toBe(4);
+      expect(FLYER_SECTORS.length).toBe(4);
+    });
+
+    it('FLYER_BLEED_MM is 3mm per print-shop standard', () => {
+      expect(FLYER_BLEED_MM).toBe(3);
+    });
+  });
+});

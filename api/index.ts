@@ -1,61 +1,316 @@
-// @ts-nocheck
-import { drizzle } from "drizzle-orm/neon-http";
-import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean } from "drizzle-orm/pg-core";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql } from 'drizzle-orm';
+import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean, numeric } from 'drizzle-orm/pg-core';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import { z } from 'zod';
+import { drizzle } from 'drizzle-orm/neon-http';
+// TB-023 REQ-TC-006: costo flat mensile Ollama Pro (modulo puro in src/,
+// bundled correttamente negli import statici — no dipendenze ESM-only).
+import { OLLAMA_PRO_FLAT_MONTHLY } from '../src/ai/providerPricing';
 
-// ─── DB SCHEMA (inlined for Vercel compatibility) ───
-const usersTable = pgTable("users", {
+type VercelRequest = {
+  method: string;
+  url: string;
+  headers: Record<string, string | string[] | undefined>;
+  body: unknown;
+};
+type VercelResponse = {
+  status(code: number): VercelResponse;
+  json(body: unknown): void;
+  setHeader(name: string, value: string | number): void;
+  write(chunk: string | Uint8Array): boolean;
+  end(): void;
+  writableEnded: boolean;
+};
+
+const connectionString = process.env.DATABASE_URL!;
+const db = drizzle(connectionString, { schema: {} as never });
+
+const usersTable = pgTable('users', {
   id: serial().primaryKey(),
   email: varchar({ length: 255 }).notNull().unique(),
   password: varchar({ length: 255 }).notNull(),
   username: varchar({ length: 255 }).notNull(),
   gender: varchar({ length: 50 }),
-  role: varchar({ length: 20 }).default("user"),
-  tokensUsed: bigint("tokens_used", { mode: "number" }).default(0),
-  tokenLimit: bigint("token_limit", { mode: "number" }).default(1000000),
-  createdAt: timestamp("created_at").defaultNow(),
+  role: varchar({ length: 20 }).default('user'),
+  tokensUsed: bigint('tokens_used', { mode: 'number' }).default(0),
+  tokenLimit: bigint('token_limit', { mode: 'number' }).default(1000000),
+  // TB-023: tracking costi reale per provider (numeric 10,6 USD)
+  tokensCostUsd: numeric('tokens_cost_usd', { precision: 10, scale: 6 }).default('0'),
+  createdAt: timestamp('created_at').defaultNow(),
 });
 
-const quotesTable = pgTable("quotes", {
+const documentsTable = pgTable('documents', {
   id: varchar({ length: 50 }).primaryKey(),
-  userEmail: varchar("user_email", { length: 255 }).notNull(),
+  userEmail: varchar('user_email', { length: 255 }).notNull(),
+  documentType: varchar('document_type', { length: 30 }).notNull().default('quote'),
   title: varchar({ length: 255 }),
   client: varchar({ length: 255 }),
   date: varchar({ length: 50 }),
   intro: text(),
   color: varchar({ length: 50 }),
   vat: integer().default(22),
-  status: varchar({ length: 50 }).default("BOZZA"),
+  status: varchar({ length: 50 }).default('BOZZA'),
   owner: varchar({ length: 255 }),
   options: jsonb(),
   clauses: jsonb(),
-  isTemplate: boolean("is_template").default(false),
-  shareToken: varchar("share_token", { length: 255 }),
-  isShared: boolean("is_shared").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  isTemplate: boolean('is_template').default(false),
+  shareToken: varchar('share_token', { length: 255 }),
+  isShared: boolean('is_shared').default(false),
+  pdfUrl: text('pdf_url'),
+  documentTheme: varchar('document_theme', { length: 50 }).default('corporate'),
+  data: jsonb(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-const userSettingsTable = pgTable("user_settings", {
-  userEmail: varchar("user_email", { length: 255 }).primaryKey().references(() => usersTable.email),
-  displayName: varchar("display_name", { length: 255 }),
-  companyName: varchar("company_name", { length: 255 }),
-  defaultColor: varchar("default_color", { length: 50 }),
-  defaultVat: integer("default_vat").default(22),
-  logoUrl: text("logo_url"),
-  onboardingDone: boolean("onboarding_done").default(false),
+const userSettingsTable = pgTable('user_settings', {
+  userEmail: varchar('user_email', { length: 255 }).primaryKey().references(() => usersTable.email),
+  displayName: varchar('display_name', { length: 255 }),
+  companyName: varchar('company_name', { length: 255 }),
+  profession: varchar('profession', { length: 100 }),
+  defaultColor: varchar('default_color', { length: 50 }),
+  defaultVat: integer('default_vat').default(22),
+  logoUrl: text('logo_url'),
+  documentTheme: varchar('document_theme', { length: 50 }).default('corporate'),
+  onboardingDone: boolean('onboarding_done').default(false),
+  // Phase 5, tier system
+  tier: varchar({ length: 20 }).default('free'),
+  unlockCode: varchar('unlock_code', { length: 50 }),
+  unlockedAt: timestamp('unlocked_at'),
+  documentCount: integer('document_count').default(0),
+  // Phase 7, onboarding step 5 preference. Optional, null if the
+  // user skipped the step. See spec REQ-002.
+  preferredDocumentType: varchar('preferred_document_type', { length: 30 }),
 });
 
-// ─── DB CONNECTION ───────────────────────────────────
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("DATABASE_URL environment variable is required");
+const unlockCodesTable = pgTable('unlock_codes', {
+  code: varchar({ length: 50 }).primaryKey(),
+  package: varchar({ length: 50 }).notNull(),
+  usedBy: varchar('used_by', { length: 255 }),
+  usedAt: timestamp('used_at'),
+  createdBy: varchar('created_by', { length: 255 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+const VALID_PACKAGES = new Set(['starter', 'apertura', 'presenza', 'custom']);
+const FREE_DOCUMENT_LIMIT = 10;
+
+type RouteHandler = (
+  path: string,
+  method: string,
+  req: VercelRequest,
+  res: VercelResponse,
+  body: Record<string, unknown>
+) => Promise<void>;
+
+const ADMIN_EMAIL = 'admin@gmail.com';
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
+const IS_PROD = process.env.VERCEL_ENV === 'production';
+
+function getAllowedOrigin(req: VercelRequest): string {
+  if (!IS_PROD) return '*';
+  if (ALLOWED_ORIGIN) return ALLOWED_ORIGIN;
+  const origin = (req.headers['origin'] || req.headers['referer'] || '') as string;
+  try {
+    const url = new URL(origin);
+    if (url.hostname.endsWith('.vercel.app')) return url.origin;
+  } catch {}
+  return 'https://precisionquote.vercel.app';
 }
-const db = drizzle(connectionString, { schema: { users: usersTable, quotes: quotesTable, userSettings: userSettingsTable } });
 
-// ─── ZOD SCHEMAS ──────────────────────────────
+function addCorsHeaders(req: VercelRequest, res: VercelResponse): void {
+  res.setHeader('Access-Control-Allow-Origin', getAllowedOrigin(req));
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+function json(req: VercelRequest, res: VercelResponse, status: number, data: unknown): void {
+  addCorsHeaders(req, res);
+  res.status(status).json(data);
+}
+
+function getRequestId(req: VercelRequest): string {
+  const header = req.headers['x-request-id'];
+  const value = Array.isArray(header) ? header[0] : header;
+  if (value) return value;
+  return crypto.randomUUID();
+}
+
+interface AILogPayload {
+  tag: string;
+  requestId: string;
+  email?: string;
+  model?: string;
+  durationMs: number;
+  tokens?: number;
+  outcome: 'ok' | 'error';
+  errorKind?: string;
+  sizeKB?: number;
+  provider?: string;
+  costUsd?: number;
+}
+
+function logAI(payload: AILogPayload): void {
+  console.info(JSON.stringify({ ...payload, ts: Date.now() }));
+}
+
+function jsonWithRequestId(
+  req: VercelRequest,
+  res: VercelResponse,
+  status: number,
+  data: Record<string, unknown>,
+  requestId: string
+): void {
+  json(req, res, status, { ...data, requestId });
+}
+
+function errorResponse(req: VercelRequest, res: VercelResponse, status: number, err: unknown): void {
+  const errMsg = (err as Error)?.message || String(err);
+  const errStack = (err as Error)?.stack;
+  console.error(`[API] error`, { status, msg: errMsg, stack: errStack });
+  const msg = process.env.VERCEL_ENV === 'development' ? errMsg : 'Errore interno del server';
+  json(req, res, status, { error: msg });
+}
+
+function safeCompare(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const aBuf = Buffer.from(a, 'utf8');
+  const bBuf = Buffer.from(b, 'utf8');
+  if (aBuf.length !== bBuf.length) {
+    crypto.timingSafeEqual(bBuf, bBuf);
+    return false;
+  }
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+function getClientIp(req: { headers: Record<string, string | string[] | undefined> }): string {
+  const xff = req.headers['x-forwarded-for'];
+  const ip = (typeof xff === 'string' ? xff : xff?.[0]) || '';
+  return ip.split(',')[0]?.trim() || 'unknown';
+}
+
+/**
+ * Builds the `input` payload for the @google/genai image-generation
+ * endpoints. Accepts a text prompt plus optional inline image parts.
+ * The part shape (`inlineData`) is the SDK convention for the
+ * `interactions.create` API. If the SDK rejects it, the caller falls
+ * back to the `contents: [{ role, parts }]` shape manually.
+ */
+type GeminiInputStep = {
+  type: 'user_input';
+  content: Array<
+    | { type: 'text'; text: string }
+    | { type: 'image'; data: string; mime_type: string }
+  >;
+};
+
+type GeminiInputPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mime_type: string };
+
+function buildGeminiMultimodalInput(
+  text: string,
+  images: Array<{ data: string; mimeType: string } | null>,
+): string | GeminiInputPart[] {
+  const hasImages = images.some((img) => !!img);
+  if (!hasImages) return text;
+  const parts: GeminiInputPart[] = [{ type: 'text', text }];
+  for (const img of images) {
+    if (!img) continue;
+    const b64 = img.data.includes(',') ? img.data.split(',')[1] : img.data;
+    parts.push({ type: 'image', data: b64, mime_type: img.mimeType });
+  }
+  return parts;
+}
+
+const rateLimitStore = new Map<string, { count: number; firstAttempt: number }>();
+
+function checkRateLimit(
+  ip: string,
+  scope: string = 'login',
+  max: number = 5,
+  windowMs: number = 15 * 60 * 1000
+): { blocked: boolean } {
+  const key = `${scope}:${ip}`;
+  const record = rateLimitStore.get(key);
+  const now = Date.now();
+  if (record) {
+    if (now - record.firstAttempt < windowMs) {
+      if (record.count >= max) return { blocked: true };
+      return { blocked: false };
+    }
+    rateLimitStore.delete(key);
+  }
+  return { blocked: false };
+}
+
+function recordRateAttempt(ip: string, success: boolean, scope: string = 'login'): void {
+  const key = `${scope}:${ip}`;
+  if (success) {
+    rateLimitStore.delete(key);
+  } else {
+    const record = rateLimitStore.get(key);
+    const now = Date.now();
+    if (record && now - record.firstAttempt < 15 * 60 * 1000) {
+      record.count++;
+      rateLimitStore.set(key, record);
+    } else {
+      rateLimitStore.set(key, { count: 1, firstAttempt: now });
+    }
+  }
+}
+
+/**
+ * Unconditional rate limiter: every successful call counts toward
+ * the cap. Used for high-volume AI endpoints (aistream, flyerCopy)
+ * where the login-style "max N failed attempts" semantics don't
+ * make sense. Returns `blocked: true` if the cap has been hit in
+ * the current window.
+ */
+function consumeRateLimit(
+  ip: string,
+  scope: string,
+  max: number,
+  windowMs: number
+): { blocked: boolean; retryAfterMs?: number } {
+  const key = `${scope}:${ip}`;
+  const now = Date.now();
+  const record = rateLimitStore.get(key);
+  if (record && now - record.firstAttempt < windowMs) {
+    if (record.count >= max) {
+      return { blocked: true, retryAfterMs: windowMs - (now - record.firstAttempt) };
+    }
+    record.count += 1;
+    rateLimitStore.set(key, record);
+    return { blocked: false };
+  }
+  rateLimitStore.set(key, { count: 1, firstAttempt: now });
+  return { blocked: false };
+}
+
+function validate<T>(schema: z.ZodType<T>, data: unknown): { error: true; errors: string[] } | { error: false; data: T } {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const issues = result.error?.issues;
+    const messages = issues ? issues.map((e: z.ZodIssue) => e.message) : ['Errore di validazione dati'];
+    return { error: true, errors: messages };
+  }
+  return { error: false, data: result.data };
+}
+
+function randomHex(n: number): string {
+  const chars = '0123456789ABCDEF';
+  let s = '';
+  for (let i = 0; i < n; i++) s += chars[Math.floor(Math.random() * 16)];
+  return s;
+}
+
+function generateUnlockCode(): string {
+  return `PQ-${randomHex(8)}-${randomHex(8)}-${randomHex(8)}`;
+}
+
 const passwordSchema = z.string()
   .min(12, 'Password: minimo 12 caratteri')
   .max(100)
@@ -84,6 +339,38 @@ const ChangePasswordSchema = z.object({
   newPassword: passwordSchema,
 });
 
+const TokenLimitSchema = z.object({
+  email: z.string().email('Email non valida'),
+  tokenLimit: z.number().positive('tokenLimit deve essere positivo'),
+});
+
+const TrackTokensSchema = z.object({
+  email: z.string().email('Email non valida'),
+  tokens: z.number().positive('tokens deve essere positivo'),
+  // TB-023: costo USD opzionale (backward compatible)
+  costUsd: z.number().min(0).optional(),
+});
+
+const RedeemCodeSchema = z.object({
+  email: z.string().email('Email non valida'),
+  code: z.string().min(1, 'Codice richiesto').max(50),
+});
+
+const DocumentCountSchema = z.object({
+  email: z.string().email('Email non valida'),
+  delta: z.number().int().min(-100).max(100).optional().default(1),
+});
+
+const GenerateCodeSchema = z.object({
+  adminEmail: z.string().email('Email non valida'),
+  package: z.enum(['starter', 'apertura', 'presenza', 'custom']),
+});
+
+const UnlockUserSchema = z.object({
+  adminEmail: z.string().email('Email non valida'),
+  userEmail: z.string().email('Email utente non valida'),
+});
+
 const QuoteBodySchema = z.object({
   email: z.string().email('Email non valida'),
   quote: z.object({
@@ -99,427 +386,2016 @@ const QuoteBodySchema = z.object({
     options: z.array(z.any()).optional(),
     clauses: z.array(z.any()).optional(),
     isTemplate: z.boolean().optional(),
-    shareToken: z.string().optional(),
-    isShared: z.boolean().optional(),
+    pdfUrl: z.string().optional(),
+    documentTheme: z.string().optional(),
   }),
+});
+
+const qrPayloadDataSchema = z.object({
+  type: z.enum(['url', 'text', 'email', 'phone', 'vcard', 'wifi', 'sms']),
+  payload: z.string(),
+});
+
+const qrStyleDataSchema = z.object({
+  errorCorrection: z.enum(['L', 'M', 'Q', 'H']).optional(),
+  fgColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  bgColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  size: z.number().min(128).max(2048).optional(),
+  margin: z.number().min(0).max(16).optional(),
+  logoOverlay: z.string().nullable().optional(),
+  dotStyle: z.enum(['square', 'rounded', 'dots']).optional(),
+});
+
+const qrDocumentSchema = z.object({
+  id: z.string().min(1),
+  documentType: z.literal('qrCode'),
+  title: z.string().default(''),
+  data: qrPayloadDataSchema,
+  style: qrStyleDataSchema.optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+// Business card / logo / flyer payloads are stored opaquely as
+// jsonb. We validate the discriminated key + id + title at the
+// boundary and trust the schema on the client (documentSchemas.ts)
+// for the deep shape. This keeps the API surface small and avoids
+// duplicating the Zod tree for nested card/grid style fields.
+// .passthrough() keeps flat client fields (builder/front/content) so
+// extractDocumentData can nest them under jsonb `data` if `data` is
+// missing. Without passthrough Zod strips unknown keys → data:null in prod.
+const genericDocumentSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().default(''),
+  data: z.any().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+const businessCardDocumentSchema = genericDocumentSchema.extend({
+  documentType: z.literal('businessCard'),
+});
+const logoDocumentSchema = genericDocumentSchema.extend({
+  documentType: z.literal('logo'),
+});
+// Phase 3: flyer schema is now live. Same opaque-jsonb treatment as
+// the card / logo handlers.
+const flyerDocumentSchema = genericDocumentSchema.extend({
+  documentType: z.literal('flyer'),
+});
+
+const DocumentBodySchema = z.object({
+  email: z.string().email('Email non valida'),
+  document: z.discriminatedUnion('documentType', [
+    qrDocumentSchema,
+    businessCardDocumentSchema,
+    logoDocumentSchema,
+    flyerDocumentSchema,
+  ]),
 });
 
 const UserSettingsSchema = z.object({
   email: z.string().email('Email non valida'),
   displayName: z.string().optional(),
   companyName: z.string().optional(),
+  profession: z.string().optional(),
   defaultColor: z.string().optional(),
   defaultVat: z.number().optional(),
   logoUrl: z.string().optional(),
   onboardingDone: z.boolean().optional(),
+  documentTheme: z.string().optional(),
+  // Phase 7, onboarding step 5 preference. Optional, no transform.
+  // Accepts one of: 'editor' | 'qr' | 'card' | 'flyer' | 'logo'. Other
+  // values are rejected by the regex to keep the column clean.
+  // Phase 3 added 'flyer' to the allowlist.
+  preferredDocumentType: z
+    .string()
+    .regex(/^(editor|qr|card|flyer|logo)$/, 'Tipo documento non valido')
+    .optional(),
 });
 
-const TokenLimitSchema = z.object({
-  email: z.string().email('Email non valida'),
-  tokenLimit: z.number().positive('tokenLimit deve essere positivo'),
-});
+const MAX_LOG_MSG = 2000;
+const VALID_LEVELS = new Set(['debug', 'info', 'warn', 'error']);
 
-const TrackTokensSchema = z.object({
-  email: z.string().email('Email non valida'),
-  tokens: z.number().positive('tokens deve essere positivo'),
-});
-
-// ─── HELPERS ───────────────────────────────────
-function addCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-}
-
-function json(res, status, data) {
-  addCorsHeaders(res);
-  res.status(status).json(data);
-}
-
-function validate(schema, data) {
-  const result = schema.safeParse(data);
-  if (!result.success) {
-    const issues = result.error?.issues;
-    const messages = issues ? issues.map(e => e.message) : ['Errore di validazione dati'];
-    return { error: true, errors: messages };
+const handleHealth: RouteHandler = async (path, method, req, res, body) => {
+  if (path === '/ping' && method === 'GET') {
+    return json(req, res, 200, { ok: true });
   }
-  return { error: false, data: result.data };
-}
 
-// ─── RATE LIMITING (in-memory) ─────────────────
-const rateLimitStore = new Map();
-
-function checkRateLimit(ip) {
-  const key = `login:${ip}`;
-  const record = rateLimitStore.get(key);
-  const now = Date.now();
-  if (record) {
-    if (now - record.firstAttempt < 15 * 60 * 1000) {
-      if (record.count >= 5) return { blocked: true };
-      return { blocked: false };
+  if (path === '/logs' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'logs', 200, 60 * 1000);
+    if (rl.blocked) {
+      return json(req, res, 429, { error: 'Troppi log' });
     }
-    rateLimitStore.delete(key);
-  }
-  return { blocked: false };
-}
-
-function recordLoginAttempt(ip, success) {
-  const key = `login:${ip}`;
-  if (success) {
-    rateLimitStore.delete(key);
-  } else {
-    const record = rateLimitStore.get(key);
-    const now = Date.now();
-    if (record && (now - record.firstAttempt < 15 * 60 * 1000)) {
-      record.count++;
-      rateLimitStore.set(key, record);
-    } else {
-      rateLimitStore.set(key, { count: 1, firstAttempt: now });
+    const { level, msg, meta, url, t } = (body as Record<string, unknown>) || {};
+    if (typeof msg !== 'string' || msg.length > MAX_LOG_MSG) {
+      return json(req, res, 400, { error: 'Invalid log payload' });
     }
-  }
-}
-
-export default async function handler(req, res) {
-  const { pathname, searchParams } = new URL(req.url, 'http://localhost');
-  const path = pathname.replace(/^\/api/, "");
-  const method = req.method;
-
-  // CORS preflight
-  if (method === "OPTIONS") {
-    addCorsHeaders(res);
-    res.setHeader('Access-Control-Max-Age', '86400');
-    return res.status(204).end();
+    const safeLevel = VALID_LEVELS.has(level as string) ? (level as 'info') : 'info';
+    console[safeLevel](`[client] ${msg.slice(0, 500)}`, { ...(meta as object), url, clientTs: t });
+    return json(req, res, 204, {});
   }
 
-  let body = {};
-  try {
-    if (req.body && typeof req.body === 'object') body = req.body;
-    else if (req.body) body = JSON.parse(req.body);
-  } catch {}
+  return json(req, res, 404, { error: 'Endpoint non trovato' });
+};
 
-  try {
-    // ─── HEALTH CHECK ───────────────────────────────
-    if (path === "/ping" && method === "GET") {
-      return json(res, 200, { ok: true });
-    }
+const handleUsers: RouteHandler = async (path, method, req, res, body) => {
+  if (path === '/users/register' && method === 'POST') {
+    const v = validate(RegisterSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, password, username, gender, tokenLimit } = v.data;
+    if (email === ADMIN_EMAIL) return json(req, res, 403, { error: 'Email non disponibile' });
 
-    // ─── USERS ─────────────────────────────────────
-    if (path === "/users/register" && method === "POST") {
-      const v = validate(RegisterSchema, body);
-      if (v.error) return json(res, 400, { errors: v.errors });
-      const { email, password, username, gender, tokenLimit } = v.data;
+    const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    if (existing.length > 0) return json(req, res, 409, { error: 'Email già registrata' });
 
-      if (email === 'admin@gmail.com') {
-        return json(res, 403, { error: "Email non disponibile" });
+    const hashed = await bcrypt.hash(password, 12);
+    const [created] = await db.insert(usersTable).values({
+      email, password: hashed, username, gender, role: 'user',
+      tokenLimit: tokenLimit || 1000000,
+    }).returning();
+    return json(req, res, 201, {
+      success: true,
+      user: {
+        email: created.email, username: created.username, gender: created.gender,
+        role: created.role, createdAt: created.createdAt,
+        tokensUsed: created.tokensUsed, tokenLimit: created.tokenLimit,
+      },
+    });
+  }
+
+  if (path === '/users/login' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rate = checkRateLimit(ip, 'login');
+    if (rate.blocked) return json(req, res, 429, { error: 'Troppi tentativi. Riprova tra 15 minuti.' });
+
+    const v = validate(LoginSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, password } = v.data;
+
+    if (email === ADMIN_EMAIL) {
+      const adminPassword = process.env.ADMIN_PASSWORD;
+      if (!adminPassword) {
+        return json(req, res, 503, { error: 'Admin password non configurata. Imposta ADMIN_PASSWORD su Vercel.' });
       }
-
-      const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
-      if (existing.length > 0) {
-        return json(res, 409, { error: "Email già registrata" });
+      if (!safeCompare(password, adminPassword)) {
+        recordRateAttempt(ip, false, 'login');
+        return json(req, res, 401, { error: 'Email o password errati' });
       }
-
-      const hashed = await bcrypt.hash(password, 12);
-      const [created] = await db.insert(usersTable).values({
-        email, password: hashed, username, gender,
-        role: "user",
-        tokenLimit: tokenLimit || 1000000,
-      }).returning();
-      return json(res, 201, {
+      recordRateAttempt(ip, true, 'login');
+      return json(req, res, 200, {
         success: true,
         user: {
-          email: created.email, username: created.username, gender: created.gender,
-          role: created.role, createdAt: created.createdAt,
-          tokensUsed: created.tokensUsed, tokenLimit: created.tokenLimit,
-        }
+          email: ADMIN_EMAIL, username: 'admin', gender: 'male',
+          role: 'admin', createdAt: new Date().toISOString(),
+          tokensUsed: 0, tokenLimit: 999999999,
+        },
       });
     }
 
-    if (path === "/users/login" && method === "POST") {
-      const ip = (req.headers['x-forwarded-for'] || '').split(',')[0]?.trim() || req.headers['client-ip'] || 'unknown';
-      const rate = checkRateLimit(ip);
-      if (rate.blocked) {
-        return json(res, 429, { error: "Troppi tentativi. Riprova tra 15 minuti." });
+    const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    if (!found || !(await bcrypt.compare(password, found.password))) {
+      recordRateAttempt(ip, false, 'login');
+      return json(req, res, 401, { error: 'Email o password errati' });
+    }
+    recordRateAttempt(ip, true, 'login');
+    return json(req, res, 200, {
+      success: true,
+      user: {
+        email: found.email, username: found.username, gender: found.gender,
+        role: found.role || 'user',
+        createdAt: found.createdAt,
+        tokensUsed: found.tokensUsed, tokenLimit: found.tokenLimit,
+      },
+    });
+  }
+
+  if (path === '/users/change-password' && method === 'POST') {
+    const v = validate(ChangePasswordSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, oldPassword, newPassword } = v.data;
+    const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    if (!found) return json(req, res, 404, { error: 'Utente non trovato' });
+    if (!(await bcrypt.compare(oldPassword, found.password))) {
+      return json(req, res, 401, { error: 'Password attuale errata' });
+    }
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await db.update(usersTable).set({ password: hashed }).where(eq(usersTable.email, email));
+    return json(req, res, 200, { success: true });
+  }
+
+  if (path === '/users' && method === 'GET') {
+    const url = new URL(req.url, 'http://localhost');
+    const adminEmail = url.searchParams.get('adminEmail');
+    if (adminEmail !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    const list = await db.select({
+      email: usersTable.email, username: usersTable.username, gender: usersTable.gender,
+      role: usersTable.role, createdAt: usersTable.createdAt,
+      tokensUsed: usersTable.tokensUsed, tokenLimit: usersTable.tokenLimit,
+    }).from(usersTable).orderBy(sql`created_at DESC`);
+    return json(req, res, 200, list);
+  }
+
+  // TB-023 REQ-TC-006: cost breakdown per admin dashboard.
+  // DEVIAZIONE dalla spec: non esiste una tabella di log per-chiamata con
+  // provider/data — `users` ha solo aggregati lifetime (tokens_used,
+  // tokens_cost_usd). Il breakdown per-provider e per finestra temporale
+  // non è calcolabile senza storico: il parametro `days` è accettato per
+  // compatibilità con la spec ma i valori ritornati sono aggregati totali.
+  // Ollama Pro è $20/mo flat (costante condivisa con providerPricing).
+  if (path === '/users/cost-breakdown' && method === 'GET') {
+    const url = new URL(req.url, 'http://localhost');
+    const adminEmail = url.searchParams.get('adminEmail');
+    if (adminEmail !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    const daysParam = Number(url.searchParams.get('days'));
+    const days = Number.isFinite(daysParam) && daysParam > 0 ? Math.min(365, Math.floor(daysParam)) : 30;
+    const list = await db.select({
+      email: usersTable.email,
+      tokensUsed: usersTable.tokensUsed,
+      tokensCostUsd: usersTable.tokensCostUsd,
+    }).from(usersTable).orderBy(sql`tokens_cost_usd DESC`);
+    return json(req, res, 200, {
+      days,
+      ollamaProFlatMonthly: OLLAMA_PRO_FLAT_MONTHLY,
+      users: list.map((u) => ({
+        email: u.email,
+        tokensUsed: u.tokensUsed ?? 0,
+        tokensCostUsd: Number(u.tokensCostUsd ?? 0),
+      })),
+    });
+  }
+
+  if (path.startsWith('/users/') && path.endsWith('/profile') && method === 'GET') {
+    const email = decodeURIComponent(path.replace('/users/', '').replace('/profile', ''));
+    const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    if (!found) return json(req, res, 404, { error: 'Utente non trovato' });
+    return json(req, res, 200, {
+      email: found.email, username: found.username, gender: found.gender,
+      role: found.role, tokensUsed: found.tokensUsed, tokenLimit: found.tokenLimit,
+    });
+  }
+
+  if (path === '/users/limits' && method === 'PATCH') {
+    if (body.adminEmail !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    const v = validate(TokenLimitSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, tokenLimit } = v.data;
+    await db.update(usersTable).set({ tokenLimit }).where(eq(usersTable.email, email));
+    return json(req, res, 200, { success: true });
+  }
+
+  if (path === '/users/tokens' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'tokens', 30, 60 * 1000);
+    if (rl.blocked) {
+      return json(req, res, 429, { error: 'Troppi aggiornamenti token. Attendi un minuto.' });
+    }
+    const v = validate(TrackTokensSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, tokens, costUsd } = v.data;
+    if (tokens > 100000) {
+      return json(req, res, 400, { error: 'Token count anomalo. Max 100k per richiesta.' });
+    }
+    // TB-023: aggiorna anche tokens_cost_usd se passato
+    if (typeof costUsd === 'number' && costUsd > 0) {
+      await db.update(usersTable).set({
+        tokensUsed: sql`tokens_used + ${tokens}`,
+        tokensCostUsd: sql`COALESCE(tokens_cost_usd, 0) + ${costUsd}`,
+      }).where(eq(usersTable.email, email));
+    } else {
+      await db.update(usersTable).set({
+        tokensUsed: sql`tokens_used + ${tokens}`,
+      }).where(eq(usersTable.email, email));
+    }
+    return json(req, res, 200, { success: true });
+  }
+
+  // ─── TIER SYSTEM (phase 5) ────────────────────────────
+
+  if (path === '/users/tier' && method === 'GET') {
+    const url = new URL(req.url, 'http://localhost');
+    const email = url.searchParams.get('email');
+    if (!email) return json(req, res, 400, { error: 'Email richiesta' });
+    if (email === ADMIN_EMAIL) {
+      return json(req, res, 200, { data: { tier: 'unlocked', documentCount: 0, documentLimit: null } });
+    }
+    const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    const tier = settings?.tier === 'unlocked' ? 'unlocked' : 'free';
+    return json(req, res, 200, {
+      data: {
+        tier,
+        documentCount: settings?.documentCount || 0,
+        documentLimit: tier === 'unlocked' ? null : FREE_DOCUMENT_LIMIT,
+      },
+    });
+  }
+
+  if (path === '/users/document-count' && method === 'PATCH') {
+    const v = validate(DocumentCountSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, delta } = v.data;
+    if (email === ADMIN_EMAIL) {
+      return json(req, res, 200, { data: { documentCount: 0 } });
+    }
+    // upsert: ensure user_settings row exists, then increment
+    const [existing] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    if (!existing) {
+      const [created] = await db.insert(userSettingsTable).values({
+        userEmail: email,
+        tier: 'free',
+        documentCount: Math.max(0, delta),
+      }).returning();
+      return json(req, res, 200, { data: { documentCount: created.documentCount || 0 } });
+    }
+    const newCount = Math.max(0, (existing.documentCount || 0) + delta);
+    await db.update(userSettingsTable).set({
+      documentCount: newCount,
+    }).where(eq(userSettingsTable.userEmail, email));
+    return json(req, res, 200, { data: { documentCount: newCount } });
+  }
+
+  if (path === '/users/redeem-code' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(ip, 'redeem', 5, 15 * 60 * 1000);
+    if (rl.blocked) {
+      return json(req, res, 429, { error: 'Troppi tentativi di riscatto. Riprova tra 15 minuti.' });
+    }
+    const v = validate(RedeemCodeSchema, body);
+    if (v.error) {
+      recordRateAttempt(ip, false, 'redeem');
+      return json(req, res, 400, { errors: v.errors });
+    }
+    const { email, code } = v.data;
+    const normalized = code.trim().toUpperCase();
+
+    // Admin short-circuit
+    if (email === ADMIN_EMAIL) {
+      recordRateAttempt(ip, true, 'redeem');
+      return json(req, res, 200, { data: { tier: 'unlocked' } });
+    }
+
+    // Lookup case-insensitive
+    const [found] = await db.select().from(unlockCodesTable)
+      .where(sql`LOWER(${unlockCodesTable.code}) = LOWER(${normalized})`);
+
+    if (!found) {
+      recordRateAttempt(ip, false, 'redeem');
+      return json(req, res, 404, { error: 'Codice non valido' });
+    }
+    if (found.usedBy) {
+      recordRateAttempt(ip, false, 'redeem');
+      return json(req, res, 409, { error: 'Codice già utilizzato' });
+    }
+
+    // Atomic claim: only update if used_by is still null (race-condition safe)
+    const claimResult = await db.update(unlockCodesTable).set({
+      usedBy: email,
+      usedAt: sql`now()`,
+    }).where(sql`${unlockCodesTable.code} = ${found.code} AND ${unlockCodesTable.usedBy} IS NULL`).returning();
+    if (claimResult.length === 0) {
+      recordRateAttempt(ip, false, 'redeem');
+      return json(req, res, 409, { error: 'Codice già utilizzato' });
+    }
+
+    // Upsert user_settings → unlocked
+    const [existing] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    if (existing) {
+      await db.update(userSettingsTable).set({
+        tier: 'unlocked',
+        unlockCode: normalized,
+        unlockedAt: sql`now()`,
+      }).where(eq(userSettingsTable.userEmail, email));
+    } else {
+      await db.insert(userSettingsTable).values({
+        userEmail: email,
+        tier: 'unlocked',
+        unlockCode: normalized,
+        unlockedAt: sql`now()`,
+        documentCount: 0,
+      });
+    }
+
+    recordRateAttempt(ip, true, 'redeem');
+    console.info('[tier] code redeemed', { email, codePrefix: normalized.slice(0, 4) });
+    return json(req, res, 200, { data: { tier: 'unlocked' } });
+  }
+
+  return json(req, res, 404, { error: 'Endpoint users non trovato' });
+};
+
+const handleAdmin: RouteHandler = async (path, method, req, res, body) => {
+  if (path === '/admin/deepseek-status' && method === 'GET') {
+    return json(req, res, 200, { configured: !!process.env.DEEPSEEK_API_KEY });
+  }
+
+  if (path === '/admin/generate-unlock-code' && method === 'POST') {
+    const v = validate(GenerateCodeSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { adminEmail, package: pkg } = v.data;
+    if (adminEmail !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    if (!VALID_PACKAGES.has(pkg)) {
+      return json(req, res, 400, { error: 'Package non valido' });
+    }
+    const code = generateUnlockCode();
+    const [created] = await db.insert(unlockCodesTable).values({
+      code,
+      package: pkg,
+      usedBy: null,
+      usedAt: null,
+      createdBy: adminEmail,
+    }).returning();
+    return json(req, res, 201, { data: { code: created.code } });
+  }
+
+  if (path === '/admin/unlock-codes' && method === 'GET') {
+    const url = new URL(req.url, 'http://localhost');
+    const adminEmail = url.searchParams.get('adminEmail');
+    if (adminEmail !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    const list = await db.select().from(unlockCodesTable).orderBy(sql`created_at DESC`);
+    return json(req, res, 200, {
+      data: list.map(c => ({
+        code: c.code,
+        package: c.package,
+        usedBy: c.usedBy,
+        usedAt: c.usedAt,
+        createdAt: c.createdAt,
+      })),
+    });
+  }
+
+  // Admin sblocca direttamente un utente senza codice
+  if (path === '/admin/unlock-user' && method === 'POST') {
+    const v = validate(UnlockUserSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { adminEmail, userEmail } = v.data;
+    if (adminEmail !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    if (userEmail === ADMIN_EMAIL) {
+      return json(req, res, 200, { data: { tier: 'unlocked' } });
+    }
+    const [existing] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, userEmail));
+    if (existing) {
+      await db.update(userSettingsTable).set({
+        tier: 'unlocked',
+        unlockedAt: sql`now()`,
+      }).where(eq(userSettingsTable.userEmail, userEmail));
+    } else {
+      await db.insert(userSettingsTable).values({
+        userEmail,
+        tier: 'unlocked',
+        unlockedAt: sql`now()`,
+        documentCount: 0,
+      });
+    }
+    console.info('[tier] admin unlocked user', { adminEmail, userEmail });
+    return json(req, res, 200, { data: { tier: 'unlocked' } });
+  }
+
+  return json(req, res, 404, { error: 'Endpoint admin non trovato' });
+};
+
+const handleQuotes: RouteHandler = async (path, method, req, res, body) => {
+  const url = new URL(req.url, 'http://localhost');
+  const searchParams = url.searchParams;
+
+  if (path === '/quotes' && method === 'GET') {
+    const userEmail = searchParams.get('email');
+    if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
+    const list = await db.select().from(documentsTable).where(eq(documentsTable.userEmail, userEmail)).orderBy(sql`created_at DESC`);
+    return json(req, res, 200, list);
+  }
+
+  if (path === '/quotes/all' && method === 'GET') {
+    if (searchParams.get('adminEmail') !== ADMIN_EMAIL) {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    const list = await db.select().from(documentsTable).orderBy(sql`created_at DESC`);
+    return json(req, res, 200, list);
+  }
+
+  if (path === '/quotes' && method === 'POST') {
+    const v = validate(QuoteBodySchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, quote } = v.data;
+
+    const existing = await db.select().from(documentsTable).where(eq(documentsTable.id, quote.id));
+    if (existing.length > 0) {
+      if (existing[0].userEmail !== email) {
+        return json(req, res, 403, { error: 'Non autorizzato' });
       }
+      const [updated] = await db.update(documentsTable).set({
+        documentType: existing[0].documentType || 'quote',
+        title: quote.title, client: quote.client, date: quote.date,
+        intro: quote.intro, color: quote.color, vat: quote.vat,
+        status: quote.status || 'BOZZA', owner: quote.owner,
+        options: quote.options || [],
+        clauses: quote.clauses || [],
+        isTemplate: quote.isTemplate ?? existing[0].isTemplate ?? false,
+        pdfUrl: quote.pdfUrl ?? existing[0].pdfUrl,
+        documentTheme: quote.documentTheme ?? existing[0].documentTheme,
+        updatedAt: sql`now()`,
+      }).where(eq(documentsTable.id, quote.id)).returning();
+      return json(req, res, 200, updated);
+    }
 
-      const v = validate(LoginSchema, body);
-      if (v.error) return json(res, 400, { errors: v.errors });
-      const { email, password } = v.data;
+    const [saved] = await db.insert(documentsTable).values({
+      id: quote.id, userEmail: email, documentType: 'quote',
+      title: quote.title, client: quote.client,
+      date: quote.date, intro: quote.intro, color: quote.color, vat: quote.vat,
+      status: quote.status || 'BOZZA', owner: quote.owner,
+      options: quote.options || [],
+      clauses: quote.clauses || [],
+      isTemplate: quote.isTemplate ?? false,
+      pdfUrl: quote.pdfUrl || null,
+      documentTheme: quote.documentTheme || 'corporate',
+    }).returning();
+    return json(req, res, 201, saved);
+  }
 
-      // Admin: validated against env var, not DB
-      if (email === 'admin@gmail.com') {
-        const adminPassword = process.env.ADMIN_PASSWORD;
-        if (!adminPassword) {
-          return json(res, 503, { error: "Admin password non configurata. L'amministratore deve impostare ADMIN_PASSWORD su Vercel." });
-        }
-        if (password !== adminPassword) {
-          recordLoginAttempt(ip, false);
-          return json(res, 401, { error: "Email o password errati" });
-        }
-        recordLoginAttempt(ip, true);
-        return json(res, 200, {
-          success: true,
-          user: {
-            email: 'admin@gmail.com', username: 'admin', gender: 'male',
-            role: 'admin', createdAt: new Date().toISOString(),
-            tokensUsed: 0, tokenLimit: 999999999,
-          }
+  if (path.startsWith('/quotes/') && method === 'DELETE') {
+    const quoteId = path.replace('/quotes/', '');
+    const email = body.email || searchParams.get('email');
+    if (!email) return json(req, res, 400, { error: 'Email richiesta' });
+
+    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, quoteId));
+    if (!existing) return json(req, res, 404, { error: 'Preventivo non trovato' });
+    if (existing.userEmail !== email) {
+      return json(req, res, 403, { error: 'Non autorizzato' });
+    }
+    await db.delete(documentsTable).where(eq(documentsTable.id, quoteId));
+    return json(req, res, 200, { success: true });
+  }
+
+  if (path === '/quotes/templates' && method === 'GET') {
+    const userEmail = searchParams.get('email');
+    if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
+    const list = await db.select().from(documentsTable)
+      .where(and(eq(documentsTable.userEmail, userEmail), eq(documentsTable.isTemplate, true)))
+      .orderBy(sql`created_at DESC`);
+    return json(req, res, 200, list);
+  }
+
+  return json(req, res, 404, { error: 'Endpoint quotes non trovato' });
+};
+
+const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
+  const url = new URL(req.url, 'http://localhost');
+  const searchParams = url.searchParams;
+
+  if (path === '/documents' && method === 'GET') {
+    const userEmail = searchParams.get('email');
+    if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
+    const type = searchParams.get('type');
+    const all = await db.select().from(documentsTable)
+      .where(eq(documentsTable.userEmail, userEmail))
+      .orderBy(sql`updated_at DESC`);
+    const filtered = type ? all.filter((d) => d.documentType === type) : all;
+    return json(req, res, 200, filtered);
+  }
+
+  if (path.startsWith('/documents/') && method === 'GET') {
+    const documentId = path.replace('/documents/', '');
+    const userEmail = searchParams.get('email');
+    const type = searchParams.get('type');
+    if (!userEmail) return json(req, res, 400, { error: 'Email richiesta' });
+    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, documentId));
+    if (!existing || existing.userEmail !== userEmail || (type && existing.documentType !== type)) {
+      return json(req, res, 404, { error: 'Documento non trovato' });
+    }
+    return json(req, res, 200, existing);
+  }
+
+  if (path === '/documents' && method === 'POST') {
+    const v = validate(DocumentBodySchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, document } = v.data;
+
+    // Extract payload for jsonb `data` column.
+    // Client may send either:
+    //   a) wrapped: { id, documentType, title, data: {...} }  (preferred)
+    //   b) flat:    { id, documentType, title, builder|front|content|... }
+    // Without this, flat logo/card/flyer used to store data:null in prod.
+    const extractDocumentData = (doc: any): unknown => {
+      if (doc.documentType === 'qrCode') return doc.data ?? null;
+      if (doc.data != null) return doc.data;
+      const META = new Set(['id', 'documentType', 'title', 'userEmail', 'createdAt', 'updatedAt', 'isTemplate', 'data']);
+      const domain: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(doc)) {
+        if (!META.has(k)) domain[k] = val;
+      }
+      return Object.keys(domain).length > 0 ? domain : null;
+    };
+
+    const dataToStore = extractDocumentData(document);
+    const existing = await db.select().from(documentsTable).where(eq(documentsTable.id, document.id));
+    if (existing.length > 0) {
+      if (existing[0].userEmail !== email) {
+        return json(req, res, 403, { error: 'Non autorizzato' });
+      }
+      const [updated] = await db.update(documentsTable).set({
+        documentType: document.documentType,
+        title: document.title,
+        data: dataToStore as never,
+        updatedAt: sql`now()`,
+      }).where(eq(documentsTable.id, document.id)).returning();
+      return json(req, res, 200, updated);
+    }
+    const [saved] = await db.insert(documentsTable).values({
+      id: document.id,
+      userEmail: email,
+      documentType: document.documentType,
+      title: document.title,
+      data: dataToStore as never,
+      isTemplate: false,
+    }).returning();
+    // Phase 5: increment user document count (admin excluded, no-op)
+    if (email !== ADMIN_EMAIL) {
+      const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+      if (settings) {
+        await db.update(userSettingsTable).set({
+          documentCount: sql`COALESCE(${userSettingsTable.documentCount}, 0) + 1`,
+        }).where(eq(userSettingsTable.userEmail, email));
+      } else {
+        await db.insert(userSettingsTable).values({
+          userEmail: email,
+          tier: 'free',
+          documentCount: 1,
         });
       }
+    }
+    return json(req, res, 201, saved);
+  }
 
-      const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
-      if (!found || !(await bcrypt.compare(password, found.password))) {
-        recordLoginAttempt(ip, false);
-        return json(res, 401, { error: "Email o password errati" });
+  if (path.startsWith('/documents/') && method === 'DELETE') {
+    const documentId = path.replace('/documents/', '');
+    const email = body.email || searchParams.get('email');
+    if (!email) return json(req, res, 400, { error: 'Email richiesta' });
+
+    const [existing] = await db.select().from(documentsTable).where(eq(documentsTable.id, documentId));
+    if (!existing) return json(req, res, 404, { error: 'Documento non trovato' });
+    if (existing.userEmail !== email) {
+      return json(req, res, 403, { error: 'Non autorizzato' });
+    }
+    await db.delete(documentsTable).where(eq(documentsTable.id, documentId));
+    return json(req, res, 200, { success: true });
+  }
+
+  return json(req, res, 404, { error: 'Endpoint documents non trovato' });
+};
+
+const handleUserSettings: RouteHandler = async (path, method, req, res, body) => {
+  const url = new URL(req.url, 'http://localhost');
+  const searchParams = url.searchParams;
+
+  if (path === '/user-settings' && method === 'GET') {
+    const email = searchParams.get('email');
+    if (!email) return json(req, res, 400, { error: 'Email richiesta' });
+    if (email === ADMIN_EMAIL) {
+      return json(req, res, 200, { userEmail: ADMIN_EMAIL, onboardingDone: true });
+    }
+    const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    return json(req, res, 200, settings || { userEmail: email, onboardingDone: false });
+  }
+
+  if (path === '/user-settings' && method === 'POST') {
+    const v = validate(UserSettingsSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const { email, ...settings } = v.data;
+    if (email === ADMIN_EMAIL) {
+      return json(req, res, 200, { success: true, userEmail: ADMIN_EMAIL, ...settings });
+    }
+    const existing = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
+    if (existing.length > 0) {
+      const [updated] = await db.update(userSettingsTable).set({
+        ...(settings.displayName !== undefined && { displayName: settings.displayName }),
+        ...(settings.companyName !== undefined && { companyName: settings.companyName }),
+        ...(settings.profession !== undefined && { profession: settings.profession }),
+        ...(settings.defaultColor !== undefined && { defaultColor: settings.defaultColor }),
+        ...(settings.defaultVat !== undefined && { defaultVat: settings.defaultVat }),
+        ...(settings.logoUrl !== undefined && { logoUrl: settings.logoUrl }),
+        ...(settings.onboardingDone !== undefined && { onboardingDone: settings.onboardingDone }),
+        ...(settings.documentTheme !== undefined && { documentTheme: settings.documentTheme }),
+        ...(settings.preferredDocumentType !== undefined && { preferredDocumentType: settings.preferredDocumentType }),
+      }).where(eq(userSettingsTable.userEmail, email)).returning();
+      return json(req, res, 200, updated);
+    }
+    const [created] = await db.insert(userSettingsTable).values({
+      userEmail: email,
+      displayName: settings.displayName,
+      companyName: settings.companyName,
+      profession: settings.profession,
+      defaultColor: settings.defaultColor,
+      defaultVat: settings.defaultVat,
+      logoUrl: settings.logoUrl,
+      documentTheme: settings.documentTheme ?? 'corporate',
+      onboardingDone: settings.onboardingDone ?? false,
+      preferredDocumentType: settings.preferredDocumentType,
+    }).returning();
+    return json(req, res, 201, created);
+  }
+
+  return json(req, res, 404, { error: 'Endpoint user-settings non trovato' });
+};
+
+const handleAI: RouteHandler = async (path, method, req, res, body) => {
+  if (path === '/ai/chat' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aichat', 30, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste AI. Attendi un minuto.' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        model: z.string().optional(),
+        messages: z
+          .array(
+            z.object({
+              role: z.enum(['system', 'user', 'assistant', 'tool']),
+              content: z.string(),
+              tool_call_id: z.string().optional(),
+              name: z.string().optional(),
+              // TB-023: Ollama multimodal messages may include images
+              images: z.array(z.string()).optional(),
+              tool_calls: z
+                .array(
+                  z.object({
+                    function: z.object({
+                      name: z.string(),
+                      arguments: z.string(),
+                    }),
+                  }),
+                )
+                .optional(),
+            }),
+          )
+          .min(1)
+          .max(50),
+        response_format: z.object({ type: z.literal('json_object') }).optional(),
+        temperature: z.number().min(0).max(2).optional(),
+        max_tokens: z.number().int().positive().max(8192).optional(),
+        userEmail: z.string().email().optional(),
+        // TB-023: provider routing (default deepseek)
+        provider: z.enum(['deepseek', 'ollama']).optional(),
+        // Ollama-only fields
+        tools: z
+          .array(
+            z.object({
+              type: z.literal('function'),
+              function: z.object({
+                name: z.string(),
+                description: z.string().optional(),
+                parameters: z.record(z.string(), z.unknown()).optional(),
+              }),
+            }),
+          )
+          .optional(),
+        format: z.union([z.literal('json'), z.record(z.string(), z.unknown())]).optional(),
+        stream: z.boolean().optional(),
+        options: z.record(z.string(), z.unknown()).optional(),
+      }),
+      body
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_chat', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
+    }
+    const userEmail = v.data.userEmail;
+    const provider = v.data.provider || 'deepseek';
+
+    // ─── TB-023: Ollama Pro Cloud routing ─────────────────────────
+    if (provider === 'ollama') {
+      const ollamaKey = process.env.OLLAMA_API_KEY;
+      if (!ollamaKey) {
+        logAI({ tag: 'ai_chat', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+        return jsonWithRequestId(req, res, 503, { error: 'Ollama non configurato. Configura OLLAMA_API_KEY su Vercel.' }, requestId);
       }
-
-      recordLoginAttempt(ip, true);
-      return json(res, 200, {
-        success: true,
-        user: {
-          email: found.email, username: found.username, gender: found.gender,
-          role: found.role || 'user',
-          createdAt: found.createdAt,
-          tokensUsed: found.tokensUsed, tokenLimit: found.tokenLimit,
-        }
-      });
-    }
-
-    if (path === "/users/change-password" && method === "POST") {
-      const v = validate(ChangePasswordSchema, body);
-      if (v.error) return json(res, 400, { errors: v.errors });
-      const { email, oldPassword, newPassword } = v.data;
-
-      const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
-      if (!found) return json(res, 404, { error: "Utente non trovato" });
-      if (!(await bcrypt.compare(oldPassword, found.password))) {
-        return json(res, 401, { error: "Password attuale errata" });
-      }
-
-      const hashed = await bcrypt.hash(newPassword, 12);
-      await db.update(usersTable).set({ password: hashed }).where(eq(usersTable.email, email));
-      return json(res, 200, { success: true });
-    }
-
-    if (path === "/users" && method === "GET") {
-      const list = await db.select({
-        email: usersTable.email, username: usersTable.username, gender: usersTable.gender,
-        role: usersTable.role, createdAt: usersTable.createdAt,
-        tokensUsed: usersTable.tokensUsed, tokenLimit: usersTable.tokenLimit,
-      }).from(usersTable).orderBy(sql`created_at DESC`);
-      return json(res, 200, list);
-    }
-
-    if (path.startsWith("/users/") && path.endsWith("/profile") && method === "GET") {
-      const email = decodeURIComponent(path.replace("/users/", "").replace("/profile", ""));
-      const [found] = await db.select().from(usersTable).where(eq(usersTable.email, email));
-      if (!found) return json(res, 404, { error: "Utente non trovato" });
-      return json(res, 200, {
-        email: found.email, username: found.username, gender: found.gender,
-        role: found.role, tokensUsed: found.tokensUsed, tokenLimit: found.tokenLimit,
-      });
-    }
-
-    if (path === "/users/limits" && method === "PATCH") {
-      const v = validate(TokenLimitSchema, body);
-      if (v.error) return json(res, 400, { errors: v.errors });
-      const { email, tokenLimit } = v.data;
-      await db.update(usersTable).set({ tokenLimit }).where(eq(usersTable.email, email));
-      return json(res, 200, { success: true });
-    }
-
-    if (path === "/users/tokens" && method === "POST") {
-      const v = validate(TrackTokensSchema, body);
-      if (v.error) return json(res, 400, { errors: v.errors });
-      const { email, tokens } = v.data;
-      await db.update(usersTable).set({
-        tokensUsed: sql`tokens_used + ${tokens}`
-      }).where(eq(usersTable.email, email));
-      return json(res, 200, { success: true });
-    }
-
-    // ─── QUOTES ─────────────────────────────────────
-    if (path === "/quotes" && method === "GET") {
-      const userEmail = searchParams.get("email");
-      if (!userEmail) return json(res, 400, { error: "Email richiesta" });
-      const list = await db.select().from(quotesTable).where(eq(quotesTable.userEmail, userEmail)).orderBy(sql`created_at DESC`);
-      return json(res, 200, list);
-    }
-
-    if (path === "/quotes/all" && method === "GET") {
-      const list = await db.select().from(quotesTable).orderBy(sql`created_at DESC`);
-      return json(res, 200, list);
-    }
-
-    if (path === "/quotes" && method === "POST") {
-      const v = validate(QuoteBodySchema, body);
-      if (v.error) return json(res, 400, { errors: v.errors });
-      const { email, quote } = v.data;
-
-      const existing = await db.select().from(quotesTable).where(eq(quotesTable.id, quote.id));
-      if (existing.length > 0) {
-        if (existing[0].userEmail !== email) {
-          return json(res, 403, { error: "Non autorizzato" });
-        }
-        const [updated] = await db.update(quotesTable).set({
-          title: quote.title, client: quote.client, date: quote.date,
-          intro: quote.intro, color: quote.color, vat: quote.vat,
-          status: quote.status || "BOZZA", owner: quote.owner,
-          options: JSON.stringify(quote.options || []),
-          clauses: JSON.stringify(quote.clauses || []),
-          isTemplate: quote.isTemplate ?? existing[0].isTemplate ?? false,
-          shareToken: quote.shareToken ?? existing[0].shareToken,
-          isShared: quote.isShared ?? existing[0].isShared ?? false,
-          updatedAt: sql`now()`,
-        }).where(eq(quotesTable.id, quote.id)).returning();
-        return json(res, 200, updated);
-      }
-
-      const [saved] = await db.insert(quotesTable).values({
-        id: quote.id, userEmail: email, title: quote.title, client: quote.client,
-        date: quote.date, intro: quote.intro, color: quote.color, vat: quote.vat,
-        status: quote.status || "BOZZA", owner: quote.owner,
-        options: JSON.stringify(quote.options || []),
-        clauses: JSON.stringify(quote.clauses || []),
-        isTemplate: quote.isTemplate ?? false,
-        shareToken: quote.shareToken || null,
-        isShared: quote.isShared ?? false,
-      }).returning();
-      return json(res, 201, saved);
-    }
-
-    if (path.startsWith("/quotes/") && method === "DELETE") {
-      const quoteId = path.replace("/quotes/", "");
-      const email = body.email || searchParams.get("email");
-      if (!email) return json(res, 400, { error: "Email richiesta" });
-
-      const [existing] = await db.select().from(quotesTable).where(eq(quotesTable.id, quoteId));
-      if (!existing) return json(res, 404, { error: "Preventivo non trovato" });
-      if (existing.userEmail !== email) {
-        return json(res, 403, { error: "Non autorizzato" });
-      }
-
-      await db.delete(quotesTable).where(eq(quotesTable.id, quoteId));
-      return json(res, 200, { success: true });
-    }
-
-    // ─── DEEPSEEK STATUS CHECK ──────────────────────
-    if (path === "/admin/deepseek-status" && method === "GET") {
-      const hasKey = !!process.env.DEEPSEEK_API_KEY;
-      return json(res, 200, { configured: hasKey });
-    }
-
-    // ─── AI CHAT PROXY ──────────────────────────────
-    if (path === "/ai/chat" && method === "POST") {
-      const apiKey = process.env.DEEPSEEK_API_KEY;
-      if (!apiKey) {
-        console.error('[DeepSeek] DEEPSEEK_API_KEY env var not set');
-        return json(res, 503, { error: "DeepSeek non configurato. L'amministratore deve impostare DEEPSEEK_API_KEY nelle variabili d'ambiente su Vercel (scope: Production, Preview)." });
-      }
-      const { model, messages, response_format, temperature } = body;
+      const { model, messages, temperature, max_tokens, tools, format, options: ollamaOptions } = v.data;
+      const ollamaModel = model || 'minimax-m3:cloud';
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 25000);
-      let apiRes;
+      const timeout = setTimeout(() => controller.abort(), 60000); // Ollama Cloud più lento di DeepSeek
+      const startedAt = Date.now();
+      let apiRes: Response;
       try {
-        apiRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model: model || "deepseek-chat",
-            messages,
-            response_format: response_format || { type: "json_object" },
-            temperature: temperature ?? 0.7,
+        const ollamaBody: Record<string, unknown> = {
+          model: ollamaModel,
+          messages: messages.map((m) => {
+            const msg: Record<string, unknown> = { role: m.role, content: m.content };
+            if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
+            if (m.name) msg.name = m.name;
+            if (m.images && m.images.length > 0) msg.images = m.images;
+            if (m.tool_calls && m.tool_calls.length > 0) {
+              msg.tool_calls = m.tool_calls.map((tc) => ({
+                function: { name: tc.function.name, arguments: tc.function.arguments },
+              }));
+            }
+            return msg;
           }),
+          stream: false,
+        };
+        if (temperature !== undefined) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), temperature };
+        }
+        if (max_tokens !== undefined) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), num_predict: max_tokens };
+        }
+        if (ollamaOptions) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), ...ollamaOptions };
+        }
+        if (v.data.response_format?.type === 'json_object' || format === 'json') {
+          ollamaBody.format = 'json';
+        } else if (format) {
+          ollamaBody.format = format;
+        }
+        if (tools && tools.length > 0) ollamaBody.tools = tools;
+
+        apiRes = await fetch('https://ollama.com/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${ollamaKey}`,
+            'X-Request-Id': requestId,
+          },
+          body: JSON.stringify(ollamaBody),
           signal: controller.signal,
         });
       } catch (err) {
-        if (err.name === "AbortError") {
-          return json(res, 504, { error: "DeepSeek non ha risposto entro 25 secondi. Riprova." });
+        clearTimeout(timeout);
+        if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError') {
+          logAI({ tag: 'ai_chat', requestId, email: userEmail, model: ollamaModel, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'timeout' });
+          return jsonWithRequestId(req, res, 504, { error: 'Ollama non ha risposto entro 60 secondi. Riprova.' }, requestId);
         }
         throw err;
       } finally {
         clearTimeout(timeout);
       }
       if (!apiRes.ok) {
-        const errBody = await apiRes.text().catch(() => "Unknown error");
-        if (apiRes.status === 402) return json(res, 402, { error: "Credito DeepSeek esaurito. Ricarica su platform.deepseek.com" });
-        if (apiRes.status === 401) return json(res, 401, { error: "Chiave API DeepSeek non valida" });
-        if (apiRes.status === 429) return json(res, 429, { error: "Troppe richieste a DeepSeek. Attendi qualche secondo e riprova." });
-        return json(res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` });
+        const errBody = await apiRes.text().catch(() => 'Unknown error');
+        const errorKind = apiRes.status === 429 ? 'rate_limit' : apiRes.status === 401 ? 'auth' : 'upstream';
+        logAI({ tag: 'ai_chat', requestId, email: userEmail, model: ollamaModel, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+        if (apiRes.status === 429) {
+          return jsonWithRequestId(req, res, 429, { error: 'Quota Ollama Pro superato. Riprova tra qualche ora o passa a DeepSeek.' }, requestId);
+        }
+        if (apiRes.status === 401) {
+          return jsonWithRequestId(req, res, 401, { error: 'Chiave API Ollama non valida' }, requestId);
+        }
+        return jsonWithRequestId(req, res, apiRes.status, { error: `Ollama (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
       }
-      const data = await apiRes.json();
-      return json(res, 200, data);
-    }
-
-    // ─── TEMPLATES ──────────────────────────────────
-    if (path === "/quotes/templates" && method === "GET") {
-      const userEmail = searchParams.get("email");
-      if (!userEmail) return json(res, 400, { error: "Email richiesta" });
-      const list = await db.select().from(quotesTable)
-        .where(and(eq(quotesTable.userEmail, userEmail), eq(quotesTable.isTemplate, true)))
-        .orderBy(sql`created_at DESC`);
-      return json(res, 200, list);
-    }
-
-    // ─── PUBLIC QUOTE (no auth) ─────────────────────
-    if (path.startsWith("/quotes/public/") && method === "GET") {
-      const token = path.replace("/quotes/public/", "");
-      const [found] = await db.select().from(quotesTable).where(eq(quotesTable.shareToken, token));
-      if (!found || !found.isShared) {
-        return json(res, 404, { error: "Preventivo non trovato o non condiviso" });
-      }
-      return json(res, 200, {
-        id: found.id, title: found.title, client: found.client, date: found.date,
-        intro: found.intro, color: found.color, vat: found.vat, status: found.status,
-        owner: found.owner, options: found.options, clauses: found.clauses,
+      const raw = await apiRes.json();
+      // Normalizza risposta Ollama → formato DeepSeek-like per il client
+      const ollamaRaw = raw as {
+        message?: { content?: string; tool_calls?: Array<{ function: { name: string; arguments: string | object } }> };
+        prompt_eval_count?: number;
+        eval_count?: number;
+      };
+      const toolCalls = ollamaRaw.message?.tool_calls?.map((tc, i) => ({
+        id: `call_${Date.now()}_${i}`,
+        type: 'function' as const,
+        function: {
+          name: tc.function.name,
+          arguments:
+            typeof tc.function.arguments === 'string'
+              ? tc.function.arguments
+              : JSON.stringify(tc.function.arguments ?? {}),
+        },
+      }));
+      const normalized = {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: ollamaRaw.message?.content || '',
+              ...(toolCalls && toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: ollamaRaw.prompt_eval_count ?? 0,
+          completion_tokens: ollamaRaw.eval_count ?? 0,
+          total_tokens: (ollamaRaw.prompt_eval_count ?? 0) + (ollamaRaw.eval_count ?? 0),
+        },
+        requestId,
+      };
+      logAI({
+        tag: 'ai_chat',
+        requestId,
+        email: userEmail,
+        model: ollamaModel,
+        durationMs: Date.now() - startedAt,
+        outcome: 'ok',
+        tokens: normalized.usage.total_tokens || undefined,
+        provider: 'ollama',
       });
+      return json(req, res, 200, normalized);
     }
 
-    // ─── USER SETTINGS ──────────────────────────────
-    if (path === "/user-settings" && method === "GET") {
-      const email = searchParams.get("email");
-      if (!email) return json(res, 400, { error: "Email richiesta" });
-      const [settings] = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
-      return json(res, 200, settings || { userEmail: email, onboardingDone: false });
+    // ─── DeepSeek (default, preesistente) ─────────────────────────
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) {
+      logAI({ tag: 'ai_chat', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'DeepSeek non configurato.' }, requestId);
     }
-
-    if (path === "/user-settings" && method === "POST") {
-      const v = validate(UserSettingsSchema, body);
-      if (v.error) return json(res, 400, { errors: v.errors });
-      const { email, ...settings } = v.data;
-      const existing = await db.select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
-      if (existing.length > 0) {
-        const [updated] = await db.update(userSettingsTable).set({
-          ...(settings.displayName !== undefined && { displayName: settings.displayName }),
-          ...(settings.companyName !== undefined && { companyName: settings.companyName }),
-          ...(settings.defaultColor !== undefined && { defaultColor: settings.defaultColor }),
-          ...(settings.defaultVat !== undefined && { defaultVat: settings.defaultVat }),
-          ...(settings.logoUrl !== undefined && { logoUrl: settings.logoUrl }),
-          ...(settings.onboardingDone !== undefined && { onboardingDone: settings.onboardingDone }),
-        }).where(eq(userSettingsTable.userEmail, email)).returning();
-        return json(res, 200, updated);
+    const { model, messages, response_format, temperature } = v.data;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    const startedAt = Date.now();
+    let apiRes: Response;
+    try {
+      apiRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: model || 'deepseek-chat',
+          messages,
+          response_format: response_format || { type: 'json_object' },
+          temperature: temperature ?? 0.7,
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError') {
+        logAI({ tag: 'ai_chat', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'timeout' });
+        return jsonWithRequestId(req, res, 504, { error: 'DeepSeek non ha risposto entro 25 secondi. Riprova.' }, requestId);
       }
-      const [created] = await db.insert(userSettingsTable).values({
-        userEmail: email,
-        displayName: settings.displayName,
-        companyName: settings.companyName,
-        defaultColor: settings.defaultColor,
-        defaultVat: settings.defaultVat,
-        logoUrl: settings.logoUrl,
-        onboardingDone: settings.onboardingDone ?? false,
-      }).returning();
-      return json(res, 201, created);
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!apiRes.ok) {
+      const errBody = await apiRes.text().catch(() => 'Unknown error');
+      const errorKind = apiRes.status === 402 ? 'quota' : apiRes.status === 401 ? 'auth' : apiRes.status === 429 ? 'rate_limit' : 'upstream';
+      logAI({ tag: 'ai_chat', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (apiRes.status === 402) return jsonWithRequestId(req, res, 402, { error: 'Credito DeepSeek esaurito. Ricarica su platform.deepseek.com' }, requestId);
+      if (apiRes.status === 401) return jsonWithRequestId(req, res, 401, { error: 'Chiave API DeepSeek non valida' }, requestId);
+      if (apiRes.status === 429) return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste a DeepSeek. Attendi qualche secondo e riprova.' }, requestId);
+      return jsonWithRequestId(req, res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
+    }
+    const data = await apiRes.json();
+    const usage = (data as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }).usage;
+    logAI({
+      tag: 'ai_chat',
+      requestId,
+      email: userEmail,
+      model: model || 'deepseek-chat',
+      durationMs: Date.now() - startedAt,
+      outcome: 'ok',
+      tokens: usage?.total_tokens,
+      provider: 'deepseek',
+    });
+    return json(req, res, 200, { ...data, requestId });
+  }
+
+  // Phase 3: dedicated copy endpoint for flyers. Same DeepSeek upstream
+  // as /ai/chat, but with a tighter rate limit (10/min per IP) since
+  // copy generation is more expensive (full prompt + system instructions)
+  // and not interactive like chat. Auth: same as /ai/chat (serverless
+  // function is auth-gated at the route level: a valid session cookie or
+  // Vercel-Auth is required; the actual authorization check happens in
+  // dataService.chatWithAI client side). The endpoint trusts the client
+  // to have a valid session.
+  if (path === '/ai/copy-flyer' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'flyerCopy', 10, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni di copy. Attendi un minuto.' }, requestId);
+    }
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) {
+      logAI({ tag: 'ai_copy_flyer', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'DeepSeek non configurato.' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        brief: z.string().max(1000),
+        tone: z.enum(['formale', 'giovanile', 'tecnico']),
+        layout: z.enum(['classic', 'centered', 'split', 'magazine']).optional(),
+        size: z.enum(['A6', 'A5', 'A4', 'Letter', 'Square']).optional(),
+        model: z.string().optional(),
+      }),
+      body
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_copy_flyer', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { errors: v.errors }, requestId);
+    }
+    const { brief, tone, layout, size, model } = v.data;
+    const startedAt = Date.now();
+    // Brief is sanitized server-side: strip HTML tags and control
+    // characters before it hits the LLM prompt. This is a defense in
+    // depth: the client sanitizes too (see sanitizeFlyerBrief in
+    // src/ai/prompts/flyerSystem.ts), but we never trust a client.
+    const sanitizedBrief = String(brief || '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 500);
+    if (!sanitizedBrief) return json(req, res, 400, { error: 'Brief vuoto' });
+    // Build the prompt server-side: the public API surface doesn't
+    // expose the prompt template (proprietary copy framework). Same
+    // template as the client's flyerCopy.ts so behavior is consistent
+    // regardless of where the call originates.
+    const systemMsg = `Sei un copywriter italiano esperto in volantini pubblicitari. Rispondi SOLO con JSON valido.`;
+    const toneLine =
+      tone === 'formale'
+        ? 'tono formale e professionale'
+        : tone === 'giovanile'
+          ? 'tono fresco e giovanile, contrazioni ammesse'
+          : 'tono tecnico e preciso, includi numeri e specifiche';
+    const bodyBudget = size === 'A4' || size === 'Letter' ? 800 : size === 'Square' ? 600 : size === 'A6' ? 300 : 500;
+    const userMsg = `Brief: "${sanitizedBrief}"
+Tono: ${toneLine}
+${layout ? `Layout: ${layout}` : ''}
+${size ? `Formato: ${size}` : ''}
+
+Restituisci SOLO un oggetto JSON valido con questa struttura:
+{
+  "headline": "titolo principale, max 60 caratteri",
+  "subheadline": "sottotitolo, max 100 caratteri",
+  "body": "corpo del testo, max ${bodyBudget} caratteri, usa \\\\n per paragrafi",
+  "cta": { "label": "call to action, max 30 caratteri" }
+}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    let apiRes: Response;
+    try {
+      apiRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: model || 'deepseek-chat',
+          messages: [
+            { role: 'system', content: systemMsg },
+            { role: 'user', content: userMsg },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.7,
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError') {
+        logAI({ tag: 'ai_copy_flyer', requestId, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'timeout' });
+        return jsonWithRequestId(req, res, 504, { error: 'DeepSeek non ha risposto entro 25 secondi. Riprova.' }, requestId);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!apiRes.ok) {
+      const errBody = await apiRes.text().catch(() => 'Unknown error');
+      const errorKind = apiRes.status === 402 ? 'quota' : apiRes.status === 401 ? 'auth' : apiRes.status === 429 ? 'rate_limit' : 'upstream';
+      logAI({ tag: 'ai_copy_flyer', requestId, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (apiRes.status === 402) return jsonWithRequestId(req, res, 402, { error: 'Credito DeepSeek esaurito.' }, requestId);
+      if (apiRes.status === 401) return jsonWithRequestId(req, res, 401, { error: 'Chiave API DeepSeek non valida' }, requestId);
+      if (apiRes.status === 429) return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste a DeepSeek. Attendi qualche secondo e riprova.' }, requestId);
+      return jsonWithRequestId(req, res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
+    }
+    const data = await apiRes.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') {
+      logAI({ tag: 'ai_copy_flyer', requestId, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_response' });
+      return jsonWithRequestId(req, res, 502, { error: 'Risposta AI vuota o malformata' }, requestId);
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      logAI({ tag: 'ai_copy_flyer', requestId, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'not_json' });
+      return jsonWithRequestId(req, res, 502, { error: 'AI non ha restituito JSON valido', raw: content.slice(0, 500) }, requestId);
+    }
+    const usage = (data as { usage?: { total_tokens?: number } }).usage;
+    logAI({ tag: 'ai_copy_flyer', requestId, model: model || 'deepseek-chat', durationMs: Date.now() - startedAt, outcome: 'ok', tokens: usage?.total_tokens });
+    return json(req, res, 200, { data: parsed, raw: content, requestId });
+  }
+
+  if (path === '/ai/chat/stream' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aistream', 30, 60 * 1000);
+    if (rl.blocked) {
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste AI. Attendi un minuto.' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        model: z.string().optional(),
+        messages: z
+          .array(
+            z.object({
+              role: z.enum(['system', 'user', 'assistant', 'tool']),
+              content: z.string(),
+              tool_call_id: z.string().optional(),
+              name: z.string().optional(),
+              // TB-023: Ollama multimodal messages may include images
+              images: z.array(z.string()).optional(),
+            }),
+          )
+          .min(1)
+          .max(50),
+        tools: z.array(z.any()).optional(),
+        temperature: z.number().min(0).max(2).optional(),
+        max_tokens: z.number().int().positive().max(8192).optional(),
+        userEmail: z.string().email().optional(),
+        // TB-023: provider routing (default deepseek)
+        provider: z.enum(['deepseek', 'ollama']).optional(),
+        // Ollama-only options
+        options: z.record(z.string(), z.unknown()).optional(),
+        format: z.union([z.literal('json'), z.record(z.string(), z.unknown())]).optional(),
+      }),
+      body
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_chat_stream', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
+    }
+    const userEmail = v.data.userEmail;
+    const provider = v.data.provider || 'deepseek';
+    const startedAt = Date.now();
+
+    // ─── TB-023: Ollama Pro Cloud streaming ─────────────────────────
+    if (provider === 'ollama') {
+      const ollamaKey = process.env.OLLAMA_API_KEY;
+      if (!ollamaKey) {
+        logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+        return jsonWithRequestId(req, res, 503, { error: 'Ollama non configurato. Configura OLLAMA_API_KEY su Vercel.' }, requestId);
+      }
+      const { model, messages, temperature, max_tokens, tools, options: ollamaOptions, format } = v.data;
+      const ollamaModel = model || 'minimax-m3:cloud';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
+      let apiRes: Response;
+      try {
+        const ollamaBody: Record<string, unknown> = {
+          model: ollamaModel,
+          messages: messages.map((m) => {
+            const msg: Record<string, unknown> = { role: m.role, content: m.content };
+            if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
+            if (m.name) msg.name = m.name;
+            if (m.images && m.images.length > 0) msg.images = m.images;
+            return msg;
+          }),
+          stream: true,
+        };
+        if (temperature !== undefined) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), temperature };
+        }
+        if (max_tokens !== undefined) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), num_predict: max_tokens };
+        }
+        if (ollamaOptions) {
+          ollamaBody.options = { ...(ollamaBody.options as object | undefined), ...ollamaOptions };
+        }
+        if (tools && tools.length > 0) ollamaBody.tools = tools;
+        if (format) ollamaBody.format = format;
+
+        apiRes = await fetch('https://ollama.com/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${ollamaKey}`,
+            'X-Request-Id': requestId,
+            Accept: 'application/x-ndjson',
+          },
+          body: JSON.stringify(ollamaBody),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        clearTimeout(timeout);
+        const errorKind = err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError' ? 'timeout' : 'connection';
+        logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model: model || ollamaModel, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+        if (errorKind === 'timeout') {
+          return jsonWithRequestId(req, res, 504, { error: 'Ollama non ha risposto entro 60 secondi. Riprova.' }, requestId);
+        }
+        return jsonWithRequestId(req, res, 502, { error: `Connessione Ollama fallita: ${(err as Error)?.message || 'unknown'}` }, requestId);
+      }
+      if (!apiRes.ok) {
+        clearTimeout(timeout);
+        const errBody = await apiRes.text().catch(() => 'Unknown error');
+        const errorKind = apiRes.status === 429 ? 'rate_limit' : apiRes.status === 401 ? 'auth' : 'upstream';
+        logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model: ollamaModel, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+        if (apiRes.status === 429) return jsonWithRequestId(req, res, 429, { error: 'Quota Ollama Pro superato. Riprova tra qualche ora o passa a DeepSeek.' }, requestId);
+        if (apiRes.status === 401) return jsonWithRequestId(req, res, 401, { error: 'Chiave API Ollama non valida' }, requestId);
+        return jsonWithRequestId(req, res, apiRes.status, { error: `Ollama (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
+      }
+
+      addCorsHeaders(req, res);
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.setHeader('X-Request-Id', requestId);
+      res.setHeader('X-Provider', 'ollama');
+
+      const reader = apiRes.body?.getReader();
+      if (!reader) {
+        clearTimeout(timeout);
+        logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model: ollamaModel, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_body' });
+        return res.end();
+      }
+      logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model: ollamaModel, durationMs: Date.now() - startedAt, outcome: 'ok', provider: 'ollama' });
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+              const parsed = JSON.parse(trimmed);
+              const content = parsed.message?.content || '';
+              if (parsed.prompt_eval_count !== undefined || parsed.eval_count !== undefined) {
+                finalUsage = {
+                  prompt_tokens: parsed.prompt_eval_count ?? finalUsage?.prompt_tokens ?? 0,
+                  completion_tokens: parsed.eval_count ?? finalUsage?.completion_tokens ?? 0,
+                  total_tokens: (parsed.prompt_eval_count ?? finalUsage?.prompt_tokens ?? 0) + (parsed.eval_count ?? finalUsage?.completion_tokens ?? 0),
+                };
+              }
+              const ssePayload: Record<string, unknown> = {
+                choices: [{ index: 0, delta: { content } }],
+              };
+              if (parsed.message?.tool_calls) {
+                (ssePayload.choices as any)[0].delta.tool_calls = parsed.message.tool_calls.map((tc: any, i: number) => ({
+                  index: i,
+                  function: { name: tc.function?.name, arguments: typeof tc.function?.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function?.arguments ?? {}) },
+                }));
+              }
+              if (parsed.done && finalUsage) {
+                ssePayload.usage = finalUsage;
+              }
+              res.write(`data: ${JSON.stringify(ssePayload)}\n\n`);
+            } catch {
+              // skip malformed NDJSON line
+            }
+          }
+        }
+        res.write('data: [DONE]\n\n');
+      } catch (err) {
+        console.error('[Stream Ollama] Errore durante lo streaming', { msg: (err as Error)?.message, requestId });
+      } finally {
+        clearTimeout(timeout);
+        if (!res.writableEnded) res.end();
+      }
+      return;
     }
 
-    return json(res, 404, { error: "Endpoint non trovato" });
+    // ─── DeepSeek streaming (default, preesistente) ─────────────────────────
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) {
+      logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'DeepSeek non configurato.' }, requestId);
+    }
+    const { model, messages, tools, temperature, max_tokens } = v.data;
+    const upBody = {
+      model: model || 'deepseek-chat',
+      messages,
+      stream: true,
+      ...(tools ? { tools } : {}),
+      ...(temperature !== undefined ? { temperature } : { temperature: 0.7 }),
+      ...(max_tokens ? { max_tokens } : {}),
+    };
+    let apiRes: Response;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+    try {
+      apiRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify(upBody),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      const errorKind = err && typeof err === 'object' && 'name' in err && (err as { name: string }).name === 'AbortError' ? 'timeout' : 'connection';
+      logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (errorKind === 'timeout') {
+        return jsonWithRequestId(req, res, 504, { error: 'DeepSeek non ha risposto entro 60 secondi. Riprova.' }, requestId);
+      }
+      return jsonWithRequestId(req, res, 502, { error: `Connessione fallita: ${(err as Error)?.message || 'unknown'}` }, requestId);
+    }
+    if (!apiRes.ok) {
+      clearTimeout(timeout);
+      const errBody = await apiRes.text().catch(() => 'Unknown');
+      const errorKind = apiRes.status === 402 ? 'quota' : apiRes.status === 401 ? 'auth' : apiRes.status === 429 ? 'rate_limit' : 'upstream';
+      logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (apiRes.status === 402) return jsonWithRequestId(req, res, 402, { error: 'Credito DeepSeek esaurito' }, requestId);
+      if (apiRes.status === 401) return jsonWithRequestId(req, res, 401, { error: 'Chiave API DeepSeek non valida' }, requestId);
+      if (apiRes.status === 429) return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste. Attendi e riprova.' }, requestId);
+      return jsonWithRequestId(req, res, apiRes.status, { error: `DeepSeek (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
+    }
+    const contentType = apiRes.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream')) {
+      clearTimeout(timeout);
+      const data = await apiRes.json();
+      return json(req, res, 200, { ...data, requestId });
+    }
+    addCorsHeaders(req, res);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('X-Request-Id', requestId);
+    const reader = apiRes.body?.getReader();
+    if (!reader) {
+      clearTimeout(timeout);
+      logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_body' });
+      return res.end();
+    }
+    logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'ok' });
+    const decoder = new TextDecoder();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        res.write(chunk);
+      }
+    } catch (err) {
+      console.error('[Stream] Errore durante lo streaming', { msg: (err as Error)?.message, requestId });
+      if (!res.writableEnded) {
+        res.end();
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+    return res.end();
+  }
+
+  // Spec 13: Onboarding AI suggest (rate-limit 5/min/IP, opt-in).
+  if (path === '/ai/onboarding-suggest' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiOnboarding', 5, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe richieste onboarding. Attendi un minuto.' });
+    }
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) {
+      return json(req, res, 503, { error: 'Onboarding AI non configurato (DEEPSEEK_API_KEY mancante)' });
+    }
+    const v = validate(
+      z.object({
+        name: z.string().max(50),
+        sector: z.string().optional(),
+        model: z.string().optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
+    if (v.data.userEmail) {
+      console.info('[ai_onboarding_suggest] user', { email: v.data.userEmail, ts: Date.now() });
+    }
+    // Placeholder: the production caller uses the client-side
+    // useAIOnboarding hook (DeepSeek via /api/ai/chat proxy). This
+    // endpoint exists for parity with /ai/logo-config and future
+    // server-side onboarding flows (e.g. registration funnel). The
+    // contract (Zod, rate-limit, 503 fallback) is in place and tested.
+    return json(req, res, 202, {
+      data: { status: 'queued' },
+      message: 'Onboarding AI endpoint is staged; client-side useAIOnboarding is the v1 path.',
+    });
+  }
+
+  // Spec 11: Logo AI v2 — config (no rate-limit) + generate (rate-limit aiLogo 10/min/IP).
+  if (path === '/ai/logo-config' && method === 'GET') {
+    const geminiKey = !!process.env.GEMINI_API_KEY || !!process.env.VITE_GEMINI_API_KEY;
+    const enabled = !!process.env.REPLICATE_API_TOKEN || geminiKey;
+    const provider = geminiKey ? 'gemini' : process.env.REPLICATE_API_TOKEN ? 'replicate' : 'none';
+    return json(req, res, 200, { enabled, provider });
+  }
+
+  if (path === '/ai/card-cover' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiCardCover', 5, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni di cover. Attendi un minuto.' }, requestId);
+    }
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      logAI({ tag: 'ai_card_cover', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Cover AI non configurata (GEMINI_API_KEY mancante)' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        prompt: z.string().max(1000),
+        context: z.string().max(2000).optional(),
+        cardImage: z.string().max(600_000).optional(),
+        logoImage: z.string().max(150_000).optional(),
+        side: z.enum(['front', 'back']).optional(),
+        userEmail: z.string().email().optional(),
+        // TB-023: modello immagine Gemini selezionabile
+        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
+      }),
+      body,
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_card_cover', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
+    }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
+    try {
+      // Dynamic import of @google/genai (node_modules, always bundled).
+      // Avoids the ESM/CJS interop issue with static import and the
+      // "Cannot find module src/..." issue with importing from src/.
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const basePrompt = v.data.context
+        ? `${v.data.prompt}\n\nCARD CONTEXT:\n${v.data.context.slice(0, 2000)}`
+        : v.data.prompt;
+      const hasImages = !!(v.data.cardImage || v.data.logoImage);
+      const grounding =
+        'The attached image(s) show the business card layout I am designing a background for. Use them as reference for text placement, colour harmony, and profession. Do NOT reproduce any text, QR code, logo, face, or UI element visible in the reference — generate only the abstract background. If a background is already visible in the reference image, treat it as the previous iteration to improve upon, not as a constraint to copy.';
+      const finalPrompt = hasImages ? `${grounding}\n\n${basePrompt}` : basePrompt;
+      const extractMime = (dataUrl: string, fallback: string) => {
+        const match = dataUrl.match(/^data:([^;]+);base64,/);
+        return match ? match[1] : fallback;
+      };
+
+      const input = buildGeminiMultimodalInput(finalPrompt, [
+        v.data.cardImage ? { data: v.data.cardImage, mimeType: extractMime(v.data.cardImage, 'image/jpeg') } : null,
+        v.data.logoImage ? { data: v.data.logoImage, mimeType: extractMime(v.data.logoImage, 'image/jpeg') } : null,
+      ]);
+      const interaction = await ai.interactions.create(
+        {
+          model: v.data.imageModel || 'gemini-3.1-flash-image',
+          input,
+          generation_config: {
+            image_config: { image_size: '512', aspect_ratio: '1:1' },
+          },
+          response_modalities: ['text', 'image'],
+        },
+        { timeout: 30_000 },
+      );
+      const image = interaction.output_image;
+      if (!image || !image.data) {
+        logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_image' });
+        return jsonWithRequestId(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' }, requestId);
+      }
+      const imageBase64 = image.data;
+      const mimeType = image.mime_type || 'image/png';
+      const sizeBytes = Math.ceil(imageBase64.length * 0.75);
+      if (sizeBytes > 500_000) {
+        logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+      }
+      const sizeKB = sizeBytes / 1024;
+      logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      const errorKind = msg.startsWith('GEMINI_401') ? 'auth' : msg.startsWith('GEMINI_429') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation') ? 'copyright' : 'upstream';
+      logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
+      if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
+      if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
+    }
+  }
+
+  if (path === '/ai/logo-background' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiLogoBg', 5, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni background. Attendi un minuto.' }, requestId);
+    }
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      logAI({ tag: 'ai_logo_background', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Logo AI background non configurato (GEMINI_API_KEY mancante)' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        prompt: z.string().max(1000),
+        logoImage: z.string().max(600_000).optional(),
+        previousBackground: z.string().max(300_000).optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_logo_background', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
+    }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
+    try {
+      // Dynamic import of @google/genai (node_modules, always bundled).
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const hasImages = !!(v.data.logoImage || v.data.previousBackground);
+      const grounding =
+        'The first attached image shows the logo layout I am designing a background for (title, tagline, icon). Use it as reference for text placement and colour harmony. Do NOT reproduce any text, icon, or shape visible in the reference — generate only the abstract decorative background that sits behind it. The second attached image (if present) is the previous background iteration to improve upon, not a constraint to copy.';
+      const finalPrompt = hasImages ? `${grounding}\n\n${v.data.prompt}` : v.data.prompt;
+      const extractMime = (dataUrl: string, fallback: string) => {
+        const match = dataUrl.match(/^data:([^;]+);base64,/);
+        return match ? match[1] : fallback;
+      };
+
+      const input = buildGeminiMultimodalInput(finalPrompt, [
+        v.data.logoImage ? { data: v.data.logoImage, mimeType: extractMime(v.data.logoImage, 'image/jpeg') } : null,
+        v.data.previousBackground ? { data: v.data.previousBackground, mimeType: extractMime(v.data.previousBackground, 'image/jpeg') } : null,
+      ]);
+      const interaction = await ai.interactions.create(
+        {
+          model: 'gemini-3.1-flash-image',
+          input,
+          generation_config: {
+            image_config: { image_size: '512', aspect_ratio: '16:9' },
+          },
+          response_modalities: ['text', 'image'],
+        },
+        { timeout: 30_000 },
+      );
+      const image = interaction.output_image;
+      if (!image || !image.data) {
+        logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_image' });
+        return jsonWithRequestId(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' }, requestId);
+      }
+      const imageBase64 = image.data;
+      const mimeType = image.mime_type || 'image/png';
+      const sizeBytes = Math.ceil(imageBase64.length * 0.75);
+      if (sizeBytes > 500_000) {
+        logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+      }
+      const sizeKB = sizeBytes / 1024;
+      logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      const errorKind = msg.startsWith('GEMINI_401') ? 'auth' : msg.startsWith('GEMINI_429') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation') ? 'copyright' : 'upstream';
+      logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
+      if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
+      if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
+    }
+  }
+
+  if (path === '/ai/flyer-hero' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiFlyerHero', 5, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni hero. Attendi un minuto.' }, requestId);
+    }
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      logAI({ tag: 'ai_flyer_hero', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Hero AI non configurata (GEMINI_API_KEY mancante)' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        prompt: z.string().max(1500),
+        context: z.string().max(1500).optional(),
+        flyerImage: z.string().max(600_000).optional(),
+        aspectRatio: z.enum(['16:9', '1:1', '3:2', '2:3', '3:4']).optional(),
+        userEmail: z.string().email().optional(),
+        // TB-023: modello immagine Gemini selezionabile
+        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
+      }),
+      body,
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_flyer_hero', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
+    }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const basePrompt = v.data.context
+        ? `${v.data.prompt}\n\nFLYER CONTEXT:\n${v.data.context.slice(0, 1500)}`
+        : v.data.prompt;
+      const hasImages = !!v.data.flyerImage;
+      const grounding =
+        'The attached image shows the flyer layout I am designing a hero image for. Use it as reference for the hero box position, the copy placement, and the overall visual style. Generate only the hero image that fits the hero box area; do NOT reproduce any text, QR code, logo, or UI element visible in the reference.';
+      const finalPrompt = hasImages ? `${grounding}\n\n${basePrompt}` : basePrompt;
+      const input = buildGeminiMultimodalInput(finalPrompt, [
+        v.data.flyerImage ? { data: v.data.flyerImage, mimeType: 'image/jpeg' } : null,
+      ]);
+      const interaction = await ai.interactions.create(
+        {
+          model: v.data.imageModel || 'gemini-3.1-flash-image',
+          input,
+          generation_config: {
+            image_config: { image_size: '512', aspect_ratio: v.data.aspectRatio ?? '3:2' },
+          },
+          response_modalities: ['text', 'image'],
+        },
+        { timeout: 30_000 },
+      );
+      const image = interaction.output_image;
+      if (!image || !image.data) {
+        logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_image' });
+        return jsonWithRequestId(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' }, requestId);
+      }
+      const imageBase64 = image.data;
+      const mimeType = image.mime_type || 'image/png';
+      const sizeBytes = Math.ceil(imageBase64.length * 0.75);
+      if (sizeBytes > 500_000) {
+        logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+      }
+      const sizeKB = sizeBytes / 1024;
+      logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      const errorKind = msg.startsWith('GEMINI_401') ? 'auth' : msg.startsWith('GEMINI_429') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation') ? 'copyright' : 'upstream';
+      logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
+      if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
+      if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
+    }
+  }
+
+  // Profession-style photo for business card portrait slot (replaces photoUrl).
+  // Same Gemini stack as card-cover / flyer-hero; all logic stays in this monolith.
+  if (path === '/ai/card-photo' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiCardPhoto', 5, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni foto. Attendi un minuto.' }, requestId);
+    }
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      logAI({ tag: 'ai_card_photo', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Foto AI non configurata (GEMINI_API_KEY mancante)' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        prompt: z.string().max(1000),
+        context: z.string().max(1500).optional(),
+        userEmail: z.string().email().optional(),
+        // TB-023: modello immagine Gemini selezionabile
+        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
+      }),
+      body,
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_card_photo', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
+    }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const finalPrompt = v.data.context
+        ? `${v.data.prompt}\n\nCARD PHOTO CONTEXT:\n${v.data.context.slice(0, 1500)}`
+        : v.data.prompt;
+      const interaction = await ai.interactions.create(
+        {
+          model: v.data.imageModel || 'gemini-3.1-flash-image',
+          input: finalPrompt,
+          generation_config: {
+            image_config: { image_size: '512', aspect_ratio: '3:4' },
+          },
+          response_modalities: ['text', 'image'],
+        },
+        { timeout: 30_000 },
+      );
+      const image = interaction.output_image;
+      if (!image || !image.data) {
+        logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_image' });
+        return jsonWithRequestId(req, res, 502, { error: 'Gemini non ha restituito un\'immagine' }, requestId);
+      }
+      const imageBase64 = image.data;
+      const mimeType = image.mime_type || 'image/png';
+      const sizeBytes = Math.ceil(imageBase64.length * 0.75);
+      if (sizeBytes > 500_000) {
+        logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+      }
+      const sizeKB = sizeBytes / 1024;
+      logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      const errorKind = msg.startsWith('GEMINI_401') ? 'auth' : msg.startsWith('GEMINI_429') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation') ? 'copyright' : 'upstream';
+      logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
+      if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
+      if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
+    }
+  }
+
+  // TB-023: Gemini 2.0 Flash image generation — icone stilizzate ed
+  // hero illustrations per card+flyer. Modello economico (~$0.02/img)
+  // alternativo a Nano Banana 3.1. Stesso pattern degli altri endpoint
+  // Gemini (dynamic import, 500KB clamp, rate limit 10/min).
+  if (path === '/ai/image-flash' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiImageFlash', 10, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe generazioni. Attendi un minuto.' }, requestId);
+    }
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      logAI({ tag: 'ai_image_flash', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Gemini Flash non configurato (GEMINI_API_KEY mancante)' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        prompt: z.string().max(1000),
+        aspectRatio: z.enum(['1:1', '16:9', '3:1']).optional(),
+        size: z.enum(['512', '1K']).optional(),
+        kind: z.enum(['icon', 'hero', 'custom']).optional(),
+        primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+        style: z.string().max(50).optional(),
+        imageModel: z.string().max(80).optional(),
+        background: z.enum(['white', 'card', 'accent']).optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_image_flash', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
+    }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const kind = v.data.kind || 'custom';
+      const aspectRatio = v.data.aspectRatio || (kind === 'hero' ? '16:9' : '1:1');
+      const size = v.data.size || '512';
+      // TB-023: sfondo icona configurabile. Gemini non produce alpha reale,
+      // quindi "white" è il default prevedibile (l'icona viene poi mostrata
+      // su card chiare). 'card'/'accent' usano i colori brand come tinta piena.
+      const bg = v.data.background || 'white';
+      const bgPrompt =
+        bg === 'card' && v.data.primaryColor
+          ? `Solid flat background color ${v.data.primaryColor}, icon in ${v.data.secondaryColor || '#FFFFFF'}.`
+          : bg === 'accent' && v.data.primaryColor
+            ? `Solid flat background color ${v.data.primaryColor}.`
+            : 'Isolated on a plain solid white background (#FFFFFF). DO NOT draw a checkerboard or transparency grid. MUST use a solid #FFFFFF white background.';
+      // Build prompt based on kind
+      let finalPrompt = v.data.prompt;
+      if (kind === 'icon' && v.data.primaryColor && v.data.secondaryColor) {
+        const styleHint = v.data.style || 'minimalist';
+        finalPrompt = `Stylized flat vector icon of ${v.data.prompt}. Two colors only: ${v.data.primaryColor} and ${v.data.secondaryColor}. ${bgPrompt} No text, no border, no gradients, no shadows. Simple geometric shapes. Style: ${styleHint}.`;
+      } else if (kind === 'hero' && v.data.primaryColor && v.data.secondaryColor) {
+        const styleHint = v.data.style || 'minimalist';
+        finalPrompt = `Stylized flat hero illustration of ${v.data.prompt}. Two colors only: ${v.data.primaryColor} and ${v.data.secondaryColor}. ${bgPrompt} No text, no border. Simple geometric shapes, editorial style. 16:9 composition. Style: ${styleHint}.`;
+      }
+      const modelId = v.data.imageModel || 'gemini-2.0-flash-preview-image-generation';
+      const interaction = await ai.interactions.create(
+        {
+          model: modelId,
+          input: finalPrompt,
+          generation_config: {
+            image_config: { image_size: size, aspect_ratio: aspectRatio },
+          },
+          response_modalities: ['text', 'image'],
+        },
+        { timeout: 30_000 },
+      );
+      const image = interaction.output_image;
+      if (!image || !image.data) {
+        logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'empty_image' });
+        return jsonWithRequestId(req, res, 502, { error: 'Gemini Flash non ha restituito un\'immagine' }, requestId);
+      }
+      const imageBase64 = image.data;
+      const mimeType = image.mime_type || 'image/png';
+      const sizeBytes = Math.ceil(imageBase64.length * 0.75);
+      if (sizeBytes > 500_000) {
+        logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+      }
+      const sizeKB = sizeBytes / 1024;
+      logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB, provider: 'gemini-flash' });
+      return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      const errorKind = msg.startsWith('GEMINI_401') ? 'auth' : msg.startsWith('GEMINI_429') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : msg.toLowerCase().includes('copyright') || msg.toLowerCase().includes('recitation') ? 'copyright' : 'upstream';
+      logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
+      if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini Flash non ha risposto entro 30s.' }, requestId);
+      if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Gemini Flash error: ${msg.slice(0, 200)}` }, requestId);
+    }
+  }
+
+  // TB-023: Design review endpoint — MiniMax M3 (Ollama) analizza uno
+  // screenshot della preview card/flyer + JSON e suggerisce 3 miglioramenti.
+  // Vision-grounded feedback (REQ-MM-004).
+  if (path === '/ai/design-review' && method === 'POST') {
+    const requestId = getRequestId(req);
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiDesignReview', 10, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste. Attendi un minuto.' }, requestId);
+    }
+    const ollamaKey = process.env.OLLAMA_API_KEY;
+    if (!ollamaKey) {
+      logAI({ tag: 'ai_design_review', requestId, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
+      return jsonWithRequestId(req, res, 503, { error: 'Design review non configurato (OLLAMA_API_KEY mancante)' }, requestId);
+    }
+    const v = validate(
+      z.object({
+        docType: z.enum(['card', 'flyer']),
+        docJson: z.string().max(50_000),
+        screenshotBase64: z.string().max(600_000),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) {
+      logAI({ tag: 'ai_design_review', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
+      return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
+    }
+    const userEmail = v.data.userEmail;
+    const startedAt = Date.now();
+    try {
+      // Strip data URL prefix if present
+      const b64 = v.data.screenshotBase64.replace(/^data:[^;]+;base64,/, '');
+      const systemPrompt = `Sei un graphic designer AI esperto. Analizza lo screenshot di un ${v.data.docType === 'card' ? 'biglietto da visita' : 'volantino'} e suggerisci 3 miglioramenti concreti. Restituisci SOLO un JSON array di 3 oggetti con shape: {"field": "string (es. style.bgColor, content.headline, decoration.id)", "value": "string (valore suggerito)", "reason": "string (motivazione 1 frase in italiano)"}. Focus su: palette colori, gerarchia visiva, leggibilità, decorazione, allineamento. Evita suggerimenti generici.`;
+      const ollamaBody = {
+        model: 'minimax-m3:cloud',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Analizza questo ${v.data.docType}. JSON attuale:\n${v.data.docJson.slice(0, 8000)}`, images: [b64] },
+        ],
+        stream: false,
+        format: 'json',
+        options: { temperature: 0.6 },
+      };
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000);
+      let apiRes: Response;
+      try {
+        apiRes = await fetch('https://ollama.com/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${ollamaKey}`,
+            'X-Request-Id': requestId,
+          },
+          body: JSON.stringify(ollamaBody),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!apiRes.ok) {
+        const errBody = await apiRes.text().catch(() => 'unknown');
+        const errorKind = apiRes.status === 429 ? 'rate_limit' : apiRes.status === 401 ? 'auth' : 'upstream';
+        logAI({ tag: 'ai_design_review', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind, provider: 'ollama' });
+        if (apiRes.status === 429) {
+          return jsonWithRequestId(req, res, 429, { error: 'Quota Ollama Pro superato. Riprova tra qualche ora.' }, requestId);
+        }
+        return jsonWithRequestId(req, res, apiRes.status, { error: `Ollama (${apiRes.status}): ${errBody.substring(0, 200)}` }, requestId);
+      }
+      const raw = (await apiRes.json()) as { message?: { content?: string }; prompt_eval_count?: number; eval_count?: number };
+      const content = raw.message?.content || '';
+      const tokens = (raw.prompt_eval_count ?? 0) + (raw.eval_count ?? 0);
+      logAI({ tag: 'ai_design_review', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', tokens: tokens || undefined, provider: 'ollama' });
+      return json(req, res, 200, { data: { suggestions: content }, requestId });
+    } catch (err) {
+      const msg = (err as Error)?.message || 'unknown';
+      const errorKind = msg.toLowerCase().includes('timeout') || msg.toLowerCase().includes('abort') ? 'timeout' : 'upstream';
+      logAI({ tag: 'ai_design_review', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind, provider: 'ollama' });
+      if (errorKind === 'timeout') return jsonWithRequestId(req, res, 504, { error: 'Ollama non ha risposto entro 60s.' }, requestId);
+      return jsonWithRequestId(req, res, 502, { error: `Design review error: ${msg.slice(0, 200)}` }, requestId);
+    }
+  }
+
+  if (path === '/ai/logo-generate' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'aiLogo', 10, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe generazioni logo AI. Attendi un minuto.' });
+    }
+    if (!process.env.REPLICATE_API_TOKEN) {
+      return json(req, res, 503, { error: 'Logo AI non configurato (REPLICATE_API_TOKEN mancante)' });
+    }
+    const v = validate(
+      z.object({
+        brief: z.string().max(500),
+        sector: z.string().optional(),
+        model: z.string().optional(),
+        userEmail: z.string().email().optional(),
+      }),
+      body,
+    );
+    if (v.error) return json(req, res, 400, { error: 'Invalid body', details: v.errors });
+    if (v.data.userEmail) {
+      console.info('[ai_logo_generate] user', { email: v.data.userEmail, ts: Date.now() });
+    }
+    // For now this proxy is a placeholder: when a Replicate-backed
+    // generator lands in v2, the call below will be replaced with the
+    // upstream invocation. The endpoint contract (Zod, rate-limit, token
+    // guard, 503 fallback) is in place and tested.
+    return json(req, res, 202, {
+      data: { status: 'queued' },
+      message: 'Logo AI v2 backend is staged; Replicate call lands in v2.',
+    });
+  }
+
+  return json(req, res, 404, { error: 'Endpoint AI non trovato' });
+};
+
+const routes: Array<{ prefix: string; handler: RouteHandler }> = [
+  { prefix: '/ping', handler: handleHealth },
+  { prefix: '/logs', handler: handleHealth },
+  { prefix: '/users', handler: handleUsers },
+  { prefix: '/quotes', handler: handleQuotes },
+  { prefix: '/documents', handler: handleDocuments },
+  { prefix: '/ai', handler: handleAI },
+  { prefix: '/user-settings', handler: handleUserSettings },
+  { prefix: '/admin', handler: handleAdmin },
+];
+
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  addCorsHeaders(req, res);
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Max-Age', '86400');
+    res.status(204).end();
+    return;
+  }
+  const { pathname } = new URL(req.url || '/', 'http://localhost');
+  const path = pathname.replace(/^\/api/, '');
+  const method = req.method || 'GET';
+
+  let body: Record<string, unknown> = {};
+  try {
+    if (req.body && typeof req.body === 'object') {
+      body = req.body as Record<string, unknown>;
+    } else if (req.body) {
+      body = JSON.parse(req.body as string);
+    }
+  } catch {
+    body = {};
+  }
+
+  try {
+    for (const { prefix, handler } of routes) {
+      if (path === prefix || path.startsWith(prefix + '/')) {
+        return await handler(path, method, req, res, body);
+      }
+    }
+    return json(req, res, 404, { error: 'Endpoint non trovato' });
   } catch (err) {
-    console.error(`[API] ${req.method} ${req.url} error:`, err?.stack || err?.message || err);
-    const msg = process.env.VERCEL_ENV === 'development' ? err?.message || 'Errore interno del server' : 'Errore interno del server';
-    return json(res, 500, { error: msg });
+    return errorResponse(req, res, 500, err);
   }
 }
 
 export const config = {
   api: {
-    bodyParser: true,
+    bodyParser: {
+      sizeLimit: '1mb',
+    },
   },
 };

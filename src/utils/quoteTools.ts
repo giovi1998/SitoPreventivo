@@ -86,10 +86,11 @@ export function applyDiscount(quote: PremiumQuote, args: ApplyDiscountArgs): Too
 }
 
 export function adjustMargin(quote: PremiumQuote, targetMarginPercent: number): ToolResult {
+  const clampedMargin = Math.max(0, Math.min(99, targetMarginPercent));
   const options = quote.options.map((opt) => {
     const totalCost = opt.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
     if (totalCost === 0) return opt;
-    const targetTotal = totalCost / (1 - targetMarginPercent / 100);
+    const targetTotal = totalCost / (1 - clampedMargin / 100);
     const multiplier = targetTotal / totalCost;
 
     return {
@@ -109,7 +110,7 @@ export function adjustMargin(quote: PremiumQuote, targetMarginPercent: number): 
   const globalTotals = calculateGlobalTotals(options, quote.globalTotals.optionsSelected);
   return {
     quote: { ...quote, options, globalTotals, updatedAt: new Date().toISOString() },
-    changes: `Margine adjusted al ${targetMarginPercent}%. Prezzi unitari modificati proporzionalmente.`,
+    changes: `Margine adjusted al ${clampedMargin}% (richiesto ${targetMarginPercent}%, clampato a [0,99]). Prezzi unitari modificati proporzionalmente.`,
   };
 }
 
@@ -205,8 +206,22 @@ export function reorderOptions(quote: PremiumQuote, sortBy: 'price_asc' | 'price
   } else {
     options.sort((a, b) => a.label.localeCompare(b.label));
   }
-  const sorted = options.map((o, i) => ({ ...o, isDefault: i === 0 }));
-  const globalTotals = calculateGlobalTotals(sorted, sorted.filter((o) => o.isDefault).map((o) => o.id));
+  // Preserve original isDefault (bug #6): only set isDefault on first sorted option
+  // if NO option was previously default. Otherwise keep the original default.
+  const originalDefaultIds = new Set(quote.options.filter((o) => o.isDefault).map((o) => o.id));
+  const originalSelectedIds = quote.globalTotals.optionsSelected;
+  const sorted = options.map((o, i) => ({
+    ...o,
+    isDefault: originalDefaultIds.size > 0
+      ? o.isDefault
+      : i === 0,
+  }));
+  const globalTotals = calculateGlobalTotals(
+    sorted,
+    originalSelectedIds.length > 0
+      ? originalSelectedIds.filter((id) => sorted.some((o) => o.id === id))
+      : sorted.filter((o) => o.isDefault).map((o) => o.id)
+  );
   return {
     quote: { ...quote, options: sorted, globalTotals, updatedAt: new Date().toISOString() },
     changes: `Opzioni riordinate per ${sortBy === 'price_asc' ? 'prezzo crescente' : sortBy === 'price_desc' ? 'prezzo decrescente' : 'nome'}.`,
@@ -234,7 +249,9 @@ export function mergeDuplicateItems(quote: PremiumQuote): ToolResult {
     const seen = new Map<string, QuoteItem>();
     const items: QuoteItem[] = [];
     for (const item of opt.items) {
-      const key = `${item.label.toLowerCase()}_${item.unit}_${item.unitPrice}`;
+      // Key includes label, unit, unitPrice, tax rate (bug #11: different tax rates
+      // must NOT be merged because the total would be wrong).
+      const key = `${item.label.toLowerCase()}_${item.unit}_${item.unitPrice}_${item.tax.rate}`;
       if (seen.has(key)) {
         const existing = seen.get(key)!;
         const newQty = existing.quantity + item.quantity;
@@ -256,6 +273,9 @@ export function mergeDuplicateItems(quote: PremiumQuote): ToolResult {
 }
 
 export function roundPrices(quote: PremiumQuote, nearest: number = 5): ToolResult {
+  if (!Number.isFinite(nearest) || nearest <= 0) {
+    return { quote, changes: `Arrotondamento non valido: nearest=${nearest}. Nessuna modifica effettuata.` };
+  }
   const options = quote.options.map((opt) => ({
     ...opt,
     items: opt.items.map((item) => {
@@ -276,23 +296,32 @@ export function roundPrices(quote: PremiumQuote, nearest: number = 5): ToolResul
 }
 
 export function calculateAnnualCost(quote: PremiumQuote): ToolResult {
+  let added = 0;
   const options = quote.options.map((opt) => {
-    const monthlyItem = opt.items.find((i) => i.unit === 'month');
-    if (!monthlyItem || monthlyItem.quantity <= 0) return opt;
-    const annualItem: QuoteItem = {
-      ...monthlyItem,
-      id: generateId('item'),
-      label: `${monthlyItem.label} (12 mesi)`,
-      quantity: 12,
-      total: calculateItemTotal(12, monthlyItem.unitPrice, monthlyItem.discount.type, monthlyItem.discount.value, monthlyItem.tax.rate),
-    };
-    const items = [...opt.items, annualItem];
+    const items = [...opt.items];
+    const monthlyItems = opt.items.filter(
+      (i) => i.unit === 'month' && i.quantity > 0 && !i.label.includes('(12 mesi)'),
+    );
+    for (const monthlyItem of monthlyItems) {
+      const annualLabel = `${monthlyItem.label} (12 mesi)`;
+      const alreadyExists = items.some((i) => i.label === annualLabel);
+      if (alreadyExists) continue;
+      const annualItem: QuoteItem = {
+        ...monthlyItem,
+        id: generateId('item'),
+        label: annualLabel,
+        quantity: 12,
+        total: calculateItemTotal(12, monthlyItem.unitPrice, monthlyItem.discount.type, monthlyItem.discount.value, monthlyItem.tax.rate),
+      };
+      items.push(annualItem);
+      added++;
+    }
     return { ...opt, items, summary: calculateOptionSummary(items) };
   });
   const globalTotals = calculateGlobalTotals(options, quote.globalTotals.optionsSelected);
   return {
     quote: { ...quote, options, globalTotals, updatedAt: new Date().toISOString() },
-    changes: 'Aggiunto costo annuale per voci mensili.',
+    changes: added > 0 ? `Aggiunti ${added} costi annuali per voci mensili.` : 'Nessun nuovo costo annuale da aggiungere.',
   };
 }
 
@@ -320,38 +349,6 @@ export function checkConsistency(quote: PremiumQuote): ToolResult {
   return { quote, changes: 'Tutti i totali sono coerenti.' };
 }
 
-export function generateSummary(quote: PremiumQuote): { quote: PremiumQuote; changes: string } {
-  const opts = quote.options;
-  const lines: string[] = [];
-  lines.push(`Preventivo: ${quote.project?.title || 'Senza titolo'}`);
-  lines.push(`Cliente: ${quote.client?.name || 'N/A'}`);
-  lines.push(`Opzioni: ${opts.length}`);
-  for (const opt of opts) {
-    lines.push(`  - ${opt.label}: €${opt.summary?.totalGross?.toFixed(2) || '0'} (${opt.items.length} voci)`);
-  }
-  lines.push(`Totale: €${quote.globalTotals?.totalGross?.toFixed(2) || '0'}`);
-  lines.push(`Stato: ${quote.status}`);
-  lines.push(`Valido fino al: ${quote.validUntil || 'N/A'}`);
-  return { quote, changes: lines.join('\n') };
-}
-
-export function enhanceDescriptionsPrompt(quote: PremiumQuote): { quote: PremiumQuote; changes: string } {
-  const optCount = quote.options.length;
-  const itemCount = quote.options.reduce((s, o) => s + o.items.length, 0);
-  return {
-    quote,
-    changes: `Riscrivi tutte le descrizioni delle ${optCount} opzioni e delle ${itemCount} voci di costo in modo più professionale e persuasivo. Mantieni i dati numerici invariati. Usa un tono formale ma accessibile.`,
-  };
-}
-
-export function translateQuotePrompt(quote: PremiumQuote, targetLang: string): { quote: PremiumQuote; changes: string } {
-  const langNames: Record<string, string> = { en: 'inglese', es: 'spagnolo', fr: 'francese', de: 'tedesco', pt: 'portoghese' };
-  return {
-    quote,
-    changes: `Traduci l'intero preventivo in ${langNames[targetLang] || targetLang}: titolo, descrizioni, clausole, note. Mantieni i numeri, le date e i nomi propri invariati.`,
-  };
-}
-
 export type ToolName =
   | 'recalculate_totals'
   | 'apply_discount'
@@ -359,51 +356,14 @@ export type ToolName =
   | 'duplicate_option'
   | 'split_quote'
   | 'merge_options'
-  | 'validate_quote'
   | 'reorder_options'
   | 'remove_empty_items'
   | 'merge_duplicate_items'
   | 'round_prices'
-  | 'calculate_annual'
-  | 'check_consistency'
-  | 'generate_summary';
+  | 'calculate_annual_cost'
+  | 'check_consistency';
 
 export interface ToolCall {
   tool: ToolName;
   args: Record<string, unknown>;
-}
-
-export function executeTool(toolName: ToolName, args: Record<string, unknown>, quote: PremiumQuote): ToolResult {
-  switch (toolName) {
-    case 'recalculate_totals':
-      return recalculateTotals(quote);
-    case 'apply_discount':
-      return applyDiscount(quote, args as unknown as ApplyDiscountArgs);
-    case 'adjust_margin':
-      return adjustMargin(quote, args.targetMargin as number);
-    case 'duplicate_option':
-      return duplicateOption(quote, args.optionId as string);
-    case 'split_quote':
-      return splitQuoteByOption(quote, args.optionIds as string[]);
-    case 'merge_options':
-      return mergeOptions(quote, args.optionIds as string[]);
-    case 'validate_quote':
-      return validateQuoteTool(quote);
-    case 'reorder_options':
-      return reorderOptions(quote, (args.sortBy as any) || 'price_asc');
-    case 'remove_empty_items':
-      return removeEmptyItems(quote);
-    case 'merge_duplicate_items':
-      return mergeDuplicateItems(quote);
-    case 'round_prices':
-      return roundPrices(quote, (args.nearest as number) || 5);
-    case 'calculate_annual':
-      return calculateAnnualCost(quote);
-    case 'check_consistency':
-      return checkConsistency(quote);
-    case 'generate_summary':
-      return generateSummary(quote);
-    default:
-      return { quote, changes: `Tool sconosciuto: ${toolName}. Nessuna modifica effettuata.` };
-  }
 }

@@ -1,6 +1,6 @@
-# PrecisionQuote — Preventivi Web Professionali
+# Quickbrand, Suite branding per piccole attività
 
-App React/Vite per creare preventivi multi-opzione per servizi digitali. Layout PDF professionale con 4 opzioni, IVA, acconto/saldo, clausole e riepilogo comparativo. Integrazione AI DeepSeek per modifiche rapide.
+App React/TypeScript + Vite per creare preventivi multi-opzione per servizi digitali. Layout PDF professionale con 4 opzioni, IVA, acconto/saldo, clausole e riepilogo comparativo. Moduli aggiuntivi: QR Code, Bigliettini da visita, **Logo Builder**, sistema di tier (free / unlocked) con watermark e codici sblocco, collection unificata multi-documento. Integrazione AI DeepSeek per modifiche rapide.
 
 ## Requisiti di sistema
 
@@ -14,7 +14,7 @@ App React/Vite per creare preventivi multi-opzione per servizi digitali. Layout 
 git clone https://github.com/giovi1998/SitoPreventivo.git
 cd SitoPreventivo
 npm install
-npm run dev
+npm run dev      # Vite dev server
 ```
 
 Server su `http://localhost:8000`
@@ -30,21 +30,63 @@ Server su `http://localhost:8000`
 | Funzione | Descrizione |
 |----------|-------------|
 | **Multi-opzione** | 4 preventivi preimpostati (WordPress/su misura, con/senza manutenzione) |
-| **AI Co-Editor** | Modifica testi, prezzi, clausole con AI — chiave condivisa gestita dall'admin |
+| **AI Co-Editor** | Modifica testi, prezzi, clausole con AI, chiave condivisa gestita dall'admin |
 | **Log AI visibili** | Pannello log in tempo reale con risposta DeepSeek raw |
 | **Pannelli collassabili** | Pannelli AI e Manuale si collassano in tabs sempre visibili (AI/Man) sul bordo, per vedere il PDF a pieno schermo |
 | **Salva con nome** | Dialog che chiede un nome personalizzato prima del salvataggio |
 | **Admin Dashboard** | Gestione utenti, limiti token, chiave DeepSeek condivisa |
 | **Token tracking** | Monitoraggio token AI usati per utente, con limite configurabile |
-| **PDF export** | Genera PDF con **pdfmake** — tabelle, page break, header/footers automatici |
+| **PDF export** | Genera PDF con **pdfmake**, tabelle, page break, header/footers automatici |
 | **Riepilogo economico** | Tabella Imponibile / IVA / Totale per ogni opzione |
 | **Acconto/Saldo** | 50% acconto sviluppo, 50% saldo a consegna |
 | **Riepilogo comparativo** | Confronto tra tutte le opzioni |
 | **Clausole** | Sezione personalizzabile con condizioni generali |
 | **10 colori brand** | Palette di colori per personalizzare il documento |
 | **Collection** | Salva, duplica, elimina preventivi, cambia stato (BOZZA/INVIATO/ACCETTATO/RIFIUTATO) |
-| **Autenticazione** | Login/registrazione con localStorage |
-| **Responsive** | Layout adattivo desktop, tablet, mobile |
+| **QR Code Generator** | Crea QR code personalizzati (URL, vCard, WiFi, SMS, email, phone) con stili (square/rounded/dots), logo overlay, export SVG/PNG |
+| **Bigliettini da Visita** | Editor fronte/retro con 3 layout, 3 formati (EU/US/square), grid editor con master switch (REQ-E01), AI Design Mode, parità mobile completa, scala font (0.7–1.5), export PDF 10-up/PNG/SVG/JSON |
+| **AI Design Mode (Card)** | 7 quick actions per bigliettini (premium, minimal, compila, palette, stampa, sposta QR, allarga foto) + prompt personalizzato |
+| **Logo Builder** | Generatore di loghi SVG da testo + icona (lucide 48 icone allowlist) + 4 forme + 3 layout. AI disabilitata nella v1 (placeholder per Replicate). Export SVG + PNG 512/1024/2048. Zero costo AI, output editabile in Illustrator/Inkscape. |
+| **Tier System** | Free con watermark + limite 3 documenti + export 150/72 DPI. Sblocco via codice (admin emette, utente redime) → piano unlocked con export 300/4096 DPI e documenti illimitati. |
+| **Unified Collection** | Una sola tabella `documents` con discriminatore `documentType` (quote, qrCode, businessCard, logo). Migration automatica dal legacy `quotes` a `documents:v1`. |
+| **Onboarding 6 step** | Wizard nuovo utente con displayName, company, settore, colore brand, IVA predefinita, preferenza documento di partenza. Step 5 naviga direttamente all'editor scelto. |
+| **HomePage "Perché Quickbrand"** | Sezione differenziazione vs web agency / Canva / Looka. H1 disruptor, pacchetti (Free, Pro, Starter, Apertura, Presenza), Manutenzione. |
+| **Responsive** | Layout adattivo desktop (3-col), tablet e mobile (tab system + FAB AI + zoom preview) |
+
+## Bigliettino, Phase 2.2 features
+
+| Feature | Descrizione |
+|---------|-------------|
+| **Master switch griglia** (REQ-E01) | Un unico toggle "Griglia ON/OFF" governa rendering grid-mode + overlay linee guida + abilitazione controlli. Persiste lo stato in `card.front.useGrid` / `card.back.useGrid`. |
+| **Init-from-layout** (REQ-E03) | Attivare il master switch su un lato senza grid lo inizializza dal layout corrente (`gridPresetLeft`/`centered`/`split`/`backDefault`). Niente "salto" dell'intera card. |
+| **QR ridimensionabile** (REQ-E02) | In flexbox-mode il QR usa `card.back.qrSize` (`small` 84px, `medium` 120px, `large` 160px). In grid-mode la dimensione deriva dalla cella grid. |
+| **Griglia fine** (REQ-E04) | Bottoni +/− su cols/rows (range 2–8). Su griglia 6×6 il QR si sposta a passi più piccoli. |
+| **Testo che va a capo** (REQ-F01) | Tutti i campi (nome, social, contatti, wordmark, handle-stamp) vanno a capo invece di essere troncati con "…". |
+| **Block label servizi** (REQ-F02) | `back.servicesLabel` editabile (max 40 char), mostrato sopra la lista servizi nel retro. Se vuoto, nessun heading. |
+| **Auto-shrink servizi** (REQ-F03) | Se un servizio supera 40 char, la lista applica una classe CSS che riduce leggermente il font per restare su poche righe. |
+| **Font family selector** (REQ-D01) | Selettore con set sicuro (`Inter`, `Roboto`, `Open Sans`, `Lato`, `Montserrat`, `Poppins`, `Georgia`, `Times New Roman`, `Courier New`). Card importate con font fuori set mostrano "Personalizzato" senza sovrascriverlo. |
+| **Font scale** (REQ-D04) | Controllo dimensione testo (range 0.7–1.5, step 0.05) applicato come CSS variable `--card-font-scale`. Replicato nell'export SVG/PDF. |
+| **Toast feedback** (REQ-G01) | Mossa/resize applicata → toast success. Mossa bloccata (collisione/bordo) → toast info. Cambio master switch → toast. |
+| **Parità AI** (REQ-I01) | L'AI può modificare `fontScale`, `qrSize`, `services`, `servicesLabel` e posizionare il logo nel grid (via `grid.elements.logo`). Il merge clampa `fontScale` a [0.7, 1.5]. |
+| **Componenti estratti** (REQ-B02) | Form condiviso desktop/mobile in `src/components/card/`: `CardFrontFields`, `CardMediaFields`, `CardBackFields`, `CardServicesFields`, `CardSocialsFields`, `CardQrAdvanced`, `CardStyleFields`, `CardGridControls`. Zero duplicazione JSX. |
+
+## AI Coding Agent Optimization (solo sviluppatori)
+
+### Caveman (compressione output)
+
+Skill auto-attiva che forza l'agente a rispondere in stile terso (drop articoli, no filler, frammenti OK). Caricata da `.agents/skills/caveman/SKILL.md` ad ogni avvio di opencode.
+
+| Comando | Effetto |
+|---------|---------|
+| `/caveman` | attiva (default `full`) |
+| `/caveman lite` | solo anti-filler, frasi complete |
+| `/caveman ultra` | telegrafico, abbreviazioni |
+| `/caveman commit` | messaggi di commit ≤50 char |
+| "normal mode" / "stop caveman" | disattiva |
+
+Installazione: `npx skills add https://github.com/juliusbrussee/caveman --skill caveman`
+
+La skill **si auto-disattiva** in caso di: warning di sicurezza, conferme di azioni irreversibili, sequenze multi-step dove l'ordine dei frammenti può confondere. È un comportamento voluto (regola `Auto-Clarity`), non un bug.
 
 ## AI Co-Editor (DeepSeek)
 
@@ -52,10 +94,19 @@ Server su `http://localhost:8000`
 
 1. **Produzione (Vercel)**: vai su **Vercel Dashboard → Settings → Environment Variables** e aggiungi `DEEPSEEK_API_KEY` con scope **Production, Preview**. La chiave viene letta solo dalla Serverless Function e non deve essere esposta come variabile `VITE_*`.
 2. **Locale (`npm run dev`)**: nella Dashboard Admin (sidebar → Admin), incolla la chiave nel campo "Chiave DeepSeek" e salva (viene conservata in localStorage)
-3. Tutti gli utenti usano la stessa chiave condivisa — l'admin controlla i **limiti token** per ogni utente
+3. Tutti gli utenti usano la stessa chiave condivisa, l'admin controlla i **limiti token** per ogni utente
 4. Gli utenti vedono selettore "Modello AI" e stato connessione nel pannello
 
 ### Token e Limiti
+
+## Privacy & AI Data Disclosure (GDPR Compliance)
+
+Per alcune funzionalità avanzate basate su IA (es. generazione sfondo bigliettini, logo background e volantini hero vision-grounded), l'applicazione invia screenshot in tempo reale della canvas e loghi caricati alle API dei provider AI configurati (Google Gemini, DeepSeek, Ollama Pro).
+
+- **Payload inviati**: screenshot JPEG/PNG in bassa risoluzione della canvas di preview, loghi dell'attività, prompt di testo dell'utente.
+- **Finalità**: consentire ai modelli multimodali di comprendere la disposizione del layout e non sovrapporre elementi grafici al testo o QR code.
+- **Trattamento dati**: nessun dato personale o immagine viene conservato in modo permanente dai provider AI oltre la sessione di generazione.
+- **Consenso & Trasparenza**: l'utente può disattivare la modalità Vision / Screenshot nelle impostazioni della rail AI Console.
 
 - Ogni chiamata AI consuma token (monitorati automaticamente)
 - L'admin può impostare un limite token per ogni utente dalla Dashboard
@@ -85,6 +136,214 @@ Il PDF è generato con **pdfmake** (nessun canvas, page break intelligenti):
 4. **Clausole e condizioni generali** (nuova pagina)
 5. **Riepilogo comparativo** (nuova pagina)
 6. **Footer**: Validità 30 giorni
+
+## QR Code Generator
+
+Generatore di QR Code personalizzati con anteprima live e salvataggio in collection.
+
+### Tipi supportati
+
+| Tipo | Payload |
+|------|---------|
+| URL | Link web (https://...) |
+| Testo | Testo libero |
+| Email | `mailto:` |
+| Telefono | `tel:` |
+| vCard | Contatto (nome, organizzazione, ruolo, telefono, email) |
+| WiFi | `WIFI:S:...;T:...;P:...;H:...;` |
+| SMS | `SMSTO:` |
+
+### Stili
+
+- **Dot style**: `square` (predefinito), `rounded` (moduli arrotondati), `dots` (punti)
+- **Error correction**: L (7%), M (15%), Q (25%), H (30%)
+- **Logo overlay**: immagine base64 opzionale centrata sul QR (max 20% area)
+- **Colori**: foreground e background personalizzabili con validazione contrasto
+
+### Export
+
+- **SVG**: vettoriale, editabile in Illustrator/Inkscape
+- **PNG**: raster ad alta risoluzione (256px)
+- **Salvataggio**: in collection come documento `qrCode`
+
+## Bigliettini da Visita
+
+Editor completo per bigliettini da visita professionali con anteprima live fronte/retro.
+
+### Formati
+
+| Preset | Dimensioni | Standard |
+|--------|-----------|----------|
+| EU 85×55 | 85×55 mm | Europeo |
+| US 89×51 | 89×51 mm | Americano |
+| Square 65×65 | 65×65 mm | Quadrato |
+
+### Layout fronte
+
+- **Centrato**: foto in alto, nome/titolo/azienda centrati
+- **Sinistra**: foto a sinistra, testo a destra, divisore accent
+- **Split**: foto full-height a sinistra, testo a destra
+
+### Grid editor
+
+- **Sistema a griglia** (4×4 di default, espandibile 2×2 → 8×8)
+- **Preset**: Sinistra (foto a sx), Centrato, Diviso (contatti + QR)
+- **Editor manuale**: seleziona elemento → frecce ←↑→↓ per spostare, +/− per ridimensionare
+- **Editor mobile**: menu popup compatto con frecce in griglia 3×3
+- **Grid overlay**: toggle per visualizzare le linee guida
+
+### Grid editor per lato (Phase 2.1)
+
+A partire dalla fase 2.1, l'editor griglia è **per lato** (Fronte / Retro), non
+si possono spostare elementi del front nel retro o viceversa.
+
+- **Lato Fronte**: mostra solo `Foto`, `Logo`, `Nome`, `Ruolo`, `Azienda`
+- **Lato Retro**: mostra solo `Contatti`, `QR`, `Social`
+- **Preset Fronte**: Sinistra / Centrato / Diviso
+- **Preset Retro**: "Default retro" (contatti a sx + QR + social a dx)
+- **Spostamenti separati**: `card.grid` per il front, `card.backGrid` per il back
+
+### Collision detection BLOCK (Phase 2.1)
+
+Le mosse sulla grid rispettano sia i bordi sia la **non-sovrapposizione** con
+altri elementi. Se una mossa causerebbe overlap, il bottone si disabilita con
+tooltip "Limite (collisione)". L'helper `src/utils/gridUtils.ts` espone
+`collides / wouldCollideOnMove / wouldCollideOnResize / canMove / canResize /
+clampMove / clampResize` ed è usato anche dal merge AI (l'AI non può generare
+grid con elementi sovrapposti).
+
+### Logo (Phase 2.1)
+
+L'elemento `logo` è ora parte degli elementi della grid (opzionale, 5° elemento
+del front). Size target ~30% della card:
+
+- Preview CSS: 100px (left) / 125px (centered) / 110px (split)
+- Export PDF: `Math.min(25mm, dims.w * 0.30)` ≈ 25mm su 85mm = ~29%
+- Export SVG: `photoSize * 0.48` (left) / `pxH * 0.20` (split) / centered aggiunto
+- Template Giovanni: `logoUrl` = SVG trasparente "WebdevCA" embeddato come data URI
+
+### Griglia OFF = layout classico (Phase 2.1)
+
+Il toggle "Griglia ON/OFF" controlla sia l'overlay sia la modalità di rendering:
+
+- **Griglia OFF** (default) → layout flexbox basato su `front.layout` (split/left/centered)
+- **Griglia ON** → CSS Grid basato su `card.grid` + overlay visivo
+
+Questo evita che il front resti "sminchiato" dopo aver usato l'editor
+griglia e spento l'overlay.
+
+### AI Design Mode
+
+7 quick actions + prompt personalizzato:
+
+| Azione | Effetto |
+|--------|---------|
+| Rendi premium | Accent sofisticato (navy/bordeaux/teal), layout split, font Inter |
+| Minimal | Rimuove campi vuoti, accent neutro #333 |
+| Compila da nome | Genera titolo professionale dal nome |
+| Cambia palette | Palette predefinite coerenti (teal, navy, bordeaux, monochrome) |
+| Ottimizza per stampa | Verifica contrasto, suggerimenti leggibilità (analysis mode) |
+| ← Sposta QR | Sposta il QR a sinistra via grid |
+| ↔ Allarga foto | Aumenta la larghezza della foto via grid |
+
+### Protezione merge AI (Phase 2.1)
+
+Il `mergeCardAIResponse` ora protegge da 4 tipi di hallucination:
+
+1. **Campi inventati** (`visible`, `enabled`, ecc.) → Zod strippa via `businessCardSchema.partial().safeParse()`
+2. **Cancellazione back fields** (es. `phone: ""`) → helper `shouldUpdateString` blocca
+3. **Grid hallucination** (tutti gli elementi a `(0,0,1,1)`) → `isGridHallucinated` rileva e skipppa
+4. **photoUrl/logoUrl clearing** → sempre preservato (mai sovrascritto)
+
+6 nuovi test in `cardMerge.test.ts` (`AI hallucination protection` describe block).
+
+### Template Giovanni
+
+Template preconfigurato con dati reali (foto `public/giovanni-photo.jpg`,
+logo SVG trasparente "WebdevCA" come data URI, company vuota, QR che punta
+al sito personale, GitHub social, layout split). Da `src/utils/documentSchemas.ts:createGiovanniCardTemplate()`.
+
+### Export
+
+| Formato | Descrizione |
+|---------|-------------|
+| **PDF 10-up** | A4 con 10 bigliettini (5×2), pronto per tipografia |
+| **PNG fronte/retro** | Immagine raster ad alta risoluzione |
+| **SVG fronte/retro** | Vettoriale editabile |
+| **JSON** | Backup completo dati card |
+
+### Responsive
+
+- **Desktop** (≥900px): layout 3-col (form | preview | AI panel)
+- **Mobile** (<900px): tab system (Anteprima | Modifica | AI) + FAB AI floating
+- **Zoom preview**: controlli −/reset/+ (50%–150%), default 70% mobile / 100% desktop
+- **AI always-accessible**: FAB con badge log non letti → bottom sheet dal basso
+
+## Logo Builder
+
+Generatore di loghi vettoriali componibile. **Nessuna AI nella v1**: l'utente compone il logo da testo + icona + forma + colore + layout. Output SVG pulito e modificabile in Illustrator/Inkscape.
+
+## Volantino (Flyer)
+
+Volantini A6/A5/A4/Letter/Square con 4 layout (classico, centrato, diviso, magazine), bleed 3mm e copy generation via DeepSeek. Tier watermark rispettato (free = QUICKBRAND diagonale, unlocked = no-op).
+
+- **Editor live**: form con headline / sottotitolo / corpo / CTA / QR opzionale, layout switcher, color picker
+- **AI copy**: bottone "Genera copy con AI" → modale con brief + tone (formale / giovanile / tecnico); 4 azioni rapide: Semplifica / Più formale / Più giovanile / Aggiungi urgenza
+- **4 template per settore**: Ristorante / Evento / Salone / Negozio
+- **Export**: PDF (pdfmake, bleed 3mm incluso) + PNG (canvas, tier-aware DPI)
+- **Endpoint AI**: `POST /ai/copy-flyer` con rate limit 10/min per IP, sanitizzazione HTML lato server
+
+### Tipi di icona
+
+| Tipo | Comportamento |
+|------|---------------|
+| **Nessuna** | Solo testo, nessuna icona |
+| **Forma geometrica** | `circle` / `square` / `rounded` / `hex` colorato |
+| **Monogramma** | 1-2 lettere (auto-uppercase) dentro la forma |
+| **Lucide** | Icona reale dalla libreria `lucide-react` (48 nomi allowlist, 5 categorie: food, tech, fashion, business, nature) |
+
+### Layout
+
+| Layout | Composizione |
+|--------|--------------|
+| **Horizontal** | Icona a sinistra, primaryText + tagline a destra (400×160 viewBox) |
+| **Vertical** | Icona in alto centrata, primaryText sotto, tagline sotto (300×300) |
+| **Stacked** | Icona in alto, primaryText sotto, tagline in piccolo sotto (300×320) |
+
+### Template per settore
+
+4 preset pronti all'uso (tech / food / fashion / professionista), ognuno con default colors + iconType + iconShape ottimizzati.
+
+### Sicurezza
+
+- **Escape XML**: `primaryText` e `tagline` passano per `escapeXml()` prima di finire nell'SVG (impedisce XSS via `<script>` injection)
+- **Allowlist icone**: 48 nomi lucide pre-validati, niente injection di nomi arbitrari
+- **Sanitize SVG**: `DOMParser` + `XMLSerializer` rimuovono `<metadata>`, `<desc>`, `<script>`, commenti, `on*` event handlers prima di `dangerouslySetInnerHTML`
+- **Validazione colori**: regex `^#[0-9a-fA-F]{6}$` su `primaryColor` / `secondaryColor`
+
+### Export
+
+| Formato | Descrizione |
+|---------|-------------|
+| **SVG** | Vettoriale, editabile in Illustrator/Inkscape |
+| **PNG 512** | Raster 512×512 (web, social) |
+| **PNG 1024** | Raster 1024×1024 (high-DPI) |
+| **PNG 2048** | Raster 2048×2048 (stampa) |
+
+### AI (placeholder v2)
+
+Il tab "AI Generation" è presente ma **disabilitato** con messaggio:  
+*"AI generation non disponibile nella v1. Configura `REPLICATE_API_TOKEN` su Vercel e upgrada a Pro."*
+
+L'attivazione richiede Vercel Pro (timeout 60s) per Replicate Recraft-V3 ed è deferred alla v2.
+
+### Generazione runtime dei path SVG
+
+I path SVG delle 48 icone sono estratti a build-time da `node_modules/lucide-react/dist/esm/icons/*.js` con lo script `scripts/extract-lucide-paths.mjs` e salvati in `src/utils/lucideIconPaths.ts`. Questo permette di renderizzare l'icona lucide reale nell'SVG esportato senza dipendere da React a runtime. Per rigenerare dopo un upgrade di lucide-react:
+
+```bash
+node scripts/extract-lucide-paths.mjs
+```
 
 ## Architettura Dati
 
@@ -136,13 +395,20 @@ cp .env.example .env
 
 | Chiave | Descrizione |
 |--------|-------------|
-| `registeredUsers` | Array JSON utenti registrati |
+| `registeredUsers` | Array JSON utenti registrati (dev only fallback) |
 | `authToken` | Token sessione |
 | `userEmail` | Email utente corrente |
 | `username` | Username |
+| `userRole` | Ruolo utente (admin / user) |
 | `dataRegistrazione` | Data registrazione |
-| `deepseekKey` | API Key DeepSeek (se configurata) |
-| `precisionQuote_quotes` | Preventivi salvati |
+| `deepseekApiKey` | API Key DeepSeek (solo dev) |
+| `precisionQuote_quotes` | Preventivi legacy (pre-fase 6, deprecata) |
+| `precisionQuote_documents:v1` | **Phase 6**: documenti unificati (quote, QR, card, logo) |
+| `pq_migration_v1_done_<email>` | **Phase 6**: flag migrazione legacy → documents:v1 |
+| `unlock_codes` | Codici sblocco tier (solo dev, popolato dall'admin) |
+| `userSettings_<email>` | Impostazioni utente (default color, VAT, theme, **tier**, **unlockCode**, **documentCount** da fase 5, **preferredDocumentType** da fase 7) |
+| `theme` | Tema corrente (light / dark) |
+| `documentTheme` | Tema documento (minimal / corporate / creative) |
 
 ## Schema Database (Postgres)
 
@@ -160,24 +426,61 @@ cp .env.example .env
 | `token_limit` | bigint | Limite token (default 1.000.000) |
 | `created_at` | timestamp | DEFAULT now() |
 
-### Tabella `quotes`
+### Tabella `documents` (Phase 6, unificata)
 
 | Colonna | Tipo | Note |
 |---------|------|------|
-| `id` | varchar(50) PK | Es. PRV-2026-042 |
+| `id` | varchar(50) PK | Es. PRV-2026-042, QR-..., CARD-..., LOGO-... |
 | `user_email` | varchar(255) | FK users.email, NOT NULL |
-| `title` | varchar(255) | Titolo preventivo |
-| `client` | varchar(255) | Nome cliente |
-| `date` | varchar(50) | Data preventivo |
-| `intro` | text | Testo introduttivo |
+| `document_type` | varchar(30) | `quote` / `qrCode` / `businessCard` / `logo` |
+| `title` | varchar(255) | Titolo documento |
+| `client` | varchar(255) | Nome cliente (quote) |
+| `date` | varchar(50) | Data |
+| `intro` | text | Intro (quote) |
 | `color` | varchar(50) | Colore brand |
 | `vat` | integer | DEFAULT 22 |
 | `status` | varchar(50) | DEFAULT 'BOZZA' |
 | `owner` | varchar(255) | |
-| `options` | jsonb | Array opzioni |
-| `clauses` | jsonb | Array clausole |
+| `options` | jsonb | Opzioni preventivo |
+| `clauses` | jsonb | Clausole |
+| `is_template` | boolean | DEFAULT false |
+| `share_token` | varchar(255) | Token pubblico condivisione |
+| `is_shared` | boolean | DEFAULT false |
+| `pdf_url` | text | URL PDF (futuro) |
+| `document_theme` | varchar(50) | minimal / corporate / creative |
+| `data` | jsonb | Payload specifico per tipo (QR payload, card grid, logo builder) |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
+
+### Tabella `user_settings`
+
+| Colonna | Tipo | Note |
+|---------|------|------|
+| `user_email` | varchar(255) PK | FK users.email |
+| `display_name` | varchar(255) | Da onboarding step 0 |
+| `company_name` | varchar(255) | Da onboarding step 1 |
+| `profession` | varchar(100) | Da onboarding step 2 |
+| `default_color` | varchar(50) | Da onboarding step 3 |
+| `default_vat` | integer | Da onboarding step 4 |
+| `logo_url` | text | Logo utente |
+| `document_theme` | varchar(50) | minimal / corporate / creative |
+| `onboarding_done` | boolean | DEFAULT false |
+| `tier` | varchar(20) | `free` / `unlocked` (Phase 5) |
+| `unlock_code` | varchar(50) | Codice sblocco (Phase 5) |
+| `unlocked_at` | timestamp | Data sblocco (Phase 5) |
+| `document_count` | integer | DEFAULT 0, counter per tier guard (Phase 5) |
+| `preferred_document_type` | varchar(30) | **Phase 7**: editor / qr / card / logo, da onboarding step 5 |
+
+### Tabella `unlock_codes` (Phase 5)
+
+| Colonna | Tipo | Note |
+|---------|------|------|
+| `code` | varchar(50) PK | Es. `STARTER-X7K2`, `APERTURA-M9P4` |
+| `package` | varchar(50) | `starter` / `apertura` / `presenza` / `custom` |
+| `used_by` | varchar(255) | Email utente che ha riscattato (null se disponibile) |
+| `used_at` | timestamp | Data riscatto |
+| `created_by` | varchar(255) | Admin email |
+| `created_at` | timestamp | DEFAULT now() |
 
 ## Sviluppo Database
 
@@ -221,43 +524,107 @@ Dopo il deploy, vai su **Vercel Dashboard → Settings → Environment Variables
 | `DATABASE_URL` | `postgresql://...` da Neon | Production, Preview |
 | `DEEPSEEK_API_KEY` | La tua chiave DeepSeek | Production, Preview |
 | `ADMIN_PASSWORD` | Password admin (admin@gmail.com) | Production, Preview |
+| `ALLOWED_ORIGIN` | (opzionale) `https://tuodominio.com` | Production, Preview |
+| `REPLICATE_API_TOKEN` | (opzionale, v2) token Replicate per AI logo | Production, Preview |
 
 ## Struttura file
 
 ```
 SitoPreventivo/
-├── App.jsx                    # AuthProvider, state, AI, PDF export
+├── App.tsx                    # AuthProvider, AuthContext, AppShell re-export
 ├── index.html
-├── package.json               # react, react-router-dom, pdfmake, drizzle
-├── vite.config.js             # Porta 8000, React plugin
+├── package.json               # react, react-router-dom, pdfmake, lucide-react, drizzle, zod
+├── tsconfig.json              # TypeScript strict mode
+├── vite.config.ts             # Porta 8000, React plugin
 ├── vercel.json                # SPA rewrites + API routing
-├── REQUIREMENTS.md            # Prerequisiti dettagliati
+├── AGENTS.md                  # Convenzioni progetto, regole test, lezioni apprese
+├── spec/                      # Specifiche di fase
+│   ├── spec-process-phase0-autosave-fix.md
+│   ├── spec-tool-phase1-qr-code.md
+│   ├── spec-design-phase2-business-card.md
+│   ├── spec-tool-phase4-logo-builder.md  # ← fase corrente
+│   └── ...
 ├── drizzle.config.ts          # Drizzle ORM config
 ├── drizzle/                   # Migrazioni database
 ├── api/
-│   └── index.js               # Vercel Serverless Function (REST API)
+│   └── index.ts               # Vercel Serverless Function (REST API monolith)
 ├── db/
 │   ├── schema.ts              # Schema Postgres (users + quotes + user_settings)
 │   └── index.ts               # Drizzle client (Neon)
 ├── src/
-│   ├── main.tsx               # BrowserRouter + ProtectedRoute
+│   ├── main.tsx               # BrowserRouter + Routes (multipage)
+│   ├── contexts/
+│   │   └── index.ts           # AuthContext + AppContext
+│   ├── hooks/
+│   │   ├── useAI.ts           # Hook AI per preventivi (streaming, token)
+│   │   ├── useAICard.ts       # Hook AI per card (no tools, JSON round-trip)
+│   │   ├── useCardAIFloating.tsx # Provider + hook stato AI panel mobile
+│   │   ├── useCardPreviewZoom.ts # Hook zoom anteprima (50-150%)
+│   │   ├── useDocumentSave.ts # Hook save documenti con tier guard
+│   │   ├── useMediaQuery.ts   # Hook responsive
+│   │   ├── useRouteView.ts    # Bridge hook pathname ↔ view
+│   │   └── useToast.ts        # Toast notifications
 │   ├── pages/
-│   │   ├── HomePage.jsx       # Landing page pubblica
-│   │   ├── LoginPage.jsx      # Login/registrazione con sesso
-│   │   ├── AdminDashboard.jsx # Gestione utenti, token, chiave AI
-│   │   └── NotFoundPage.jsx   # 404 animato
+│   │   ├── HomePage.tsx       # Landing page pubblica (hero, features, pricing, perché noi)
+│   │   ├── LogoAiDocsPage.tsx # ← fase 7: docs pubblica per AI logo
+│   │   ├── LoginPage.tsx      # Login/registrazione
+│   │   ├── SettingsPage.tsx   # Cambio password, tema, tier
+│   │   ├── AdminDashboard.tsx # Gestione utenti/token/chiave AI/codici sblocco
+│   │   ├── NotFoundPage.tsx   # 404
+│   │   └── app/               # Page wrappers protetti da /app
+│   │       ├── EditorPage.tsx
+│   │       ├── CollectionPage.tsx
+│   │       ├── QrPage.tsx
+│   │       ├── CardPage.tsx
+│   │       ├── LogoPage.tsx   # ← fase 4
+│   │       ├── SettingsRoute.tsx
+│   │       └── AdminPage.tsx
 │   ├── components/
-│   │   ├── DocumentPreview.jsx # Layout PDF preview
-│   │   ├── EditorView.jsx     # AI panel + controlli (sezioni collassabili)
-│   │   ├── CollectionView.jsx # Griglia preventivi + stato
-│   │   ├── SaveDialog.jsx     # Modale per nome personalizzato
-│   │   ├── Layout.jsx         # Sidebar con icone
-│   │   ├── Topbar.jsx         # Salva/Esporta (solo editor)
-│   │   ├── GlobalStyles.jsx   # Tutti i CSS
-│   │   └── Icon.jsx           # Icone SVG
+│   │   ├── AppShell.tsx       # Global state shell (Outlet)
+│   │   ├── Layout.tsx         # Sidebar (Loghi, QR Code, Bigliettini, Editor, Collection, Settings, Admin)
+│   │   ├── Topbar.tsx         # Salva/Esporta per view corrente
+│   │   ├── EditorView.tsx     # AI panel + controlli
+│   │   ├── OnboardingModal.tsx # ← fase 7: 6 step wizard (include preferenza doc)
+│   │   ├── TierLimitModal.tsx # ← fase 5: modale limite free tier
+│   │   ├── QREditor.tsx       # Generatore QR Code
+│   │   ├── CardEditor.tsx     # Editor bigliettini
+│   │   ├── CardPreview.tsx    # Anteprima card (flexbox + CSS Grid mode)
+│   │   ├── CardEditorTabs.tsx # Tab system per mobile
+│   │   ├── MobileGridEditor.tsx # Grid editor mobile
+│   │   ├── CardAIFab.tsx      # FAB AI floating (mobile)
+│   │   ├── CardAIBottomSheet.tsx # Bottom sheet AI panel
+│   │   ├── CardPreviewZoomControls.tsx
+│   │   ├── LogoEditor.tsx     # ← fase 4: Logo Builder (tabs Builder + AI)
+│   │   ├── BuilderPanel.tsx   # ← fase 4: form + lucide picker + live preview
+│   │   ├── CollectionView.tsx # ← fase 6: griglia documenti unificata
+│   │   ├── SaveDialog.tsx     # Modale nome personalizzato
+│   │   ├── GlobalStyles.tsx   # Tutti i CSS
+│   │   └── ...                # altri
+│   ├── ai/
+│   │   ├── promptUtils.ts     # AI helpers
+│   │   ├── cardOrchestrator.ts # AI orchestrator per card
+│   │   ├── cardMerge.ts       # Merge risposta AI → card
+│   │   ├── aiCardInputSchema.ts
+│   │   └── prompts/
+│   │       ├── system.ts
+│   │       ├── cardSystem.ts
+│   │       └── cardContext.ts
 │   └── utils/
 │       ├── dataService.js     # API produzione / localStorage locale
-│       └── generatePDF.ts     # PDF con pdfmake
+│       ├── generatePDF.ts     # PDF preventivi con pdfmake
+│       ├── cardGenerator.ts   # PDF/PNG/SVG export bigliettini
+│       ├── qrGenerator.ts     # QR Code SVG/PNG generation
+│       ├── logoGenerator.ts   # ← fase 4: SVG builder + sanitize + export PNG
+│       ├── lucideIconPaths.ts # ← fase 4: path SVG icone lucide (auto-generato)
+│       ├── watermark.ts       # ← fase 5: tier-aware watermark
+│       ├── documentSchemas.ts # Zod schema (quote, QR, card, logo, grid presets)
+│       ├── documentThemes.ts
+│       ├── quoteSchema.ts
+│       ├── quoteTools.ts
+│       ├── onboarding.ts      # Helpers onboarding (shouldShowOnboarding)
+│       └── logger.ts          # Client logger (sendBeacon → /api/logs)
+└── scripts/
+    └── extract-lucide-paths.mjs # ← fase 4: estrae path SVG da lucide-react
 ```
 
 ## Sviluppo
@@ -266,4 +633,21 @@ SitoPreventivo/
 npm run dev        # Dev server su :8000
 npm run build      # Build produzione in /dist
 npm run preview    # Preview del build
+npm run test       # Vitest (76 file, 850+ test)
+npm run typecheck  # tsc --noEmit
 ```
+
+## Roadmap
+
+| Fase | Stato | Descrizione |
+|------|-------|-------------|
+| 0, Auto-save fix | ✅ | Reset timer su modifiche quote |
+| 1, QR Code | ✅ | 7 tipi, stili, logo overlay, export SVG/PNG |
+| 2, Bigliettini | ✅ | 3 layout, 3 formati, AI Design Mode, grid editor |
+| 2.1, Card polish | ✅ | Collision detection BLOCK, logo in grid (~30%), backGrid separato, showGrid toggle, AI merge protection, template Giovanni con foto+logo trasparente |
+| 2.2, Card refactor | ✅ | Master switch griglia, init-from-layout, QR sizing, fontScale, servicesLabel, parità mobile, AI parity |
+| 3, Volantino | ✅ | 4 layout × 5 formati (A6/A5/A4/Letter/Square), bleed 3mm, AI copy via `POST /ai/copy-flyer` (10/min/IP), export PDF+PNG, tier watermark rispettato |
+| 4, **Logo Builder** | ✅ | SVG builder templated, 48 icone lucide, 4 template settore, 3 layout, export SVG + PNG 512/1024/2048 |
+| 5, Tier System | ✅ | Watermark free (150/72 DPI), unlock code via admin, tier guard su save (3 doc free) |
+| 6, Unified Collection | ✅ | Tabella `documents` rinominata, migration legacy, tab per tipo documento |
+| 7, Polish | ✅ | Onboarding 6 step, HomePage refactor (perché noi), Collection accessibile a tutti, `preferredDocumentType`, docs/logo-ai.md privato, docs aggiornate |

@@ -165,7 +165,7 @@ export async function generateDOCX(quote: PremiumQuote, themeId: DocumentTemplat
             children: [
               new TextRun({ text: `${ps.label} (${ps.percentage}%): `, bold: true, size: 20 }),
               new TextRun({ text: `${money((option.summary?.totalGross || 0) * ps.percentage / 100)} IVA inclusa`, bold: true, size: 20, color: accent }),
-              new TextRun({ text: ` — ${ps.notes || `Entro ${ps.dueDaysFromIssue} giorni`}`, size: 20 }),
+              new TextRun({ text: `, ${ps.notes || `Entro ${ps.dueDaysFromIssue} giorni`}`, size: 20 }),
             ],
             spacing: { before: 200 },
           })
@@ -211,7 +211,7 @@ export async function generateDOCX(quote: PremiumQuote, themeId: DocumentTemplat
     compRows.push(
       new TableRow({
         tableHeader: true,
-        children: [{ text: 'Caratteristica', bold: true, size: 18 }, ...opts.map((o) => ({ text: o.label.split('—')[0].trim(), bold: true, size: 18 }))].map((h, i) =>
+        children: [{ text: 'Caratteristica', bold: true, size: 18 }, ...opts.map((o) => ({ text: o.label.split(':')[0].trim(), bold: true, size: 18 }))].map((h, i) =>
           new TableCell({
             children: [new Paragraph({ children: [new TextRun({ text: h.text, bold: true, size: 18 })], alignment: i === 0 ? AlignmentType.LEFT : AlignmentType.CENTER })],
           })

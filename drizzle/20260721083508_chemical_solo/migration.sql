@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "tokens_cost_usd" numeric(10,6) DEFAULT '0';

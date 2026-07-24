@@ -1,11 +1,13 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import App, { AuthProvider, AuthContext } from '../App';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
-import PublicQuoteView from './pages/PublicQuoteView';
 import NotFoundPage from './pages/NotFoundPage';
+import AdminRoute from '../src/components/AdminRoute';
+import { EditorPage, CollectionPage, QrPage, CardPage, LogoPage, FlyerPage, SettingsRoute, AdminPage } from './pages/app';
+import SocialPage from './pages/app/SocialPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user } = React.useContext(AuthContext);
@@ -13,18 +15,60 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function IndexRedirect() {
+  const { user } = React.useContext(AuthContext);
+  // Admin lands on the editor (preventivi), normal users land on the QR
+  // editor (the most common entry point). They can reach the Collection
+  // from the sidebar in both cases.
+  const target = user?.role === 'admin' ? 'editor' : 'qr';
+  return <Navigate to={target} replace />;
+}
+
+function AdminEditorRoute({ children }: { children: React.ReactNode }) {
+  const { user } = React.useContext(AuthContext);
+  if (!user || user.role !== 'admin') {
+    return <Navigate to="/app/qr" replace />;
+  }
+  return <>{children}</>;
+}
+
 function AppWrapper() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/preventivo/:shareToken" element={<PublicQuoteView />} />
           <Route path="/app" element={
             <ProtectedRoute>
               <App />
             </ProtectedRoute>
-          } />
+          }>
+            <Route index element={<IndexRedirect />} />
+            <Route path="editor" element={<AdminEditorRoute><EditorPage /></AdminEditorRoute>} />
+            <Route path="editor/:docId" element={<AdminEditorRoute><EditorPage /></AdminEditorRoute>} />
+            <Route path="collection" element={<CollectionPage />} />
+            <Route path="qr" element={<QrPage />} />
+            <Route path="qr/:docId" element={<QrPage />} />
+            <Route path="card" element={<CardPage />} />
+            <Route path="card/:docId" element={<CardPage />} />
+            <Route path="logo" element={<LogoPage />} />
+            <Route path="logo/:docId" element={<LogoPage />} />
+            <Route path="flyer" element={<FlyerPage />} />
+            <Route path="flyer/:docId" element={<FlyerPage />} />
+            <Route path="social" element={<SocialPage />} />
+            <Route path="settings" element={<SettingsRoute />} />
+            <Route path="admin" element={
+              <AdminRoute>
+                <AdminPage />
+              </AdminRoute>
+            } />
+            <Route path="*" element={<IndexRedirect />} />
+          </Route>
           <Route path="/" element={
             <HomePageWrapper />
           } />
@@ -39,5 +83,7 @@ function HomePageWrapper() {
   const { user } = React.useContext(AuthContext);
   return <HomePage user={user} />;
 }
+
+void Outlet;
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<AppWrapper />);

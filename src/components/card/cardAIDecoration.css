@@ -1,0 +1,32 @@
+.card-ai-color-row {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.card-ai-color-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.card-ai-color-cell input[type="color"] {
+  width: 100%;
+  height: 28px;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.card-ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.75rem 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}

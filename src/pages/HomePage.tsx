@@ -1,180 +1,539 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import CardPreview from '../components/CardPreview';
+import '../components/CardEditor.css';
+import { createGiovanniCardTemplate } from '../utils/documentSchemas';
+import type { Tier } from '../utils/watermark';
 
 interface HomePageProps {
   user: any;
 }
 
+const giovanniCard = createGiovanniCardTemplate();
+
+/**
+ * Phase 13b (REQ-UX-011): scroll-reveal via IntersectionObserver.
+ * Nessuna libreria (CON-002). Disattivato con prefers-reduced-motion (CSS).
+ */
+function useReveal() {
+  useEffect(() => {
+    const els = Array.from(document.querySelectorAll('.hp .reveal'));
+    if (els.length === 0) return;
+    if (typeof IntersectionObserver !== 'function') {
+      els.forEach((el) => el.classList.add('reveal-visible'));
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('reveal-visible');
+            io.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12 }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+}
+
 export default function HomePage({ user }: HomePageProps) {
+  const [flipped, setFlipped] = useState(false);
+  const toggle = () => setFlipped((f) => !f);
+  useReveal();
+
   return (
-    <div className="home-page">
-      <header className="home-header">
-        <div className="home-header-inner">
-          <div className="home-logo">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-              <rect width="32" height="32" rx="8" fill="#0B57D0"/>
-              <path d="M8 10h16M8 16h12M8 22h8" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+    <div className="hp">
+      <header className="hp-header">
+        <div className="hp-header-inner">
+          <div className="hp-brand">
+            <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <rect width="32" height="32" rx="8" fill="#E62020" />
+              <path d="M8 10h16M8 16h12M8 22h8" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
-            <span>PrecisionQuote</span>
+            <span>Quickbrand</span>
           </div>
-          <nav className="home-nav">
+          <nav className="hp-nav">
             {user ? (
-              <Link to="/app" className="home-btn-primary">Vai all'App</Link>
+              <Link to="/app" className="hp-btn-primary">Vai all'App</Link>
             ) : (
               <>
-                <Link to="/login" className="home-btn-ghost">Accedi</Link>
-                <Link to="/login?register=1" className="home-btn-primary">Registrati</Link>
+                <Link to="/login" className="hp-btn-ghost">Accedi</Link>
+                <Link to="/login?register=1" className="hp-btn-primary">Registrati</Link>
               </>
             )}
           </nav>
         </div>
       </header>
 
-      <section className="home-hero">
-        <div className="home-hero-bg" />
-        <div className="home-hero-content">
-          <div className="home-hero-badge">Gratis per sempre</div>
-          <h1>Preventivi professionali<br/>in minuti, non in ore.</h1>
-          <p>Crea, personalizza e condividi preventivi multi-opzione con layout PDF professionale. Costi contenuti, zero abbonamenti.</p>
-          {user ? (
-            <Link to="/app" className="home-cta">Vai all'App →</Link>
-          ) : (
-            <Link to="/login?register=1" className="home-cta">Inizia gratis →</Link>
-          )}
+      {/* ─── Hero ─────────────────────────────────────────── */}
+      <section className="hp-hero">
+        <div className="hp-hero-inner">
+          <p className="hp-eyebrow">AI brand kit · Pronti per la stampa</p>
+          <h1 className="hp-h1">
+            Descrivi la tua attività.<br />
+            <span className="hp-h1-accent">L'AI costruisce il tuo brand kit.</span>
+          </h1>
+          <p className="hp-sub">
+            Logo SVG, bigliettini, volantini e post social coordinati: l'AI
+            genera la prima bozza, tu la rifinisci con l'editor a griglia.
+            Export PDF pronti per la tipografia, in 60 secondi.
+          </p>
+          <div className="hp-cta-row">
+            {user ? (
+              <Link to="/app" className="hp-cta">Vai all'App →</Link>
+            ) : (
+              <Link to="/login?register=1" className="hp-cta">Crea il tuo brand →</Link>
+            )}
+            <a href="#pricing" className="hp-cta-ghost">Vedi i pacchetti</a>
+          </div>
+          <p className="hp-hero-foot">Nessuna carta di credito · File pronti per la tipografia · 60 secondi</p>
         </div>
       </section>
 
-      <section className="home-features">
-        <div className="home-feature-card">
-          <div className="home-feature-icon" style={{ background: '#e8f0fe', color: '#0B57D0' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-          </div>
-          <h3>4 Opzioni per Preventivo</h3>
-          <p>Ogni preventivo contiene fino a 4 opzioni tariffarie, ognuna con costi una tantum e mensili, descrizione dettagliata e flag manutenzione.</p>
-        </div>
-        <div className="home-feature-card">
-          <div className="home-feature-icon" style={{ background: '#fef3e2', color: '#ea580c' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-          </div>
-          <h3>Layout PDF Professionale</h3>
-          <p>Esporta in PDF con layout elegante: opzioni, IVA, acconto, saldo, clausole e riepilogo comparativo. Zero problemi di page break.</p>
-        </div>
-        <div className="home-feature-card">
-          <div className="home-feature-icon" style={{ background: '#e0f2e9', color: '#059669' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          </div>
-          <h3>AI Integrata</h3>
-          <p>Modifica il preventivo con linguaggio naturale: "Rendi premium", "Applica sconto 10%", "Aggiungi clausola FAQ". Assistito da DeepSeek.</p>
-        </div>
-        <div className="home-feature-card">
-          <div className="home-feature-icon" style={{ background: '#f3e8ff', color: '#7c3aed' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-          </div>
-          <h3>Collection & Stati</h3>
-          <p>Gestisci tutti i preventivi in un'unica collezione. Imposta stati BOZZA, INVIATO, ACCETTATO, RIFIUTATO. Duplica e apri in modifica con un click.</p>
+      {/* ─── Interest: bento strumenti (Phase 13b, REQ-UX-010) ────────── */}
+      <section className="hp-section reveal">
+        <h2 className="hp-section-h">Gli strumenti dell'AI</h2>
+        <p className="hp-section-sub">
+          Cinque strumenti, un unico sistema coordinato. L'AI scrive e propone, tu controlli il risultato.
+        </p>
+        <div className="hp-bento">
+          <article className="hp-create-item hp-bento-wide">
+            <div className="hp-create-icon" data-color="red">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="4" x2="8" y2="10"/></svg>
+            </div>
+            <h3>Biglietti da visita AI</h3>
+            <p>Descrivi la tua attività: l'AI compone fronte e retro con foto, logo, QR e contatti. Grid editor con collision detection — non puoi sbagliare layout. Export PDF 10-up pronto tipografia, PNG o SVG.</p>
+          </article>
+          <article className="hp-create-item hp-bento-wide">
+            <div className="hp-create-icon" data-color="red">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20"/><path d="M12 2a14.5 14.5 0 0 1 0 20"/></svg>
+            </div>
+            <h3>Logo AI</h3>
+            <p>Tre domande, tre concept: l'AI propone testo, colori, icona e uno sfondo artistico generato. Il testo resta vettoriale e modificabile. Esporta SVG o PNG fino a 2048px.</p>
+          </article>
+          <article className="hp-create-item">
+            <div className="hp-create-icon" data-color="red">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v12H4z"/><path d="M4 16l5-5 4 4 3-3 4 4"/><circle cx="9" cy="8" r="1.5"/></svg>
+            </div>
+            <h3>Volantini AI</h3>
+            <p>L'AI scrive headline, body e CTA dal tuo brief. 4 layout × 5 formati, bleed 3mm per la tipografia.</p>
+          </article>
+          <article className="hp-create-item">
+            <div className="hp-create-icon" data-color="red">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            </div>
+            <h3>Social AI</h3>
+            <p>Tre post coordinati (Instagram, Facebook, LinkedIn) generati dal tuo bigliettino o volantino.</p>
+          </article>
+          <article className="hp-create-item">
+            <div className="hp-create-icon" data-color="red">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            </div>
+            <h3>QR Code</h3>
+            <p>7 tipi: URL, testo, email, telefono, vCard, WiFi, SMS. Stili square, rounded o dots. Export SVG.</p>
+          </article>
+          <article className="hp-create-item">
+            <div className="hp-create-icon" data-color="red">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            </div>
+            <h3>Preventivi</h3>
+            <p>Fino a 4 opzioni con costi una tantum e mensili, IVA, acconto e clausole. PDF professionale.</p>
+          </article>
         </div>
       </section>
 
-      <section className="home-pricing">
-        <h2>Costi Contenuti</h2>
-        <div className="home-pricing-cards">
-          <div className="home-pricing-card home-pricing-featured">
-            <div className="home-pricing-glow" />
-            <h3>Gratuito</h3>
-            <div className="home-price"><span>€0</span> / forever</div>
+      {/* ─── Desire: card demo flip 3D ────────────────────── */}
+      <section className="hp-section hp-demo-section reveal">
+        <h2 className="hp-section-h">Gratis con watermark. Sbloccata, pronta per la stampa.</h2>
+        <p className="hp-section-sub">
+          Tocca o passa il mouse sulla card per vedere il file finale.
+        </p>
+
+        <div
+          className={`hp-flip ${flipped ? 'is-flipped' : ''}`}
+          onClick={toggle}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+          role="button"
+          tabIndex={0}
+          aria-label="Demo card: clicca o tocca per vedere la versione sbloccata senza watermark"
+          aria-pressed={flipped}
+        >
+          <div className="hp-flip-inner">
+            <div className="hp-flip-face hp-flip-front">
+              <div className="hp-card-scale">
+                <CardPreview side="front" card={giovanniCard} tier="free" />
+              </div>
+              <svg className="hp-watermark-overlay" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                <defs>
+                  <pattern id="hp-wm-front" patternUnits="userSpaceOnUse" width="220" height="90" patternTransform="rotate(-30)">
+                    <text x="0" y="40" textAnchor="start" fontFamily="Helvetica, Arial, sans-serif" fontSize="20" fontWeight="700" fill="#1A1A1A" fillOpacity="0.10" letterSpacing="1.5">QUICKBRAND · FREE</text>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#hp-wm-front)" />
+              </svg>
+              <span className="hp-tier-tag" data-tier="free">FREE · watermark attivo</span>
+            </div>
+            <div className="hp-flip-face hp-flip-back">
+              <div className="hp-card-scale">
+                <CardPreview side="back" card={giovanniCard} tier="unlocked" />
+              </div>
+              <span className="hp-tier-tag" data-tier="unlocked">SBLOCCATO · 300 DPI · no watermark</span>
+            </div>
+          </div>
+        </div>
+
+        <p className="hp-demo-hint">
+          {flipped ? '◀ Torna al fronte (Free)' : 'Vai al retro (Sbloccato) ▶'}
+        </p>
+      </section>
+
+      {/* ─── Come funziona ────────────────────────────────── */}
+      <section className="hp-section hp-steps-section reveal">
+        <h2 className="hp-section-h">Come funziona</h2>
+        <ol className="hp-steps">
+          <li className="hp-step">
+            <span className="hp-step-num">1</span>
+            <h3>Scegli il settore</h3>
+            <p>Logo builder con template tech, food, fashion o professionista. Personalizza testo, colori e icone Lucide. Anteprima live.</p>
+          </li>
+          <li className="hp-step">
+            <span className="hp-step-num">2</span>
+            <h3>Lascia lavorare l'AI</h3>
+            <p>L'AI Co-Editor (DeepSeek) ottimizza palette e testi in tempo reale. Il grid editor con collision detection impedisce errori di layout: non puoi sbagliare.</p>
+          </li>
+          <li className="hp-step">
+            <span className="hp-step-num">3</span>
+            <h3>Esporta per la tipografia</h3>
+            <p>SVG vettoriali puri per il logo, PDF 10-up A4 con 10 bigliettini già impaginati per la stampa. Senza watermark, 300 DPI.</p>
+          </li>
+        </ol>
+      </section>
+
+      {/* ─── Perché noi (Phase 7, spec REQ-008) ─────────── */}
+      <section className="hp-section hp-why-section reveal" aria-labelledby="hp-why-h">
+        <h2 id="hp-why-h" className="hp-section-h">Perché Quickbrand</h2>
+        <p className="hp-section-sub">
+          Tre differenze concrete rispetto a web agency, Canva e Looka.
+        </p>
+        <div className="hp-why-grid">
+          <article className="hp-why-card">
+            <h3>Più veloce di una web agency</h3>
+            <p>72 ore per logo, bigliettino e volantino coordinati. Una web agency chiede 2-4 settimane e 2.500-8.000€ per lo stesso output.</p>
+          </article>
+          <article className="hp-why-card">
+            <h3>Più completo di Canva</h3>
+            <p>Tu non fai niente. L'editor compone il file e tu esporti PDF pronto tipografia. Su Canva rifai il layout ogni volta.</p>
+          </article>
+          <article className="hp-why-card">
+            <h3>Più personalizzato di Looka</h3>
+            <p>Logo, bigliettino, volantino, preventivo e QR sono un unico sistema coordinato. Su Looka sono strumenti scollegati.</p>
+          </article>
+        </div>
+      </section>
+
+      {/* ─── Action: pricing ─────────────────────────────── */}
+      <section className="hp-section hp-pricing-section reveal" id="pricing">
+        <h2 className="hp-section-h">Un piano. Tutto incluso.</h2>
+        <p className="hp-section-sub">
+          Il piano Pro copre l'AI che usi davvero e sblocca i file pronti per
+          la tipografia su tutti i tuoi documenti.
+        </p>
+
+        <div className="hp-pricing-grid">
+          <div className="hp-price-card">
+            <h3>Free</h3>
+            <div className="hp-price"><span>€0</span><small>per sempre</small></div>
             <ul>
-              <li>Preventivi illimitati</li>
-              <li>4 opzioni per preventivo</li>
-              <li>Esportazione PDF</li>
-              <li>AI DeepSeek (con chiave API)</li>
-              <li>Collection e stati</li>
-              <li>Nessun limite di utenti</li>
-              <li>Condivisione link pubblico</li>
+              <li>10 documenti salvati</li>
+              <li>Watermark su export e preview</li>
+              <li>150 DPI PDF · 72 DPI PNG</li>
+              <li>AI: 0 prompt/mese</li>
             </ul>
             {user ? (
-              <Link to="/app" className="home-cta-secondary">Vai all'App</Link>
+              <Link to="/app" className="hp-price-cta">Vai all'App</Link>
             ) : (
-              <Link to="/login?register=1" className="home-cta-secondary">Registrati ora</Link>
+              <Link to="/login?register=1" className="hp-price-cta">Inizia gratis</Link>
             )}
           </div>
+
+          <div className="hp-price-card hp-price-featured">
+            <div className="hp-price-badge">Per chi va in tipografia</div>
+            <h3>Pro</h3>
+            <div className="hp-price"><span>€9</span><small>/mese</small></div>
+            <ul>
+              <li>Documenti illimitati</li>
+              <li>No watermark su export e preview</li>
+              <li>300 DPI PDF · 4096px PNG</li>
+              <li>AI: 1.000 prompt/mese inclusi</li>
+              <li>Quota extra AI: €0.01/prompt</li>
+              <li>Cancella quando vuoi</li>
+            </ul>
+            <a href="mailto:webdevcagliari@gmail.com?subject=Pro%20%E2%82%AC9%2Fmese" className="hp-price-cta">Attiva Pro</a>
+          </div>
         </div>
+
+        <h2 className="hp-section-h hp-section-h-secondary">Pacchetti una tantum</h2>
+        <p className="hp-section-sub">
+          Per chi preferisce pagare una volta sola, senza abbonamento.
+          Sblocco permanente, niente AI mensile.
+        </p>
+
+        <div className="hp-pricing-grid">
+          <div className="hp-price-card">
+            <h3>Starter</h3>
+            <div className="hp-price"><span>€49</span><small>una tantum</small></div>
+            <ul>
+              <li>Documenti illimitati</li>
+              <li>No watermark</li>
+              <li>300 DPI export</li>
+              <li>Senza AI (acquistabile a parte)</li>
+            </ul>
+            <a href="mailto:webdevcagliari@gmail.com?subject=Starter%20%E2%82%AC49" className="hp-price-cta">Contattaci</a>
+          </div>
+
+          <div className="hp-price-card">
+            <h3>Apertura</h3>
+            <div className="hp-price"><span>€349</span><small>una tantum</small></div>
+            <ul>
+              <li>Tutto di Starter</li>
+              <li>250 volantini stampati</li>
+              <li>Sito 1 pagina o landing</li>
+              <li>Consegna 3 giorni</li>
+            </ul>
+            <a href="mailto:webdevcagliari@gmail.com?subject=Apertura%20%E2%82%AC349" className="hp-price-cta">Contattaci</a>
+          </div>
+
+          <div className="hp-price-card">
+            <h3>Presenza</h3>
+            <div className="hp-price"><span>€690</span><small>una tantum</small></div>
+            <ul>
+              <li>Tutto di Apertura</li>
+              <li>Sito 3-5 pagine</li>
+              <li>Google My Business</li>
+              <li>3 grafiche social</li>
+            </ul>
+            <a href="mailto:webdevcagliari@gmail.com?subject=Presenza%20%E2%82%AC690" className="hp-price-cta">Contattaci</a>
+          </div>
+        </div>
+
+        <p className="hp-pricing-note">
+          Manutenzione mensile <strong>€49/mese</strong>: aggiornamenti, 1-2 grafiche, hosting
+          gestito. A confronto: un'agenzia chiede €2.500-8.000 e 2-4 settimane
+          di attesa. Quickbrand te li consegna in 60 secondi.
+        </p>
       </section>
 
-      <footer className="home-footer">
-        <div className="home-footer-inner">
-          <p>© 2026 PrecisionQuote. Tutti i diritti riservati.</p>
-          <p style={{ color: '#94a3b8', fontSize: '.8rem', marginTop: '4px' }}>Sviluppato per uso personale — Giovanni Cidu</p>
-        </div>
+      {/* ─── CTA finale ───────────────────────────────────── */}
+      <section className="hp-final-cta">
+        <h2>Dall'idea alla tipografia in 60 secondi.</h2>
+        <p>Crea logo e biglietti da visita adesso.</p>
+        {user ? (
+          <Link to="/app" className="hp-cta">Vai all'App →</Link>
+        ) : (
+          <Link to="/login?register=1" className="hp-cta">Crea il tuo brand →</Link>
+        )}
+      </section>
+
+      <footer className="hp-footer">
+        <p>© 2026 Quickbrand · Giovanni Cidu</p>
+        <p className="hp-footer-small">Pagamenti gestiti personalmente via email · Cagliari, Italia</p>
       </footer>
 
       <style>{`
-        .home-page{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#07111f;background:#f8fafc;min-height:100vh}
-        [data-theme="dark"] .home-page{color:#e8eaf0;background:#0f1117}
-        .home-header{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(255,255,255,.85);backdrop-filter:blur(12px);border-bottom:1px solid #e2e8f0}
-        [data-theme="dark"] .home-header{background:rgba(15,17,23,.85);border-bottom-color:#2d3044}
-        .home-header-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:14px 24px}
-        .home-logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.05rem;color:#07111f}
-        [data-theme="dark"] .home-logo{color:#e8eaf0}
-        .home-nav{display:flex;align-items:center;gap:12px}
-        .home-btn-ghost{padding:8px 18px;border-radius:10px;font-weight:600;font-size:.9rem;color:#0B57D0;text-decoration:none;transition:background .2s}
-        .home-btn-ghost:hover{background:#e8f0fe}
-        [data-theme="dark"] .home-btn-ghost:hover{background:rgba(77,148,255,.1)}
-        .home-btn-primary{padding:8px 18px;border-radius:10px;font-weight:600;font-size:.9rem;color:#fff;background:#0B57D0;text-decoration:none;transition:box-shadow .2s,transform .15s}
-        .home-btn-primary:hover{box-shadow:0 4px 12px rgba(11,87,208,.3);transform:translateY(-1px)}
-        .home-hero{position:relative;padding:160px 24px 110px;text-align:center;overflow:hidden}
-        .home-hero-bg{position:absolute;inset:0;background:linear-gradient(160deg,#082033 0%,#0B57D0 50%,#3b82f6 100%);opacity:.06}
-        [data-theme="dark"] .home-hero-bg{opacity:.1}
-        .home-hero-content{position:relative;max-width:700px;margin:0 auto}
-        .home-hero-badge{display:inline-block;padding:6px 16px;background:#e8f0fe;color:#0B57D0;border-radius:100px;font-size:.78rem;font-weight:700;letter-spacing:.02em;margin-bottom:24px}
-        [data-theme="dark"] .home-hero-badge{background:rgba(77,148,255,.12);color:#4d94ff}
-        .home-hero h1{font-size:3.2rem;font-weight:900;letter-spacing:-0.04em;line-height:1.12;margin:0 0 20px}
-        .home-hero p{font-size:1.15rem;color:#475569;line-height:1.6;margin:0 0 36px;max-width:520px;margin-left:auto;margin-right:auto}
-        [data-theme="dark"] .home-hero p{color:#8892a8}
-        .home-cta{display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#0B57D0,#1d4ed8);color:#fff;border-radius:14px;font-weight:700;font-size:1.05rem;text-decoration:none;box-shadow:0 4px 20px rgba(11,87,208,.35);transition:transform .15s,box-shadow .2s}
-        .home-cta:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(11,87,208,.45)}
-        .home-features{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px;max-width:1100px;margin:0 auto;padding:0 24px 80px}
-        .home-feature-card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:28px;transition:box-shadow .3s,transform .2s,border-color .3s}
-        [data-theme="dark"] .home-feature-card{background:#1a1d27;border-color:#2d3044}
-        .home-feature-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.06);transform:translateY(-2px);border-color:#c7d2e0}
-        [data-theme="dark"] .home-feature-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.3);border-color:#3d4054}
-        .home-feature-icon{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;margin-bottom:16px}
-        .home-feature-card h3{font-size:1rem;font-weight:800;margin:0 0 8px}
-        .home-feature-card p{font-size:.85rem;color:#647086;line-height:1.5;margin:0}
-        [data-theme="dark"] .home-feature-card h3{color:#e8eaf0}
-        [data-theme="dark"] .home-feature-card p{color:#8892a8}
-        .home-pricing{padding:0 24px 80px;text-align:center}
-        .home-pricing h2{font-size:2rem;font-weight:900;letter-spacing:-0.03em;margin:0 0 40px}
-        .home-pricing-cards{display:flex;justify-content:center}
-        .home-pricing-card{position:relative;background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:36px;max-width:360px;width:100%;text-align:left;overflow:hidden}
-        [data-theme="dark"] .home-pricing-card{background:#1a1d27;border-color:#2d3044}
-        .home-pricing-glow{position:absolute;inset:-2px;border-radius:22px;background:linear-gradient(135deg,#0B57D0,#3b82f6,#0B57D0);opacity:0;transition:opacity .3s;z-index:-1}
-        .home-pricing-featured .home-pricing-glow{opacity:.5}
-        .home-pricing-featured{border-color:transparent;box-shadow:0 0 0 1px #0B57D0,0 8px 24px rgba(11,87,208,.1)}
-        .home-pricing-featured:hover .home-pricing-glow{opacity:.8}
-        .home-pricing-card h3{font-size:1.2rem;font-weight:800;margin:0 0 8px}
-        .home-price{font-size:.9rem;color:#647086;margin-bottom:20px}
-        .home-price span{font-size:2.5rem;font-weight:900;color:#07111f}
-        [data-theme="dark"] .home-price{color:#8892a8}
-        [data-theme="dark"] .home-price span{color:#e8eaf0}
-        .home-pricing-card ul{list-style:none;padding:0;margin:0 0 24px;display:grid;gap:12px}
-        .home-pricing-card ul li{padding-left:24px;position:relative;font-size:.9rem;color:#475569}
-        [data-theme="dark"] .home-pricing-card ul li{color:#8892a8}
-        .home-pricing-card ul li::before{content:'';position:absolute;left:0;top:5px;width:14px;height:14px;background:#0B57D0;border-radius:50%;opacity:.15}
-        .home-pricing-card ul li::after{content:'';position:absolute;left:4px;top:9px;width:6px;height:3px;border-left:2px solid #0B57D0;border-bottom:2px solid #0B57D0;transform:rotate(-45deg)}
-        .home-cta-secondary{display:block;text-align:center;padding:12px;background:#e8f0fe;color:#0B57D0;border-radius:12px;font-weight:700;font-size:.95rem;text-decoration:none;transition:background .2s}
-        .home-cta-secondary:hover{background:#d2e3fc}
-        [data-theme="dark"] .home-cta-secondary{background:rgba(77,148,255,.1);color:#4d94ff}
-        [data-theme="dark"] .home-cta-secondary:hover{background:rgba(77,148,255,.18)}
-        .home-footer{border-top:1px solid #e2e8f0;padding:24px;text-align:center}
-        [data-theme="dark"] .home-footer{border-top-color:#2d3044}
-        .home-footer-inner{max-width:1100px;margin:0 auto;font-size:.85rem;color:#647086}
-        [data-theme="dark"] .home-footer-inner{color:#8892a8}
-        @keyframes heroGlow{0%,100%{opacity:.06}50%{opacity:.1}}
-        .home-hero-bg{animation:heroGlow 4s ease-in-out infinite}
+        /* ─── Palette tokens: The Classic (Red & Ink) ─── */
+        .hp{
+          font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+          color:var(--qb-ink);
+          background:var(--qb-paper);
+          min-height:100vh;
+          -webkit-font-smoothing:antialiased;
+          --qb-red:#E62020;
+          --qb-ink:#1A1A1A;
+          --qb-paper:#FFFFFF;
+          --qb-muted:#5C5C5C;
+          --qb-surface:#F7F7F7;
+          --qb-border:rgba(26,26,26,.18);
+          --qb-red-soft:#FCE8E8;
+          --qb-success:#10B981;
+        }
+        [data-theme="dark"] .hp{
+          --qb-red:#FF3B3B;
+          --qb-ink:#E8EAF0;
+          --qb-paper:#0F1117;
+          --qb-muted:#9AA0AE;
+          --qb-surface:#14161F;
+          --qb-border:#2D3044;
+          --qb-red-soft:rgba(255,59,59,.12);
+        }
+
+        /* ─── Header ──────────────────────────────────── */
+        .hp-header{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--qb-border)}
+        [data-theme="dark"] .hp-header{background:rgba(15,17,23,.88);border-bottom-color:var(--qb-border)}
+        .hp-header-inner{max-width:1080px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:14px 24px}
+        .hp-brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.05rem}
+        .hp-nav{display:flex;gap:10px}
+        .hp-btn-ghost{padding:8px 16px;border-radius:10px;font-weight:600;font-size:.88rem;color:var(--qb-ink);text-decoration:none;transition:background .15s}
+        .hp-btn-ghost:hover{background:var(--qb-surface)}
+        [data-theme="dark"] .hp-btn-ghost:hover{background:rgba(255,255,255,.04)}
+        .hp-btn-primary{padding:8px 16px;border-radius:10px;font-weight:700;font-size:.88rem;color:#fff;background:var(--qb-ink);text-decoration:none;transition:box-shadow .15s,transform .1s}
+        .hp-btn-primary:hover{box-shadow:0 4px 12px rgba(0,0,0,.18);transform:translateY(-1px)}
+
+        /* ─── Hero (Attention) ────────────────────────── */
+        .hp-hero{padding:96px 24px 72px;text-align:center}
+        .hp-hero-inner{max-width:64rem;margin:0 auto}
+        .hp-eyebrow{font-size:.78rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--qb-red);margin:0 0 20px}
+        .hp-h1{font-family:'Outfit',ui-sans-serif,system-ui,sans-serif;font-size:clamp(2.5rem,5vw,4.5rem);font-weight:800;letter-spacing:-.035em;line-height:1.06;margin:0 0 24px;color:var(--qb-ink)}
+        .hp-h1-accent{color:var(--qb-red)}
+        .hp-sub{font-size:1.15rem;color:var(--qb-ink);opacity:.78;line-height:1.6;margin:0 0 32px;max-width:46rem;margin-left:auto;margin-right:auto}
+        .hp-cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+        .hp-cta{display:inline-block;padding:14px 32px;background:var(--qb-red);color:#fff;border-radius:12px;font-weight:800;font-size:1.02rem;text-decoration:none;letter-spacing:-.01em;transition:transform .15s,box-shadow .2s}
+        .hp-cta:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(230,32,32,.32)}
+        .hp-cta-ghost{display:inline-block;padding:14px 28px;color:var(--qb-ink);border:1px solid var(--qb-ink);border-radius:12px;font-weight:700;font-size:1.02rem;text-decoration:none;transition:background .15s,color .15s}
+        .hp-cta-ghost:hover{background:var(--qb-ink);color:var(--qb-paper)}
+        [data-theme="dark"] .hp-cta-ghost{color:var(--qb-ink);border-color:var(--qb-ink)}
+        .hp-hero-foot{font-size:.82rem;color:var(--qb-muted);margin:0}
+
+        /* ─── Section base ────────────────────────────── */
+        .hp-section{max-width:1080px;margin:0 auto;padding:96px 24px}
+
+        /* ─── Motion v1: scroll-reveal (REQ-UX-011) ─────── */
+        .reveal{opacity:0;transform:translateY(24px);transition:opacity .6s ease-out,transform .6s ease-out}
+        .reveal-visible{opacity:1;transform:none}
+        @media(prefers-reduced-motion:reduce){
+          .reveal{opacity:1;transform:none;transition:none}
+          .hp-create-item,.hp-create-item:hover{transition:none;transform:none}
+        }
+        .hp-section-h{font-size:clamp(1.6rem,3.5vw,2.1rem);font-weight:900;letter-spacing:-.03em;margin:0 0 16px;text-align:center;color:var(--qb-ink)}
+        .hp-section-h-secondary{margin-top:48px;font-size:clamp(1.3rem,3vw,1.7rem);position:relative}
+        .hp-section-h-secondary::before{content:'';display:block;width:40px;height:2px;background:var(--qb-red);margin:0 auto 16px;opacity:.7}
+        .hp-section-sub{font-size:1rem;color:var(--qb-muted);text-align:center;max-width:560px;margin:0 auto 40px;line-height:1.55}
+
+        /* ─── Interest: bento strumenti (gapless, dense) ── */
+        .hp-bento{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-flow:dense;gap:20px}
+        .hp-bento-wide{grid-column:span 2}
+        @media(max-width:900px){.hp-bento{grid-template-columns:repeat(2,1fr)}.hp-bento-wide{grid-column:span 2}}
+        @media(max-width:600px){.hp-bento{grid-template-columns:1fr}.hp-bento-wide{grid-column:span 1}}
+        .hp-create-item{background:var(--qb-paper);border:1px solid var(--qb-border);border-radius:14px;padding:24px;transition:transform .3s ease-out,box-shadow .3s ease-out,border-color .3s ease-out;overflow:hidden}
+        .hp-create-item:hover{transform:translateY(-3px) scale(1.01);box-shadow:0 8px 24px rgba(0,0,0,.06);border-color:var(--qb-ink)}
+        [data-theme="dark"] .hp-create-item:hover{box-shadow:0 8px 24px rgba(0,0,0,.4)}
+        .hp-create-icon{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;margin-bottom:14px}
+        .hp-create-icon svg{width:22px;height:22px}
+        .hp-create-icon[data-color="red"]{background:var(--qb-red-soft);color:var(--qb-red)}
+        .hp-create-item h3{font-size:1rem;font-weight:800;margin:0 0 6px;color:var(--qb-ink)}
+        .hp-create-item p{font-size:.85rem;color:var(--qb-muted);line-height:1.5;margin:0}
+
+        /* ─── Card flip demo ──────────────────────────── */
+        .hp-demo-section{background:linear-gradient(180deg,var(--qb-surface) 0%,var(--qb-paper) 100%);max-width:none;padding-left:24px;padding-right:24px}
+        .hp-demo-section .hp-section-h,.hp-demo-section .hp-section-sub{position:relative;z-index:1}
+        .hp-flip{perspective:1400px;width:min(440px,92vw);margin:0 auto;cursor:pointer;outline:none;aspect-ratio:85/55;position:relative}
+        .hp-flip:focus-visible{outline:3px solid var(--qb-red);outline-offset:8px;border-radius:14px}
+        .hp-flip-inner{position:relative;width:100%;height:100%;transition:transform .8s cubic-bezier(.4,.2,.2,1);transform-style:preserve-3d}
+        .hp-flip.is-flipped .hp-flip-inner{transform:rotateY(180deg)}
+        .hp-flip-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:10px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.14)}
+        .hp-flip-front{transform:rotateY(0)}
+        .hp-flip-back{transform:rotateY(180deg)}
+        .hp-card-scale{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+        .hp-card-scale .card-preview-wrap{position:absolute;inset:0;overflow:hidden;display:block;border-radius:0}
+        .hp-card-scale .card-preview-side{width:100% !important;height:100% !important;max-width:100% !important;max-height:100% !important;aspect-ratio:85/55 !important;border:none !important;border-radius:0 !important;box-shadow:none !important;display:block}
+        .hp-card-scale .card-front-split{font-size:0.28em;gap:0}
+        .hp-card-scale .card-photo.split{width:100%;height:100%}
+        .hp-card-scale .card-front-text{gap:1px}
+        .hp-card-scale .card-name{font-size:1em !important;letter-spacing:0.05em !important;white-space:normal !important;line-height:1.05 !important;overflow:visible !important;text-overflow:clip !important}
+        .hp-card-scale .card-title{font-size:0.65em !important}
+        .hp-card-scale .card-company{font-size:0.6em !important}
+        .hp-card-scale .card-split-footer{height:14%}
+        .hp-card-scale .card-logo.split{height:100% !important;width:auto !important;max-width:80%}
+        .hp-card-scale .card-preview-back{font-size:0.26em;padding:3% 5% !important;gap:2% !important;display:flex !important;flex-direction:column !important;justify-content:space-between !important}
+        .hp-card-scale .card-back-header{font-size:1em !important;margin-bottom:1% !important}
+        .hp-card-scale .card-back-eyebrow{font-size:0.85em !important;letter-spacing:0.15em !important}
+        .hp-card-scale .card-back-wordmark{font-size:0.78em !important;letter-spacing:0.05em !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .hp-card-scale .card-back-body{font-size:1em !important;display:flex !important;flex-direction:row !important;gap:4% !important;flex:1 !important;align-items:center;min-height:0}
+        .hp-card-scale .card-back-contacts{font-size:0.78em !important;line-height:1.35 !important;flex:1 !important;min-width:0}
+        .hp-card-scale .card-back-line{font-size:1em !important;margin-bottom:0.4em !important}
+        .hp-card-scale .card-back-key{font-size:0.7em !important;letter-spacing:0.1em !important;margin-bottom:0.2em !important}
+        .hp-card-scale .card-back-val{font-size:1.1em !important}
+        .hp-card-scale .card-back-socials{font-size:0.7em !important;line-height:1.3 !important;margin-top:1em !important;letter-spacing:0.05em}
+        .hp-card-scale .card-back-qr{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:1%;align-self:center}
+        .hp-card-scale .card-back-qr-frame{padding:1.5% !important;border:0.4px solid var(--card-accent) !important;border-radius:0.6% !important}
+        .hp-card-scale .card-back-qr-svg{width:8em !important;height:8em !important;display:block}
+        .hp-card-scale .card-back-qr-label{font-size:0.7em !important;max-width:none !important;line-height:1.2 !important;opacity:0.78}
+        .hp-card-scale .card-back-qr-wordmark-wrap{font-size:0.7em;margin-top:1%}
+        .hp-card-scale .card-back-qr-wordmark{font-size:1em !important;letter-spacing:0.05em !important}
+        .hp-watermark-overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5;mix-blend-mode:multiply;user-select:none}
+        [data-theme="dark"] .hp-watermark-overlay{opacity:.55}
+        .hp-tier-tag{position:absolute;bottom:8px;left:8px;padding:4px 10px;border-radius:6px;font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;backdrop-filter:blur(8px);z-index:10;pointer-events:none}
+        .hp-tier-tag[data-tier="free"]{background:rgba(26,26,26,.92);color:#fff}
+        .hp-tier-tag[data-tier="unlocked"]{background:rgba(16,185,129,.92);color:#fff}
+        .hp-demo-hint{text-align:center;font-size:.85rem;color:var(--qb-muted);margin:24px 0 0;min-height:1.2em}
+
+        /* ─── Steps ───────────────────────────────────── */
+        .hp-steps-section{background:var(--qb-paper);max-width:none;padding-left:24px;padding-right:24px}
+        .hp-steps{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:32px;max-width:1000px;margin-left:auto;margin-right:auto}
+        .hp-step{position:relative;padding-left:0}
+        .hp-step-num{display:inline-grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--qb-ink);color:var(--qb-paper);font-weight:900;font-size:1.1rem;margin-bottom:14px}
+        .hp-step h3{font-size:1.05rem;font-weight:800;margin:0 0 6px;color:var(--qb-ink)}
+        .hp-step p{font-size:.9rem;color:var(--qb-muted);line-height:1.55;margin:0}
+
+        /* ─── Perché noi (Phase 7) ───────────────────── */
+        .hp-why-section{background:var(--qb-surface);max-width:none;padding-left:24px;padding-right:24px}
+        .hp-why-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;max-width:1000px;margin:0 auto}
+        .hp-why-card{background:var(--qb-paper);border:1px solid var(--qb-border);border-radius:14px;padding:24px;transition:transform .2s,box-shadow .2s,border-color .2s}
+        .hp-why-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.06);border-color:var(--qb-ink)}
+        [data-theme="dark"] .hp-why-card:hover{box-shadow:0 6px 18px rgba(0,0,0,.4)}
+        .hp-why-card h3{font-size:1.02rem;font-weight:800;margin:0 0 8px;color:var(--qb-ink);letter-spacing:-.01em}
+        .hp-why-card p{font-size:.9rem;color:var(--qb-muted);line-height:1.55;margin:0}
+
+        /* ─── Pricing ─────────────────────────────────── */
+        .hp-pricing-section{padding-top:64px;padding-bottom:64px}
+        .hp-pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;max-width:1080px;margin:0 auto}
+        .hp-price-card{position:relative;background:var(--qb-paper);border:1px solid var(--qb-border);border-radius:16px;padding:28px 22px;display:flex;flex-direction:column;transition:border-color .2s}
+        .hp-price-card:hover{border-color:var(--qb-ink)}
+        .hp-price-featured{border-color:transparent;box-shadow:0 0 0 2px var(--qb-red),0 10px 28px rgba(230,32,32,.14)}
+        .hp-price-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--qb-red);color:#fff;font-size:.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:5px 14px;border-radius:100px}
+        .hp-price-card h3{font-size:1.15rem;font-weight:800;margin:0 0 8px;color:var(--qb-ink)}
+        .hp-price{display:flex;align-items:baseline;gap:6px;margin-bottom:18px}
+        .hp-price span{font-size:2.2rem;font-weight:900;color:var(--qb-ink);letter-spacing:-.02em}
+        .hp-price small{font-size:.82rem;color:var(--qb-muted)}
+        .hp-price-card ul{list-style:none;padding:0;margin:0 0 20px;display:grid;gap:8px;flex:1}
+        .hp-price-card li{padding-left:22px;position:relative;font-size:.84rem;color:var(--qb-muted);line-height:1.45}
+        .hp-price-card li::before{content:'';position:absolute;left:0;top:3px;width:14px;height:14px;background:var(--qb-red);border-radius:50%;opacity:.14}
+        .hp-price-card li::after{content:'';position:absolute;left:4px;top:6px;width:6px;height:3px;border-left:2px solid var(--qb-red);border-bottom:2px solid var(--qb-red);transform:rotate(-45deg)}
+        .hp-price-cta{display:block;text-align:center;padding:10px;background:var(--qb-paper);color:var(--qb-ink);border:1px solid var(--qb-ink);border-radius:10px;font-weight:700;font-size:.9rem;text-decoration:none;transition:background .15s,color .15s}
+        .hp-price-cta:hover{background:var(--qb-ink);color:var(--qb-paper)}
+        .hp-pricing-note{font-size:.84rem;color:var(--qb-muted);text-align:center;max-width:680px;margin:28px auto 0;line-height:1.55}
+        .hp-pricing-note strong{color:var(--qb-ink)}
+
+        /* ─── Final CTA ───────────────────────────────── */
+        .hp-final-cta{text-align:center;padding:72px 24px;background:var(--qb-ink);color:var(--qb-paper)}
+        .hp-final-cta h2{font-size:clamp(1.6rem,4vw,2.4rem);font-weight:900;letter-spacing:-.03em;margin:0 0 12px;color:#fff}
+        .hp-final-cta p{font-size:1.05rem;opacity:.72;margin:0 0 28px;color:#fff}
+        .hp-final-cta .hp-cta{background:var(--qb-red);color:#fff}
+        .hp-final-cta .hp-cta:hover{box-shadow:0 8px 24px rgba(230,32,32,.4)}
+
+        /* ─── Footer ──────────────────────────────────── */
+        .hp-footer{padding:28px 24px;text-align:center;border-top:1px solid var(--qb-border);background:var(--qb-paper)}
+        .hp-footer p{font-size:.85rem;color:var(--qb-muted);margin:0}
+        .hp-footer-small{font-size:.76rem;color:var(--qb-muted);opacity:.7;margin-top:4px !important}
+
+        /* ─── Mobile ──────────────────────────────────── */
         @media(max-width:640px){
-          .home-hero h1{font-size:2rem}
-          .home-hero{padding:110px 20px 60px}
-          .home-features{grid-template-columns:1fr;padding:0 20px 60px}
+          .hp-hero{padding:48px 20px 40px}
+          .hp-section{padding:48px 20px}
+          .hp-demo-section,.hp-steps-section,.hp-pricing-section,.hp-why-section{padding-left:20px;padding-right:20px}
+          .hp-create-grid{grid-template-columns:1fr}
+          .hp-pricing-grid{grid-template-columns:1fr}
+          .hp-why-grid{grid-template-columns:1fr}
+          .hp-steps{grid-template-columns:1fr;gap:24px}
+          .hp-flip{width:min(340px,92vw)}
+          .hp-cta-row{flex-direction:column;align-items:stretch}
+          .hp-cta,.hp-cta-ghost{text-align:center}
+        }
+        @media(prefers-reduced-motion:reduce){
+          .hp-flip-inner{transition:none}
+          .hp-create-item:hover{transform:none}
         }
       `}</style>
     </div>
