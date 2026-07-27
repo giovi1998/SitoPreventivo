@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Logo, LogoSector, LogoBuilder } from '../utils/documentSchemas';
 import { createEmptyLogo, createLogoTemplate, mergeLogoWithDefaults } from '../utils/documentSchemas';
-import { builderToSvg, sanitizeSvg, svgToPng } from '../utils/logoGenerator';
+import {
+  builderToSvg,
+  sanitizeSvg,
+  svgToPng,
+  svgToPdf,
+  svgToJpg,
+  svgToIco,
+  svgToFaviconZip,
+  optimizeSvg,
+} from '../utils/logoGenerator';
+import { saveAs } from 'file-saver';
 import dataService from '../utils/dataService';
 import SaveDialog from './SaveDialog';
 import ActionBar from './ActionBar';
@@ -45,7 +55,18 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
     logoHasContent(mergeLogoWithDefaults(initialLogo)) ? 'builder' : 'ai'
   );
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [exporting, setExporting] = useState<'svg' | 'png-512' | 'png-1024' | 'png-2048' | null>(null);
+  const [exporting, setExporting] = useState<
+    | 'svg'
+    | 'svg-opt'
+    | 'png-512'
+    | 'png-1024'
+    | 'png-2048'
+    | 'pdf'
+    | 'jpg-1024'
+    | 'ico'
+    | 'favicon'
+    | null
+  >(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedIdRef = useRef<string | undefined>(initialLogo?.id);
   const { addToast } = useToast();
@@ -148,6 +169,89 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
     }
   }, [logo, tier, addToast]);
 
+  const exportOptimizedSvg = useCallback(async () => {
+    setExporting('svg-opt');
+    try {
+      const svg = optimizeSvg(sanitizeSvg(builderToSvg(logo.builder)));
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      saveAs(blob, `${logo.id}.opt.svg`);
+      addToast('success', 'SVG ottimizzato scaricato');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Errore export SVG ottimizzato';
+      addToast('error', message);
+    } finally {
+      setExporting(null);
+    }
+  }, [logo, addToast]);
+
+  const exportPdf = useCallback(async () => {
+    setExporting('pdf');
+    try {
+      const svg = sanitizeSvg(builderToSvg(logo.builder));
+      const bytes = await svgToPdf(svg);
+      const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+      saveAs(blob, `${logo.id}.pdf`);
+      addToast('success', 'PDF vettoriale scaricato');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Errore export PDF';
+      addToast('error', message);
+    } finally {
+      setExporting(null);
+    }
+  }, [logo, addToast]);
+
+  const exportJpg = useCallback(async (size: 1024) => {
+    setExporting('jpg-1024');
+    try {
+      const svg = sanitizeSvg(builderToSvg(logo.builder));
+      const bytes = await svgToJpg(svg, size, '#FFFFFF', { tier });
+      const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const blob = new Blob([arrayBuffer], { type: 'image/jpeg' });
+      saveAs(blob, `${logo.id}_${size}.jpg`);
+      addToast('success', `JPG ${size} scaricato`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `Errore export JPG ${size}`;
+      addToast('error', message);
+    } finally {
+      setExporting(null);
+    }
+  }, [logo, tier, addToast]);
+
+  const exportIco = useCallback(async () => {
+    setExporting('ico');
+    try {
+      const svg = sanitizeSvg(builderToSvg(logo.builder));
+      const bytes = await svgToIco(svg, [16, 32, 48], { tier });
+      const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const blob = new Blob([arrayBuffer], { type: 'image/x-icon' });
+      saveAs(blob, `${logo.id}.ico`);
+      addToast('success', 'ICO (16/32/48) scaricato');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Errore export ICO';
+      addToast('error', message);
+    } finally {
+      setExporting(null);
+    }
+  }, [logo, tier, addToast]);
+
+  const exportFaviconZip = useCallback(async () => {
+    setExporting('favicon');
+    try {
+      const svg = sanitizeSvg(builderToSvg(logo.builder));
+      const bytes = await svgToFaviconZip(svg, 'favicon', { tier });
+      const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const blob = new Blob([arrayBuffer], { type: 'application/zip' });
+      saveAs(blob, `${logo.id}_favicons.zip`);
+      addToast('success', 'Favicon set (ZIP) scaricato');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Errore export favicon ZIP';
+      addToast('error', message);
+    } finally {
+      setExporting(null);
+    }
+  }, [logo, tier, addToast]);
+
   const handleSave = useCallback(async (customName: string) => {
     const title = customName || logo.title || 'Logo';
     let bgImage = logo.builder?.backgroundImage;
@@ -225,13 +329,19 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
   }, [logo, addToast, onReset]);
 
   // Phase 13b (REQ-UX-004/005): cluster azioni uniforme — Salva primary,
-  // Esporta secondary con menu (SVG/PNG 512/1024/2048), Nuovo ghost.
+  // Esporta secondary con menu (SVG/PNG/PDF/ICO/Favicon), Nuovo ghost.
+  // TB-024: aggiunti PDF vettoriale, favicon set ZIP, ICO, JPG sfondo, SVG ottimizzato.
   const handleExportAction = useCallback((id: string) => {
     if (id === 'svg') exportSvg();
+    else if (id === 'svg-opt') exportOptimizedSvg();
     else if (id === 'png-512') exportPng(512);
     else if (id === 'png-1024') exportPng(1024);
     else if (id === 'png-2048') exportPng(2048);
-  }, [exportSvg, exportPng]);
+    else if (id === 'pdf') exportPdf();
+    else if (id === 'jpg-1024') exportJpg(1024);
+    else if (id === 'ico') exportIco();
+    else if (id === 'favicon') exportFaviconZip();
+  }, [exportSvg, exportOptimizedSvg, exportPng, exportPdf, exportJpg, exportIco, exportFaviconZip]);
 
   return (
     <div className="logo-editor">
@@ -242,9 +352,14 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
           onSave={openSaveDialog}
           exportItems={[
             { id: 'svg', label: exporting === 'svg' ? 'Esportando…' : 'SVG vettoriale' },
+            { id: 'svg-opt', label: exporting === 'svg-opt' ? 'Esportando…' : 'SVG ottimizzato' },
             { id: 'png-512', label: 'PNG 512×512' },
             { id: 'png-1024', label: 'PNG 1024×1024' },
             { id: 'png-2048', label: 'PNG 2048×2048' },
+            { id: 'pdf', label: exporting === 'pdf' ? 'Esportando…' : 'PDF vettoriale' },
+            { id: 'jpg-1024', label: exporting === 'jpg-1024' ? 'Esportando…' : 'JPG 1024 (sfondo bianco)' },
+            { id: 'ico', label: exporting === 'ico' ? 'Esportando…' : 'ICO Windows (16/32/48)' },
+            { id: 'favicon', label: exporting === 'favicon' ? 'Esportando…' : 'Favicon set (ZIP)' },
           ]}
           onExport={handleExportAction}
           exportDisabled={exporting !== null}

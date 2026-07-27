@@ -78,6 +78,84 @@ describe('LogoAiPanel (spec 11/12 UI integration)', () => {
     }
   });
 
+  it('mood chip click persists selection (is-selected class on button)', () => {
+    render(
+      <LogoAiPanel
+        logo={{ builder: {} } as never}
+        onPatch={vi.fn()}
+        tier="unlocked"
+        userEmail="t@e.com"
+      />
+    );
+    // Default mood = 'minimal' → chip minimal ha is-selected
+    const minimalChips = screen.getAllByText('minimal');
+    const minimalChip = minimalChips.find((el) => el.tagName === 'BUTTON') as HTMLButtonElement;
+    expect(minimalChip).toBeTruthy();
+    expect(minimalChip.classList.contains('is-selected')).toBe(true);
+    // Click su 'bold' → bold diventa is-selected, minimal no
+    const boldChips = screen.getAllByText('bold');
+    const boldChip = boldChips.find((el) => el.tagName === 'BUTTON') as HTMLButtonElement;
+    fireEvent.click(boldChip);
+    expect(boldChip.classList.contains('is-selected')).toBe(true);
+    expect(minimalChip.classList.contains('is-selected')).toBe(false);
+  });
+
+  it('variant menu: opens and lists multiple sector variants', () => {
+    render(
+      <LogoAiPanel
+        logo={{ builder: {} } as never}
+        onPatch={vi.fn()}
+        tier="unlocked"
+        userEmail="t@e.com"
+      />
+    );
+    // Default settore tech → menu varianti ha "Altri esempi Tech"
+    const variantsBtn = screen.getByText(/Altri esempi Tech/i);
+    fireEvent.click(variantsBtn);
+    // Tech ha 5 varianti: Startup SaaS, Agenzia web, Studio di design,
+    // Consulente cloud, App mobile fitness
+    expect(screen.getByText('Startup SaaS')).toBeInTheDocument();
+    expect(screen.getByText('Agenzia web')).toBeInTheDocument();
+    expect(screen.getByText('Studio di design')).toBeInTheDocument();
+    expect(screen.getByText('Consulente cloud')).toBeInTheDocument();
+    expect(screen.getByText('App mobile fitness')).toBeInTheDocument();
+  });
+
+  it('variant menu: clicking a variant fills activity/mood/target', () => {
+    render(
+      <LogoAiPanel
+        logo={{ builder: {} } as never}
+        onPatch={vi.fn()}
+        tier="unlocked"
+        userEmail="t@e.com"
+      />
+    );
+    fireEvent.click(screen.getByText(/Altri esempi Tech/i));
+    fireEvent.click(screen.getByText('Studio di design'));
+    const activity = screen.getByPlaceholderText(/Pizzeria moderna/i) as HTMLTextAreaElement;
+    expect(activity.value).toContain('brand identity');
+  });
+
+  it('food sector has multiple variants (pizzeria, cinese, B&B, gastropub, gelateria, enoteca)', () => {
+    render(
+      <LogoAiPanel
+        logo={{ builder: {} } as never}
+        onPatch={vi.fn()}
+        tier="unlocked"
+        userEmail="t@e.com"
+      />
+    );
+    const sectorSelect = screen.getByDisplayValue('tech') as HTMLSelectElement;
+    fireEvent.change(sectorSelect, { target: { value: 'food' } });
+    fireEvent.click(screen.getByText(/Altri esempi Food/i));
+    expect(screen.getByText('Pizzeria napoletana')).toBeInTheDocument();
+    expect(screen.getByText('Ristorante cinese nuovo')).toBeInTheDocument();
+    expect(screen.getByText('B&B biologico')).toBeInTheDocument();
+    expect(screen.getByText('Gastropub artigianale')).toBeInTheDocument();
+    expect(screen.getByText('Gelateria gourmet')).toBeInTheDocument();
+    expect(screen.getByText('Enoteca wine bar')).toBeInTheDocument();
+  });
+
   it('genera button disabled until activity and target filled', () => {
     render(
       <LogoAiPanel

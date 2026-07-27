@@ -1,8 +1,9 @@
-import React, { useContext, useEffect } from 'react';
+import React, { useContext, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EditorView from '../../components/EditorView';
 import { AppContext, AuthContext } from '../../contexts';
 import { useDocumentLoader } from '../../hooks/useDocumentLoader';
+import { migrateFromLegacy, recalculateQuote, type PremiumQuote } from '../../utils/quoteSchema';
 
 export default function EditorPage() {
   const ctx = useContext(AppContext) as any;
@@ -23,13 +24,40 @@ export default function EditorPage() {
     }
   }, [user, navigate]);
 
+  // useDocumentLoader carica doc grezzo (legacy flat o PremiumQuote
+  // parziale) e lo scrive in ctx.editingQuote. EditorView assume
+  // PremiumQuote idratato (options/items/tax). Migr sempre, anche se
+  // doc sembra già PremiumQuote: migrateFromLegacy è idempotente su
+  // `_premium` e idrata campi mancanti. recalculateQuote ricalcola
+  // totali per coerenza. Bug fix: prima initialDoc legacy flat →
+  // EditorView crash su quote.options[0].items[0].tax.rate.
+  const quote = useMemo<PremiumQuote>(() => {
+    const src = initialDoc || ctx.editingQuote;
+    if (!src) return ctx.editingQuote;
+    try {
+      const migrated = migrateFromLegacy(src as any);
+      return recalculateQuote(migrated);
+    } catch {
+      return src as PremiumQuote;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDoc]);
+
+  // Sync il quote migrato sul ctx state così patch/save operano sullo
+  // stesso oggetto idratato. Solo se diverso per evitare loop.
+  useEffect(() => {
+    if (quote && ctx.editingQuote !== quote && ctx.setEditingQuote) {
+      ctx.setEditingQuote(quote);
+    }
+  }, [quote, ctx.editingQuote, ctx.setEditingQuote]);
+
   if (!user || user.role !== 'admin') {
     return null;
   }
 
   return (
     <EditorView
-      quote={initialDoc || ctx.editingQuote}
+      quote={quote}
       aiText={ctx.aiText}
       setAiText={ctx.setAiText}
       patch={ctx.patch}

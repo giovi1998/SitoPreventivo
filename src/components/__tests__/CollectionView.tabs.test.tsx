@@ -205,7 +205,7 @@ describe('CollectionView, tabs (phase 6)', () => {
     const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
     expect(within(tablist).getByRole('tab', { name: /Tutti.*2/ })).toBeInTheDocument();
     const panel = screen.getByRole('tabpanel');
-    expect(within(panel).getByText('Mio preventivo')).toBeInTheDocument();
+    expect(within(panel).getAllByText('Mio preventivo').length).toBeGreaterThan(0);
     expect(within(panel).getByText('QR uno')).toBeInTheDocument();
   });
 

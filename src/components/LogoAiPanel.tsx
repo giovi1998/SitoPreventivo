@@ -85,31 +85,155 @@ const SECTOR_LABELS: Record<LogoSector, string> = {
 };
 
 /**
- * Piano B (prompt templates): un esempio pronto per settore, per far
+ * Piano B (prompt templates): esempi pronti per settore, per far
  * partire velocemente la generazione o mostrare all'utente cosa
  * scrivere. L'utente può poi modificare liberamente i campi.
+ *
+ * Più varianti per settore: il bottone "Usa esempio" diventa un menu
+ * a tendina con le varianti disponibili (es. food: pizzeria napoletana,
+ * ristorante cinese appena aperto, B&B biologico, gastropub, gelateria).
  */
-const SECTOR_PRESET_BRIEFS: Record<LogoSector, { activity: string; mood: (typeof MOODS)[number]; target: string }> = {
-  tech: {
-    activity: 'Startup SaaS per la gestione di progetti in team remoti, con dashboard e integrazioni.',
-    mood: 'tech',
-    target: 'startup e team di sviluppo software',
-  },
-  food: {
-    activity: 'Pizzeria napoletana artigianale nel centro città, forno a legna e ingredienti locali.',
-    mood: 'bold',
-    target: 'famiglie e giovani 20-40 anni',
-  },
-  fashion: {
-    activity: 'Atelier di moda sostenibile con capi su misura, tessuti naturali e produzione etica.',
-    mood: 'elegant',
-    target: 'donne 25-45 anni attente allo stile',
-  },
-  professionista: {
-    activity: 'Studio di consulenza legale specializzato in diritto del lavoro e contrattualistica.',
-    mood: 'minimal',
-    target: 'aziende e piccole-medie imprese',
-  },
+interface SectorVariant {
+  label: string;
+  activity: string;
+  mood: (typeof MOODS)[number];
+  target: string;
+}
+const SECTOR_PRESET_BRIEFS: Record<LogoSector, SectorVariant[]> = {
+  tech: [
+    {
+      label: 'Startup SaaS',
+      activity: 'Startup SaaS per la gestione di progetti in team remoti, con dashboard e integrazioni.',
+      mood: 'tech',
+      target: 'startup e team di sviluppo software',
+    },
+    {
+      label: 'Agenzia web',
+      activity: 'Agenzia web che realizza siti vetrina ed e-commerce per piccole imprese locali.',
+      mood: 'bold',
+      target: 'piccole imprese e artigiani',
+    },
+    {
+      label: 'Studio di design',
+      activity: 'Studio di design freelance specializzato in brand identity e packaging.',
+      mood: 'elegant',
+      target: 'startup e PMI creative',
+    },
+    {
+      label: 'Consulente cloud',
+      activity: 'Consulente cloud indipendente che aiuta aziende a migrare su AWS/GCP.',
+      mood: 'minimal',
+      target: 'CTO e responsabili IT',
+    },
+    {
+      label: 'App mobile fitness',
+      activity: 'App mobile per allenamenti domestici personalizzati con tracking e community.',
+      mood: 'playful',
+      target: 'giovani 18-35 fitness enthusiast',
+    },
+  ],
+  food: [
+    {
+      label: 'Pizzeria napoletana',
+      activity: 'Pizzeria napoletana artigianale nel centro città, forno a legna e ingredienti locali.',
+      mood: 'bold',
+      target: 'famiglie e giovani 20-40 anni',
+    },
+    {
+      label: 'Ristorante cinese nuovo',
+      activity: 'Ristorante cinese appena aperto, cucina del Sichuan autentica, ambiente moderno.',
+      mood: 'bold',
+      target: 'coppie e gruppi 25-45 curiosi',
+    },
+    {
+      label: 'B&B biologico',
+      activity: 'B&B biologico in campagna, colazione km zero e camere arredate in legno naturale.',
+      mood: 'minimal',
+      target: 'coppie e famiglie 30-55 che cercano relax',
+    },
+    {
+      label: 'Gastropub artigianale',
+      activity: 'Gastropub con birre artigianali e tapas, serate dal vivo e atmosfera informale.',
+      mood: 'playful',
+      target: 'giovani 25-40 e gruppi di amici',
+    },
+    {
+      label: 'Gelateria gourmet',
+      activity: 'Gelateria gourmet con gusti stagionali e sorbetti vegani, produzione propria.',
+      mood: 'playful',
+      target: 'famiglie e foodies di tutte le età',
+    },
+    {
+      label: 'Enoteca wine bar',
+      activity: 'Enoteca wine bar con selezione naturale e taglieri di salumi locali.',
+      mood: 'elegant',
+      target: 'adulti 30-60 amanti del vino',
+    },
+  ],
+  fashion: [
+    {
+      label: 'Atelier sostenibile',
+      activity: 'Atelier di moda sostenibile con capi su misura, tessuti naturali e produzione etica.',
+      mood: 'elegant',
+      target: 'donne 25-45 attente allo stile',
+    },
+    {
+      label: 'Streetwear brand',
+      activity: 'Marchio di streetwear indipendente con grafiche bold e drop a edizione limitata.',
+      mood: 'bold',
+      target: 'giovani 18-30 urban',
+    },
+    {
+      label: 'Vintage & second hand',
+      activity: 'Negozio di abbigliamento vintage selezionato, capi anni 70-90 restaurati.',
+      mood: 'playful',
+      target: 'giovani 20-35 e collezionisti',
+    },
+    {
+      label: 'Pelletteria artigianale',
+      activity: 'Pelletteria artigianale con borse e portafogli cuciti a mano in pelle italiana.',
+      mood: 'elegant',
+      target: 'adulti 35-60 alto spendente',
+    },
+    {
+      label: 'Jewelry minimal',
+      activity: 'Brand di gioielli minimal in argento, pezzi essenziali e geometrici.',
+      mood: 'minimal',
+      target: 'donne 25-45 design-conscious',
+    },
+  ],
+  professionista: [
+    {
+      label: 'Studio legale lavoro',
+      activity: 'Studio di consulenza legale specializzato in diritto del lavoro e contrattualistica.',
+      mood: 'minimal',
+      target: 'aziende e piccole-medie imprese',
+    },
+    {
+      label: 'Studio medico generale',
+      activity: 'Studio medico di medicina generale, prenotazioni online e telemedicina.',
+      mood: 'minimal',
+      target: 'famiglie e pazienti 30-70',
+    },
+    {
+      label: 'Commercialista online',
+      activity: 'Commercialista online per startup e freelance, consulenza fiscale via videochiamata.',
+      mood: 'tech',
+      target: 'liberi professionisti e startup 25-50',
+    },
+    {
+      label: 'Architetto libero professionista',
+      activity: 'Architetto libero professionista specializzato in ristrutturazioni residenziali.',
+      mood: 'elegant',
+      target: 'coppie e famiglie 30-60 che rinnovano casa',
+    },
+    {
+      label: 'Fisioterapista sportivo',
+      activity: 'Fisioterapista sportivo con riabilitazione post-infortunio e preparazione atletica.',
+      mood: 'bold',
+      target: 'sportivi 20-50 e squadre amatoriali',
+    },
+  ],
 };
 
 interface LogoConfig {
@@ -391,9 +515,33 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
 
   // ─── Piano B: preset per settore + libreria "I miei prompt" ──────
 
+  const applyVariant = (variant: SectorVariant) => {
+    setAnswers({ ...answers, activity: variant.activity, mood: variant.mood, target: variant.target });
+  };
+
+  const [variantOpen, setVariantOpen] = useState(false);
+  const variantMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!variantOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (variantMenuRef.current && !variantMenuRef.current.contains(e.target as Node)) {
+        setVariantOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setVariantOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [variantOpen]);
+
   const applySectorExample = () => {
-    const preset = SECTOR_PRESET_BRIEFS[answers.sector];
-    setAnswers({ ...answers, activity: preset.activity, mood: preset.mood, target: preset.target });
+    const variants = SECTOR_PRESET_BRIEFS[answers.sector];
+    if (variants && variants.length > 0) applyVariant(variants[0]);
   };
 
   const saveBriefToLibrary = () => {
@@ -521,6 +669,36 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
           <button type="button" className="logo-ai-preset-btn" onClick={applySectorExample}>
             Usa esempio {SECTOR_LABELS[answers.sector]}
           </button>
+          <div className="logo-ai-variants" ref={variantMenuRef}>
+            <button
+              type="button"
+              className="logo-ai-variants-btn"
+              onClick={() => setVariantOpen((v) => !v)}
+              aria-expanded={variantOpen}
+              aria-haspopup="menu"
+            >
+              Altri esempi {SECTOR_LABELS[answers.sector]} ▾
+            </button>
+            {variantOpen && (
+              <div className="logo-ai-variants-menu" role="menu">
+                {SECTOR_PRESET_BRIEFS[answers.sector].map((v) => (
+                  <button
+                    key={v.label}
+                    type="button"
+                    role="menuitem"
+                    className="logo-ai-variants-item"
+                    onClick={() => {
+                      applyVariant(v);
+                      setVariantOpen(false);
+                    }}
+                  >
+                    <span className="logo-ai-variants-label">{v.label}</span>
+                    <span className="logo-ai-variants-mood">mood: {v.mood}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="logo-ai-mood">
             <span className="logo-ai-q">Che mood vuoi?</span>
             <AiActionGrid>

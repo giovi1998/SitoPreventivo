@@ -143,8 +143,9 @@ Sprint 2 ✅ done:    TB-023 pattern decorativi (lib + picker thumbnail +
 Sprint 3 ✅ done:    TB-023 drag foto grid-mode + wheel scale + readout/reset
                     + overlay coords + icona AI 1K e2e verificata — 2026-07-27
 
-Sprint 4 (next):    TB-024 più formati export logo (PDF vettoriale, favicon)
-                    TB-004 + TB-005 test helper mancanti
+Sprint 4 ✅ done:    TB-024 più formati export logo (PDF vettoriale, favicon
+                    set ZIP, ICO, JPG sfondo, SVG ottimizzato) — 2026-07-27
+Sprint 4 (next):     TB-004 + TB-005 test helper mancanti
                     TB-006 audit-ui-components.md (doc-only)
 
 Sprint 5 (opz):     TB-007 test flyer refactor (6 file)
@@ -186,7 +187,7 @@ Fase 5 collaboraz:  Tipografie (dopo 3-5 clienti con stampa, no esclusiva)
 monetizzazione automatizzata per ultima. L'intake pipeline (TB-019)
 è infrastruttura che serve quando hai volume — non prima.
 
-**Effort rimanente**: TB-024 ~12h (export logo) + business fasi 1-2 (~35h).
+**Effort rimanente**: business fasi 1-2 (~35h). TB-024 ✅ closed 2026-07-27.
 TB-023 ✅ closed 2026-07-27.
 
 **Quick win già fatti**: TB-003 + 4 file test Gemini.
@@ -312,17 +313,46 @@ primi clienti paganti.
   esistente + Gemini per-image. Atteso ~$25-30/mo total a volume 100
   clienti/mese (vs $80+ con solo DeepSeek pay-per-token).
 
-#### TB-024 Più formati export logo 🟡 P1
+#### TB-024 Più formati export logo ✅ COMPLETED 2026-07-27
+- **Stato**: ✅ COMPLETED 2026-07-27. Aggiunti 5 formati export al logo
+  builder: PDF vettoriale (svg2pdf.js + jspdf), favicon set ZIP (PNG
+  16/32/64/180/512 + ICO 16/32/48 + SVG + webmanifest + browserconfig),
+  ICO Windows (PNG embedded, Vista+), JPG con sfondo colorato, SVG
+  ottimizzato (regex-based, ~30-40% più piccolo senza SVGO runtime).
+  PNG trasparente già presente (512/1024/2048). Export menu in
+  `LogoEditor.tsx` ActionBar passa da 4 a 9 voci. Test: 12 nuovi +
+  2 skipped (PDF richiede getBBox non in jsdom) in
+  `src/utils/__tests__/logoGenerator.tb024.test.ts`.
 - **Perché**: oggi SVG + PNG 512/1024/2048. Tipografie e siti web
   richiedono più formati.
 - **Scope**:
-  - **PDF vettoriale** (stampa tipografia, non raster) — prioritario
-  - **Favicon set** (16/32/64/180/512) — per siti web
-  - **ICO** (Windows, vecchio ma richiesto)
-  - **SVG ottimizzato** (SVGO, ~40% più piccolo)
-  - **JPG con sfondo colorato** (per social quando serve sfondo)
-  - Verifica: PNG trasparente già c'è?
-- **Effort**: ~12h (logoGenerator.ts + export actions)
+  - **PDF vettoriale** (stampa tipografia, non raster) — ✅ done
+  - **Favicon set** (16/32/64/180/512) — ✅ done (ZIP)
+  - **ICO** (Windows, vecchio ma richiesto) — ✅ done (16/32/48)
+  - **SVG ottimizzato** (SVGO, ~40% più piccolo) — ✅ done (regex minimale)
+  - **JPG con sfondo colorato** (per social quando serve sfondo) — ✅ done
+  - Verifica: PNG trasparente già c'è? — ✅ sì (512/1024/2048)
+- **Effort**: ~12h (logoGenerator.ts + export actions) — effettivo ~3h
+
+#### TB-025 Collection preview SVG inline (logo/card/flyer/quote) ✅ COMPLETED 2026-07-27
+- **Stato**: ✅ COMPLETED 2026-07-27. La griglia Collection ora mostra
+  preview SVG inline per documenti `logo`, `businessCard`, `flyer` e
+  `quote` invece dell'icona generica. Logo: `builderToSvg`+`sanitizeSvg`.
+  Card: `buildCardSvg(card,'front')` dopo `mergeCardWithDefaults`. Flyer:
+  `buildFlyerSvg` dopo `mergeFlyerWithDefaults`. Quote:
+  `buildQuotePreviewSvg` dopo `migrateFromLegacy` (legacy flat da
+  `precisionQuote_quotes`). QR/generatedImage mantengono icona. Fallback
+  sicuro: se SVG build throw (doc corrotto), cade su icona, no crash.
+  Fix robustezza `quotePreviewImage.ts`: `escapeXml(s:unknown)` con
+  `String()` coercion (legacy quote con `client` oggetto non crashava).
+  CSS in `GlobalStyles.tsx` (`.collection-preview-svg`, max-height 160px
+  per flyer/quote). Test: 9 in `CollectionView.preview.test.tsx`.
+- **Perché**: riconoscibilità immediata documento in Collection senza
+  aprirlo. Icona generica non distingue 10 loghi/flyer/quote diversi.
+- **Scope**: logo + card front + flyer + quote. Back card (richiede
+  rotazione) out of scope v1.
+- **Effort**: ~3h (4 tipi documento + fix robustezza)
+- **Dettaglio**: vedi `docs/agent-gotchas.md` §15.
 
 #### TB-018 Portfolio 5 esempi settore 🟡 P1 — DEFERRED
 - **Stato**: **DEFERRED 2026-07-27** — spostato a fase successiva (post-TB-023

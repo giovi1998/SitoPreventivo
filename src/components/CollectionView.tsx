@@ -5,7 +5,13 @@ import Icon from './Icon';
 import ConfirmModal from './ConfirmModal';
 import { AppContext, AuthContext } from '../contexts';
 import dataService from '../utils/dataService';
-import type { DocumentType } from '../utils/documentSchemas';
+import type { DocumentType, BusinessCard, Logo, Flyer } from '../utils/documentSchemas';
+import { mergeCardWithDefaults, mergeFlyerWithDefaults } from '../utils/documentSchemas';
+import { builderToSvg, sanitizeSvg } from '../utils/logoGenerator';
+import { buildCardSvg } from '../utils/card/svgRenderer';
+import { buildFlyerSvg } from '../utils/flyer/svgRenderer';
+import { buildQuotePreviewSvg } from '../utils/quote/quotePreviewImage';
+import { migrateFromLegacy, type PremiumQuote } from '../utils/quoteSchema';
 import { useToast } from '../hooks/useToast';
 
 type TabId = 'all' | 'quote' | 'qrCode' | 'businessCard' | 'flyer' | 'logo' | 'generatedImage';
@@ -51,6 +57,44 @@ function downloadDataUrl(dataUrl: string, filename: string) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+/**
+ * Genera SVG inline per preview Collection.
+ * - logo: `builderToSvg` + sanitize, ritorna stringa SVG con viewBox.
+ * - card: `buildCardSvg` lato front (no rotazione, no font import per
+ *   leggerezza), ritorna SVG con viewBox 0 0 pxW pxH.
+ * - flyer: `mergeFlyerWithDefaults` + `buildFlyerSvg` (viewBox in mm).
+ * - quote: `buildQuotePreviewSvg` su PremiumQuote; se il doc è legacy
+ *   flat, prima `migrateFromLegacy` poi preview.
+ * Ritorna stringa vuota se il documento non è renderizzabile.
+ */
+function buildPreviewSvg(doc: any): string {
+  try {
+    if (doc.documentType === 'logo' && doc.builder) {
+      return sanitizeSvg(builderToSvg(doc.builder as Logo['builder']));
+    }
+    if (doc.documentType === 'businessCard') {
+      const card = mergeCardWithDefaults(doc as Partial<BusinessCard>);
+      // Preview front, dimensioni ridotte (il viewBox è in mm user units
+      // ma renderizza scalato via CSS). Usiamo 320×200 px logici.
+      return buildCardSvg(card, 'front', 320, 200, { embeddedFontCss: '' });
+    }
+    if (doc.documentType === 'flyer') {
+      const flyer = mergeFlyerWithDefaults(doc as Partial<Flyer>);
+      return buildFlyerSvg(flyer);
+    }
+    if (doc.documentType === 'quote') {
+      // Doc unificato ha `quote` field (PremiumQuote); legacy flat ha
+      // i campi sul doc stesso. migrateFromLegacy gestisce entrambi i
+      // casi: se già PremiumQuote lo passa, se legacy lo converte.
+      const quote = (doc.quote ?? migrateFromLegacy(doc)) as PremiumQuote;
+      return buildQuotePreviewSvg(quote);
+    }
+  } catch {
+    // Documento malformato/non idratabile: fallback icona.
+  }
+  return '';
 }
 
 const QUOTE_STATUSES = ['BOZZA', 'INVIATO', 'ACCETTATO', 'RIFIUTATO', 'ARCHIVIATO'];
@@ -613,6 +657,32 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                           style={{
                             width: '100%', height: '120px', objectFit: 'cover',
                             borderRadius: '8px', marginBottom: '8px',
+                          }}
+                        />
+                      ) : (type === 'logo' || type === 'businessCard' || type === 'flyer' || type === 'quote') && buildPreviewSvg(doc) ? (
+                        <div
+                          className="collection-preview-svg"
+                          data-testid={`preview-${doc.id}`}
+                          style={{
+                            width: '100%',
+                            height:
+                              type === 'businessCard' ? '110px'
+                              : type === 'flyer' ? '160px'
+                              : type === 'quote' ? '150px'
+                              : '120px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background:
+                              type === 'businessCard' || type === 'quote' ? '#fff' : 'transparent',
+                            borderRadius: '8px',
+                            marginBottom: '8px',
+                            overflow: 'hidden',
+                            border:
+                              type === 'businessCard' || type === 'quote' ? '1px solid #e5e7eb' : 'none',
+                          }}
+                          dangerouslySetInnerHTML={{
+                            __html: buildPreviewSvg(doc),
                           }}
                         />
                       ) : (

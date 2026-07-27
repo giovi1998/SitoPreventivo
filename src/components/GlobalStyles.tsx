@@ -435,6 +435,8 @@ export default function GlobalStyles() {
     .card-photo-prompt-editor{display:grid;gap:8px}
     .card-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
     .card-top span{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:var(--weight-extrabold);padding:4px 8px;border-radius:6px}
+    .collection-preview-svg{width:100%;display:flex;align-items:center;justify-content:center;border-radius:8px;margin-bottom:8px;overflow:hidden}
+    .collection-preview-svg svg{width:100%;height:100%;max-height:160px;object-fit:contain;display:block}
     .status-dropdown{border-radius:6px;overflow:hidden}
     .status-dropdown select{border:none;border-radius:6px;padding:4px 20px 4px 8px;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:var(--weight-extrabold);cursor:pointer;appearance:auto;-webkit-appearance:auto;outline:none}
     .status-dropdown select:focus{box-shadow:none}

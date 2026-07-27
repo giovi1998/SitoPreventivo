@@ -154,6 +154,7 @@ export default function EditorView({
   const handleDragEnd = (event: any) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
+    if (!Array.isArray(quote.options)) return;
     const oldIndex = quote.options.findIndex((o) => o.id === active.id);
     const newIndex = quote.options.findIndex((o) => o.id === over.id);
     if (oldIndex !== -1 && newIndex !== -1) {
@@ -299,7 +300,7 @@ export default function EditorView({
               <input value={(quote.createdAt || '').slice(0, 10)} onChange={(e) => patch("date", e.target.value)} />
             </label>
             <label>IVA %
-              <input type="number" inputMode="numeric" value={quote.options[0]?.items[0]?.tax?.rate || 22} onChange={(e) => patch("vat", e.target.value)} />
+              <input type="number" inputMode="numeric" value={quote.options?.[0]?.items?.[0]?.tax?.rate || 22} onChange={(e) => patch("vat", e.target.value)} />
             </label>
           </div>
           <label>Introduzione
@@ -314,10 +315,10 @@ export default function EditorView({
           ))}
         </div>
       </Section>
-      <Section title="Opzioni commerciali" badge={quote.options.length} defaultOpen={quote.options.length <= 2} extra={<button onClick={addOption} className="btn-add">+ Opzione</button>}>
+      <Section title="Opzioni commerciali" badge={quote.options?.length || 0} defaultOpen={(quote.options?.length || 0) <= 2} extra={<button onClick={addOption} className="btn-add">+ Opzione</button>}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={quote.options.map((o) => o.id)} strategy={verticalListSortingStrategy}>
-            {quote.options.map((option) => (
+          <SortableContext items={(quote.options || []).map((o) => o.id)} strategy={verticalListSortingStrategy}>
+            {(quote.options || []).map((option) => (
               <SortableOption key={option.id} option={option} updateOption={updateOption} removeOption={removeOption} />
             ))}
           </SortableContext>

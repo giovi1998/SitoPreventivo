@@ -1,7 +1,7 @@
 import type { PremiumQuote } from '../quoteSchema';
 
-function escapeXml(s: string): string {
-  return s
+function escapeXml(s: unknown): string {
+  return String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -10,7 +10,7 @@ function escapeXml(s: string): string {
 }
 
 function formatEuro(n: number): string {
-  return `€${n.toFixed(2).replace('.', ',')}`;
+  return `€${Number(n || 0).toFixed(2).replace('.', ',')}`;
 }
 
 /**
@@ -57,11 +57,12 @@ export function buildQuotePreviewSvg(quote: PremiumQuote): string {
   const muted = '#64748b';
   const font = 'Arial, sans-serif';
 
-  const title = quote.project?.title || 'Preventivo';
-  const client = quote.client?.name || '';
-  const date = (quote.createdAt || '').slice(0, 10);
+  const title = String(quote.project?.title ?? 'Preventivo');
+  const clientRaw = quote.client?.name ?? '';
+  const client = typeof clientRaw === 'string' ? clientRaw : String(clientRaw);
+  const date = String(quote.createdAt || '').slice(0, 10);
   const options = quote.options || [];
-  const total = options.reduce((sum, o) => sum + (o.summary?.totalGross || 0), 0);
+  const total = options.reduce((sum, o) => sum + Number(o.summary?.totalGross || 0), 0);
 
   const lines: string[] = [];
   let y = PADDING;

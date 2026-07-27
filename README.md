@@ -614,7 +614,7 @@ SitoPreventivo/
 │       ├── generatePDF.ts     # PDF preventivi con pdfmake
 │       ├── cardGenerator.ts   # PDF/PNG/SVG export bigliettini
 │       ├── qrGenerator.ts     # QR Code SVG/PNG generation
-│       ├── logoGenerator.ts   # ← fase 4: SVG builder + sanitize + export PNG
+│       ├── logoGenerator.ts   # ← fase 4: SVG builder + sanitize + PNG/PDF/JPG/ICO/FaviconZIP (TB-024)
 │       ├── lucideIconPaths.ts # ← fase 4: path SVG icone lucide (auto-generato)
 │       ├── watermark.ts       # ← fase 5: tier-aware watermark
 │       ├── documentSchemas.ts # Zod schema (quote, QR, card, logo, grid presets)
@@ -647,7 +647,7 @@ npm run typecheck  # tsc --noEmit
 | 2.1, Card polish | ✅ | Collision detection BLOCK, logo in grid (~30%), backGrid separato, showGrid toggle, AI merge protection, template Giovanni con foto+logo trasparente |
 | 2.2, Card refactor | ✅ | Master switch griglia, init-from-layout, QR sizing, fontScale, servicesLabel, parità mobile, AI parity |
 | 3, Volantino | ✅ | 4 layout × 5 formati (A6/A5/A4/Letter/Square), bleed 3mm, AI copy via `POST /ai/copy-flyer` (10/min/IP), export PDF+PNG, tier watermark rispettato |
-| 4, **Logo Builder** | ✅ | SVG builder templated, 48 icone lucide, 4 template settore, 3 layout, export SVG + PNG 512/1024/2048 |
+| 4, **Logo Builder** | ✅ | SVG builder templated, 48 icone lucide, 4 template settore, 3 layout, export SVG/PNG/PDF/JPG/ICO/FaviconZIP |
 | 5, Tier System | ✅ | Watermark free (150/72 DPI), unlock code via admin, tier guard su save (3 doc free) |
 | 6, Unified Collection | ✅ | Tabella `documents` rinominata, migration legacy, tab per tipo documento |
 | 7, Polish | ✅ | Onboarding 6 step, HomePage refactor (perché noi), Collection accessibile a tutti, `preferredDocumentType`, docs/logo-ai.md privato, docs aggiornate |

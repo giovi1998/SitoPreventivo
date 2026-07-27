@@ -429,6 +429,73 @@
   border-style: solid;
 }
 
+.logo-ai-variants {
+  position: relative;
+  align-self: flex-start;
+  margin-top: 0.25rem;
+}
+
+.logo-ai-variants-btn {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--line, #ccc);
+  background: transparent;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  color: var(--ink-sec, inherit);
+}
+
+.logo-ai-variants-btn:hover {
+  border-color: var(--accent, #E62020);
+  color: var(--accent, #E62020);
+}
+
+.logo-ai-variants-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.25rem;
+  min-width: 18rem;
+  max-height: 18rem;
+  overflow-y: auto;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #ccc);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+  padding: 0.25rem 0;
+}
+
+.logo-ai-variants-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  gap: 2px;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.logo-ai-variants-item:hover {
+  background: var(--surface-hov, #f1f5f9);
+}
+
+.logo-ai-variants-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.logo-ai-variants-mood {
+  font-size: 0.72rem;
+  color: var(--ink-sec, #666);
+  opacity: 0.85;
+}
+
 /* Libreria "I miei prompt" (Piano B) */
 .logo-ai-library {
   margin-top: 0.75rem;

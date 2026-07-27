@@ -193,7 +193,7 @@ export default function AppShell() {
           setShowOnboarding(true);
         } else {
           if (settings.defaultColor) setQuote((c) => ({ ...c, uiPreferences: { ...c.uiPreferences, accentColor: settings.defaultColor } }));
-          if (settings.defaultVat) setQuote((c) => ({ ...c, options: c.options.map((o) => ({ ...o, items: o.items.map((i) => ({ ...i, tax: { ...i.tax, rate: settings.defaultVat } })) })) }));
+          if (settings.defaultVat) setQuote((c) => ({ ...c, options: (c.options || []).map((o) => ({ ...o, items: (o.items || []).map((i) => ({ ...i, tax: { ...i.tax, rate: settings.defaultVat } })) })) }));
           if (settings.documentTheme) setDocumentTheme(settings.documentTheme);
         }
       }).catch((err) => {
@@ -407,7 +407,7 @@ export default function AppShell() {
     else if (key === 'client') setQuote((c) => ({ ...c, client: { ...c.client, name: value } }));
     else if (key === 'intro') setQuote((c) => ({ ...c, project: { ...c.project, description: value } }));
     else if (key === 'color') setQuote((c) => ({ ...c, uiPreferences: { ...c.uiPreferences, accentColor: value } }));
-    else if (key === 'vat') setQuote((c) => ({ ...c, options: c.options.map((o) => ({ ...o, items: o.items.map((i) => ({ ...i, tax: { ...i.tax, rate: Number(value) } })) })) }));
+    else if (key === 'vat') setQuote((c) => ({ ...c, options: (c.options || []).map((o) => ({ ...o, items: (o.items || []).map((i) => ({ ...i, tax: { ...i.tax, rate: Number(value) } })) })) }));
     else if (key === 'owner') setQuote((c) => ({ ...c, issuer: { ...c.issuer, name: value } }));
     else if (key === 'note') setQuote((c) => ({ ...c, notes: { ...c.notes, internal: value } }));
     else if (key === 'date') setQuote((c) => ({ ...c, createdAt: value }));
@@ -418,12 +418,12 @@ export default function AppShell() {
   const updateOption = (id: string, key: string, value: any) => {
     markDirty();
     setQuote((c) => {
-      const options = c.options.map((o) => {
+      const options = (c.options || []).map((o) => {
         if (o.id !== id) return o;
         if (key === 'title') return { ...o, label: value };
         if (key === 'description') return { ...o, description: value };
         if (key === 'oneTimeCost') {
-          const items = o.items.map((item) =>
+          const items = (o.items || []).map((item) =>
             item.unit === 'fixed'
               ? { ...item, unitPrice: Number(value) }
               : item
@@ -431,7 +431,7 @@ export default function AppShell() {
           return { ...o, items };
         }
         if (key === 'monthlyCost') {
-          const items = o.items.map((item) =>
+          const items = (o.items || []).map((item) =>
             item.unit === 'month'
               ? { ...item, unitPrice: Number(value) }
               : item
@@ -439,7 +439,7 @@ export default function AppShell() {
           return { ...o, items };
         }
         if (key === 'includesMaintenance') {
-          const items = o.items.map((item) =>
+          const items = (o.items || []).map((item) =>
             item.label.toLowerCase().includes('manutenzione')
               ? { ...item, quantity: value ? 12 : 0 }
               : item
@@ -464,7 +464,7 @@ export default function AppShell() {
 
   const removeOption = (id: string) => {
     markDirty();
-    setQuote((c) => recalculateQuote({ ...c, options: c.options.filter((o) => o.id !== id) }));
+    setQuote((c) => recalculateQuote({ ...c, options: (c.options || []).filter((o) => o.id !== id) }));
   };
 
   const updateClause = (id: string, key: string, value: string) => {

@@ -112,6 +112,19 @@
   cursor: not-allowed;
 }
 
+.ai-action-chip.is-selected {
+  background: var(--ink, #1a1a1a);
+  color: var(--surface, #fff);
+  border-color: var(--ink, #1a1a1a);
+}
+
+.ai-action-chip.is-selected:hover:not(:disabled) {
+  background: var(--ink, #1a1a1a);
+  color: var(--surface, #fff);
+  border-color: var(--ink, #1a1a1a);
+  transform: none;
+}
+
 .ai-quick-action-card {
   display: grid;
   gap: 4px;

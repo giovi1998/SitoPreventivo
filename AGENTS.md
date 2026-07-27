@@ -72,7 +72,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/utils/generatePDF.ts` | PDF preventivi (pdfmake, client-side) |
 | `src/utils/cardGenerator.ts` | Card PDF/PNG/SVG + `buildCardSvg` |
 | `src/utils/qrGenerator.ts` | QR SVG/PNG (`qrcode` lib) |
-| `src/utils/logoGenerator.ts` | Logo SVG builder + sanitize + PNG, render `builder.backgroundImage` |
+| `src/utils/logoGenerator.ts` | Logo SVG builder + sanitize + PNG/PDF/JPG/ICO/FaviconZIP, render `builder.backgroundImage` |
 | `src/utils/flyer/` | Flyer engine: `layoutEngine`, `svgRenderer`, `textFit`, `geometry`, `budgets`, `templateCatalog/Factory`, `qrRenderer`, `pdf/pngExport` |
 | `src/utils/watermark.ts` | Tier-aware watermark (free vs unlocked) |
 | `src/utils/documentSchemas.ts` | Zod schemas: quote, QR, businessCard, cardGrid, logo, flyer, presets |
@@ -88,6 +88,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/flyer/` | Flyer: `FlyerEditorShell` + pannelli AI/manuale/preview/export |
 | `src/components/ai/AIConsole.tsx` | Rail AI unificata (collapse in `pq_ui:v1`, quickActions, `AILogPanel` + `AIProviderBadge`) |
 | `src/components/ActionBar.tsx` | Cluster azioni Salva/Esporta/Nuovo (logo, QR) |
+| `src/components/CollectionView.tsx` | Collection griglia documenti: tab, filtri, ricerca, preview SVG inline (logo/card/flyer/quote), export ZIP |
 | `src/hooks/useAI*.ts` | Hook AI: useAI, useAICard, useAIFlyer, useAILogo, useAISocial, useAIOnboarding |
 | `src/hooks/useMediaQuery.ts` | Breakpoint canonici `BP_SHELL=768`/`BP_WORKSPACE=1024` + hook mobile |
 | `src/utils/uiPrefs.ts` | `pq_ui:v1` (sidebarCollapsed, aiConsoleExpanded per editor) |
@@ -168,6 +169,17 @@ Tutte le `/app/*` sono servite dalla catch-all SPA in `vercel.json`.
 - **Mai persistere immagini base64 solo in localStorage**: fonte primaria =
   stato sollevato al genitore (`aiStateRef` in `LogoEditor`), localStorage
   solo backup try/catch. Vedi `docs/agent-gotchas.md` §2.12.
+- **Export multi-formato (TB-024, v2.5)**: 9 voci nel menu Esporta di
+  `LogoEditor` ActionBar. `logoGenerator.ts` esporta: `builderToSvg`,
+  `svgToPng` (512/1024/2048), `svgToPdf` (vettoriale via svg2pdf.js +
+  jspdf, dimensioni pt = viewBox), `svgToJpg` (sfondo opaco, default
+  bianco), `svgToIco` (PNG embedded 16/32/48, Vista+), `svgToFaviconZip`
+  (PNG 16/32/64/180/512 + ICO + SVG + site.webmanifest + browserconfig),
+  `optimizeSvg` (regex minimale, ~30-40% più piccolo, no SVGO runtime).
+  PDF/JPG usano `applyWatermarkToCanvas` (tier-aware). ICO/Favicon
+  richiamano `svgToPng` internamente. Test PDF skip in jsdom (getBBox
+  mancante). Deps: `jspdf`, `svg2pdf.js` (dynamic import non necessario,
+  import statico OK — bundled lato client, no Vercel boundary).
 
 ## ⚠️ Gotchas critici (sintesi — dettaglio in `docs/agent-gotchas.md`)
 
@@ -217,7 +229,10 @@ Phase 11 (flyer refactor/Volantino) parziale: gap test matrix. Spec attivi in
 `spec/`: flyer refactor (TB-007),
 `spec-api-saas-monetization.md`, `spec-intake-pipeline.md` (TB-019).
 Issue aperti: `docs/post-tb023-known-issues.md`. Verifica TB-023:
-`docs/tb023-verification.md`.
+`docs/tb023-verification.md`. TB-024 (logo export multi-formato) ✅
+completed 2026-07-27 — vedi `docs/agent-gotchas.md` §14. TB-025
+(Collection preview SVG inline logo/card/flyer/quote) ✅ completed
+2026-07-27 — vedi `docs/agent-gotchas.md` §15.
 
 ## Responsive Patterns
 

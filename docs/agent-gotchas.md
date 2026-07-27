@@ -446,3 +446,99 @@ implementati sono cancellati dopo verifica (traccia in git history +
 - A08 Data Integrity ✅ env server-side only
 - A09 Logging ✅ logger strutturato, /api/logs client→server
 - A10 SSRF ✅ solo outbound hardcoded (DeepSeek/Ollama/Gemini)
+
+## 14. Logo export multi-formato (TB-024, v2.5)
+
+Aggiunti 5 formati export al logo builder. Regole da rispettare quando
+si tocca `logoGenerator.ts`:
+
+1. **PDF vettoriale (`svgToPdf`)**: usa `svg2pdf.js` + `jspdf` (import
+   statico OK, bundled lato client, NO Vercel boundary). Importante:
+   `svg2pdf.js` richiede `getBBox()` su elementi SVG, **non disponibile
+   in jsdom** → test skip condizionale su jsdom (`supportsSvgBBox`).
+   Verifica reale via Playwright o manuale. Dimensioni PDF in pt =
+   viewBox SVG (preserva proporzioni, scalabile).
+2. **ICO (`svgToIco`)**: formato manuale, no dep. Header ICONDIR (6B) +
+   ICONDIRENTRY (16B/entry) + PNG embedded (Vista+). Size range 1..256;
+   `width=0` significa 256. Non usare BMP legacy (più ingombrante).
+3. **Favicon ZIP (`svgToFaviconZip`)**: dynamic `import('jszip')` (no
+   bundle bloat se path non preso). Contenuto: PNG 16/32/64/180/512,
+   ICO 16/32/48, SVG, `site.webmanifest`, `browserconfig.xml`. Il
+   `site.webmanifest` ha `theme_color`/`background_color` hardcoded
+   `#01696F`/`#FFFFFF` — se il logo ha colori brand diversi, l'utente
+   può editare a mano il manifest.
+4. **JPG (`svgToJpg`)**: fill canvas con `bgColor` (default bianco)
+   prima di `drawImage`. JPG non supporta trasparenza. Watermark
+   tier-aware applicato.
+5. **SVG ottimizzato (`optimizeSvg`)**: regex minimale, ~30-40% più
+   piccolo. Rimuove commenti/metadata/dichiarazione XML, collassa
+   whitespace, rimuove attributi default (`stroke="none"`, `fill=""`).
+   No SVGO runtime (pesante, ~1MB). Per SVG generati da `builderToSvg`
+   (subset controllato) è sicuro; per SVG arbitrari utente usare prima
+   `sanitizeSvg` (security).
+6. **Watermark**: PDF usa `svg2pdf` (no canvas, watermark non applicato
+   su vettoriale — tier-aware non supportato su PDF vettoriale). JPG
+   usa `applyWatermarkToCanvas` come PNG. ICO/Favicon: watermark su
+   PNG interni. Se in futuro si vuole watermark su PDF, usare
+   `pdf.text()` di jspdf nel documento finale.
+7. **Tier limit**: `getMaxPngSideForTier` clampa PNG/JPG. ICO/Favicon
+   richiamano `svgToPng` internamente → rispettano il limite. PDF
+   vettoriale non ha limite (scalabile, no pixel).
+8. **Test**: `src/utils/__tests__/logoGenerator.tb024.test.ts`. Mock
+   canvas deve includere `measureText` (svg2pdf lo usa). PDF test
+   skip in jsdom. Header verificati: PNG (`89 50 4E 47`), JPG
+   (`FF D8 FF`), ICO (ICONDIR `00 00 01 00`), ZIP (`50 4B 03 04`),
+   PDF (`%PDF-`).
+
+## 15. Collection preview SVG inline (TB-025)
+
+Preview logo/card/flyer/quote nella griglia Collection: render SVG
+inline invece di icona generica. Regole:
+
+1. **Scope**: `logo`, `businessCard`, `flyer`, `quote` hanno preview
+   SVG. QR/generatedImage mantengono icona (o thumb per immagini AI).
+2. **Logo**: `builderToSvg(doc.builder)` + `sanitizeSvg`.
+3. **Card**: `mergeCardWithDefaults(doc)` + `buildCardSvg(card,'front',
+   320,200,{embeddedFontCss:''})` — `embeddedFontCss:''` salta @import
+   font Google (pesante, non necessario in thumbnail).
+4. **Flyer**: `mergeFlyerWithDefaults(doc)` + `buildFlyerSvg(flyer)`.
+   `SvgRenderOptions` non ha `embeddedFontCss` (a differenza di card) —
+   non passarlo. Flyer SVG ha viewBox in mm; CSS scala via `contain`.
+   Altezza container 160px (più alto di card/logo per aspect A5/A6).
+5. **Quote**: `buildQuotePreviewSvg(quote)`. Doc unificato ha
+   `doc.quote` (PremiumQuote); legacy flat (da `precisionQuote_quotes`)
+   va migrato via `migrateFromLegacy(doc)`. Preview usa `legacy.title`
+   (piatto) non `legacy.project.title` per il titolo — `migrateFromLegacy`
+   mappa `legacy.title → project.title`. Se seed test usa
+   `project:{title:'X'}` senza `title` flat → preview mostra 'Preventivo'
+   (default), non 'X'. Test quote devono usare `title` flat.
+6. **escapeXml robusto** (`quotePreviewImage.ts`): `escapeXml(s:unknown)`
+   con `String(s ?? '')` — legacy quote può avere `client` come oggetto
+   annidato o stringa, `project.title` undefined, ecc. Mai crash su
+   `s.replace` non-function. Stesso pattern per `formatEuro` (Number
+   coercion). Fix TB-025: preview quote prima crashava su
+   `client: {name: 'X'}` (legacy parziale) → ora safe.
+7. **Card idratazione**: `mergeCardWithDefaults` SEMPRE applicato prima
+   di `buildCardSvg`. Card salvata parziale → defaults idratati →
+   preview renderizza (non crash).
+8. **Fallback sicuro**: `buildPreviewSvg` wrappa in try/catch. Se
+   `builderToSvg`/`buildCardSvg`/`buildFlyerSvg`/`buildQuotePreviewSvg`/
+   `migrateFromLegacy` throw (doc corrotto), ritorna '' → render
+   condizionale cade su icona. Mai crash Collection.
+9. **dangerouslySetInnerHTML**: usato per inline SVG. Sicuro perché:
+   - Logo: `sanitizeSvg` rimuove script/event handler.
+   - Card: `buildCardSvg` genera da template controllato.
+   - Flyer: `buildFlyerSvg` da template + `escapeHtml`/`escapeXmlAttr`.
+   - Quote: `buildQuotePreviewSvg` usa `escapeXml` su ogni input utente.
+10. **CSS**: `.collection-preview-svg svg` width 100%, max-height 160px
+    (flyer/quote più alti), `object-fit:contain`. Container flex center.
+    Card/quote sfondo bianco + bordo (preview su bianco); logo/flyer
+    sfondo trasparente (rispetta brand).
+11. **Quote admin-only**: quote visibili solo admin (filtro Phase 7).
+    Test preview quote devono usare `renderCollection({role:'admin'})`.
+    Seed in `precisionQuote_quotes` non `precisionQuote_documents:v1`.
+12. **Test**: `src/components/__tests__/CollectionView.preview.test.tsx`
+    (9 test). Logo/card/flyer renderizzano SVG + contenuto. Quote
+    renderizza SVG + title (usa `title` flat legacy). Malformed di
+    ogni tipo → fallback icona o preview idratata, no crash. QR → no
+    preview SVG.
