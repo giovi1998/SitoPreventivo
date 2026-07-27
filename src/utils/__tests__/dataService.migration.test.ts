@@ -105,6 +105,27 @@ describe('dataService.migrateLegacyQuotes (local path)', () => {
     expect(docs[0].userEmail).toBe('user@test.com');
   });
 
+  it('hydrated migrated quote preserves title/client/options flat fields (editor load regression)', async () => {
+    seedLegacy([{
+      id: 'tpl_1',
+      owner: 'user@test.com',
+      title: 'Sito Web Premium',
+      client: 'Mario Rossi',
+      intro: 'Realizzazione sito web',
+      options: [
+        { id: 'o1', title: 'Base', description: 'Opzione base', oneTimeCost: 1200, monthlyCost: 0 },
+      ],
+    }]);
+    await dataService.migrateLegacyQuotes('user@test.com');
+    const doc = readDocs()[0];
+    const hydrated = await dataService.getDocument('user@test.com', doc.id, 'quote');
+    expect(hydrated).not.toBeNull();
+    expect(hydrated.title).toBe('Sito Web Premium');
+    expect(hydrated.client).toBe('Mario Rossi');
+    expect(hydrated.options).toHaveLength(1);
+    expect(hydrated.options[0].title).toBe('Base');
+  });
+
   it('throws (does not silently swallow) when localStorage.setItem fails (QuotaExceeded)', async () => {
     seedLegacy([{ id: 'q1', owner: 'user@test.com', title: 'A' }]);
     const realSetItem = Storage.prototype.setItem;

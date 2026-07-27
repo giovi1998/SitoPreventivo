@@ -529,7 +529,7 @@ export function migrateFromLegacy(legacy: LegacyQuote): PremiumQuote {
     currency: 'EUR',
     locale: 'it-IT',
     issuer: {
-      name: legacy.owner || '',
+      name: (typeof legacy.owner === 'string' ? legacy.owner : (legacy.owner && (legacy.owner as any).name) || '') || '',
       vatNumber: null,
       taxCode: null,
       address: '',
@@ -539,8 +539,8 @@ export function migrateFromLegacy(legacy: LegacyQuote): PremiumQuote {
       logoUrl: null,
     },
     client: {
-      name: legacy.client || '',
-      contactPerson: legacy.contact || null,
+      name: (typeof legacy.client === 'string' ? legacy.client : (legacy.client && (legacy.client as any).name) || '') || '',
+      contactPerson: (typeof legacy.contact === 'string' ? legacy.contact : null) || null,
       address: '',
       email: '',
       phone: '',
@@ -549,9 +549,9 @@ export function migrateFromLegacy(legacy: LegacyQuote): PremiumQuote {
       notes: null,
     },
     project: {
-      title: legacy.title || '',
+      title: (typeof legacy.title === 'string' ? legacy.title : (legacy.title && (legacy.title as any).title) || '') || '',
       code: '',
-      description: legacy.intro || '',
+      description: (typeof legacy.intro === 'string' ? legacy.intro : '') || '',
       startDate: null,
       endDate: null,
     },

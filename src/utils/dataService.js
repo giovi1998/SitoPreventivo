@@ -92,7 +92,7 @@ function hydrateDocument(row) {
 
   // Already flat (localStorage path): domain fields live on the row.
   const hasFlatDomain = Object.keys(rest).some((k) => !DOC_META_KEYS.has(k));
-  if (hasFlatDomain && (rest.builder || rest.front || rest.content || rest.data?.payload !== undefined || rest.style)) {
+  if (hasFlatDomain && (rest.builder || rest.front || rest.content || rest.data?.payload !== undefined || rest.style || rest.options || rest.project || rest.client !== undefined)) {
     return {
       id,
       userEmail,
