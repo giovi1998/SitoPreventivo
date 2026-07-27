@@ -28,7 +28,7 @@ function makeCard(overrides: Partial<BusinessCard> = {}): BusinessCard {
       qrPayload: '', qrLabel: '', qrSize: 'medium',
       coverImageUrl: null, useGrid: false,
     },
-    decorations: { pattern: null, opacity: 0.2, palette: { primary: '#000', secondary: '#fff', accent: '#888', text: '#000', background: '#fff' } },
+    decorations: { pattern: null, opacity: 0.2, palette: { primary: '#000', secondary: '#fff', accent: '#888', text: '#000', background: '#fff' }, userLocked: false } as unknown as import('../../../utils/documentSchemas').BusinessCard['decorations'],
     grid: {},
     backGrid: {},
     style: { borderRadius: 'none', borderColor: '#000', borderWidth: 1, fontFamily: 'Inter', fontScale: 1, textColor: '#000', bgColor: '#fff', theme: 'modern' },

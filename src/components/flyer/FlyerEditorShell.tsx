@@ -234,6 +234,22 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
     setFlyer((prev) => ({ ...prev, style: { ...prev.style, [key]: value }, updatedAt: new Date().toISOString() }));
   }, []);
 
+  // TB-023 REQ-PD-004: patch decorations flyer (pattern/palette/opacity/userLocked).
+  const updateDecorations = React.useCallback((patch: Partial<Flyer['decorations']>) => {
+    setFlyer((prev) => ({
+      ...prev,
+      decorations: {
+        ...(prev.decorations ?? { pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null }, userLocked: false }),
+        ...patch,
+        palette: {
+          ...(prev.decorations?.palette ?? { primary: '#01696F', secondary: '#E11D48', accent: null }),
+          ...(patch.palette ?? {}),
+        },
+      },
+      updatedAt: new Date().toISOString(),
+    }));
+  }, []);
+
   const updateSize = React.useCallback((size: FlyerSize) => {
     setFlyer((prev) => ({ ...prev, size, updatedAt: new Date().toISOString() }));
   }, []);
@@ -462,6 +478,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
       limitReached={limitReached} exporting={exporting}
       onCollapse={() => setShowManual(false)}
       onTitleChange={updateTitle} onUpdateContent={updateContent} onUpdateStyle={updateStyle}
+      onUpdateDecorations={updateDecorations}
       onUpdateSize={updateSize} onUpdateOrientation={updateOrientation} onUpdateLayout={updateLayout}
       onApplySector={applySector}
       onApplySectorLayout={applySectorLayout}

@@ -11,6 +11,7 @@ describe('CardAIDecorationSection', () => {
       pattern: 'wave-bottom',
       opacity: 0.25,
       palette: { primary: '#ff0000', secondary: '#00ff00', accent: '#0000ff' },
+      userLocked: false,
     },
   };
 
@@ -19,7 +20,7 @@ describe('CardAIDecorationSection', () => {
     fireEvent.click(header);
   }
 
-  it('renders pattern selector and defaults to none when no pattern', () => {
+  it('renders thumbnail picker with none active when no pattern', () => {
     const empty = createEmptyCard();
     render(
       <CardAIDecorationSection
@@ -29,10 +30,11 @@ describe('CardAIDecorationSection', () => {
       />,
     );
     expandSection();
-    expect(screen.getByLabelText(/pattern/i)).toHaveValue('');
+    const noneBtn = screen.getByTestId('decoration-thumb-none');
+    expect(noneBtn).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('patches pattern when selection changes', () => {
+  it('patches pattern when a thumbnail is clicked', () => {
     const onPatch = vi.fn();
     render(
       <CardAIDecorationSection
@@ -42,9 +44,26 @@ describe('CardAIDecorationSection', () => {
       />,
     );
     expandSection();
-    fireEvent.change(screen.getByLabelText(/pattern/i), { target: { value: 'blob-corner' } });
+    fireEvent.click(screen.getByTestId('decoration-thumb-blob-corner'));
     expect(onPatch).toHaveBeenCalledWith({
       pattern: 'blob-corner',
+      palette: { primary: '#ff0000', secondary: '#00ff00', accent: '#0000ff' },
+    });
+  });
+
+  it('clears pattern when the none thumbnail is clicked', () => {
+    const onPatch = vi.fn();
+    render(
+      <CardAIDecorationSection
+        card={card}
+        isProcessing={false}
+        onPatchDecorations={onPatch}
+      />,
+    );
+    expandSection();
+    fireEvent.click(screen.getByTestId('decoration-thumb-none'));
+    expect(onPatch).toHaveBeenCalledWith({
+      pattern: null,
       palette: { primary: '#ff0000', secondary: '#00ff00', accent: '#0000ff' },
     });
   });

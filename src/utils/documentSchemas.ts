@@ -594,7 +594,10 @@ export const businessCardSchema = z.object({
       secondary: hexColorSchema.default('#E11D48'),
       accent: hexColorSchema.nullable().default(null),
     }),
-  }).default(() => ({ pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null } })),
+    // CON-PD-002: se true, il merge AI NON può modificare pattern/palette/
+    // opacity (l'utente ha bloccato la scelta manuale).
+    userLocked: z.boolean().default(false),
+  }).default(() => ({ pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null }, userLocked: false })),
   style: z.object({
     sizePreset: businessCardSizePresetSchema.default('eu-85x55'),
     bgColor: hexColorSchema.default('#FFFFFF'),
@@ -658,6 +661,7 @@ export function createEmptyCard(): BusinessCard {
       pattern: null,
       opacity: 0.2,
       palette: { primary: '#01696F', secondary: '#E11D48', accent: null },
+      userLocked: false,
     },
     grid: gridPresetLeft(),
     backGrid: gridPresetBackDefault(),
@@ -1106,7 +1110,9 @@ export const flyerSchema = z.object({
       secondary: hexColorSchema.default('#E11D48'),
       accent: hexColorSchema.nullable().default(null),
     }),
-  }).default(() => ({ pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null } })),
+    // CON-PD-002: se true, il merge AI NON può modificare la decorazione.
+    userLocked: z.boolean().default(false),
+  }).default(() => ({ pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null }, userLocked: false })),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1141,6 +1147,7 @@ export function createEmptyFlyer(): Flyer {
       pattern: null,
       opacity: 0.2,
       palette: { primary: '#01696F', secondary: '#E11D48', accent: null },
+      userLocked: false,
     },
     createdAt: now,
     updatedAt: now,
@@ -1222,6 +1229,7 @@ export function createFlyerTemplate(sector: FlyerSector, layout?: FlyerLayout): 
       pattern: null,
       opacity: 0.2,
       palette: { primary: tpl.accentColor, secondary: tpl.textColor, accent: null },
+      userLocked: false,
     },
     createdAt: now,
     updatedAt: now,

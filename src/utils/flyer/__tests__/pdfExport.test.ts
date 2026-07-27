@@ -26,7 +26,7 @@ const sampleFlyer: Flyer = {
     fontFamily: 'Inter',
     fontScale: 1,
   },
-  decorations: { pattern: null, opacity: 0.2, palette: { primary: '#2563eb', secondary: '#1e293b', accent: null } },
+  decorations: { pattern: null, opacity: 0.2, palette: { primary: '#2563eb', secondary: '#1e293b', accent: null }, userLocked: false },
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };

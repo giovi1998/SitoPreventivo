@@ -50,6 +50,7 @@ interface FlyerManualPanelProps {
   onTitleChange: (title: string) => void;
   onUpdateContent: (patch: Partial<FlyerContent>) => void;
   onUpdateStyle: <K extends keyof Flyer['style']>(key: K, value: Flyer['style'][K]) => void;
+  onUpdateDecorations?: (patch: Partial<Flyer['decorations']>) => void;
   onUpdateSize: (size: FlyerSize) => void;
   onUpdateOrientation: (orientation: FlyerOrientation) => void;
   onUpdateLayout: (layout: FlyerLayout) => void;
@@ -69,7 +70,7 @@ interface FlyerManualPanelProps {
 
 export function FlyerManualPanel({
   flyer, showTemplateBanner, activeSector, showCustomFont, setShowCustomFont,
-  limitReached, exporting, onCollapse, onTitleChange, onUpdateContent, onUpdateStyle,
+  limitReached, exporting, onCollapse, onTitleChange, onUpdateContent, onUpdateStyle, onUpdateDecorations,
   onUpdateSize, onUpdateOrientation, onUpdateLayout, onApplySector, onApplySectorLayout,
   onCloseTemplateBanner, onHeroUpload, onRemoveHero,
   onReset, onSave, onExportPdf, onExportPng, flyerHasContent, budgetWarning, copyBudget,
@@ -190,6 +191,7 @@ export function FlyerManualPanel({
           showCustomFont={showCustomFont}
           setShowCustomFont={setShowCustomFont}
           onUpdateStyle={onUpdateStyle}
+          onUpdateDecorations={onUpdateDecorations}
         />
       </Section>
       <div className="editor-actions-row" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

@@ -1,15 +1,8 @@
 import React from 'react';
 import type { BusinessCard } from '../../../utils/documentSchemas';
-import { AiSection, AiSelect } from '../../ai-ui';
-import { DECORATIVE_PATTERN_IDS, type DecorativePatternId, defaultDecorativePalette } from '../../../utils/decorations/patterns';
-
-const PATTERN_LABELS: Record<DecorativePatternId, string> = {
-  'wave-bottom': 'Onda in basso',
-  'wave-split': 'Onda divisa',
-  'blob-corner': 'Blob ad angolo',
-  'splash-corners': 'Splash agli angoli',
-  'full-overlay': 'Overlay pieno',
-};
+import { AiSection } from '../../ai-ui';
+import { DecorationPicker } from '../../DecorationPicker';
+import { defaultDecorativePalette } from '../../../utils/decorations/patterns';
 
 export interface CardAIDecorationSectionProps {
   card: BusinessCard;
@@ -26,11 +19,6 @@ export default function CardAIDecorationSection({
   const opacity = decorations.opacity ?? 0.2;
   const palette = decorations.palette || defaultDecorativePalette(card.style.accentColor, card.style.textColor);
 
-  const patternOptions = [
-    { value: '', label: 'Nessuno' },
-    ...DECORATIVE_PATTERN_IDS.map((id) => ({ value: id, label: PATTERN_LABELS[id] })),
-  ];
-
   return (
     <AiSection
       title="Decorazione"
@@ -39,17 +27,11 @@ export default function CardAIDecorationSection({
       collapsible
       defaultOpen={false}
     >
-      <AiSelect
-        label="Pattern"
-        value={pattern || ''}
-        onChange={(e) => {
-          const id = e.target.value as DecorativePatternId | '';
-          onPatchDecorations({
-            pattern: id || null,
-            palette: palette,
-          });
-        }}
-        options={patternOptions}
+      <DecorationPicker
+        value={pattern}
+        palette={palette}
+        onChange={(id) => onPatchDecorations({ pattern: id, palette })}
+        ariaLabel="Pattern decorazione AI"
       />
       {pattern && (
         <>

@@ -43,7 +43,7 @@ const sampleCard: BusinessCard = {
   },
   grid: { cols: 4, rows: 4, elements: {} },
   backGrid: { cols: 4, rows: 4, elements: {} },
-  decorations: { pattern: null, opacity: 0.2, palette: { primary: '#2563eb', secondary: '#0f172a', accent: null } },
+  decorations: { pattern: null, opacity: 0.2, palette: { primary: '#2563eb', secondary: '#0f172a', accent: null }, userLocked: false },
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };

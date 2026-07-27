@@ -1,16 +1,23 @@
 import React from 'react';
 import type { Flyer } from '../../utils/documentSchemas';
 import { AiFontPicker } from '../ai-ui';
+import { DecorationPicker } from '../DecorationPicker';
+import { defaultDecorativePalette, type DecorativePatternId } from '../../utils/decorations/patterns';
 
 interface FlyerStyleFieldsProps {
   flyer: Flyer;
   showCustomFont: boolean;
   setShowCustomFont: (v: boolean) => void;
   onUpdateStyle: <K extends keyof Flyer['style']>(key: K, value: Flyer['style'][K]) => void;
+  onUpdateDecorations?: (patch: Partial<Flyer['decorations']>) => void;
 }
 
-export function FlyerStyleFields({ flyer, onUpdateStyle }: FlyerStyleFieldsProps): React.ReactElement {
+export function FlyerStyleFields({ flyer, onUpdateStyle, onUpdateDecorations }: FlyerStyleFieldsProps): React.ReactElement {
   const currentScale = flyer.style.fontScale ?? 1;
+  const decorations = flyer.decorations ?? { pattern: null, opacity: 0.2, palette: defaultDecorativePalette(flyer.style.accentColor, flyer.style.textColor), userLocked: false };
+  const pattern = decorations.pattern;
+  const opacity = decorations.opacity ?? 0.2;
+  const palette = decorations.palette || defaultDecorativePalette(flyer.style.accentColor, flyer.style.textColor);
   return (
     <div className="stack flyer-style-fields">
       <div className="swatches">
@@ -50,6 +57,41 @@ export function FlyerStyleFields({ flyer, onUpdateStyle }: FlyerStyleFieldsProps
           <span className="flyer-scale-value">{(currentScale * 100).toFixed(0)}%</span>
         </div>
       </div>
+      {onUpdateDecorations && (
+        <div className="flyer-decorations" data-testid="flyer-decoration-field">
+          <span className="flyer-scale-label">Decorazione</span>
+          <DecorationPicker
+            value={pattern}
+            palette={palette}
+            onChange={(id: DecorativePatternId | null) => onUpdateDecorations({ pattern: id, palette })}
+            ariaLabel="Pattern decorazione volantino"
+          />
+          {pattern && (
+            <>
+              <div className="form-grid" style={{ marginTop: 6 }}>
+                <label>Primario<input type="color" value={palette.primary} onChange={(e) => onUpdateDecorations({ palette: { ...palette, primary: e.target.value } })} aria-label="Colore primario decorazione volantino" /></label>
+                <label>Secondario<input type="color" value={palette.secondary} onChange={(e) => onUpdateDecorations({ palette: { ...palette, secondary: e.target.value } })} aria-label="Colore secondario decorazione volantino" /></label>
+              </div>
+              <div className="flyer-scale-row" style={{ marginTop: 6 }}>
+                <label className="flyer-scale-label" htmlFor="flyer-decoration-opacity">Opacità</label>
+                <div className="flyer-scale-control">
+                  <input
+                    id="flyer-decoration-opacity"
+                    type="range"
+                    min={0.05}
+                    max={0.8}
+                    step={0.05}
+                    value={opacity}
+                    onChange={(e) => onUpdateDecorations({ opacity: Number(e.target.value) })}
+                    aria-label="Opacità decorazione volantino"
+                  />
+                  <span className="flyer-scale-value">{Math.round(opacity * 100)}%</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

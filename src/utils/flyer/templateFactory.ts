@@ -54,6 +54,7 @@ export function createFlyerTemplate(sector: FlyerSector, layout?: FlyerLayout): 
       pattern: null,
       opacity: 0.2,
       palette: { primary: tpl.accentColor, secondary: tpl.textColor, accent: null },
+      userLocked: false,
     },
     createdAt: now,
     updatedAt: now,
