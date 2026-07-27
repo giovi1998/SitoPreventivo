@@ -20,6 +20,8 @@ import './AIProviderBadge.css';
 export interface AIProviderBadgeProps {
   /** Costo USD ultima operazione AI (opzionale, mostrato inline) */
   lastCostUsd?: number;
+  /** Costo USD totale accumulato di sessione (TB-023 REQ-UX-006 tooltip) */
+  totalCostUsd?: number;
   /** Callback quando l'utente cambia provider */
   onProviderChange?: (providerId: string) => void;
 }
@@ -42,9 +44,12 @@ export function providerModelShort(model: string): string {
 
 export default function AIProviderBadge({
   lastCostUsd,
+  totalCostUsd,
   onProviderChange,
 }: AIProviderBadgeProps): React.ReactElement {
   const [open, setOpen] = useState(false);
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const tooltipTimer = useRef<number | null>(null);
   const [selectedId, setSelectedId] = useState<string>(
     () => getAiProviderDefault() || providerRegistry.getDefaultId()
   );
@@ -95,6 +100,22 @@ export default function AIProviderBadge({
     return () => document.removeEventListener('keydown', handler);
   }, [open]);
 
+  // TB-023 REQ-UX-006: tooltip costi 30gg appare dopo hover ≥300ms.
+  const showTooltip = useCallback(() => {
+    if (tooltipTimer.current) window.clearTimeout(tooltipTimer.current);
+    tooltipTimer.current = window.setTimeout(() => setTooltipOpen(true), 300);
+  }, []);
+  const hideTooltip = useCallback(() => {
+    if (tooltipTimer.current) {
+      window.clearTimeout(tooltipTimer.current);
+      tooltipTimer.current = null;
+    }
+    setTooltipOpen(false);
+  }, []);
+  useEffect(() => () => {
+    if (tooltipTimer.current) window.clearTimeout(tooltipTimer.current);
+  }, []);
+
   const shortLabel = selected ? providerShortName(selected.id) : 'AI';
   const modelLabel = selected ? providerModelShort(selected.model) : '';
 
@@ -104,6 +125,8 @@ export default function AIProviderBadge({
   const pricing = selected ? PRICING[selected.id] : undefined;
   const isFlat = pricing?.unit === 'flat_monthly';
   const showCost = lastCostUsd !== undefined && lastCostUsd >= 0 && !isFlat;
+  // TB-023 REQ-UX-006: breakdown costi solo se c'è un total > 0.
+  const showTotalTooltip = totalCostUsd !== undefined && totalCostUsd > 0;
 
   return (
     <div className="ai-provider-badge-wrapper" ref={ref}>
@@ -112,6 +135,10 @@ export default function AIProviderBadge({
         className="ai-provider-badge"
         data-testid="ai-provider-badge"
         onClick={() => setOpen((v) => !v)}
+        onMouseEnter={showTotalTooltip ? showTooltip : undefined}
+        onMouseLeave={showTotalTooltip ? hideTooltip : undefined}
+        onFocus={showTotalTooltip ? showTooltip : undefined}
+        onBlur={showTotalTooltip ? hideTooltip : undefined}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label="Cambia provider AI"
@@ -166,6 +193,23 @@ export default function AIProviderBadge({
           ))}
           <div className="ai-provider-badge__menu-footer">
             Ollama Pro: ${OLLAMA_PRO_FLAT_MONTHLY}/mese flat · 50x free usage
+          </div>
+        </div>
+      )}
+
+      {tooltipOpen && showTotalTooltip && (
+        <div
+          className="ai-provider-badge__tooltip"
+          role="tooltip"
+          data-testid="ai-provider-cost-tooltip"
+        >
+          <div className="ai-provider-badge__tooltip-title">Costi AI sessione</div>
+          <div className="ai-provider-badge__tooltip-row">
+            <span>Totale sessione</span>
+            <span>{formatCostUsd(totalCostUsd)}</span>
+          </div>
+          <div className="ai-provider-badge__tooltip-hint">
+            Breakdown per-provider 30gg disponibile in Admin → Cost breakdown.
           </div>
         </div>
       )}

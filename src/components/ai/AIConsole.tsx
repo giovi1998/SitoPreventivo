@@ -162,7 +162,7 @@ export default function AIConsole({
                   {visionEnabled ? 'Vision ✓' : 'Vision ✕'}
                 </button>
               )}
-              <AIProviderBadge lastCostUsd={lastCostUsd} onProviderChange={onProviderChange} />
+              <AIProviderBadge lastCostUsd={lastCostUsd} totalCostUsd={totalCostUsd} onProviderChange={onProviderChange} />
             </div>
           </header>
 

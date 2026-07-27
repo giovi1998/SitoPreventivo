@@ -199,3 +199,43 @@
     min-width: 220px;
   }
 }
+
+/* TB-023 REQ-UX-006: tooltip breakdown costi sessione */
+.ai-provider-badge__tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  max-width: 280px;
+  background: var(--ink, #1a1a2e);
+  color: var(--surface, #fff);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  padding: 10px 12px;
+  z-index: 110;
+  font-size: 0.74rem;
+  pointer-events: none;
+}
+
+.ai-provider-badge__tooltip-title {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.65;
+  margin-bottom: 6px;
+}
+
+.ai-provider-badge__tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-provider-badge__tooltip-hint {
+  margin-top: 6px;
+  font-size: 0.66rem;
+  opacity: 0.65;
+  line-height: 1.4;
+}
