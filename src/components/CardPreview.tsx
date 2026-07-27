@@ -292,7 +292,34 @@ function useDraggablePlacement(
     };
   }, [enabled, element, elementKey, deps.onPatchPlacement]);
 
-  return { onPointerDown, enabled, cursor: enabled ? 'grab' : undefined };
+  // REQ-DF-003 residuo: wheel sull'elemento modifica scale (±0.1, range 0.5-2).
+  // handler su React event (onWheel prop), non window listener: evita conflitto
+  // con scroll pagina. preventDefault ferma lo scroll solo quando il drag è
+  // abilitato (cella selezionata con contenuto).
+  const onWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (!enabled || !deps.onPatchPlacement || !element) return;
+      e.preventDefault();
+      const current = element.placement ?? element.photoPlacement ?? { x: 0, y: 0, scale: 1 };
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      const nextScale = Math.min(2, Math.max(0.5, current.scale + delta));
+      if (Math.abs(nextScale - current.scale) > 0.001) {
+        deps.onPatchPlacement(elementKey, { scale: nextScale });
+      }
+    },
+    [enabled, element, elementKey, deps.onPatchPlacement]
+  );
+
+  return { onPointerDown, onWheel, enabled, placement: element?.placement ?? element?.photoPlacement ?? { x: 0, y: 0, scale: 1 }, cursor: enabled ? 'grab' : undefined };
+}
+
+// REQ-UX-003: overlay coords durante drag (x, y, s) in basso-destra cella.
+function PlacementOverlay({ label, placement }: { label: string; placement: { x: number; y: number; scale: number } }) {
+  return (
+    <div className="card-grid-placement-overlay" aria-live="polite" data-testid={`grid-placement-overlay-${label}`}>
+      x:{placement.x.toFixed(2)} y:{placement.y.toFixed(2)} s:{placement.scale.toFixed(2)}
+    </div>
+  );
 }
 
 const FrontPreview = React.memo(function FrontPreview({
@@ -474,9 +501,11 @@ const FrontPreview = React.memo(function FrontPreview({
           data-testid="grid-el-photo"
           style={{ ...gridPlacement(grid!.elements.photo), cursor: photoDrag.cursor }}
           onPointerDown={photoDrag.onPointerDown}
-          title={photoDrag.enabled ? 'Trascina per spostare la foto' : undefined}
+          onWheel={photoDrag.onWheel}
+          title={photoDrag.enabled ? 'Trascina per spostare la foto · rotellina per zoom' : undefined}
         >
           {photoContent}
+          {photoDrag.enabled && <PlacementOverlay label="foto" placement={photoDrag.placement} />}
         </div>
       )}
       {grid!.elements.logo && card.front.logoUrl && (
@@ -493,9 +522,11 @@ const FrontPreview = React.memo(function FrontPreview({
               : {}),
           }}
           onPointerDown={logoDrag.onPointerDown}
-          title={logoDrag.enabled ? 'Trascina per spostare il logo' : undefined}
+          onWheel={logoDrag.onWheel}
+          title={logoDrag.enabled ? 'Trascina per spostare il logo · rotellina per zoom' : undefined}
         >
           <img className="card-logo grid" src={card.front.logoUrl} alt="Logo aziendale" />
+          {logoDrag.enabled && <PlacementOverlay label="logo" placement={logoDrag.placement} />}
         </div>
       )}
       {grid!.elements.name && card.front.name && (
@@ -504,9 +535,11 @@ const FrontPreview = React.memo(function FrontPreview({
           data-testid="grid-el-name"
           style={{ ...gridPlacement(grid!.elements.name, 'column'), cursor: nameDrag.cursor }}
           onPointerDown={nameDrag.onPointerDown}
-          title={nameDrag.enabled ? 'Trascina per spostare il nome' : undefined}
+          onWheel={nameDrag.onWheel}
+          title={nameDrag.enabled ? 'Trascina per spostare il nome · rotellina per zoom' : undefined}
         >
           <div className="card-name">{card.front.name}</div>
+          {nameDrag.enabled && <PlacementOverlay label="name" placement={nameDrag.placement} />}
         </div>
       )}
       {grid!.elements.title && card.front.title && (
@@ -515,9 +548,11 @@ const FrontPreview = React.memo(function FrontPreview({
           data-testid="grid-el-title"
           style={{ ...gridPlacement(grid!.elements.title, 'column'), cursor: titleDrag.cursor }}
           onPointerDown={titleDrag.onPointerDown}
-          title={titleDrag.enabled ? 'Trascina per spostare il ruolo' : undefined}
+          onWheel={titleDrag.onWheel}
+          title={titleDrag.enabled ? 'Trascina per spostare il ruolo · rotellina per zoom' : undefined}
         >
           <div className="card-title" style={{ color: card.style.accentColor }}>{card.front.title}</div>
+          {titleDrag.enabled && <PlacementOverlay label="title" placement={titleDrag.placement} />}
         </div>
       )}
       {grid!.elements.company && card.front.company && (
@@ -526,9 +561,11 @@ const FrontPreview = React.memo(function FrontPreview({
           data-testid="grid-el-company"
           style={{ ...gridPlacement(grid!.elements.company, 'column'), cursor: companyDrag.cursor }}
           onPointerDown={companyDrag.onPointerDown}
-          title={companyDrag.enabled ? 'Trascina per spostare l\'azienda' : undefined}
+          onWheel={companyDrag.onWheel}
+          title={companyDrag.enabled ? 'Trascina per spostare l\'azienda · rotellina per zoom' : undefined}
         >
           <div className="card-company">{card.front.company}</div>
+          {companyDrag.enabled && <PlacementOverlay label="company" placement={companyDrag.placement} />}
         </div>
       )}
     </div>

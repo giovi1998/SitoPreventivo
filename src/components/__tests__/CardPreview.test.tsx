@@ -200,6 +200,132 @@ describe('CardPreview', () => {
       expect(lastCall[1]).toEqual({ x: 0, y: 0 });
     });
 
+    it('wheel on photo cell updates scale (REQ-DF-003)', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, photoUrl: 'data:image/png;base64,AAAA', useGrid: true },
+        grid: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 3, placement: { x: 0, y: 0, scale: 1 } } } },
+      };
+      const onPatch = vi.fn();
+      const { container } = render(
+        <CardPreview
+          side="front"
+          card={card}
+          showGrid={true}
+          selectedElement={{ side: 'front', key: 'photo' }}
+          onPatchPlacement={onPatch}
+        />,
+      );
+      const photoCell = container.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
+      // Wheel up (deltaY<0) → scale +0.1 → 1.1
+      fireEvent.wheel(photoCell, { deltaY: -100 });
+      expect(onPatch).toHaveBeenCalledWith('photo', { scale: 1.1 });
+    });
+
+    it('wheel on photo clamps scale to [0.5, 2] (REQ-DF-003)', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, photoUrl: 'data:image/png;base64,AAAA', useGrid: true },
+        grid: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 3, placement: { x: 0, y: 0, scale: 2 } } } },
+      };
+      const onPatch = vi.fn();
+      const { container } = render(
+        <CardPreview
+          side="front"
+          card={card}
+          showGrid={true}
+          selectedElement={{ side: 'front', key: 'photo' }}
+          onPatchPlacement={onPatch}
+        />,
+      );
+      const photoCell = container.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
+      // Wheel up oltre 2 → resta 2
+      fireEvent.wheel(photoCell, { deltaY: -100 });
+      expect(onPatch).not.toHaveBeenCalled();
+    });
+
+    it('wheel does NOT fire when photo not selected (CON-DF-001)', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, photoUrl: 'data:image/png;base64,AAAA', useGrid: true },
+        grid: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 3 } } },
+      };
+      const onPatch = vi.fn();
+      const { container } = render(
+        <CardPreview
+          side="front"
+          card={card}
+          showGrid={true}
+          selectedElement={{ side: 'front', key: 'name' }}
+          onPatchPlacement={onPatch}
+        />,
+      );
+      const photoCell = container.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
+      fireEvent.wheel(photoCell, { deltaY: -100 });
+      expect(onPatch).not.toHaveBeenCalled();
+    });
+
+    it('renders placement overlay (x, y, s) when photo is selected (REQ-UX-003)', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, photoUrl: 'data:image/png;base64,AAAA', useGrid: true },
+        grid: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 3, placement: { x: 0.34, y: -0.12, scale: 1.2 } } } },
+      };
+      const { container } = render(
+        <CardPreview
+          side="front"
+          card={card}
+          showGrid={true}
+          selectedElement={{ side: 'front', key: 'photo' }}
+          onPatchPlacement={vi.fn()}
+        />,
+      );
+      const overlay = container.querySelector('[data-testid="grid-placement-overlay-foto"]');
+      expect(overlay).not.toBeNull();
+      expect(overlay!.textContent).toContain('x:0.34');
+      expect(overlay!.textContent).toContain('y:-0.12');
+      expect(overlay!.textContent).toContain('s:1.20');
+    });
+
+    it('does NOT render overlay when photo is not selected', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, photoUrl: 'data:image/png;base64,AAAA', useGrid: true },
+        grid: { cols: 4, rows: 4, elements: { photo: { x: 0, y: 0, w: 2, h: 3 } } },
+      };
+      const { container } = render(
+        <CardPreview
+          side="front"
+          card={card}
+          showGrid={true}
+          selectedElement={{ side: 'front', key: 'name' }}
+          onPatchPlacement={vi.fn()}
+        />,
+      );
+      expect(container.querySelector('[data-testid="grid-placement-overlay-foto"]')).toBeNull();
+    });
+
+    it('renders placement overlay on name cell when name is selected (REQ-UX-003)', () => {
+      const card: BusinessCard = {
+        ...createEmptyCard(),
+        front: { ...createEmptyCard().front, name: 'MARIO', useGrid: true },
+        grid: { cols: 4, rows: 4, elements: { name: { x: 0, y: 0, w: 4, h: 1, placement: { x: 0.2, y: -0.1, scale: 1 } } } },
+      };
+      const { container } = render(
+        <CardPreview
+          side="front"
+          card={card}
+          showGrid={true}
+          selectedElement={{ side: 'front', key: 'name' }}
+          onPatchPlacement={vi.fn()}
+        />,
+      );
+      const overlay = container.querySelector('[data-testid="grid-placement-overlay-name"]');
+      expect(overlay).not.toBeNull();
+      expect(overlay!.textContent).toContain('x:0.20');
+      expect(overlay!.textContent).toContain('y:-0.10');
+    });
+
     it('does NOT render monogram (removed feature) when name is set but no photo', () => {
       const card = { ...createEmptyCard(), front: { ...createEmptyCard().front, name: 'GIOVANNI CIDU' } };
       render(<CardPreview side="front" card={card} />);
@@ -268,6 +394,7 @@ describe('CardPreview', () => {
           pattern: 'wave-bottom',
           opacity: 0.3,
           palette: { primary: '#01696F', secondary: '#E11D48', accent: null },
+          userLocked: false,
         },
       };
       const { container } = render(<CardPreview side="front" card={card} />);
@@ -285,7 +412,7 @@ describe('CardPreview', () => {
       const card: BusinessCard = {
         ...createEmptyCard(),
         back: { ...createEmptyCard().back, phone: '333' },
-        decorations: { pattern: 'blob-corner', opacity: 0.2, palette: { primary: '#01696F', secondary: '#1A1A1A', accent: null } },
+        decorations: { pattern: 'blob-corner', opacity: 0.2, palette: { primary: '#01696F', secondary: '#1A1A1A', accent: null }, userLocked: false },
       };
       const { container } = render(<CardPreview side="back" card={card} />);
       const svg = container.querySelector('svg.card-decorative-pattern--back');

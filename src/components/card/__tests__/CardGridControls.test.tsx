@@ -115,4 +115,39 @@ describe('CardGridControls', () => {
     fireEvent.click(screen.getByTestId('grid-placement-right'));
     expect(mocks.onPatchPlacement).toHaveBeenCalledWith('qr', { x: 0.05, y: 0, scale: 1 });
   });
+
+  // ─── REQ-DF-005: display coordinate + Reset posizione ───────
+  it('shows placement readout with x/y/s coordinates when an element is selected', () => {
+    const card = createGiovanniCardTemplate();
+    renderControls({ card, selected: 'photo' });
+    const readout = screen.getByTestId('grid-placement-readout');
+    expect(readout).toBeInTheDocument();
+    expect(readout.textContent).toMatch(/x:\s*0\.00.*y:\s*0\.00.*s:\s*1\.00/i);
+  });
+
+  it('reset button patches placement back to {0,0,1}', () => {
+    const card = createGiovanniCardTemplate();
+    const { mocks } = renderControls({ card, selected: 'photo' });
+    fireEvent.click(screen.getByTestId('grid-placement-reset'));
+    expect(mocks.onPatchPlacement).toHaveBeenCalledWith('photo', { x: 0, y: 0, scale: 1 });
+  });
+
+  it('readout reflects nudged coordinates', () => {
+    // CardGridControls è controlled: usa il placement del card passato.
+    const card = createGiovanniCardTemplate();
+    const photoEl = card.grid?.elements?.photo;
+    const nudgedCard: BusinessCard = {
+      ...card,
+      grid: {
+        ...(card.grid as CardGrid),
+        elements: {
+          ...(card.grid?.elements as Record<string, unknown>),
+          photo: { ...photoEl!, placement: { x: -0.05, y: 0.05, scale: 1 } },
+        },
+      },
+    };
+    renderControls({ card: nudgedCard, selected: 'photo' });
+    const readout = screen.getByTestId('grid-placement-readout');
+    expect(readout.textContent).toMatch(/x:\s*-0\.05.*y:\s*0\.05/i);
+  });
 });

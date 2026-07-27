@@ -61,6 +61,23 @@
   cursor: grabbing;
 }
 
+/* REQ-UX-003: overlay coords durante drag (x, y, s) in basso-destra cella. */
+.card-grid-placement-overlay {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 2px 6px;
+  font-size: 9px;
+  line-height: 1;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 5;
+}
+
 .card-preview-side.grid-mode .card-grid-cell--text,
 .card-back-body-grid .card-grid-cell--text {
   flex-direction: column;

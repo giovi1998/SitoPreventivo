@@ -530,6 +530,22 @@ export function CardGridControls({
                 </label>
                 );
               })()}
+              {/* REQ-DF-005: display coordinate + Reset posizione */}
+              <div className="card-grid-placement-readout" data-testid="grid-placement-readout">
+                <span className="card-grid-placement-coords" aria-live="polite">
+                  x: {placement.x.toFixed(2)}, y: {placement.y.toFixed(2)}, s: {placement.scale.toFixed(2)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handlePatchPlacement({ x: 0, y: 0, scale: 1 })}
+                  className="card-grid-placement-reset"
+                  aria-label={`Reset posizione ${selectedLabel}`}
+                  title={`Reset posizione ${selectedLabel}`}
+                  data-testid="grid-placement-reset"
+                >
+                  Reset
+                </button>
+              </div>
             </div>
           )}
         </>
