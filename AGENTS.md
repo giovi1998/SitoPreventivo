@@ -392,6 +392,12 @@ skill** (`.agents/skills/<name>/SKILL.md`):
   o fixi un bug (vedi "Test, OBBLIGATORI" sopra: nuovo codice → nuovi test,
   bug fix → regression test). Invoca `skill("test-driven-development")`
   PRIMA di scrivere l'implementazione, non dopo.
+- `clean-code` — quando scrivi/modifichi codice in `src/`/`api/`/`db/`
+  (nuovo codice, refactor, PR review). Principi Uncle Bob: naming
+  intention-revealing, funzioni piccole (<20 righe, una sola cosa),
+  no commenti inutili (spiega in codice), law of Demeter, error handling
+  via exceptions non return codes, F.I.R.S.T. test. Invoca
+  `skill("clean-code")` PRIMA di scrivere codice nuovo o refactor.
 
 On-demand (solo se il task lo richiede): `deploy-to-vercel`,
 `vercel-cli-with-tokens`, `vercel-optimize`, `gpt-taste` /
