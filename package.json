@@ -14,7 +14,11 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "test:e2e:critical": "node scripts/e2e-gate.mjs",
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky",
+    "check:api-imports": "node scripts/check-api-imports.mjs",
+    "docs:sync-check": "node scripts/docs-sync-check.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -49,7 +53,9 @@
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^4.1.9",
     "drizzle-kit": "^1.0.0-beta.22",
+    "husky": "^9.1.7",
     "jsdom": "^29.1.1",
+    "lint-staged": "^16.4.0",
     "playwright": "^1.61.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",

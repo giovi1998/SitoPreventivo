@@ -1,0 +1,3 @@
+# Post-commit docs sync reminder (non-blocking).
+# Warns when src/ or api/ changed but docs/spec/README untouched.
+node scripts/docs-sync-check.mjs HEAD~1..HEAD || true

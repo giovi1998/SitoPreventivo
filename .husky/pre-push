@@ -1,0 +1,11 @@
+# Pre-push gate (full, ~1-3min):
+#   typecheck + unit tests + production build.
+#   Would have caught ERR_MODULE_NOT_FOUND before Vercel.
+
+echo "[pre-push] typecheck + test + build"
+
+npm run typecheck || { echo "[pre-push] FAIL typecheck"; exit 1; }
+npm run test || { echo "[pre-push] FAIL test"; exit 1; }
+npm run build || { echo "[pre-push] FAIL build"; exit 1; }
+
+echo "[pre-push] OK"

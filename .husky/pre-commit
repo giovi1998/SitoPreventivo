@@ -1,0 +1,7 @@
+# Pre-commit gate (fast, <30s):
+#   1. check-api-imports: serverless import safety (gotcha §1 ERR_MODULE_NOT_FOUND)
+#   2. lint-staged: targeted tests on staged files
+
+node scripts/check-api-imports.mjs || exit 1
+
+npx lint-staged || exit 1

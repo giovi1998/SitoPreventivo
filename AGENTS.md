@@ -13,10 +13,17 @@ npm run db:generate  # Generate Drizzle migration
 npm run db:migrate   # Apply migrations to Neon
 ```
 
-## Output Style (caveman skill)
+## Output Style (caveman skill) — OBBLIGATORIO SEMPRE
 
-Compressione output attiva via skill `caveman` (`.agents/skills/caveman/SKILL.md`,
-auto-load). Stile terso, ~-65% token. La skill si **disattiva automaticamente**
+**Regola hard**: ad ogni avvio sessione (anche dopo refresh), PRIMA di rispondere
+a qualunque prompt utente, devi **invocare `skill("caveman")`** via tool.
+Senza quella chiamata la skill non è attiva (opencode non auto-carica le skill
+legate solo a descrizione). AGENTS.md elenca `caveman` in "Active Skills" ma è
+informativo — l'azione obbligatoria è la `skill("caveman")` all'inizio della
+sessione.
+
+Compressione output attiva via skill `caveman` (`.agents/skills/caveman/SKILL.md`).
+Stile terso, ~-65% token. La skill si **disattiva automaticamente**
 (auto-clarity) su: warning sicurezza, conferme azioni irreversibili, sequenze
 multi-step ambigue, utente che chiede chiarimento. Non forzare lo stile terso
 in quei casi.
@@ -330,6 +337,37 @@ Regole push/deploy:
 2. Mai cambiare `vercel.json` rewrites senza testare `/api` routes dopo.
 3. Prima di push di feature con env var Vercel, confermare che siano
    settate nella dashboard (mancanti → 503/500 in prod).
+
+## Git Hooks (husky + lint-staged)
+
+Hook installati via `husky` 9 (`.husky/`), attivi dopo `npm install`
+(`prepare: husky`). Script di supporto in `scripts/`.
+
+| Hook | Quando | Cosa fa | Durata |
+|------|--------|---------|--------|
+| `pre-commit` | `git commit` | `scripts/check-api-imports.mjs` (serverless import safety, gotcha §1) + `lint-staged` (vitest related su file staged + check api/ su `api/**/*.ts`) | <30s |
+| `pre-push` | `git push` | `npm run typecheck` + `npm run test` + `npm run build` (full gate, intercetta ERR_MODULE_NOT_FOUND pre-Vercel) | ~1-3min |
+| `post-commit` | dopo `git commit` | `scripts/docs-sync-check.mjs HEAD~1..HEAD` — reminder non bloccante se `src/`/`api/`/`db/` cambiati ma `docs/`/`spec/`/`README.md`/`AGENTS.md` no | <1s |
+
+E2E gate (manuale, non in pre-push perché lento ~5-10min):
+
+```bash
+npm run test:e2e:critical   # node scripts/e2e-gate.mjs
+```
+
+Gira Playwright sulle route critiche (routing, card export roundtrip,
+flyer hero entrypoint, ai-log-preview). Usa prima di merge su `main`.
+
+Comandi manuali:
+
+```bash
+npm run check:api-imports   # solo check import api/
+npm run docs:sync-check     # solo reminder docs (HEAD~1..HEAD)
+node scripts/docs-sync-check.mjs <range>   # range custom (es. main..HEAD)
+```
+
+Bypass locale (emergenza, NON in CI): `git commit --no-verify` /
+`git push --no-verify`. Mai usare per aggirare test rossi — fixa prima.
 
 ## Active Skills
 
