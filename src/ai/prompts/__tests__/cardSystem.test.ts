@@ -103,4 +103,22 @@ describe('buildCardSystemPrompt', () => {
     expect(p).toMatch(/fontScale.*legacy|legacy.*fontScale/i);
     expect(p).toContain('placement.scale');
   });
+
+  // ─── TB-023 REQ-PD-007: decorations nel prompt ──────────────
+  it('documents decorations.pattern with the 5 pattern ids and sector examples', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toContain('decorations.pattern');
+    expect(p).toContain('wave-bottom');
+    expect(p).toContain('blob-corner');
+    expect(p).toContain('splash-corners');
+    expect(p).toContain('full-overlay');
+    expect(p).toContain('wave-split');
+    expect(p).toMatch(/food.*wave-bottom|wave-bottom.*food/i);
+    expect(p).toMatch(/tech.*blob-corner|blob-corner.*tech/i);
+  });
+
+  it('warns that userLocked decorations must not be touched', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toMatch(/userLocked/i);
+  });
 });

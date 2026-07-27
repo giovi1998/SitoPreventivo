@@ -185,4 +185,42 @@ describe('aiCardInputSchema', () => {
       expect((r.data.front as Record<string, unknown>).opacity).toBeUndefined();
     }
   });
+
+  // ─── TB-023 REQ-PD-007: decorations nello schema AI ─────────
+  it('accepts decorations.pattern with valid pattern id', () => {
+    const r = aiCardInputSchema.safeParse({ decorations: { pattern: 'wave-bottom' } });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts decorations.pattern null (clear decoration)', () => {
+    const r = aiCardInputSchema.safeParse({ decorations: { pattern: null } });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects decorations.pattern with an unknown id', () => {
+    const r = aiCardInputSchema.safeParse({ decorations: { pattern: 'zigzag' } });
+    expect(r.success).toBe(false);
+  });
+
+  it('accepts decorations.opacity in [0,1] and rejects out-of-range', () => {
+    expect(aiCardInputSchema.safeParse({ decorations: { opacity: 0.3 } }).success).toBe(true);
+    expect(aiCardInputSchema.safeParse({ decorations: { opacity: 1.5 } }).success).toBe(false);
+    expect(aiCardInputSchema.safeParse({ decorations: { opacity: -0.1 } }).success).toBe(false);
+  });
+
+  it('accepts decorations.palette with #RRGGBB colors (hex validation delegated to merge)', () => {
+    expect(
+      aiCardInputSchema.safeParse({
+        decorations: { palette: { primary: '#01696F', secondary: '#E11D48', accent: null } },
+      }).success,
+    ).toBe(true);
+    // Lo schema è permissivo sui colori (string): un hex invalid non fa
+    // scartare tutta la palette. Il merge valida per-campo e scarta i
+    // singoli valori invalidi.
+    expect(
+      aiCardInputSchema.safeParse({
+        decorations: { palette: { primary: 'red', secondary: '#E11D48' } },
+      }).success,
+    ).toBe(true);
+  });
 });

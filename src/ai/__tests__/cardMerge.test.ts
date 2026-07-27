@@ -844,4 +844,89 @@ describe('mergeCardAIResponse — placement (nudge/zoom) preservation', () => {
     expect(merged.front.layout).toBe('right-balanced');
     expect(changes.some((c) => c.includes('right-balanced'))).toBe(true);
   });
+
+  // ─── TB-023 REQ-PD-007: decorations merge ───────────────────
+  it('merges decorations.pattern and palette from AI response', () => {
+    const card = createEmptyCard();
+    const { card: merged, changes } = mergeCardAIResponse(card, {
+      decorations: {
+        pattern: 'wave-bottom',
+        palette: { primary: '#FF0000', secondary: '#00FF00', accent: '#0000FF' },
+      },
+    });
+    expect(merged.decorations?.pattern).toBe('wave-bottom');
+    expect(merged.decorations?.palette.primary).toBe('#FF0000');
+    expect(merged.decorations?.palette.secondary).toBe('#00FF00');
+    expect(merged.decorations?.palette.accent).toBe('#0000FF');
+    expect(changes.some((c) => c.includes('pattern'))).toBe(true);
+  });
+
+  it('merges decorations.pattern=null (clears decoration)', () => {
+    const card: BusinessCard = {
+      ...createEmptyCard(),
+      decorations: {
+        pattern: 'wave-bottom',
+        opacity: 0.2,
+        palette: { primary: '#01696F', secondary: '#E11D48', accent: null },
+        userLocked: false,
+      },
+    };
+    const { card: merged, changes } = mergeCardAIResponse(card, {
+      decorations: { pattern: null },
+    });
+    expect(merged.decorations?.pattern).toBeNull();
+    expect(changes.some((c) => /nessuno|null/.test(c))).toBe(true);
+  });
+
+  it('merges decorations.opacity within [0,1]', () => {
+    const card = createEmptyCard();
+    const { card: merged } = mergeCardAIResponse(card, {
+      decorations: { opacity: 0.5 },
+    });
+    expect(merged.decorations?.opacity).toBe(0.5);
+  });
+
+  it('respects decorations.userLocked=true and skips AI decoration changes', () => {
+    const card: BusinessCard = {
+      ...createEmptyCard(),
+      decorations: {
+        pattern: 'blob-corner',
+        opacity: 0.3,
+        palette: { primary: '#111111', secondary: '#222222', accent: null },
+        userLocked: true,
+      },
+    };
+    const { card: merged, changes } = mergeCardAIResponse(card, {
+      decorations: { pattern: 'wave-bottom' },
+    });
+    // userLocked → AI pattern ignorato, resta blob-corner
+    expect(merged.decorations?.pattern).toBe('blob-corner');
+    expect(changes.some((c) => /bloccata dall'utente|userLocked/i.test(c))).toBe(true);
+  });
+
+  it('preserves existing decorations when AI sends nothing', () => {
+    const card: BusinessCard = {
+      ...createEmptyCard(),
+      decorations: {
+        pattern: 'wave-split',
+        opacity: 0.25,
+        palette: { primary: '#aaaaaa', secondary: '#bbbbbb', accent: null },
+        userLocked: false,
+      },
+    };
+    const { card: merged } = mergeCardAIResponse(card, { front: { name: 'X' } });
+    expect(merged.decorations?.pattern).toBe('wave-split');
+    expect(merged.decorations?.palette.primary).toBe('#aaaaaa');
+  });
+
+  it('rejects invalid hex in AI decorations.palette (keeps current palette)', () => {
+    const card = createEmptyCard();
+    const { card: merged } = mergeCardAIResponse(card, {
+      decorations: { palette: { primary: 'not-a-color', secondary: '#00FF00' } },
+    });
+    // primary invalida → scartata, default del createEmptyCard resta
+    expect(merged.decorations?.palette.primary).toBe('#01696F');
+    // secondary valida → merge
+    expect(merged.decorations?.palette.secondary).toBe('#00FF00');
+  });
 });

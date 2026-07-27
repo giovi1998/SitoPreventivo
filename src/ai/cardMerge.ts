@@ -374,6 +374,48 @@ export function mergeCardAIResponse(
     }
   }
 
+  // ─── DECORATIONS (TB-023 REQ-PD-007, CON-PD-002) ───────────
+  // L'AI può suggerire pattern/palette/opacity. Se l'utente ha bloccato
+  // la decorazione (`decorations.userLocked === true`), il merge salta
+  // qualunque modifica AI alle decorations e registra un change esplicito.
+  const aiDecorations = (modifiedSafe as Record<string, unknown>).decorations as
+    | {
+        pattern?: 'wave-bottom' | 'wave-split' | 'blob-corner' | 'splash-corners' | 'full-overlay' | null;
+        opacity?: number;
+        palette?: { primary?: string; secondary?: string; accent?: string | null };
+      }
+    | undefined;
+
+  if (aiDecorations && typeof aiDecorations === 'object') {
+    const currentDecor = updated.decorations ?? { pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null }, userLocked: false };
+    if (currentDecor.userLocked) {
+      changes.push('Decorazione: bloccata dall\'utente (userLocked), suggerimento AI ignorato');
+    } else {
+      const next = { ...currentDecor, palette: { ...currentDecor.palette } };
+      if (aiDecorations.pattern !== undefined) {
+        next.pattern = aiDecorations.pattern;
+        changes.push(`Decorazione: pattern → ${aiDecorations.pattern ?? 'nessuno'}`);
+      }
+      if (typeof aiDecorations.opacity === 'number' && aiDecorations.opacity >= 0 && aiDecorations.opacity <= 1) {
+        next.opacity = aiDecorations.opacity;
+        changes.push(`Decorazione: opacità → ${aiDecorations.opacity}`);
+      }
+      if (aiDecorations.palette && typeof aiDecorations.palette === 'object') {
+        if (typeof aiDecorations.palette.primary === 'string' && /^#[0-9a-fA-F]{6}$/.test(aiDecorations.palette.primary)) {
+          next.palette.primary = aiDecorations.palette.primary;
+        }
+        if (typeof aiDecorations.palette.secondary === 'string' && /^#[0-9a-fA-F]{6}$/.test(aiDecorations.palette.secondary)) {
+          next.palette.secondary = aiDecorations.palette.secondary;
+        }
+        if (aiDecorations.palette.accent === null || (typeof aiDecorations.palette.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(aiDecorations.palette.accent))) {
+          next.palette.accent = aiDecorations.palette.accent;
+        }
+        changes.push('Decorazione: palette aggiornata');
+      }
+      updated.decorations = next;
+    }
+  }
+
   if (changes.length > 0) {
     updated.updatedAt = new Date().toISOString();
   }

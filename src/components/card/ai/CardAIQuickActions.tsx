@@ -20,6 +20,15 @@ const QUICK_GROUP_PERSONALIZE: QuickAction[] = [
   { mode: 'growPhoto', label: 'Allarga foto', title: 'Aumenta la larghezza della foto' },
 ];
 
+// TB-023 REQ-PD-008: decoration quick chips.
+const QUICK_GROUP_DECORATION: QuickAction[] = [
+  { mode: 'decorationWave', label: 'Onda', title: 'Aggiungi onda decorativa in basso' },
+  { mode: 'decorationBlob', label: 'Blob', title: 'Aggiungi blob decorativo in un angolo' },
+  { mode: 'decorationSplash', label: 'Splash', title: 'Aggiungi splash decorativo agli angoli' },
+  { mode: 'decorationFull', label: 'Overlay', title: 'Aggiungi overlay pieno come sfondo' },
+  { mode: 'decorationClear', label: 'No decoro', title: 'Rimuovi la decorazione' },
+];
+
 export interface CardAIQuickActionsProps {
   isProcessing: boolean;
   onRun: (mode: string) => void;
@@ -62,6 +71,7 @@ export default function CardAIQuickActions({ isProcessing, onRun }: CardAIQuickA
     >
       <QuickGroup items={QUICK_GROUP_CLEAN} label="Pulisci" isProcessing={isProcessing} onRun={onRun} />
       <QuickGroup items={QUICK_GROUP_PERSONALIZE} label="Personalizza" isProcessing={isProcessing} onRun={onRun} />
+      <QuickGroup items={QUICK_GROUP_DECORATION} label="Decorazione" isProcessing={isProcessing} onRun={onRun} />
     </AiSection>
   );
 }

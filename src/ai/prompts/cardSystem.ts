@@ -22,6 +22,9 @@ CAMPI DISPONIBILI (puoi modificare qualsiasi campo):
  - grid.cols (2-8), grid.rows (2-8)
  - grid.elements.{photo,name,title,company,logo,qr,contacts,socials,services} con x,y,w,h, opzionali alignH/alignV e placement {x,y,scale}
  - placement: x,y ∈ [-1,1] = spostamento fine dentro la cella; scale ∈ [0.5,2] = zoom per photo/qr/logo, fattore dimensione font per gli elementi testo
+ - decorations.pattern: "wave-bottom" | "wave-split" | "blob-corner" | "splash-corners" | "full-overlay" | null
+ - decorations.opacity: numero 0-1 (default 0.2)
+ - decorations.palette: { primary #RRGGBB, secondary #RRGGBB, accent #RRGGBB | null }
 
 PALETTE PREDEFINITE (usa questi set coerenti, NON mescolare):
 | Stile | bgColor | textColor | accentColor |
@@ -133,9 +136,19 @@ REGOLE IMPORTANTI:
 14. Per "testo più grande/più piccolo" preferisci placement.scale sul
     singolo elemento (0.5–2). style.fontScale è un campo legacy per la
     dimensione GLOBALE: il merge lo clampa a [0.7, 1.5].
-15. back.qrSize: imposta questo campo se l'utente chiede "QR più
-    piccolo/grande". "small"≈84px, "medium"≈120px (default), "large"≈160px
-    in flexbox-mode. In grid-mode la dimensione è data dalla cella.
+ 15. back.qrSize: imposta questo campo se l'utente chiede "QR più
+     piccolo/grande". "small"≈84px, "medium"≈120px (default), "large"≈160px
+     in flexbox-mode. In grid-mode la dimensione è data dalla cella.
+ 16. DECORAZIONI (decorations.pattern): pattern SVG dietro i contenuti.
+     L'AI può suggerirlo in base al settore (esempi):
+     - food/ristorazione/bar → "wave-bottom" + colori caldi (rosso/arancio)
+     - tech/software/app → "blob-corner" + blu/teal
+     - education/formazione → "splash-corners" + toni soft
+     - finance/legale/studio → "full-overlay" + blu navy
+     - wellness/bellezza/moda → "wave-split" + verde/bianco
+     - default/uncategorized → "blob-corner" o ometti
+     Se l'utente ha bloccato la decorazione (userLocked), NON modificarla.
+     Per "togli decorazione" → decorations.pattern = null.
 
 ESEMPI COMUNI MODIFICA (rispondi SEMPRE con JSON completo):
 - "rendi premium": accent color sofisticato (navy #1e3a5f, bordeaux #8b0000, o teal #01696F), layout "split" se c'è foto o "centered" se non c'è, font Inter, borderStyle "accent-strip-left"
@@ -147,7 +160,9 @@ ESEMPI COMUNI MODIFICA (rispondi SEMPRE con JSON completo):
 - "cambia palette": cambia bgColor/textColor/accentColor con una palette predefinita coerente (teal, navy, bordeaux, monochrome)
 - "rendi il testo più grande": grid.elements.name.placement.scale=1.2 (globale: style.fontScale=1.2, legacy)
 - "rimpicciolisci il QR": back.qrSize="small"
-- "intitola i servizi": back.servicesLabel="Servizi che offro"
+ - "intitola i servizi": back.servicesLabel="Servizi che offro"
+ - "aggiungi onda decorativa": decorations={pattern:"wave-bottom", palette:{primary:"#01696F",secondary:"#E11D48"}}
+ - "decorazione food": decorations={pattern:"wave-bottom", palette:{primary:"#E11D48",secondary:"#F59E0B"}}
 
 ESEMPI ANALISI (rispondi con TESTO, niente JSON):
 - "ottimizza per stampa": verifica contrasto, suggerisci font leggibili, evita colori troppo chiari

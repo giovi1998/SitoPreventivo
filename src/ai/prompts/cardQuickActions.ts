@@ -43,6 +43,36 @@ export const CARD_QUICK_ACTIONS: CardQuickAction[] = [
     title: 'Allarga la foto',
     prompt: 'Allarga la foto: aumenta grid.elements.photo.w di 1.',
   },
+  {
+    mode: 'decorationWave',
+    label: '〜 Onda',
+    title: 'Aggiungi onda decorativa in basso',
+    prompt: 'Aggiungi una decorazione onda in basso: imposta decorations.pattern="wave-bottom" con palette coerente con accentColor e textColor del bigliettino.',
+  },
+  {
+    mode: 'decorationBlob',
+    label: '● Blob',
+    title: 'Aggiungi blob decorativo in un angolo',
+    prompt: 'Aggiungi una decorazione blob: imposta decorations.pattern="blob-corner" con palette coerente con accentColor.',
+  },
+  {
+    mode: 'decorationSplash',
+    label: '✦ Splash',
+    title: 'Aggiungi splash decorativo agli angoli',
+    prompt: 'Aggiungi una decorazione splash: imposta decorations.pattern="splash-corners" con palette soft coerente.',
+  },
+  {
+    mode: 'decorationFull',
+    label: '▣ Overlay',
+    title: 'Aggiungi overlay pieno come sfondo',
+    prompt: 'Aggiungi una decorazione overlay pieno: imposta decorations.pattern="full-overlay" con palette navy/teal.',
+  },
+  {
+    mode: 'decorationClear',
+    label: '✕ Pulisci',
+    title: 'Rimuovi la decorazione',
+    prompt: 'Rimuovi la decorazione: imposta decorations.pattern=null.',
+  },
 ];
 
 export function findCardQuickAction(mode: string): CardQuickAction | undefined {

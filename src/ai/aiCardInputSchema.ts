@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DECORATIVE_PATTERN_IDS } from '../utils/decorations/patterns';
 
 const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colore non valido (formato #RRGGBB)');
 
@@ -94,6 +95,22 @@ export const aiCardInputSchema = z.object({
       contacts: gridElementShape.optional(),
       socials: gridElementShape.optional(),
       services: gridElementShape.optional(),
+    }).optional(),
+  }).optional(),
+
+  // Spec TB-023 REQ-PD-007: l'AI può suggerire un pattern decorativo.
+  // Shape specchia `businessCardSchema.decorations` ma con tutti i campi
+  // opzionali (l'AI invia solo ciò che vuole cambiare). I colori sono
+  // `string` permissivi (non hexColorSchema) così un singolo valore
+  // invalido non fa scartare tutta la palette: il merge valida per-campo.
+  // Il merge rispetta `userLocked`: se true, l'AI non può modificare.
+  decorations: z.object({
+    pattern: z.enum(DECORATIVE_PATTERN_IDS).nullable().optional(),
+    opacity: z.number().min(0).max(1).optional(),
+    palette: z.object({
+      primary: z.string().optional(),
+      secondary: z.string().optional(),
+      accent: z.string().nullable().optional(),
     }).optional(),
   }).optional(),
 });
