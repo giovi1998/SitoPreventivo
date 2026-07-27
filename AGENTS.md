@@ -378,16 +378,29 @@ skill** (`.agents/skills/<name>/SKILL.md`):
 - `vercel-composition-patterns` — component design
 - `web-design-guidelines` — review UI/accessibilità
 - `writing-guidelines` — docs/prose style
-- `caveman` — compressione output (sempre)
+- `caveman` — compressione output (sempre, vedi "Output Style" sopra per
+  regola hard di invocazione `skill("caveman")` ad ogni sessione)
 - `ai-prompt-engineering` — quando tocchi `src/ai/prompts/*` o `*Orchestrator.ts`
 - `vercel-serverless-monolith` — quando tocchi `api/index.ts` o `api/`
 - `pdf-client-side` — quando tocchi `*Generator.ts` o `watermark.ts`
+- `web-security` — quando tocchi auth/rate-limit/CORS/Zod-validation in
+  `api/index.ts` o `api/` (gotcha §13 OWASP A04/A06 🟡 TODO). Invoca
+  `skill("web-security")` PRIMA di modificare `handleAuth`,
+  `consumeRateLimit`, `bodyParser`, header CORS, o qualsiasi schema Zod
+  su body/query dell'API.
+- `test-driven-development` — quando crei nuovo file in `src/`/`api/`/`db/`
+  o fixi un bug (vedi "Test, OBBLIGATORI" sopra: nuovo codice → nuovi test,
+  bug fix → regression test). Invoca `skill("test-driven-development")`
+  PRIMA di scrivere l'implementazione, non dopo.
 
 On-demand (solo se il task lo richiede): `deploy-to-vercel`,
 `vercel-cli-with-tokens`, `vercel-optimize`, `gpt-taste` /
 `design-taste-frontend` / `high-end-visual-design` (design UI premium),
 `muapi-nano-banana` (prompt `imagePrompt` AI), `imagegen-frontend-*`,
-`redesign-existing-projects`, `brandkit`, `image-to-code`, ecc.
+`redesign-existing-projects`, `brandkit`, `image-to-code`,
+`playwright-cli` (debug E2E), `full-output-enforcement` (output lungo),
+`create-specification` (nuove spec in `spec/`), `frontend-design`,
+`minimalist-ui`, `industrial-brutalist-ui`, `stitch-design-taste`, ecc.
 
 Le skill sono **solo per l'agente di coding**, non per l'app: l'app usa
 DeepSeek/Gemini/Ollama via proxy server-side.

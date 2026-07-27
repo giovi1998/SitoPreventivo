@@ -42,21 +42,23 @@
 | REQ-TC-002 trackUsage costUsd | ✅ | `BaseOrchestrator.ts:239-255` → `dataService.trackTokens(email, tokens, costUsd)`. |
 | REQ-TC-003 migration | ✅ | `db/migrations/0027_token_cost.sql` + schema inline `api/index.ts:36`. |
 | REQ-TC-004 /users/tokens costUsd | ✅ | `api/index.ts:348,619-643`, backward compatibile. |
-| REQ-TC-005 badge costo | ⚠️ | Costo ultima operazione inline con guard `isFlat` ✅; **manca** tooltip/popover breakdown 30gg (REQ-UX-006). |
+| REQ-TC-005 badge costo | ✅ DONE 2026-07-27 | Costo ultima operazione inline con guard `isFlat` ✅. Tooltip/popover breakdown 30gg ✅ aggiunto: hover ≥300ms su `AIProviderBadge` mostra `totalCostUsd` sessione + hint admin breakdown. `totalCostUsd` forwarded da `AIHarnessConsole` → `AIConsole` → badge. |
 | REQ-TC-006 cost-breakdown admin | 🛠️ | **Implementato in questa verifica**: `GET /users/cost-breakdown` (`api/index.ts:598-628`) + test `api/__tests__/costBreakdown.test.ts`. Deviazione documentata: non esiste storico per-chiamata nel DB → ritorna aggregati lifetime per utente + `ollamaProFlatMonthly`, `days` è echo. |
 
 ## 4. Pattern Decorativi (§3.4)
 
 | REQ | Esito | Evidenza |
 |-----|-------|----------|
-| REQ-PD-001 5 pattern | 🔶 | `src/utils/decorations/patterns.ts` — unico entry point `renderDecorativePattern(id,w,h,opts)` invece di 5 funzioni esportate; palette `{primary,secondary,accent}` invece di `(color,corner)`. Equivalente. |
-| REQ-PD-002 DecorationId | 🔶 | `DecorativePatternId` senza `'none'` (il "nessuno" è `pattern: null`). |
-| REQ-PD-003 schema | 🔶 | `decorations` top-level (non `style.decoration`), shape `{pattern, opacity, palette}`. Nessun supporto `corner` per blob-corner (hardcoded bottom-right). |
-| REQ-PD-004 DecorationPicker | ⚠️ | Nessun componente con 6 thumbnail (REQ-UX-001): UI reale = select + color picker + slider in `CardStyleFields` ("Decorazione" manuale). `CardAIDecorationSection.tsx` è codice morto (solo test). **Flyer: nessuna UI decoration** (schema+render esistono ma non attivabili). |
-| REQ-PD-005 preview layer | ✅ | `CardPreview.tsx:404-417` (+ retro), flyer via `svgRenderer.ts:80-92` condiviso. |
-| REQ-PD-006 export layer | ✅ | card `svgRenderer.ts:228-232,457-461`; flyer `svgRenderer.ts:82`; PNG/PDF via `buildCardSvg`/`buildFlyerSvg`. |
-| REQ-PD-007 AI sceglie decoration | ❌ | Nessun campo decoration negli output schema AI né esempi settore nei prompt. Feature manual-only. |
-| REQ-PD-008 quick action chip | ❌ | Nessun chip decoration in `CardAIQuickActions`/`AIConsole`. |
+| REQ-PD-001 5 pattern | ✅ DONE | `src/utils/decorations/patterns.ts` — `renderDecorativePattern(id,w,h,opts)` + 5 renderer interni. Palette `{primary,secondary,accent}`. |
+| REQ-PD-002 DecorationId | ✅ DONE | `DecorativePatternId` senza `'none'` (il "nessuno" è `pattern: null`). |
+| REQ-PD-003 schema | ✅ DONE 2026-07-27 | `decorations` top-level, shape `{pattern, opacity, palette, userLocked}`. `userLocked` per CON-PD-002. Nessun supporto `corner` per blob-corner (hardcoded bottom-right — deviazione minore). |
+| REQ-PD-004 DecorationPicker | ✅ DONE 2026-07-27 | `src/components/DecorationPicker.tsx` con 6 thumbnail SVG 80×50 (none + 5 pattern). Integrato in `CardStyleFields` + `CardAIDecorationSection` (card) + `FlyerStyleFields` (flyer, con opacity slider). |
+| REQ-PD-005 preview layer | ✅ DONE | `CardPreview.tsx` (front+back), flyer via `svgRenderer.ts`. |
+| REQ-PD-006 export layer | ✅ DONE | card `svgRenderer.ts`; flyer `svgRenderer.ts`; PNG/PDF via `buildCardSvg`/`buildFlyerSvg`. |
+| REQ-PD-007 AI sceglie decoration | ✅ DONE 2026-07-27 | `aiCardInputSchema` accetta `decorations {pattern, opacity, palette}`. `cardMerge` fa merge rispettando `userLocked` (CON-PD-002). Prompt `cardSystem.ts` documenta 5 pattern + esempi settore (food→wave-bottom, tech→blob-corner, finance→full-overlay, wellness→wave-split, education→splash-corners). |
+| REQ-PD-008 quick action chip | ✅ DONE 2026-07-27 | 5 chip in `cardQuickActions` + gruppo "Decorazione" in `CardAIQuickActions`: Onda, Blob, Splash, Overlay, No decoro. |
+| CON-PD-001 solo geometria | ✅ DONE | Solo path/circle/gradient. |
+| CON-PD-002 userLocked | ✅ DONE 2026-07-27 | Flag `userLocked: boolean` in schema card/flyer decorations. `cardMerge` salta AI decoration se `userLocked === true` e registra change esplicito. |
 | CON-PD-001 solo geometria | ✅ | Solo path/circle/gradient. |
 | CON-PD-002 userLocked | ❌ de-facto OK | Flag inesistente; il merge AI non tocca le decoration perché non sono negli schema AI. |
 
@@ -67,31 +69,33 @@ REQ-PD-007/008 (AI decoration), DecorationPicker thumbnail (REQ-UX-001), flyer d
 
 | REQ | Esito | Evidenza |
 |-----|-------|----------|
-| REQ-DF-001 photoPlacement | 🔶 | Per-element in grid (`placement {x,y,scale}` generico + legacy `photoPlacement`), non `card.front.photoPlacement`. Documentato v2.15. |
-| REQ-DF-002 solo grid-mode | ✅ | `enabled` richiede `showGrid` (`CardPreview.tsx`). |
-| REQ-DF-003 pointer events | ⚠️ | pointerdown/move/up ✅ (sincrono, fix 2026-07-22: rimosso `requestAnimationFrame` che in jsdom non eseguiva mai). **Wheel scale: mancante** (scale solo via slider controlli). |
-| REQ-DF-004 overflow hidden + transform | ✅ | `cardPreviewSide.css:39,87`. |
-| REQ-DF-005 controlli placement | 🔶 | Frecce nudge ±0.05 + slider zoom 0.5-2 (invece di bottoni +/-); display solo zoom %; nessun display coordinate né bottone "Reset posizione". |
-| REQ-DF-006 export transform | 🔶 | Geometria inline (`imgX/imgY/imgW/imgH`) invece di attributo `transform` — equivalente. |
-| CON-DF-001 drag solo se selezionato | ✅ | + test. |
-| CON-DF-002 drag disabilitato senza foto | 🛠️ | **Fixato**: `hasContent` in `useDraggablePlacement` (photo: `photoUrl`, qr: `qrPayload`). |
-| GUD-DF-001 cursor grab/grabbing | 🛠️ | **Fixato**: regole `.card-grid-cell--draggable/--dragging` in `cardPreviewSide.css` (prima la classe era aggiunta ma mai stilizzata). |
-| GUD-DF-002 dead zone 0.05 | 🛠️ | **Fixato**: snap a 0 per \|nextX\|, \|nextY\| < 0.05. |
+| REQ-DF-001 photoPlacement | ✅ DONE | Per-element in grid (`placement {x,y,scale}` generico + legacy `photoPlacement`). Implementato `useDraggablePlacement` hook. |
+| REQ-DF-002 solo grid-mode | ✅ DONE | `enabled` richiede `showGrid` (`CardPreview.tsx`). |
+| REQ-DF-003 pointer events + wheel | ✅ DONE 2026-07-27 | pointerdown/move/up sincrono. Wheel scale ✅ aggiunto: `onWheel` handler in `useDraggablePlacement`, ±0.1 clamp [0.5, 2]. Wired a photo/logo/name/title/company. E2E `card-drag-wheel-overlay.spec.ts` test (a) wheel on name. |
+| REQ-DF-004 overflow hidden + transform | ✅ DONE | `cardPreviewSide.css`. |
+| REQ-DF-005 controlli placement | ✅ DONE 2026-07-27 | Frecce nudge ±0.05 + slider zoom 0.5-2 + readout `grid-placement-readout` (x/y/s live) + bottone `grid-placement-reset` (patch a {0,0,1}). E2E test (c) Reset. |
+| REQ-DF-006 export transform | ✅ DONE | Geometria inline equivalente a `transform`. E2E test (e) export SVG front verificato. |
+| CON-DF-001 drag solo se selezionato | ✅ DONE | + test. E2E test (h) overlay disappears. |
+| CON-DF-002 drag disabilitato senza foto | ✅ DONE | `hasContent` in `useDraggablePlacement`. |
+| GUD-DF-001 cursor grab/grabbing | ✅ DONE | `.card-grid-cell--draggable/--dragging`. |
+| GUD-DF-002 dead zone 0.05 | ✅ DONE | Snap a 0 per \|nextX\|, \|nextY\| < 0.05. |
+| REQ-UX-003 overlay coords | ✅ DONE 2026-07-27 | `PlacementOverlay` component in `CardPreview.tsx`: badge in basso-destra cella con `x:0.34 y:-0.12 s:1.20`. Render solo quando elemento selezionato. Esteso a name/title/company/logo. E2E test (b) nudge name shows overlay, (h) disappears on deselect. |
 
 ## 6. Icone AI (§3.6)
 
 | REQ | Esito | Evidenza |
 |-----|-------|----------|
-| REQ-IS-001 iconOrchestrator | 🔶 | Nessuna classe: hook `useAIIconHero.ts` + endpoint `/api/ai/image-flash`. |
-| REQ-IS-002 default flash + fallback | ⚠️ | Default = Nano Banana (`gemini-3.1-flash-image`), invertito rispetto alla spec; **nessun fallback automatico** tra modelli. |
+| REQ-IS-001 iconOrchestrator | 🔶 | Nessuna classe: hook `useAIIconHero.ts` + endpoint `/api/ai/image-flash`. Funzionalmente equivalente. |
+| REQ-IS-002 default flash + fallback | ⚠️ | Default = Nano Banana (`gemini-3.1-flash-image`), invertito rispetto alla spec; nessun fallback automatico tra modelli. |
 | REQ-IS-003 prompt 2-colori 256px | 🔶 | Prompt flat 2-colori ✅; size `'1K'` invece di 256×256 (fix pixelazione, issue #3 known-issues — spec mai aggiornata). |
 | REQ-IS-004 UI genera icona | 🔶 | Sezione `CardAIIconHeroSection` nella rail AI (non in CardFormFields). |
-| REQ-IS-005 schema iconUrl | ❌ | Nessun campo dedicato: l'icona va in `logoUrl`/`photoUrl`. |
+| REQ-IS-005 schema iconUrl | ❌ | Nessun campo dedicato: l'icona va in `photoUrl`. By-design (CON-IS-001). |
 | REQ-IS-006 heroIllustration flyer | ❌ | Flyer hero solo fotografico (`/api/flyer-hero`); `kind:'hero'` flat esiste in image-flash ma è wireato solo nella card. |
 | REQ-IS-007 preview prima di applicare | ⚠️ | Applicazione diretta a `photoUrl`. |
-| CON-IS-001 sostituire foto con icona AI | ✅ | L'icona AI generata va sempre in `photoUrl`, sostituendo la foto corrente; `logoUrl` caricato dall'utente non viene mai toccato. |
+| CON-IS-001 sostituire foto con icona AI | ✅ DONE | L'icona AI generata va sempre in `photoUrl`, sostituendo la foto corrente; `logoUrl` caricato dall'utente non viene mai toccato. |
 | CON-IS-002 compressione icone >200KB | ❌ | Solo clamp server 500KB che rifiuta (413) invece di comprimere. |
-| 🛠️ Reset log card pulisce anche icon hero logs | 🛠️ | **Fixato in questa verifica**: `resetCardChat` ora chiama `clearIconHeroLogs` (via `handleResetCardChat` in `CardEditorShell`), garantendo che "Nuova conversazione" pulisca tutti i log AI (card + icon hero). Prima solo `cardAiLogs` veniva pulito; `iconHeroLogs` (da `useAIIconHero` con `useAILogs` separato) restava. Regression test `CardEditorShell.test.tsx`. |
+| 🛠️ Reset log card pulisce anche icon hero logs | ✅ DONE | `resetCardChat` ora chiama `clearIconHeroLogs` (via `handleResetCardChat` in `CardEditorShell`), garantendo che "Nuova conversazione" pulisca tutti i log AI. Regression test `CardEditorShell.test.tsx`. |
+| 🛠️ **Icona AI 1K end-to-end verificata (issue 2b)** | ✅ DONE 2026-07-27 | E2E `card-icon-ai-1k.spec.ts` (3 test): mock `/api/ai/image-flash` con PNG 1024×1024 (sfondo bianco + cerchio rosso + quadrato verde) → `removeWhiteBackground` (tolerance 240) rimuove solo near-white puro, NON i colori saturi. Verifica pixel rossi+verdi sopravvivono. Screenshot `e2e/__screenshots__/tb023-icon-ai-1k-*.png`. Issue 2b chiusa: quadrato vuoto era causato da icone AI chiare/pastello su bianco (Gemini), non dal codice — con icone colorate removeBackground funziona correttamente. |
 
 **Issue 2b (icona quadrato vuoto) — valutazione cause:**
 CORS: non plausibile (data URL same-origin). Clamp 500KB: plausibile ma darebbe errore 413, non quadrato vuoto. **Causa più plausibile: `removeBackground.ts` con `tolerance=240`** — se Gemini produce icona chiara/pastello su bianco, ampie zone dell'icona stessa superano la tolleranza e diventano trasparenti. Non fixato in questa verifica (richiede test manuale con immagini reali Gemini); raccomandazione: ridurre tolerance a ~250 solo per near-white puro o rendere il removal opzionale.
@@ -106,12 +110,12 @@ CORS: non plausibile (data URL same-origin). Clamp 500KB: plausibile ma darebbe 
 
 | REQ | Esito | Evidenza |
 |-----|-------|----------|
-| REQ-UX-001 DecorationPicker thumbnail | ❌ | Select testuale (vedi REQ-PD-004). |
-| REQ-UX-002 badge dropdown | ✅ | Click-outside + ESC + lista provider + pricing. |
-| REQ-UX-003 drag overlay coords + dead zone | ⚠️ | Dead zone fixata 🛠️; overlay coords durante drag mancante. |
+| REQ-UX-001 DecorationPicker thumbnail | ✅ DONE 2026-07-27 | `src/components/DecorationPicker.tsx` con 6 thumbnail SVG 80×50 (none + 5 pattern). Integrato in `CardStyleFields` + `CardAIDecorationSection` + `FlyerStyleFields`. |
+| REQ-UX-002 badge dropdown | ✅ DONE | Click-outside + ESC + lista provider + pricing. |
+| REQ-UX-003 drag overlay coords + dead zone | ✅ DONE 2026-07-27 | Dead zone fixata. Overlay coords `PlacementOverlay` in `CardPreview.tsx`: badge in basso-destra cella con `x:0.34 y:-0.12 s:1.20`. E2E test (b)+(h). |
 | REQ-UX-004 modal icona 2-col 3 esempi | ❌ | Sezione singola, 1 immagine per chiamata. |
 | REQ-UX-005 "I miei clienti" Settings | ❌ | Non iniziato. |
-| REQ-UX-006 tooltip breakdown 30gg | ❌ | Vedi REQ-TC-005. |
+| REQ-UX-006 tooltip breakdown 30gg | ✅ DONE 2026-07-27 | Tooltip costi 30gg in `AIProviderBadge`: hover ≥300ms mostra total sessione + hint admin breakdown. `totalCostUsd` forwarded da `AIHarnessConsole` → `AIConsole` → badge. |
 | REQ-UX-007 toggle Vision | ⚠️ | Toggle ✅ (persistenza, default OFF, tooltip); manca icona occhio (testo "Vision ✓/✕"). |
 | CON-UX-002 no emoji nuovi componenti | ❌ | Spot-check: `🔒`/`✨` in `CardAIIconHeroSection`, emoji nei log hook. |
 

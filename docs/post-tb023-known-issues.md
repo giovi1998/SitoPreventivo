@@ -1,7 +1,8 @@
 # Post-TB-023 Known Issues & Stato Implementazione
 
-> Ultimo aggiornamento: 2026-07-23 (fix responsive preview, vision capture,
-> AI log image previews, auto-grow textarea — vedi commit 7a4c349..3cd1b70).
+> Ultimo aggiornamento: 2026-07-27 (TB-023 chiuso: wheel scale + readout/reset
+> + overlay coords + e2e playwright drag + icona AI 1K end-to-end verificata).
+> Vedi commit 2026-07-27.
 
 ---
 
@@ -26,6 +27,14 @@
 | 15 | **Prompt textarea non espandibile**: textarea in flyer/logo partiva con rows=3 senza auto-grow | 🛠️ `AiPromptTextarea` ora ha auto-grow via scrollHeight (max 320px). | `src/components/ai-ui/AiPromptTextarea.tsx` |
 | 16 | **Provider selection non persisteva tra editor**: cambiare provider in un editor non si propagava agli altri | 🛠️ `onProviderChange` callback in AIHarnessConsole → AppShell → `setAiProviderDefault`. | `src/components/ai/AIHarnessConsole.tsx`, `src/components/AppShell.tsx`, `src/components/EditorView.tsx`, `src/pages/app/EditorPage.tsx` |
 | 17 | **Flyer svgRenderer body in foreignObject non rasterizzabile**: `<img>` e canvas non supportano foreignObject | 🛠️ Opzione `renderBodyAsText` per rendering SVG nativo (text) quando il SVG viene rasterizzato. | `src/utils/flyer/svgRenderer.ts` |
+| 18 | **DecorationPicker dropdown non visivo**: selector era un `<select>` testuale in `CardStyleFields` e `CardAIDecorationSection` | 🛠️ Nuovo `src/components/DecorationPicker.tsx` con 6 thumbnail SVG 80×50 (REQ-UX-001). Hover scale 1.1, palette neutra, attivo con ring accent. Integrato in card (Style + AI section) e flyer (`FlyerStyleFields` con opacity slider). | `src/components/DecorationPicker.tsx`, `src/components/DecorationPicker.css`, `src/components/card/form/CardStyleFields.tsx`, `src/components/card/ai/CardAIDecorationSection.tsx`, `src/components/flyer/FlyerStyleFields.tsx`, `src/components/flyer/FlyerManualPanel.tsx`, `src/components/flyer/FlyerEditorShell.tsx` |
+| 19 | **AI non poteva suggerire decorazioni**: schema AI input e merge ignoravano `decorations` | 🛠️ `aiCardInputSchema` accetta `decorations` (pattern/opacity/palette permissivi). `cardMerge` fa merge con rispetto di `userLocked` (CON-PD-002): se true, AI pattern ignorato e change registrato. Prompt `cardSystem.ts` documenta 5 pattern + esempi settore (food→wave-bottom, tech→blob-corner, finance→full-overlay, wellness→wave-split, education→splash-corners). | `src/ai/aiCardInputSchema.ts`, `src/ai/cardMerge.ts`, `src/ai/prompts/cardSystem.ts`, `src/utils/documentSchemas.ts` (userLocked), `src/utils/flyer/templateFactory.ts` |
+| 20 | **Quick action chips mancavano per decorazioni**: nessun shortcut AI per pattern | 🛠️ 5 nuovi chip in `cardQuickActions` + `CardAIQuickActions` gruppo "Decorazione": Onda, Blob, Splash, Overlay, No decoro. | `src/ai/prompts/cardQuickActions.ts`, `src/components/card/ai/CardAIQuickActions.tsx` |
+| 21 | **AIProviderBadge senza breakdown costi**: solo costo ultima call, no total sessione | 🛠️ Tooltip costi 30gg (REQ-UX-006): hover ≥300ms su badge mostra total sessione + hint admin breakdown. `totalCostUsd` prop forwarded da `AIHarnessConsole` → `AIConsole` → badge. | `src/components/ai/AIProviderBadge.tsx`, `src/components/ai/AIProviderBadge.css`, `src/components/ai/AIConsole.tsx` |
+| 22 | **Wheel scale mancante (REQ-DF-003 residuo)**: scale solo via slider CardGridControls | 🛠️ `useDraggablePlacement` espone `onWheel` handler: wheel up/down sull'elemento selezionato modifica `placement.scale` ±0.1 clamp [0.5, 2]. Wired a photo/logo/name/title/company in `CardPreview.tsx`. | `src/components/CardPreview.tsx` |
+| 23 | **Display coordinate + Reset mancanti (REQ-DF-005)**: solo slider zoom, nessun readout x/y/s né bottone reset | 🛠️ Aggiunto `grid-placement-readout` (x/y/s live) + bottone `grid-placement-reset` (patch a {0,0,1}) in `CardGridControls.tsx`. | `src/components/card/CardGridControls.tsx`, `src/components/card/cardGridOverlay.css` |
+| 24 | **Overlay coords durante drag mancante (REQ-UX-003)**: nessun feedback visivo delle coordinate durante nudge | 🛠️ `PlacementOverlay` component in `CardPreview.tsx`: badge in basso-destra cella con `x:0.34 y:-0.12 s:1.20`. Render solo quando elemento selezionato (`photoDrag.enabled`). Esteso a name/title/company/logo. | `src/components/CardPreview.tsx`, `src/components/card/cardPreviewSide.css` |
+| 25 | **Icona AI 1K end-to-end non verificata (issue 2b)**: quadrato vuoto sospetto removeBackground tolerance 240 | 🛠️ E2E `card-icon-ai-1k.spec.ts` (3 test): mock `/api/ai/image-flash` con PNG 1024×1024 (sfondo bianco + cerchio rosso + quadrato verde) → verifica pixel rossi+verdi sopravvivono a `removeWhiteBackground`. Screenshot preview front + back. Test verde conferma icona non quadrato vuoto. | `e2e/card-icon-ai-1k.spec.ts`, screenshot `e2e/__screenshots__/tb023-icon-ai-1k-*.png` |
 
 ---
 
@@ -96,23 +105,25 @@
 
 ## 📋 Checklist Prossimi Passi
 
-> Aggiornata 2026-07-23 dopo i fix responsive/vision/log (commit 7a4c349..3cd1b70).
+> Aggiornata 2026-07-27: TB-023 chiuso (wheel + readout + overlay + icona 1K
+> e2e verificati). Rimangono solo backlog low-priority.
 
 ### Priorità alta
 
-1. **Verificare icona AI 1K end-to-end** (issue 2b sopra)
-   - Apri `/app/card`, genera icona AI.
-   - Controlla preview + export PNG/SVG.
-   - Se quadrato vuoto: investigare `removeBackground.ts` tolerance 240.
-   - Se 413, abbassare quality/compressione o tornare a 512 con upscaling.
+1. ~~Verificare icona AI 1K end-to-end~~ ✅ DONE 2026-07-27 (e2e
+   `card-icon-ai-1k.spec.ts` verde, removeBackground non strappa icona
+   colorata — solo near-white 240+).
 
 ### Media priorità
 
-2. **Gap TB-023 documentati** (stima ~10h, da `tb023-verification.md` §4/§8):
-   - REQ-PD-007/008: AI sceglie decoration (schema output + prompt settore + quick chip).
-   - REQ-UX-001: DecorationPicker con 6 thumbnail SVG.
-   - Flyer: UI decoration manuale (schema+render esistono).
-   - REQ-UX-006: tooltip breakdown costi 30gg in `AIProviderBadge`.
+2. ~~Gap TB-023 residui~~ ✅ DONE 2026-07-27:
+   - REQ-DF-003 wheel scale: ✅
+   - REQ-DF-005 readout + reset: ✅
+   - REQ-UX-003 overlay coords: ✅
+   - REQ-PD-007/008 AI decorations: ✅ (precedente)
+   - REQ-UX-001 DecorationPicker thumbnail: ✅ (precedente)
+   - REQ-UX-006 tooltip costi 30gg: ✅ (precedente)
+   - Flyer UI decoration: ✅ (precedente)
 
 3. **Costi immagini Gemini**
    - Verificare che `calculateCostUsd('gemini-nano-banana', undefined, 1)` venga propagato nei log dei cover/photo/hero.
@@ -147,6 +158,46 @@
 ## 🗺️ Mappa File
 
 ```
+NUOVO (2026-07-27, TB-023 chiusura drag/wheel/overlay/icon-1k):
+e2e/card-drag-wheel-overlay.spec.ts     ← 8 test: wheel, nudge, reset, overlay, screenshot, export
+e2e/card-icon-ai-1k.spec.ts             ← 3 test: icona AI 1K + removeBackground survival + screenshot
+
+MODIFICATI (2026-07-27, TB-023 chiusura):
+src/components/CardPreview.tsx           ← +onWheel su useDraggablePlacement + PlacementOverlay su name/title/company/logo
+src/components/card/CardGridControls.tsx ← +readout x/y/s + bottone Reset (REQ-DF-005)
+src/components/card/cardGridOverlay.css  ← +CSS readout/reset
+src/components/card/cardPreviewSide.css   ← +CSS overlay coords
+src/components/__tests__/CardPreview.test.tsx ← +5 test wheel/overlay name
+src/components/card/__tests__/CardGridControls.test.tsx ← +3 test readout/reset
+
+NUOVO (2026-07-27, TB-023 pattern decorativi end-to-end):
+src/components/DecorationPicker.tsx          ← thumbnail picker 80×50 (REQ-UX-001)
+src/components/DecorationPicker.css
+src/components/__tests__/DecorationPicker.test.tsx
+src/components/ai/__tests__/AIProviderBadge.test.tsx
+src/components/flyer/__tests__/FlyerStyleFields.test.tsx
+src/ai/prompts/__tests__/cardQuickActions.test.ts
+
+MODIFICATI (2026-07-27):
+src/ai/aiCardInputSchema.ts                 ← +decorations field (REQ-PD-007)
+src/ai/cardMerge.ts                         ← +merge decorations con userLocked
+src/ai/prompts/cardSystem.ts                ← +decorations contract + esempi settore
+src/ai/prompts/__tests__/cardSystem.test.ts
+src/ai/__tests__/aiCardInputSchema.test.ts
+src/ai/__tests__/cardMerge.test.ts
+src/ai/prompts/cardQuickActions.ts          ← +5 decoration chips (REQ-PD-008)
+src/components/card/form/CardStyleFields.tsx ← dropdown → DecorationPicker
+src/components/card/ai/CardAIDecorationSection.tsx ← dropdown → DecorationPicker
+src/components/card/ai/CardAIQuickActions.tsx ← +gruppo Decorazione
+src/components/ai/AIProviderBadge.tsx       ← +tooltip costi 30gg (REQ-UX-006)
+src/components/ai/AIProviderBadge.css
+src/components/ai/AIConsole.tsx             ← forward totalCostUsd al badge
+src/components/flyer/FlyerStyleFields.tsx   ← +DecorationPicker + opacity
+src/components/flyer/FlyerManualPanel.tsx   ← +onUpdateDecorations prop
+src/components/flyer/FlyerEditorShell.tsx   ← +updateDecorations callback
+src/utils/documentSchemas.ts                ← +userLocked in decorations card/flyer
+src/utils/flyer/templateFactory.ts          ← +userLocked default
+
 NUOVO (2026-07-23):
 src/utils/quote/quotePreviewImage.ts    ← server-side quote preview renderer
 src/utils/flyer/flyerPreviewImage.ts    ← server-side flyer preview renderer

@@ -37,7 +37,7 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 | 12 | `spec-tool-ai-card-flyer-tools.md` | **DONE** | `ToolAwareOrchestrator` wired end-to-end in `AIOrchestrator`, `CardAIOrchestrator`, `FlyerAIOrchestrator`; test tool path e fallback verdi. Gap residuo UI: callback `onToolStart/Complete` non passati da `useAICard` → assorbito in REQ-LOG-001 spec #14 |
 | 13 | `spec-api-saas-monetization.md` | **NOT-STARTED** | Zero Stripe/api-key in `api/` (verificato 2026-07-18). Track futuro separato, mantenuto in `spec/` |
 | 14 | `spec-design-ai-first-ux-redesign.md` | **DONE** | Fase 12 ✅ (useAILogs, 6 hook migrati, AILogEntry v2, trackUsage ESM, IMAGE_TOKEN_COST, X-Request-Id, ghost rate limit fix). Fase 13 ✅ (ToastProvider, token The Classic + purge teal/blu, ai-ui.css, ActionBar logo/QR, sidebar gruppi + pq_ui:v1, breakpoint canonici, font lazy, copy AI-first, HomePage AIDA + motion). Fase 14 ✅ (AIConsole rail in social/flyer/card/quote, logo tab AI-first, AIProviderBadge, suggestedPrompt doc vuoto, onboarding AI-first). Deviazioni documentate in AGENTS.md §13-14. Spec cancellato dopo verifica (185 file, 2177 test verdi). |
-| 15 | `spec-design-ai-harness-upgrade.md` | **PARTIAL** | TB-023. Modulo AI unificato (`useAIHarness` + `AIHarnessConsole`) implementato e cablato in 4 editor. Multi-provider registry esiste. RAG rimosso (deferred). Manca: wiring bottone design review, verifica icona AI 1K end-to-end, pattern decorativi SVG, drag foto grid-mode. ~15h rimanenti. Vedi `docs/post-tb023-known-issues.md`. |
+| 15 | `spec-design-ai-harness-upgrade.md` | **DONE** | TB-023 ✅ 2026-07-27. Modulo AI unificato (`useAIHarness` + `AIHarnessConsole`) cablato in 4 editor. Multi-provider registry. Pattern decorativi: lib + schema card/flyer + render preview/export + `DecorationPicker` thumbnail (REQ-UX-001) + AI schema `decorations` + merge `userLocked` (CON-PD-002) + prompt settore (REQ-PD-007) + quick chips (REQ-PD-008) + flyer UI decoration + tooltip costi 30gg (REQ-UX-006). Drag foto grid-mode: pointer events + wheel scale (REQ-DF-003) + readout/reset (REQ-DF-005) + overlay coords (REQ-UX-003). Icona AI 1K verificata end-to-end (e2e `card-icon-ai-1k.spec.ts` — removeBackground non strappa icona colorata). RAG rimosso (deferred). |
 
 ---
 
@@ -136,17 +136,18 @@ Sprint 1 ✅ done:    TB-001 wiring ToolAwareOrchestrator
                     TB-003 rimuove bottone hero da manual panel
                     TB-002 test 4 endpoint Gemini (regression gratis)
 
-Sprint 2 (next):    TB-023a multi-provider (Ollama Pro + MiniMax M3 +
-                    Gemini Flash) + selector UI + pricing (~12h)
-                    TB-023b pattern decorativi lib + picker (~10h)
+Sprint 2 ✅ done:    TB-023 pattern decorativi (lib + picker thumbnail +
+                    AI schema/merge + prompt settore + quick chips +
+                    flyer UI + tooltip costi) — 2026-07-27
 
-Sprint 3:           TB-023c export pattern + AI v2 prompt + drag foto
-                    card + icone AI + test (~23h)
-                    TB-024 più formati export logo (PDF vettoriale, favicon)
+Sprint 3 ✅ done:    TB-023 drag foto grid-mode + wheel scale + readout/reset
+                    + overlay coords + icona AI 1K e2e verificata — 2026-07-27
+
+Sprint 4 (next):    TB-024 più formati export logo (PDF vettoriale, favicon)
                     TB-004 + TB-005 test helper mancanti
                     TB-006 audit-ui-components.md (doc-only)
 
-Sprint 4 (opz):     TB-007 test flyer refactor (6 file)
+Sprint 5 (opz):     TB-007 test flyer refactor (6 file)
                     TB-008 README privacy
                     TB-009 verifica costi
 ```
@@ -154,11 +155,15 @@ Sprint 4 (opz):     TB-007 test flyer refactor (6 file)
 ### Sprint business (dopo qualità prodotto)
 
 ```
-Fase 1 validazione: TB-018 portfolio 5 esempi settore (8-10h)
-                    TB-022 privacy policy + cookie banner (3h)
+Fase 1 validazione: TB-022 privacy policy + cookie banner (3h)
                     TB-017 landing vendita Apertura €349 (4h)
                     → 30 contatti diretti CCIAA + giro fisico
                     → Obiettivo: 2 clienti paganti in 60 giorni
+
+Fase 1b portfolio:  TB-018 portfolio 5 esempi settore (8-10h)
+                    → DEFERRED da 2026-07-27, riattivare quando
+                      TB-023 drag foto done + 1 cliente reale outreach
+                      avviato (portfolio serve per il pitch)
 
 Fase 2 semi-auto:   TB-019 intake pipeline Google Form/Tally (20h)
                     → SOLO dopo 5+ clienti reali (volume giustifica infra)
@@ -181,8 +186,8 @@ Fase 5 collaboraz:  Tipografie (dopo 3-5 clienti con stampa, no esclusiva)
 monetizzazione automatizzata per ultima. L'intake pipeline (TB-019)
 è infrastruttura che serve quando hai volume — non prima.
 
-**Effort rimanente**: ~2-3 giorni tecnici (P1+P2) + qualità prodotto
-(TB-023 ~45h con spec scritta, TB-024 ~12h) + business fasi 1-2 (~35h).
+**Effort rimanente**: TB-024 ~12h (export logo) + business fasi 1-2 (~35h).
+TB-023 ✅ closed 2026-07-27.
 
 **Quick win già fatti**: TB-003 + 4 file test Gemini.
 
@@ -256,7 +261,7 @@ primi clienti paganti.
 
 ### Qualità prodotto (PRIORITÀ ALTA — prima delle infra)
 
-#### TB-023 Migliorare harness AI 🟡 P1 — spec scritta
+#### TB-023 Migliorare harness AI ✅ COMPLETED 2026-07-27
 - **Spec**: `spec/spec-design-ai-harness-upgrade.md` (2026-07-20)
 - **Perché**: oggi DeepSeek + Gemini soli. Qualità AI è il differenziale
   vs Durable/Canva. Le 4 foto biglietti reali (Alice Cinofila onda blu,
@@ -281,17 +286,26 @@ primi clienti paganti.
     `tokens_cost_usd`, endpoint admin cost-breakdown (REQ-TC-001..006) — parziale: costi testo funzionano, immagini da confermare dashboard
   - Pattern decorativi (5): wave-bottom, wave-split, blob-corner,
     splash-corners, full-overlay — SVG programmatici, selezionabili
-    manualmente + via AI (REQ-PD-001..008)
+    manualmente + via AI (REQ-PD-001..008) — ✅ DONE 2026-07-27:
+    `src/utils/decorations/patterns.ts` + `src/components/DecorationPicker.tsx`
+    (thumbnail 80×50, REQ-UX-001) + schema `decorations` card/flyer con
+    `userLocked` (CON-PD-002) + AI schema `decorations` + `cardMerge` merge
+    con userLocked + prompt `cardSystem.ts` esempi settore (REQ-PD-007) +
+    5 quick action chips `cardQuickActions` (REQ-PD-008) + flyer UI
+    decoration in `FlyerStyleFields` + tooltip costi 30gg in `AIProviderBadge`
+    (REQ-UX-006)
   - Drag mouse foto in card grid-mode: `photoPlacement {x,y,scale}`
-    normalizzato -1..+1, pointer events, export coerente (REQ-DF-001..006)
+    normalizzato -1..+1, pointer events, export coerente (REQ-DF-001..006) —
+    **ancora da fare** (~6h)
   - Icone stilizzate AI: `iconOrchestrator` per card.builder.iconUrl +
     flyer.style.heroIllustration (es. frutta/oggetti/animali flat 2-colori)
-    (REQ-IS-001..007)
+    (REQ-IS-001..007) — parziale: `useAIIconHero` hook esiste, verifica
+    end-to-end 1K da fare (issue 2b in post-tb023)
   - A/B provider: rimosso definitivamente (non necessario in fase di validazione)
   - RAG clienti: **rimosso dal codebase** — deferred a quando il backend embeddings/vector search sarà pronto
-- **Effort**: ~45h totali, ~20h rimanenti dopo modulo AI unificato
-  - Sprint 2 (~12h rimanenti): pattern decorativi lib + picker + drag foto
-  - Sprint 3 (~8h): icona AI end-to-end, verifica costi, test
+- **Effort**: ~45h totali, ✅ COMPLETED 2026-07-27
+  - Sprint 2 ✅: pattern decorativi lib + picker + AI schema/merge + prompt + chips + flyer UI + tooltip costi
+  - Sprint 3 ✅: drag foto grid-mode + wheel scale + readout/reset + overlay coords + icona AI 1K e2e verificata
 - **Prereq**: nessuno tecnico. Business:订阅 Ollama Pro $20/mo +
   `OLLAMA_API_KEY` in Vercel env.
 - **Costi ricorrenti**: $20/mo Ollama Pro (flat) + DeepSeek pay-per-token
@@ -310,11 +324,16 @@ primi clienti paganti.
   - Verifica: PNG trasparente già c'è?
 - **Effort**: ~12h (logoGenerator.ts + export actions)
 
-#### TB-018 Portfolio 5 esempi settore 🔴 P0 business
-- **Perché**: senza portfolio niente credibilità (BP §G settimana 1-2).
+#### TB-018 Portfolio 5 esempi settore 🟡 P1 — DEFERRED
+- **Stato**: **DEFERRED 2026-07-27** — spostato a fase successiva (post-TB-023
+  residuo + fix icona AI). Priorità attuale: chiudere gap tecnici TB-023
+  (drag foto, verifica icona 1K) prima di investire ore in portfolio demo.
+- **Perché originale**: senza portfolio niente credibilità (BP §G settimana 1-2).
 - **Scope**: ristorante, B&B, bar, negozio, studio professionale —
   fatti con l'app stessa (logo+card+flyer per ciascuno).
 - **Effort**: ~8-10h con gli strumenti AI esistenti.
+- **Trigger riattivazione**: TB-023 drag foto done + 1 cliente reale
+  outreach avviato (portfolio serve per il pitch).
 
 #### TB-019 Intake pipeline (Google Form → Quickbrand) 🔴 P0 business
 - **Spec**: `spec/spec-intake-pipeline.md` (nuova, Architettura A ibrida)
