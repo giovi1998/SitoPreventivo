@@ -7,7 +7,7 @@ test.describe('Social editor — functional', () => {
     await seedAuth(page);
     await page.goto('/app/social');
     await page.waitForTimeout(1500);
-    await expect(page.locator('text=/seleziona un documento sorgente/i, text=/nessun documento/i, text=/crea prima/i').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=/nessun documento sorgente/i').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('source selector lists card documents', async ({ page }) => {
