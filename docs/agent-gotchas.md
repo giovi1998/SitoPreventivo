@@ -542,3 +542,93 @@ inline invece di icona generica. Regole:
     renderizza SVG + title (usa `title` flat legacy). Malformed di
     ogni tipo → fallback icona o preview idratata, no crash. QR → no
     preview SVG.
+
+## 16. Cost tracker per-document (TB-026)
+
+Ogni documento salva il proprio costo AI cumulato (`aiStats`). Regole:
+
+1. **Schema**: campo opzionale `aiStats` su `businessCardSchema`,
+   `logoSchema`, `flyerSchema`, `qrCodeSchema` (documentSchemas.ts) e
+   `quoteSchema` (quoteSchema.ts, inline per evitare import cross-file).
+   Shape: `{ totalCostUsd: number, calls: Record<AiCallKind, {count, costUsd}>, updatedAt?: string }`.
+   Default: `undefined` (non `EMPTY_AI_STATS`) — documenti esistenti non
+   rompono. `aiStatsSchema` in `src/utils/aiStats.ts` è `z.object().default({})`.
+2. **Helper** (`src/utils/aiStats.ts`):
+   - `incrementAiStats(stats, kind, cost)` → nuovo AiStats con kind+1
+     e costo accumulato (round 6 decimali).
+   - `withAiCall(doc, kind, cost)` → `{...doc, aiStats: incrementAiStats(...)}`.
+   - `mergeAiStats(a, b)` → somma due stats (utile per split/merge).
+   - `formatAiStatsCompact(stats)` → stringa "3 icone · 2 elaborazioni
+     testo · $0.08" per Collection badge.
+   - `aiStatsTotalCalls(stats)` → numero totale chiamate.
+   - `AI_CALL_LABELS` → label singular/plural per ogni kind.
+   - `AI_CALL_KINDS` → 11 kinds: text, cover, photo, icon, hero,
+     background, flyerCopy, logoConcept, socialCopy, quoteCopy, visionReview.
+3. **Hook AI**: ogni hook ritorna `aiCall: {kind, costUsd}` ad ogni
+   operazione riuscita. L'editor (non l'hook) applica `withAiCall` sul
+   documento — scelta: hook resta pure, editor è owner dello stato doc.
+   - `useAICard.processCardPrompt` → `aiCall.kind='text'`
+   - `useAICard.generateCover` → `aiCall.kind='cover'`
+   - `useAICard.generatePhoto` → `aiCall.kind='photo'`
+   - `useAIIconHero.generate(kind='icon')` → `aiCall.kind='icon'`/`'hero'`
+   - `useAILogo.generate` → `result.aiCall.kind='logoConcept'`
+   - `useAILogo.generateBackground` → `result.aiCall.kind='background'`
+   - `useAIFlyer.generate/refine` → `result.aiCall.kind='flyerCopy'`
+   - `useAIFlyer.generateHero` → `result.aiCall.kind='hero'`
+   - `useAI.processPrompt` → `result.aiCall.kind='quoteCopy'`
+   - `useAISocial` non persiste aiStats (social posts non sono documenti
+     salvati — output generato, no doc social schema).
+4. **Editor wiring**:
+   - `CardEditorShell` usa `recordAiOnCard(kind, cost, transform)` per
+     applicare aiCall + transform in un singolo `setCard`. Cover/photo/icon
+     passano `transform` per applicare `dataUrl` e aiCall insieme (evita
+     race tra `patchFront` e `setCard`).
+   - `LogoEditor` passa `onAiCall` prop a `LogoAiPanel` e `BuilderPanel`.
+   - `FlyerEditorShell` applica `withAiCall(result.flyer, ...)` su
+     generate/refine/generateHero.
+   - `AppShell` (quote) applica `incrementAiStats` su result.quote.
+5. **Persistenza**: `dataService.saveDocument` preserva `aiStats`
+   automaticamente (spread del doc). In IS_LOCAL: top-level in
+   `precisionQuote_documents:v1`. In prod: entra in `data` jsonb via
+   `toApiDocument` (non destrutturato in `rest` → `domain` → `payload`).
+   `hydrateDocument` rimette aiStats a top-level in entrambi i path. No
+   migration DB necessaria (campo opzionale in jsonb).
+6. **Collection badge**: `CollectionView` renderizza `<p class="card-ai-stats">`
+   sotto `<p class="card-meta">` per `logo`, `businessCard`, `flyer`, `quote`.
+   Mostra sempre "🤖 Nessun costo AI" se nessuna chiamata registrata;
+   altrimenti conteggi per kind + costo totale. Testid:
+   `ai-stats-${doc.id}`.
+7. **calculateCostUsd fix** (`providerPricing.ts`): per-image non
+   richiede più `usage` — `imageCount` basta. Prima
+   `calculateCostUsd('gemini-nano-banana', undefined, 1)` ritornava 0
+   (bug!); ora ritorna 0.04. Per-text provider (DeepSeek) ancora
+   ritorna 0 se `usage=undefined` (corretto — non c'è modo di stimare
+   token senza usage).
+8. **Retrocompat**: documenti salvati prima di TB-026 non hanno `aiStats`
+    → schema parse OK (opzionale). Collection mostra "Nessun costo AI".
+    Se utente genera nuova chiamata AI su doc vecchio, `withAiCall(undefined stats)`
+    → parte da `EMPTY_AI_STATS` (gestito in `incrementAiStats`).
+9. **Editor widgets**: `DocumentAiStats` è montato in:
+    - `CardEditorShell` header (accanto a titolo e reset).
+    - `LogoEditor` header (accanto ad ActionBar).
+    - `FlyerManualPanel` sotto il titolo del volantino.
+    - `Topbar` per la quote view (`view === 'editor'`), passato da
+      `AppShell` tramite prop `aiStats={quote.aiStats}`.
+    Mostra "🤖 Nessun costo AI" quando vuoto, altrimenti conteggio kind
+    e costo. Per tutti gli editor, aiStats si aggiorna in tempo reale
+    quando l'utente lancia una chiamata AI; non serve salvare per vedere
+    il badge (perché `withAiCall` modifica lo stato locale del doc).
+10. **No tracking doppio**: `dataService.trackTokens` (per-user)
+    rimane — ora c'è sia per-user (`users.tokensCostUsd`) che
+    per-document (`doc.aiStats.totalCostUsd`). Per-user = budget
+    billing; per-document = accountability costo produzione.
+11. **Test**: 19 in `src/utils/__tests__/aiStats.test.ts` (helper),
+    3 in `CollectionView.preview.test.tsx` (badge render condizionale),
+    mock aggiornati in `CardEditorShell.test.tsx` (aiCall nei mock
+    useAICard/useAIIconHero), `useAICard.test.ts` (assert aiCall
+    kind/cost), `useAIIconHero.test.tsx` (url → r.dataUrl),
+    `providerPricing.test.ts` (per-image senza usage).
+12. **Social escluso**: post social non sono documenti salvati nella
+    Collection (sono output generati, copiabili). Se in futuro si
+    vuole persistere post social come documenti, aggiungere
+    `socialSchema` + aiStats — per ora out of scope.

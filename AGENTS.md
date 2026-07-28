@@ -75,7 +75,9 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/utils/logoGenerator.ts` | Logo SVG builder + sanitize + PNG/PDF/JPG/ICO/FaviconZIP, render `builder.backgroundImage` |
 | `src/utils/flyer/` | Flyer engine: `layoutEngine`, `svgRenderer`, `textFit`, `geometry`, `budgets`, `templateCatalog/Factory`, `qrRenderer`, `pdf/pngExport` |
 | `src/utils/watermark.ts` | Tier-aware watermark (free vs unlocked) |
-| `src/utils/documentSchemas.ts` | Zod schemas: quote, QR, businessCard, cardGrid, logo, flyer, presets |
+| `src/utils/aiStats.ts` | TB-026: per-document AI cost tracker (aiStats: totalCostUsd + calls breakdown) + `withAiCall`, `incrementAiStats`, `formatAiStatsCompact` |
+| `src/components/DocumentAiStats.tsx` | TB-026: widget riusabile "🤖 3 icone · 2 elaborazioni · $0.08" per editor e Collection |
+| `src/utils/documentSchemas.ts` | Zod schemas: quote, QR, businessCard, cardGrid, logo, flyer, presets (+ opzionale `aiStats` per-document TB-026) |
 | `src/utils/gridUtils.ts` | Grid collision helpers (BLOCK su sovrapposizione) |
 | `src/ai/BaseOrchestrator.ts` | Abstract condivisa (sanitize, parseJson, handleStream, trackUsage) |
 | `src/ai/*Orchestrator.ts` | card / flyer / logo / social / onboarding |
@@ -232,7 +234,9 @@ Issue aperti: `docs/post-tb023-known-issues.md`. Verifica TB-023:
 `docs/tb023-verification.md`. TB-024 (logo export multi-formato) ✅
 completed 2026-07-27 — vedi `docs/agent-gotchas.md` §14. TB-025
 (Collection preview SVG inline logo/card/flyer/quote) ✅ completed
-2026-07-27 — vedi `docs/agent-gotchas.md` §15.
+2026-07-27 — vedi `docs/agent-gotchas.md` §15. TB-026 (cost tracker
+per-document aiStats + Collection badge) ✅ completed 2026-07-27 —
+vedi `docs/agent-gotchas.md` §16.
 
 ## Responsive Patterns
 

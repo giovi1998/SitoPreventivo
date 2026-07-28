@@ -145,12 +145,21 @@ Sprint 3 ✅ done:    TB-023 drag foto grid-mode + wheel scale + readout/reset
 
 Sprint 4 ✅ done:    TB-024 più formati export logo (PDF vettoriale, favicon
                     set ZIP, ICO, JPG sfondo, SVG ottimizzato) — 2026-07-27
-Sprint 4 (next):     TB-004 + TB-005 test helper mancanti
+Sprint 4 (next) ✅ done 2026-07-27:
+                    TB-004 test helper backgroundImage.ts (logo)
+                    TB-005 test cardCover client (aiCoverImage.test.ts)
                     TB-006 audit-ui-components.md (doc-only)
 
-Sprint 5 (opz):     TB-007 test flyer refactor (6 file)
-                    TB-008 README privacy
-                    TB-009 verifica costi
+Sprint 5 ✅ done 2026-07-27:
+                    TB-007 test flyer refactor (geometry, svgRenderer,
+                    templateCatalog, pdfExport — 4 file aggiunti, matrice
+                    10/10)
+                    TB-008 README privacy (§Privacy & AI Data Disclosure)
+                    TB-009 verifica costi dashboard — no codice, manuale
+                    (cost tracker live in BaseOrchestrator/providerPricing)
+
+Sprint 6 ✅ done 2026-07-27: TB-026 cost tracker per-document (aiStats)
+                    in document.data + Collection badge costi/contatori
 ```
 
 ### Sprint business (dopo qualità prodotto)
@@ -335,7 +344,7 @@ primi clienti paganti.
 - **Effort**: ~12h (logoGenerator.ts + export actions) — effettivo ~3h
 
 #### TB-025 Collection preview SVG inline (logo/card/flyer/quote) ✅ COMPLETED 2026-07-27
-- **Stato**: ✅ COMPLETED 2026-07-27. La griglia Collection ora mostra
+- **Stato**: ✅ COMPLETED 2026-07-27. La griglia Collection mostra
   preview SVG inline per documenti `logo`, `businessCard`, `flyer` e
   `quote` invece dell'icona generica. Logo: `builderToSvg`+`sanitizeSvg`.
   Card: `buildCardSvg(card,'front')` dopo `mergeCardWithDefaults`. Flyer:
@@ -353,6 +362,33 @@ primi clienti paganti.
   rotazione) out of scope v1.
 - **Effort**: ~3h (4 tipi documento + fix robustezza)
 - **Dettaglio**: vedi `docs/agent-gotchas.md` §15.
+
+#### TB-026 Cost tracker per-document (aiStats) ✅ COMPLETED 2026-07-27
+- **Stato**: ✅ COMPLETED 2026-07-27. Ogni documento (`quote`,
+  `businessCard`, `flyer`, `logo`, `qrCode`) ora porta un campo opzionale
+  `aiStats: { totalCostUsd, calls: Record<kind, {count, costUsd}>, updatedAt }`.
+  Gli hook AI (`useAICard`, `useAIIconHero`, `useAILogo`, `useAIFlyer`,
+  `useAI`) ritornano `aiCall: { kind, costUsd }` ad ogni operazione; gli
+  editor applicano `withAiCall(doc, kind, cost)` sul documento corrente.
+  La Collection mostra un badge `🤖 3 icone · 2 elaborazioni testo · $0.08`
+  sotto il titolo di ogni card (solo se aiStats ha chiamate > 0). Persistenza
+  automatica in `dataService.saveDocument` (top-level in localStorage, in
+  `data` jsonb in prod). Helper centralizzato `src/utils/aiStats.ts` con
+  `incrementAiStats`, `withAiCall`, `mergeAiStats`, `formatAiStatsCompact`,
+  `aiStatsTotalCalls`. Kinds: `text`, `cover`, `photo`, `icon`, `hero`,
+  `background`, `flyerCopy`, `logoConcept`, `socialCopy`, `quoteCopy`,
+  `visionReview`. Fix `calculateCostUsd`: per-image non richiede più
+  `usage` (imageCount basta). Test: 19 in `aiStats.test.ts`, 3 in
+  `CollectionView.preview.test.tsx`, mock aggiornati in `CardEditorShell.test.tsx`,
+  `useAICard.test.ts`, `useAIIconHero.test.tsx`.
+- **Perché**: sapere quanto costa produrre ogni oggetto (es. card = 3
+  icone + 2 elaborazioni testo → $0.08) è essenziale per pricing e
+  accountability. Già esisteva `tokensCostUsd` per-user; ora c'è anche
+  per-document granulare.
+- **Scope**: aiStats opzionale (default undefined → {}), retrocompatibile
+  con documenti esistenti. No migration DB (campo in jsonb `data`).
+- **Effort**: ~4h (modulo + 5 hook + 4 editor + Collection + test)
+- **Dettaglio**: vedi `docs/agent-gotchas.md` §16.
 
 #### TB-018 Portfolio 5 esempi settore 🟡 P1 — DEFERRED
 - **Stato**: **DEFERRED 2026-07-27** — spostato a fase successiva (post-TB-023
