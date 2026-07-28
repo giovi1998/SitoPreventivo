@@ -2,10 +2,13 @@
  * TB-023: tabella costi reale per provider AI.
  * Vedi spec-design-ai-harness-upgrade.md REQ-TC-001.
  *
- - DeepSeek: pay-per-token, prezzi ufficiali 2026-07
- - Ollama Pro: $20/mo flat, 50x free usage. costUsd per chiamata = 0
-   (costo fisso mensile tracciato separatamente in admin dashboard)
- - Gemini immagini: per-image, prezzi stimati (variabili, verify in dashboard)
+ * - DeepSeek: pay-per-token, prezzi ufficiali 2026-07
+ * - Ollama Pro: $20/mo flat, 50x free usage. costUsd per chiamata = 0
+ *   (costo fisso mensile tracciato separatamente in admin dashboard)
+ * - Gemini immagini: per-image, prezzi stimati. Il costo effettivo dipende
+ *   dal modello esatto e dalla regione; verificare in Google AI Studio / GCP
+ *   billing dashboard (§TB-009). I valori qui sono upper-bound conservativi per
+ *   il tracking interno, non tariffe contrattuali.
  */
 export type PricingUnit = 'per_1m_tokens' | 'per_image' | 'flat_monthly';
 
@@ -26,6 +29,13 @@ export const PRICING: Record<string, ProviderPricing> = {
   'ollama-qwen-3.5': { input: 0, output: 0, unit: 'flat_monthly' },
   // Provider ID nel registry è 'ollama-minimax-m3' ma il model è
   // 'minimax-m3:cloud' — pricing lookup usa provider ID
+  //
+  // Gemini image pricing:
+  // - Nano Banana (gemini-3.1-flash-image): stima $0.04/immagine 512px.
+  //   Può variare in base a risoluzione effettiva e tier; controllare
+  //   la dashboard Google AI Studio per cifra reale (TB-009).
+  // - 2.0 Flash Image (gemini-2.0-flash-preview-image-generation): stima
+  //   $0.02/immagine 512px. Verificare in dashboard.
   'gemini-nano-banana': { input: 0, output: 0, unit: 'per_image', perImage: 0.04 },
   'gemini-flash-image': { input: 0, output: 0, unit: 'per_image', perImage: 0.02 },
 };

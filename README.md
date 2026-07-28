@@ -103,10 +103,15 @@ La skill **si auto-disattiva** in caso di: warning di sicurezza, conferme di azi
 
 Per alcune funzionalità avanzate basate su IA (es. generazione sfondo bigliettini, logo background e volantini hero vision-grounded), l'applicazione invia screenshot in tempo reale della canvas e loghi caricati alle API dei provider AI configurati (Google Gemini, DeepSeek, Ollama Pro).
 
-- **Payload inviati**: screenshot JPEG/PNG in bassa risoluzione della canvas di preview, loghi dell'attività, prompt di testo dell'utente.
-- **Finalità**: consentire ai modelli multimodali di comprendere la disposizione del layout e non sovrapporre elementi grafici al testo o QR code.
-- **Trattamento dati**: nessun dato personale o immagine viene conservato in modo permanente dai provider AI oltre la sessione di generazione.
-- **Consenso & Trasparenza**: l'utente può disattivare la modalità Vision / Screenshot nelle impostazioni della rail AI Console.
+- **Payload inviati**:
+  - screenshot JPEG/PNG in bassa risoluzione della canvas di preview;
+  - loghi dell'attività e immagini di brand (ad esempio il logo caricato nel Logo Builder);
+  - per i bigliettini da visita, la preview può contenere **PII** inserite dall'utente (nome, cognome, email, telefono, indirizzo/sito web, foto/avatar);
+  - prompt di testo dell'utente.
+- **Destinatari**: screenshot e immagini sono trasmesse ai provider AI usati dall'app (Google Gemini per la generazione di immagini, DeepSeek/Ollama Pro per copy/vision, se abilitati). Nessun dato viene venduto a terzi.
+- **Finalità**: consentire ai modelli multimodali di comprendere la disposizione del layout e non sovrapporre elementi grafici al testo, foto o QR code.
+- **Trattamento dati**: nessun dato personale o immagine viene conservato in modo permanente dai provider AI oltre la sessione di generazione. Quickbrand non salva gli screenshot su server propri.
+- **Consenso & Trasparenza**: l'utente può disattivare la modalità Vision / Screenshot nelle impostazioni della rail AI Console. Con Vision OFF, i prompt testuali vengono comunque inviati, ma non screenshot o immagini di preview.
 
 - Ogni chiamata AI consuma token (monitorati automaticamente)
 - L'admin può impostare un limite token per ogni utente dalla Dashboard

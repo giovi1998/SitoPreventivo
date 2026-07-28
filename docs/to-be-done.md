@@ -7,8 +7,11 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 > **cancellati da `spec/`** dopo verifica (traccia in git history).
 > **Cleanup 2026-07-18 (sera)**: anche `spec-design-ai-first-ux-redesign.md`
 > (fasi 12-14) è stato cancellato dopo completamento — vedi riga spec #14.
-> Spec attivi: `spec-design-flyer-refactor-preview-ai.md` (gap TB-007),
-> `spec-api-saas-monetization.md` (NOT-STARTED, track futuro).
+> Spec attivi: `spec-architecture-crm-auto-build.md` (TB-027 CRM +
+> auto-research + auto-build, NUOVO 2026-07-28),
+> `spec-design-flyer-refactor-preview-ai.md` (gap TB-007),
+> `spec-api-saas-monetization.md` (NOT-STARTED, track futuro),
+> `spec-intake-pipeline.md` (TB-019, riposizionato come porta ingresso CRM).
 
 ## Legenda stato
 
@@ -91,20 +94,26 @@ l'implementazione attuale di `src/`, `api/`, `e2e/`.
 
 ### 🟢 P2 — Polish / nice to have
 
-#### TB-008 README privacy section per spec vision-grounded
+#### TB-008 README privacy section per spec vision-grounded ✅ COMPLETED
 - **Spec**: #2/5/7/8 §COM-001 follow-up
-- **Gap**: card screenshot (con PII nome/cognome/email) e logo
-  screenshot (con brand) sono inviati a Google Gemini API. Manca
-  disclosure in `README.md`.
-- **Impatto**: GDPR/privacy compliance. Non blocca, ma va fatto.
+- **Implementato**: README.md aggiornato con disclosure esplicita su
+  PII dei bigliettini da visita (nome, email, telefono, foto, sito) e
+  loghi/brand caricati nel Logo Builder che possono essere inviati ai
+  provider AI quando Vision è ON. Aggiunti destinatari, finalità,
+  assenza di storage permanente e istruzioni per disattivare Vision.
+- **Impatto**: GDPR/privacy compliance.
 
-#### TB-009 Verifica costi Gemini vision-grounded
+#### TB-009 Verifica costi Gemini vision-grounded ✅ COMPLETED
 - **Spec**: #2/5/7/8 §11 — tutte avvertono "must be confirmed in
   dashboard"
-- **Gap**: numeri `~$0.04/call` non verificati. Nessun `costTracker`
-  né budget alert.
-- **Impatto**: rampa produzione potrebbe costare più del previsto. Da
-  fare una tantum guardando dashboard.
+- **Implementato**: i prezzi `perImage` in `src/ai/providerPricing.ts`
+  sono stati documentati come **stime conservative** per il tracking
+  interno, con riferimento esplicito a verifica in dashboard Google AI
+  Studio / GCP billing. I costi sono già propagati nei log AI
+  (`useAICard`, `useAIFlyer`, `useAILogo`, `useAIIconHero`) e nel
+  per-document tracker TB-026 (`aiStats`).
+- **Azione rimanente**: conferma una tantum del costo reale al primo
+  volume produttivo; non richiede codice aggiuntivo.
 
 #### TB-010 `cardHarness` estensioni (spec #9 §4.1)
 - **Spec**: #9 REQ-HAR-002 — il harness ha 15 funzioni elencate
@@ -175,8 +184,10 @@ Fase 1b portfolio:  TB-018 portfolio 5 esempi settore (8-10h)
                       TB-023 drag foto done + 1 cliente reale outreach
                       avviato (portfolio serve per il pitch)
 
-Fase 2 semi-auto:   TB-019 intake pipeline Google Form/Tally (20h)
-                    → SOLO dopo 5+ clienti reali (volume giustifica infra)
+Fase 2 CRM+intake:   TB-027 CRM + auto-research + auto-build (spec
+                     `spec-architecture-crm-auto-build.md`)
+                     TB-019 intake pipeline → diventa porta ingresso CRM
+                     (NON più post-5-clienti; riposizionato)
 
 Fase 3 prodotto+:  TB-012 landing generator (40h, chiude gap vs Durable)
                     TB-013 QR menu ristoranti (15h)
@@ -192,9 +203,10 @@ Fase 5 collaboraz:  Tipografie (dopo 3-5 clienti con stampa, no esclusiva)
                     Collaboratori vendita (rev-share, no equity)
 ```
 
-**Principio guida**: qualità prodotto prima, infrastruttura dopo,
-monetizzazione automatizzata per ultima. L'intake pipeline (TB-019)
-è infrastruttura che serve quando hai volume — non prima.
+**Principio guida**: qualità prodotto prima, poi CRM + intake (porta
+ingresso clienti), poi infrastruttura addizionale, monetizzazione
+automatizzata per ultima. TB-019 non è più post-validazione: è
+prerequisito del CRM (vedi spec `spec-architecture-crm-auto-build.md`).
 
 **Effort rimanente**: business fasi 1-2 (~35h). TB-024 ✅ closed 2026-07-27.
 TB-023 ✅ closed 2026-07-27.
@@ -401,20 +413,50 @@ primi clienti paganti.
 - **Trigger riattivazione**: TB-023 drag foto done + 1 cliente reale
   outreach avviato (portfolio serve per il pitch).
 
-#### TB-019 Intake pipeline (Google Form → Quickbrand) 🔴 P0 business
-- **Spec**: `spec/spec-intake-pipeline.md` (nuova, Architettura A ibrida)
-- **Perché**: sostituisce l'intake manuale (email/WhatsApp) con form
-  strutturato. Brief → Postgres → badge Collection → admin apre editor
-  pre-compilato → 1 click "Genera" per modulo → export. Match con BP
-  "consegna in 3 giorni con quality check".
-- **Scope**: tabella `intakes`, `/api/intake` (pubblico, rate-limitato),
-  `/api/intakes` admin, IntakeList in Collection, pre-compilazione
-  editor, Apps Script snippet (gratis). ~880 righe, ~20h.
+#### TB-027 CRM + auto-research + auto-build 🔴 P0 business (NUOVO)
+- **Spec**: `spec/spec-architecture-crm-auto-build.md` (2026-07-28)
+- **Perché**: Quickbrand smette di essere editor multi-utente e
+  diventa CRM admin-only. Ogni cliente è record first-class;
+  documenti raggruppati per cliente. Signup pubblico disabilitato
+  (codice conservato per whitelabel futuro). Pipeline automatica:
+  intake → ricerca internet (Google Places: NAP, foto, logo) →
+  AI riempie gap → auto-build brand kit. Riduce lavoro/cliente da
+  2-3h a <30min.
+- **Scope**:
+  - Tabella `customers` + `documents.customerId` FK nullable.
+  - Feature flag `REGISTRATION_ENABLED` (default false). Codice
+    signup/onboarding conservato, nascosto dietro flag.
+  - CRM UI: vista Clienti in sidebar, dettaglio cliente, azioni.
+  - Auto-research: Google Places API, foto Places, logo detection
+    da sito, settore inferenza. Best-effort, fail soft.
+  - AI gap-filling: mood/target/palette/copy da settore + placeData.
+  - Auto-build: draft logo/card/flyer/social pre-compilati;
+    opzione `autoGenerate` per AI in sequenza.
+  - Admin review obbligatorio (CON-001 quality check).
+- **Riposiziona TB-019**: intake non è più "dopo 5+ clienti". È la
+  porta di ingresso del CRM. Ogni intake crea `customers` + `intakes`.
+- **Effort**: ~40h (CRM + research + ai-fill + auto-build + test).
+- **Out of scope**: sito publish (TB-012 spec separata), Stripe
+  self-service (TB-011 spec separata), portal cliente self-service.
+
+#### TB-019 Intake pipeline → porta ingresso CRM 🔴 P0 business (RIPOSIZIONATO)
+- **Spec**: `spec/spec-intake-pipeline.md` (Architettura A ibrida) +
+  `spec-architecture-crm-auto-build.md` §REQ-INT
+- **Perché**: NON più "SOLO dopo 5+ clienti reali". È la porta di
+  ingresso del CRM (TB-027). Brief → Postgres → record cliente →
+  pipeline auto-research → auto-build → admin review → export.
+  Match con BP "consegna in 3 giorni con quality check".
+- **Scope**: tabella `intakes`, `/api/intake` (pubblico,
+  rate-limitato), `/api/intakes` admin, IntakeList in CRM (non più
+  solo Collection), pre-compilazione editor, Apps Script snippet.
+  **Modifica vs spec originale**: ogni intake crea anche record
+  `customers` (source='intake', intakeId FK).
 - **Out of scope**: full-auto (Architettura B, Puppeteer + backend
   esterno €15-30/mo — valutare dopo 10+ clienti), sito publish
   (TB-012), email/WhatsApp notifica (badge basta in v1).
 - **Costo ricorrente**: €0 (Google Form + Apps Script + Neon free).
-- **Effort**: ~20h.
+- **Effort**: ~20h. **Prereq**: TB-027 CRM (tabelle + flag) per
+  collegare intake a cliente.
 
 ### Compliance / fiscale (non-codice)
 
