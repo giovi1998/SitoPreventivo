@@ -686,7 +686,7 @@ const dataService = {
       return {
         tier,
         documentCount: settings.documentCount || 0,
-        documentLimit: 3,
+        documentLimit: settings.documentLimit ?? 3,
       };
     }
     return api('GET', `/users/tier?email=${encodeURIComponent(email)}`);
@@ -760,6 +760,8 @@ const dataService = {
     });
   },
 
+  generateUnlockCode,
+
   async adminListUnlockCodes() {
     if (IS_LOCAL) {
       return { codes: lsGet('unlock_codes') || [] };
@@ -778,8 +780,10 @@ const dataService = {
     return api('POST', '/admin/unlock-user', { adminEmail: 'admin@gmail.com', userEmail });
   },
 
+  generateUnlockCode,
 
 };
+
 
 // ─── HELPERS ─────────────────────────────────────────
 function randomHex(n) {

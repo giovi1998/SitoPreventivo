@@ -1,4 +1,6 @@
 import type { DocumentTemplateId } from '../utils/quoteSchema';
+import { DocumentAiStats } from './DocumentAiStats';
+import { aiStatsTotalCalls, type AiStats } from '../utils/aiStats';
 
 function formatTime(date: Date) {
   return date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -20,6 +22,8 @@ interface TopbarProps {
   setTheme: (t: string) => void;
   documentTheme: DocumentTemplateId;
   onDocumentThemeChange?: (t: DocumentTemplateId) => void;
+  /** TB-026: costo AI cumulato del documento corrente (quote editor). */
+  aiStats?: AiStats;
 }
 
 export default function Topbar({
@@ -38,6 +42,7 @@ export default function Topbar({
   setTheme,
   documentTheme,
   onDocumentThemeChange,
+  aiStats,
 }: TopbarProps) {
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
@@ -54,7 +59,7 @@ export default function Topbar({
     logo: { kicker: 'Logo Builder', title: 'Logo' },
     social: { kicker: 'Social AI', title: 'Generatore post social' },
   };
-  const current = titles[view] || titles.collection;
+  const current = titles[view] || titles.editor;
 
   return (
     <header className="topbar">
@@ -63,6 +68,11 @@ export default function Topbar({
         <h1>{current.title}</h1>
       </div>
       <div className="top-actions">
+        {view === 'editor' && aiStats && aiStatsTotalCalls(aiStats) > 0 && (
+          <div className="topbar-ai-stats" style={{ marginRight: '12px' }}>
+            <DocumentAiStats aiStats={aiStats} size="md" />
+          </div>
+        )}
         {view === 'editor' && (
           <div className="editor-actions">
             <div className="save-status">

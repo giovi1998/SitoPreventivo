@@ -560,7 +560,7 @@ export default function GlobalStyles() {
       .editor-mobile-panel .panel{border-right:none;padding:16px;height:auto;overflow-x:auto}
       .preview-wrap{width:100%;padding:12px;min-height:40vh;overflow-x:hidden}
       .workspace{overflow-x:hidden}
-      .workspace > .topbar{display:none !important}
+
       .top-actions{flex-wrap:wrap;gap:6px}
       .form-grid{grid-template-columns:1fr}
       .document{padding:16px;font-size:.82rem;overflow-x:auto}
