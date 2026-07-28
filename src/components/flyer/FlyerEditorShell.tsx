@@ -7,6 +7,7 @@ import type { Flyer, FlyerSize, FlyerOrientation, FlyerLayout, FlyerContent, Fly
 import { createEmptyFlyer, createFlyerTemplate, mergeFlyerWithDefaults, FLYER_SECTORS, FLYER_SECTOR_DEFAULT_LAYOUT } from '../../utils/documentSchemas';
 import { getDefaultHeroImage } from '../../utils/flyer';
 import { useAIFlyer } from '../../hooks/useAIFlyer';
+import { withAiCall } from '../../utils/aiStats';
 import { useToast } from '../../hooks/useToast';
 import { useDocumentSave } from '../../hooks/useDocumentSave';
 import { computeFlyerLayout, getFlyerCopyBudget } from '../../utils/flyer';
@@ -310,7 +311,11 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
     if (!brief) { addToast('info', 'Scrivi un brief nel campo AI prima di generare.'); return; }
     try {
       const result = await ai.generate(debouncedFlyer, brief, aiTone);
-      if (result.applied) { setFlyer(result.flyer); addToast('success', 'Copy generato e applicato'); setAiPrompt(''); }
+      if (result.applied) {
+        const merged = result.aiCall ? withAiCall(result.flyer, result.aiCall.kind, result.aiCall.costUsd) : result.flyer;
+        setFlyer(merged);
+        addToast('success', 'Copy generato e applicato'); setAiPrompt('');
+      }
       else {
         const reason = result.changes.find((c) => c.startsWith('error:')) || 'risposta non valida';
         addToast('error', `Copy non generato: ${reason}. Verifica la chiave DeepSeek in Impostazioni o il credito residuo.`);
@@ -322,7 +327,11 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
     if (!flyerHasCopy(flyer)) { addToast('info', 'Compila prima il copy.'); return; }
     try {
       const result = await ai.refine(flyer, action);
-      if (result.applied) { setFlyer(result.flyer); addToast('success', `Copy aggiornato: ${action}`); }
+      if (result.applied) {
+        const merged = result.aiCall ? withAiCall(result.flyer, result.aiCall.kind, result.aiCall.costUsd) : result.flyer;
+        setFlyer(merged);
+        addToast('success', `Copy aggiornato: ${action}`);
+      }
       else { addToast('error', "L'AI non ha restituito un risultato valido."); }
     } catch (err) { addToast('error', (err as Error).message); }
   }, [ai, flyer, addToast]);
@@ -373,7 +382,10 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
         imageModel,
       });
       if (result.applied && result.flyer) {
-        setFlyer(result.flyer);
+        const merged = result.aiCall
+          ? withAiCall(result.flyer, result.aiCall.kind, result.aiCall.costUsd)
+          : result.flyer;
+        setFlyer(merged);
         addToast('success', 'Hero AI generato');
       } else {
         addToast('error', result.error || "L'AI non ha restituito un'immagine.");

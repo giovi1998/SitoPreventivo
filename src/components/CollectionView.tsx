@@ -12,6 +12,7 @@ import { buildCardSvg } from '../utils/card/svgRenderer';
 import { buildFlyerSvg } from '../utils/flyer/svgRenderer';
 import { buildQuotePreviewSvg } from '../utils/quote/quotePreviewImage';
 import { migrateFromLegacy, type PremiumQuote } from '../utils/quoteSchema';
+import { formatAiStatsCompact, type AiStats, aiStatsTotalCalls, documentAiStatsTitle } from '../utils/aiStats';
 import { useToast } from '../hooks/useToast';
 
 type TabId = 'all' | 'quote' | 'qrCode' | 'businessCard' | 'flyer' | 'logo' | 'generatedImage';
@@ -726,6 +727,32 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                       >{title}</h3>
                     )}
                     <p className="card-meta">{meta}</p>
+                    {(() => {
+                      const stats: AiStats | undefined = (doc as any).aiStats;
+                      const compact = formatAiStatsCompact(stats);
+                      const hasCalls = aiStatsTotalCalls(stats) > 0;
+                      const showForType = ['businessCard', 'logo', 'flyer', 'quote'].includes(type);
+                      if (!showForType) return null;
+                      return (
+                        <p
+                          className="card-ai-stats"
+                          data-testid={`ai-stats-${doc.id}`}
+                          title={documentAiStatsTitle(stats)}
+                          style={{
+                            margin: '2px 0 6px',
+                            fontSize: '.72rem',
+                            color: 'var(--text-muted, #6b7280)',
+                            display: 'flex',
+                            gap: '4px',
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <span aria-hidden="true">🤖</span>
+                          <span>{compact || 'Nessun costo AI'}</span>
+                        </p>
+                      );
+                    })()}
                     <div className="card-actions">
                       {type !== 'generatedImage' && (
                         <>

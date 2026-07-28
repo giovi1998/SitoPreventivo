@@ -25,7 +25,7 @@ vi.mock('../../../hooks/useToast', () => ({
   }),
 }));
 
-const mockGenerateCover = vi.fn().mockImplementation((_: any, side: 'front' | 'back') => Promise.resolve(`data:image/png;base64,${side.toUpperCase()}`));
+const mockGenerateCover = vi.fn().mockImplementation((_: any, side: 'front' | 'back') => Promise.resolve({ dataUrl: `data:image/png;base64,${side.toUpperCase()}`, aiCall: { kind: 'cover', costUsd: 0.04 } }));
 
 vi.mock('../../../hooks/useAICard', () => ({
   useAICard: () => ({
@@ -33,6 +33,7 @@ vi.mock('../../../hooks/useAICard', () => ({
       card: createEmptyCard(),
       changes: [],
       rawResponse: '{}',
+      aiCall: { kind: 'text', costUsd: 0.001 },
     }),
     generateCover: mockGenerateCover,
     resetCardChat: vi.fn(),
@@ -46,7 +47,7 @@ vi.mock('../../../hooks/useAICard', () => ({
 
 vi.mock('../../../hooks/useAIIconHero', () => ({
   useAIIconHero: () => ({
-    generate: vi.fn().mockResolvedValue('data:image/png;base64,ICON'),
+    generate: vi.fn().mockResolvedValue({ dataUrl: 'data:image/png;base64,ICON', aiCall: { kind: 'icon', costUsd: 0.02 } }),
     isProcessing: false,
     logs: [],
     clear: mockClearIconHeroLogs,
@@ -178,10 +179,10 @@ describe('CardEditorShell', () => {
       if (side === 'front') {
         await Promise.resolve();
         frontResolved = true;
-        return 'data:image/png;base64,FRONT';
+        return { dataUrl: 'data:image/png;base64,FRONT', aiCall: { kind: 'cover', costUsd: 0.04 } };
       }
       expect(frontResolved).toBe(true);
-      return 'data:image/png;base64,BACK';
+      return { dataUrl: 'data:image/png;base64,BACK', aiCall: { kind: 'cover', costUsd: 0.04 } };
     });
 
     const { container } = render(<CardAIFloatingProvider><CardEditorShell {...baseProps} /></CardAIFloatingProvider>);

@@ -25,7 +25,7 @@ export interface UseAIIconHeroReturn {
     prompt: string,
     kind: IconHeroKind,
     options?: IconHeroOptions
-  ) => Promise<string>;
+  ) => Promise<{ dataUrl: string; aiCall: { kind: 'icon' | 'hero'; costUsd: number } }>;
   isProcessing: boolean;
   logs: ReturnType<typeof useAILogs>['logs'];
   clear: () => void;
@@ -101,7 +101,7 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
             imagePreviewBase64: finalDataUrl,
           },
         );
-        return finalDataUrl;
+        return { dataUrl: finalDataUrl, aiCall: { kind, costUsd } };
       } catch (err: any) {
         const is404Hint = err?.message?.includes('Endpoint icona AI non trovato');
         const hint = is404Hint ? err.message : mapAiError(err);

@@ -28,6 +28,7 @@ import { FREE_DOCUMENT_LIMIT } from '../utils/watermark';
 import { logger } from '../utils/logger';
 import { isLocalhost } from '../utils/env';
 import { getAiProviderDefault, setAiProviderDefault } from '../utils/uiPrefs';
+import { incrementAiStats } from '../utils/aiStats';
 
 function generateId() {
   const year = new Date().getFullYear();
@@ -320,7 +321,10 @@ export default function AppShell() {
         onStream: () => {},
       });
 
-      setQuote(result.quote as PremiumQuote);
+      const mergedQuote = result.aiCall
+        ? { ...(result.quote as PremiumQuote), aiStats: incrementAiStats((result.quote as PremiumQuote).aiStats, result.aiCall.kind, result.aiCall.costUsd) }
+        : (result.quote as PremiumQuote);
+      setQuote(mergedQuote);
       markDirty();
 
       const { count, summary } = summarizeMergeChanges(result.changes);
@@ -686,6 +690,7 @@ export default function AppShell() {
             setTheme={setTheme}
             documentTheme={documentTheme}
             onDocumentThemeChange={(t) => setDocumentTheme(t)}
+            aiStats={quote.aiStats}
           />
           <Outlet />
         </Layout>

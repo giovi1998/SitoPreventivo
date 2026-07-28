@@ -21,6 +21,7 @@ import { resolveProviderId, providerSupportsVision } from '../utils/resolveProvi
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiVisionEnabled } from '../utils/uiPrefs';
 import { getAiImageModelDefault } from '../utils/uiPrefs';
+import type { AiCallKind } from '../utils/aiStats';
 
 interface UseAICardReturn {
   processCardPrompt: (
@@ -35,17 +36,18 @@ interface UseAICardReturn {
     card: BusinessCard;
     changes: string[];
     rawResponse?: string;
+    aiCall?: { kind: AiCallKind; costUsd: number };
   }>;
   generateCover: (
     card: BusinessCard,
     side?: 'front' | 'back',
     prompt?: string,
     options?: { onProgress?: (msg: string) => void; imageModel?: string }
-  ) => Promise<string>;
+  ) => Promise<{ dataUrl: string; aiCall: { kind: AiCallKind; costUsd: number } }>;
   generatePhoto: (
     card: BusinessCard,
     options?: { promptOverride?: string; onProgress?: (msg: string) => void; imageModel?: string }
-  ) => Promise<string>;
+  ) => Promise<{ dataUrl: string; aiCall: { kind: AiCallKind; costUsd: number } }>;
   resetCardChat: () => void;
   cardAiLogs: ReturnType<typeof useAILogs>['logs'];
   isCardProcessing: boolean;
@@ -196,7 +198,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
           info('Risposta AI ricevuta (vedi dettaglio sopra)', undefined, { requestId });
         }
 
-        return { card: result.card, changes: result.changes, rawResponse: result.rawResponse };
+        return { card: result.card, changes: result.changes, rawResponse: result.rawResponse, aiCall: { kind: 'text' as const, costUsd: textCost } };
       } catch (err: any) {
         const msg = err.message || 'Errore AI';
         const hint = mapAiError(err);
@@ -252,7 +254,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         success(`Cover AI (${side}) generata`, `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd: imageCost, hasImage: true, modelId: imageModel });
         const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
         saveGeneratedImage(userEmail, dataUrl, 'cards', 'cover', coverPrompt).catch(() => {});
-        return dataUrl;
+        return { dataUrl, aiCall: { kind: 'cover' as const, costUsd: imageCost } };
       } catch (err: any) {
         const hint = mapAiError(err);
         logger.error('Card AI generateCover failed', { route: 'useAICard.generateCover', err: err?.message });
@@ -301,7 +303,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         success('Foto AI generata', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd: imageCost, hasImage: true, modelId: imageModel });
         const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
         saveGeneratedImage(userEmail, dataUrl, 'cards', 'photo', prompt).catch(() => {});
-        return dataUrl;
+        return { dataUrl, aiCall: { kind: 'photo' as const, costUsd: imageCost } };
       } catch (err: any) {
         const hint = mapAiError(err);
         logger.error('Card AI generatePhoto failed', { route: 'useAICard.generatePhoto', err: err?.message });

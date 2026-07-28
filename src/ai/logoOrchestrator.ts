@@ -52,6 +52,7 @@ export interface LogoProcessResult {
   applied: boolean;
   concepts: LogoBuilder[];
   selected: number;
+  aiCall?: { kind: 'logoConcept'; costUsd: number };
 }
 
 export class LogoAIOrchestrator extends BaseOrchestrator {

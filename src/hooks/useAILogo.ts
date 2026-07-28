@@ -22,7 +22,7 @@ export interface UseAILogoReturn {
     logo: Logo,
     context: { activity: string; mood: string; target: string; imagePrompt?: string },
     options?: { imageModel?: string },
-  ) => Promise<{ logo: Logo; applied: boolean; error?: string }>;
+  ) => Promise<{ logo: Logo; applied: boolean; error?: string; aiCall?: { kind: 'background'; costUsd: number } }>;
   reset: () => void;
   logs: ReturnType<typeof useAILogs>['logs'];
   isProcessing: boolean;
@@ -139,7 +139,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
         } else {
           error('AI non ha restituito parametri validi', result.changes.join(','), { requestId });
         }
-        return result;
+        return { ...result, aiCall: { kind: 'logoConcept' as const, costUsd: cost } };
       } catch (err) {
         const hint = mapAiError(err);
         finalizeStream(streamId, false, { errorMsg: hint });
@@ -172,6 +172,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
           trackImage(imageCost);
           const bgImage = result.logo.builder.backgroundImage;
           if (bgImage) saveGeneratedImage(userEmail, bgImage, 'logos', 'background', context.imagePrompt).catch(() => {});
+          return { ...result, aiCall: { kind: 'background' as const, costUsd: imageCost } };
         } else {
           error(mapAiError(result.error ?? 'Background non generato'), undefined, { requestId });
         }

@@ -90,8 +90,8 @@ describe('Topbar save-status during AI processing', () => {
     expect(screen.getByText('Raccolta documenti')).toBeInTheDocument();
   });
 
-  it('falls back to Collection title for unknown view', () => {
+  it('falls back to editor title for unknown view', () => {
     render(<Topbar {...baseProps} view="unknown-thing" isDirty={false} />);
-    expect(screen.getByRole('heading', { name: 'Collection' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Editor preventivo' })).toBeInTheDocument();
   });
 });

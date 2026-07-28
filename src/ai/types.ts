@@ -111,6 +111,8 @@ export interface ProcessResult {
   sessionId: string;
   changes: string[];
   rawResponse?: string;
+  /** TB-026: call AI da registrare in document.aiStats. */
+  aiCall?: { kind: 'quoteCopy'; costUsd: number };
 }
 
 export interface FlyerProcessResult {

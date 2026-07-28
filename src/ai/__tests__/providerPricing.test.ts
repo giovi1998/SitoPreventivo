@@ -28,8 +28,10 @@ describe('providerPricing calculateCostUsd (spec TB-023 §6.1)', () => {
     expect(cost).toBe(0);
   });
 
-  it('usage undefined → 0 anche per provider a consumo', () => {
+  it('usage undefined → 0 per provider a consumo (text); per-image ignora usage', () => {
     expect(calculateCostUsd('deepseek-chat', undefined)).toBe(0);
-    expect(calculateCostUsd('gemini-nano-banana', undefined, 2)).toBe(0);
+    // TB-026: per-image non richiede usage, conta solo imageCount
+    expect(calculateCostUsd('gemini-nano-banana', undefined, 2)).toBe(0.08);
+    expect(calculateCostUsd('gemini-nano-banana', undefined, 0)).toBe(0);
   });
 });

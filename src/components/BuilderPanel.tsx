@@ -27,6 +27,8 @@ interface BuilderPanelProps {
   onTemplate?: (sector: LogoSector) => void;
   tier?: Tier;
   userEmail?: string;
+  /** TB-026: notifica il genitore di una chiamata AI (per aiStats). */
+  onAiCall?: (kind: 'background', costUsd: number) => void;
 }
 
 const LUCIDE_NAME_TO_COMPONENT: Record<string, React.ComponentType<any>> = {
@@ -109,7 +111,7 @@ function PreviewIcon({ builder }: { builder: LogoBuilder }) {
   return <IconComp size={20} aria-hidden="true" />;
 }
 
-export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlocked', userEmail }: BuilderPanelProps) {
+export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlocked', userEmail, onAiCall }: BuilderPanelProps) {
   const b = logo.builder;
   const [search, setSearch] = useState('');
   const debouncedBuilder = useDebouncedValue(b, 200);
@@ -150,6 +152,7 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
         target: '',
         imagePrompt: promptText,
       });
+      if (result.aiCall) onAiCall?.(result.aiCall.kind, result.aiCall.costUsd);
       if (result.applied && result.logo?.builder.backgroundImage) {
         onPatch('builder.backgroundImage', result.logo.builder.backgroundImage);
         onPatch('builder.imagePrompt', promptText);

@@ -79,6 +79,9 @@ describe('useAICard', () => {
     });
     expect(res!.card.front.name).toBe('AI NAME');
     expect(res!.changes.length).toBeGreaterThan(0);
+    expect(res!.aiCall).toBeDefined();
+    expect(res!.aiCall!.kind).toBe('text');
+    expect(res!.aiCall!.costUsd).toBeGreaterThanOrEqual(0);
   });
 
   it('rejects empty prompt', async () => {
@@ -145,8 +148,10 @@ describe('useAICard', () => {
         json: async () => ({ data: { imageBase64: 'FAKEBASE64', mimeType: 'image/png' } }),
       });
       const { result } = renderHook(() => useAICard('user@test.com'));
-      const coverUrl = await act(async () => result.current.generateCover(createGiovanniCardTemplate()));
-      expect(coverUrl).toBe('data:image/png;base64,FAKEBASE64');
+      const coverRes = await act(async () => result.current.generateCover(createGiovanniCardTemplate()));
+      expect(coverRes.dataUrl).toBe('data:image/png;base64,FAKEBASE64');
+      expect(coverRes.aiCall.kind).toBe('cover');
+      expect(coverRes.aiCall.costUsd).toBeGreaterThan(0);
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/ai/card-cover',
         expect.objectContaining({

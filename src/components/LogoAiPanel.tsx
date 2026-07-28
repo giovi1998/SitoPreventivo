@@ -69,6 +69,8 @@ interface Props {
   initialState?: LogoAiState;
   /** Chiamato ad ogni cambio di stato per sincronizzare il genitore. */
   onStateChange?: (state: LogoAiState) => void;
+  /** TB-026: notifica il genitore di una chiamata AI (per aiStats). */
+  onAiCall?: (kind: 'logoConcept' | 'background', costUsd: number) => void;
 }
 
 const SECTORS: LogoSector[] = ['tech', 'food', 'fashion', 'professionista'];
@@ -274,7 +276,7 @@ function nowTime(): string {
 
 const DEFAULT_ANSWERS: ChatAnswers = { activity: '', mood: 'minimal', target: '', sector: 'tech' };
 
-export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialState, onStateChange }: Props) {
+export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialState, onStateChange, onAiCall }: Props) {
   const { generate, generateBackground, isProcessing, isGeneratingBg, logs, reset } = useAILogo(userEmail);
   const { addToast } = useToast();
   // Se il genitore (LogoEditor) fornisce `initialState`, lo stato vive
@@ -414,6 +416,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
       ].join('. ');
       addToast('info', 'Generazione 3 concept logo...');
       const result = await generate(logo, brief, { sector: answers.sector });
+      if (result.aiCall) onAiCall?.(result.aiCall.kind, result.aiCall.costUsd);
       if (!result.applied || !result.concepts.length) {
         addToast('error', 'AI non ha restituito concept validi. Riprova con una descrizione più dettagliata.');
         return;
@@ -589,6 +592,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
         imagePrompt: promptText,
       };
       const r = await generateBackground({ ...logo, builder: concept }, ctx, { imageModel });
+      if (r.aiCall) onAiCall?.(r.aiCall.kind, r.aiCall.costUsd);
       if (r.applied && r.logo?.builder.backgroundImage) {
         setBgImages((prev) => {
           const next = [...prev];

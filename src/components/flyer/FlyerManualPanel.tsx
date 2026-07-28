@@ -9,6 +9,7 @@ import { isHttpUrl } from '../../utils/qrGenerator';
 import { getSizeLabel, getLayoutLabel, getSectorLabel } from '../../utils/flyer';
 import FlyerStyleFields from './FlyerStyleFields';
 import { AiSelect } from '../ai-ui';
+import { DocumentAiStats } from '../DocumentAiStats';
 
 interface SectionProps {
   title: string;
@@ -103,6 +104,9 @@ export function FlyerManualPanel({
         </button>
       </div>
       <input value={flyer.title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Titolo del volantino" className="flyer-title-input" aria-label="Titolo del volantino" />
+      <div style={{ margin: '6px 0' }}>
+        <DocumentAiStats aiStats={flyer.aiStats} />
+      </div>
       {showTemplateBanner && (
         <div className="flyer-template-banner" role="status">
           <div className="flyer-template-banner__header">

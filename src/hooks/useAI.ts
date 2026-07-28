@@ -209,7 +209,7 @@ export function useAI(userEmail?: string): UseAIReturn {
           info('Risposta AI ricevuta (vedi dettaglio sopra)', undefined, { requestId });
         }
 
-        return result;
+        return { ...result, aiCall: { kind: 'quoteCopy' as const, costUsd: costUsd ?? 0 } };
       } catch (err: any) {
         const msg = err.message || 'Errore AI';
         const hint = mapAiError(err);

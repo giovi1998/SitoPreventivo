@@ -199,6 +199,18 @@ export const quoteSchema = z.object({
   notes: notesSchema,
   attachments: z.array(attachmentSchema).default([]),
   uiPreferences: uiPreferencesSchema,
+  aiStats: z
+    .object({
+      totalCostUsd: z.number().min(0).default(0),
+      calls: z
+        .record(
+          z.string(),
+          z.object({ count: z.number().int().min(0).default(0), costUsd: z.number().min(0).default(0) }),
+        )
+        .default({}),
+      updatedAt: z.string().optional(),
+    })
+    .optional(),
 });
 
 export type PremiumQuote = z.infer<typeof quoteSchema>;

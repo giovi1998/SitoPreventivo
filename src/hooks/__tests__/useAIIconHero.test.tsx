@@ -18,7 +18,8 @@ describe('useAIIconHero', () => {
     const { result } = renderHook(() => useAIIconHero('user@test.com'));
     let url = '';
     await act(async () => {
-      url = await result.current.generate('mela', 'icon', { primaryColor: '#E62020', secondaryColor: '#1A1A1A' });
+      const r = await result.current.generate('mela', 'icon', { primaryColor: '#E62020', secondaryColor: '#1A1A1A' });
+      url = r.dataUrl;
     });
     expect(url).toBe('data:image/png;base64,iconB64');
     expect(mockFetch).toHaveBeenCalledWith(

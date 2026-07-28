@@ -22,6 +22,8 @@ import { logger } from '../utils/logger';
 import './LogoEditor.css';
 import { useDocumentSave } from '../hooks/useDocumentSave';
 import { compressDataUrl } from '../utils/card/imageCompress';
+import { withAiCall } from '../utils/aiStats';
+import { DocumentAiStats } from './DocumentAiStats';
 
 interface LogoEditorProps {
   userEmail: string;
@@ -347,6 +349,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
     <div className="logo-editor">
       <header className="logo-editor-header">
         <h1>Logo</h1>
+        <DocumentAiStats aiStats={logo.aiStats} />
         <ActionBar
           onNew={handleNew}
           onSave={openSaveDialog}
@@ -394,7 +397,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
 
       <div id="logo-tab-panel" role="tabpanel" aria-labelledby={tab === 'builder' ? 'tab-builder' : 'tab-ai'}>
         {tab === 'builder' ? (
-          <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} userEmail={userEmail} />
+          <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} userEmail={userEmail} onAiCall={(kind, costUsd) => setLogo((prev) => withAiCall(prev, kind, costUsd))} />
         ) : (
           <LogoAiPanel
             key={aiPanelResetKey}
@@ -406,6 +409,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
             userEmail={userEmail}
             initialState={aiStateRef.current}
             onStateChange={handleAiStateChange}
+            onAiCall={(kind, costUsd) => setLogo((prev) => withAiCall(prev, kind, costUsd))}
           />
         )}
       </div>

@@ -33,6 +33,7 @@ import { useCardExport } from '../../hooks/useCardExport';
 import { isAllowedLogoMime, isHttpUrl } from '../../utils/qrGenerator';
 import { useToast } from '../../hooks/useToast';
 import { useAICard } from '../../hooks/useAICard';
+import { withAiCall, type AiCallKind } from '../../utils/aiStats';
 
 import { findCardQuickAction } from '../../ai/prompts/cardQuickActions';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -48,6 +49,7 @@ import CardEditorTabs from './CardEditorTabs';
 import MobileGridEditor from '../MobileGridEditor';
 import CardAIFab from '../CardAIFab';
 import CardAIBottomSheet from '../CardAIBottomSheet';
+import { DocumentAiStats } from '../DocumentAiStats';
 import SaveDialog from '../SaveDialog';
 import {
   loadPromptLibrary,
@@ -545,6 +547,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
   }, [card, userEmail, addToast, saveDocumentGuarded, onSaved]);
 
+  const recordAiOnCard = useCallback((kind: AiCallKind, costUsd: number, transform?: (c: BusinessCard) => BusinessCard) => {
+    setCard((prev) => {
+      const next = transform ? transform(prev) : prev;
+      return withAiCall(next, kind, costUsd);
+    });
+  }, []);
+
   const runCardAI = useCallback(async (mode: string = 'custom') => {
     const quick = findCardQuickAction(mode);
     let userPrompt = quick?.prompt ?? aiText.trim();
@@ -560,7 +569,13 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
         onProgress: () => {},
         onStream: () => {},
       });
-      setCard(result.card);
+      const aiCall = result.aiCall;
+      const merged = result.card;
+      if (aiCall) {
+        setCard(withAiCall(merged, aiCall.kind, aiCall.costUsd));
+      } else {
+        setCard(merged);
+      }
       const realChanges = result.changes.filter((c: string) => !c.startsWith('error:'));
       const gridChanged = realChanges.some((c: string) => c.startsWith('Griglia:')) ||
         result.card.front.useGrid || result.card.back.useGrid;
@@ -587,18 +602,18 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       if (side === 'both') {
         // Serializziamo fronte e retro: due chiamate Gemini in parallelo
         // possono sovraccaricare il dev proxy / l'upstream e ritornare 502.
-        const frontCover = await generateCover(card, 'front', promptOverride, { imageModel });
-        const backCover = await generateCover(card, 'back', promptOverride, { imageModel });
-        patchFront({ coverImageUrl: frontCover });
-        patchBack({ coverImageUrl: backCover });
+        const frontRes = await generateCover(card, 'front', promptOverride, { imageModel });
+        const backRes = await generateCover(card, 'back', promptOverride, { imageModel });
+        recordAiOnCard('cover', frontRes.aiCall.costUsd, (c) => ({ ...c, front: { ...c.front, coverImageUrl: frontRes.dataUrl } }));
+        recordAiOnCard('cover', backRes.aiCall.costUsd, (c) => ({ ...c, back: { ...c.back, coverImageUrl: backRes.dataUrl } }));
         addToast('success', 'Cover AI generate per fronte e retro.', 4000);
       } else {
-        const coverDataUrl = await generateCover(card, side, promptOverride, { imageModel });
-        if (side === 'front') {
-          patchFront({ coverImageUrl: coverDataUrl });
-        } else {
-          patchBack({ coverImageUrl: coverDataUrl });
-        }
+        const res = await generateCover(card, side, promptOverride, { imageModel });
+        recordAiOnCard('cover', res.aiCall.costUsd, (c) =>
+          side === 'front'
+            ? { ...c, front: { ...c.front, coverImageUrl: res.dataUrl } }
+            : { ...c, back: { ...c.back, coverImageUrl: res.dataUrl } },
+        );
         addToast('success', `Cover AI generata e applicata al ${side === 'front' ? 'fronte' : 'retro'}.`, 4000);
       }
     } catch (err: any) {
@@ -606,7 +621,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     } finally {
       setIsCoverGenerating(false);
     }
-  }, [card, tier, generateCover, patchFront, patchBack, addToast]);
+  }, [card, tier, generateCover, recordAiOnCard, addToast]);
 
   const handleGeneratePhoto = useCallback(async (imageModel?: string) => {
     if (tier !== 'unlocked') {
@@ -615,18 +630,18 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
     setIsPhotoGenerating(true);
     try {
-      const photoUrl = await generatePhoto(card, {
+      const res = await generatePhoto(card, {
         promptOverride: photoPrompt.trim() || undefined,
         imageModel,
       });
-      patchFront({ photoUrl });
+      recordAiOnCard('photo', res.aiCall.costUsd, (c) => ({ ...c, front: { ...c.front, photoUrl: res.dataUrl } }));
       addToast('success', 'Foto AI generata e applicata al bigliettino.', 4000);
     } catch (err: any) {
       addToast('error', err.message || 'Errore generazione foto AI', 5000);
     } finally {
       setIsPhotoGenerating(false);
     }
-  }, [card, tier, generatePhoto, patchFront, addToast, photoPrompt]);
+  }, [card, tier, generatePhoto, recordAiOnCard, addToast, photoPrompt]);
 
   const handleFillAutoPhotoPrompt = useCallback(() => {
     setPhotoPrompt(buildCardPhotoBrief(card).prompt);
@@ -671,19 +686,19 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       return;
     }
     try {
-      const dataUrl = await generateIconHero(iconPrompt.trim() || buildAutoIconPrompt(), 'icon', {
+      const res = await generateIconHero(iconPrompt.trim() || buildAutoIconPrompt(), 'icon', {
         primaryColor: card.style.accentColor,
         secondaryColor: card.style.textColor,
         imageModel: opts.imageModel,
         background: opts.background,
       });
       // CON-IS-001: sostituisce sempre la foto (photoUrl) esistente.
-      patchFront({ photoUrl: dataUrl });
+      recordAiOnCard('icon', res.aiCall.costUsd, (c) => ({ ...c, front: { ...c.front, photoUrl: res.dataUrl } }));
       addToast('success', 'Icona AI generata e applicata come foto.', 4000);
     } catch (err: any) {
       addToast('error', err.message || 'Errore generazione icona AI', 5000);
     }
-  }, [card, tier, generateIconHero, iconPrompt, buildAutoIconPrompt, patchFront, addToast]);
+  }, [card, tier, generateIconHero, iconPrompt, buildAutoIconPrompt, recordAiOnCard, addToast]);
 
   const handleFillAutoIconPrompt = useCallback(() => {
     setIconPrompt(buildAutoIconPrompt());
@@ -1113,6 +1128,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
           placeholder="Titolo del bigliettino"
           aria-label="Titolo del bigliettino"
         />
+        <DocumentAiStats aiStats={card.aiStats} />
         <button type="button" className="card-reset-btn" onClick={resetCard}>
           Nuovo / reset
         </button>

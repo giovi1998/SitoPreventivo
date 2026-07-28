@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { hasElementContent, type GridElementKey } from './card/gridElements';
 import { FLYER_TEMPLATES_BY_SECTOR_LAYOUT, heroBoxMmForLayout } from './flyer/templateCatalog';
 import { DECORATIVE_PATTERN_IDS, type DecorativePatternId } from './decorations/patterns';
+import { aiStatsSchema } from './aiStats';
 
 export const documentTypeSchema = z.enum(['quote', 'qrCode', 'businessCard', 'flyer', 'logo', 'generatedImage']);
 export type DocumentType = z.infer<typeof documentTypeSchema>;
@@ -41,6 +42,7 @@ export const qrCodeSchema = z.object({
   title: z.string().default(''),
   data: qrCodeDataSchema,
   style: qrStyleSchema,
+  aiStats: aiStatsSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -611,6 +613,7 @@ export const businessCardSchema = z.object({
   }),
   grid: cardGridSchema.optional(),
   backGrid: cardGridSchema.optional(),
+  aiStats: aiStatsSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -853,6 +856,7 @@ export const logoSchema = z.object({
     primaryColor: '#01696F',
     secondaryColor: '#1a1a2e',
   }),
+  aiStats: aiStatsSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1113,6 +1117,7 @@ export const flyerSchema = z.object({
     // CON-PD-002: se true, il merge AI NON può modificare la decorazione.
     userLocked: z.boolean().default(false),
   }).default(() => ({ pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null }, userLocked: false })),
+  aiStats: aiStatsSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

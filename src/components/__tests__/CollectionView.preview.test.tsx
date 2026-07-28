@@ -234,3 +234,63 @@ describe('CollectionView preview SVG (TB-025)', () => {
     expect(screen.getByTestId('card-badflyer')).toBeTruthy();
   });
 });
+
+describe('CollectionView aiStats badge (TB-026)', () => {
+  it('renders aiStats badge when document has aiStats with calls', async () => {
+    seedDocumentsLocalStorage([
+      makeDocument({
+        id: 'card-ai',
+        documentType: 'businessCard',
+        title: 'Card con AI',
+        front: { name: 'Mario' },
+        aiStats: {
+          totalCostUsd: 0.08,
+          calls: {
+            icon: { count: 3, costUsd: 0.06 },
+            text: { count: 2, costUsd: 0.02 },
+          },
+          updatedAt: new Date().toISOString(),
+        },
+      }),
+    ]);
+    await renderCollection();
+    const badge = screen.queryByTestId('ai-stats-card-ai');
+    expect(badge).toBeTruthy();
+    const text = badge?.textContent ?? '';
+    // 3 icone + 2 elaborazioni testo + costo $0.08
+    expect(text).toContain('3 icone');
+    expect(text).toContain('2 elaborazioni testo');
+    expect(text).toContain('$0.08');
+  });
+
+  it('renders aiStats placeholder when document has no aiStats calls', async () => {
+    seedDocumentsLocalStorage([
+      makeDocument({
+        id: 'card-noai',
+        documentType: 'businessCard',
+        title: 'Card senza AI',
+        front: { name: 'Luigi' },
+      }),
+    ]);
+    await renderCollection();
+    const badge = screen.queryByTestId('ai-stats-card-noai');
+    expect(badge).toBeTruthy();
+    expect(badge?.textContent).toContain('Nessun costo AI');
+  });
+
+  it('renders aiStats placeholder when aiStats has zero calls', async () => {
+    seedDocumentsLocalStorage([
+      makeDocument({
+        id: 'card-empty',
+        documentType: 'businessCard',
+        title: 'Card empty stats',
+        front: { name: 'Carla' },
+        aiStats: { totalCostUsd: 0, calls: {} },
+      }),
+    ]);
+    await renderCollection();
+    const badge = screen.queryByTestId('ai-stats-card-empty');
+    expect(badge).toBeTruthy();
+    expect(badge?.textContent).toContain('Nessun costo AI');
+  });
+});

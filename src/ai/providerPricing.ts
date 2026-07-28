@@ -41,18 +41,19 @@ export function calculateCostUsd(
   usage: { promptTokens: number; completionTokens: number } | undefined,
   imageCount = 0
 ): number {
-  if (!usage) return 0;
   const pricing = PRICING[providerId];
   if (!pricing) return 0;
+
+  if (pricing.unit === 'per_image') {
+    return Math.round((imageCount * (pricing.perImage ?? 0)) * 1_000_000) / 1_000_000;
+  }
+
+  if (!usage) return 0;
 
   if (pricing.unit === 'per_1m_tokens') {
     const inputCost = (usage.promptTokens / 1_000_000) * pricing.input;
     const outputCost = (usage.completionTokens / 1_000_000) * pricing.output;
     return Math.round((inputCost + outputCost) * 1_000_000) / 1_000_000;
-  }
-
-  if (pricing.unit === 'per_image') {
-    return Math.round((imageCount * (pricing.perImage ?? 0)) * 1_000_000) / 1_000_000;
   }
 
   // flat_monthly → 0 per chiamata

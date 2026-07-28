@@ -14,6 +14,12 @@ import { resolveProviderId, providerSupportsVision } from '../utils/resolveProvi
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
 import { renderFlyerPreviewImage } from '../utils/flyer/flyerPreviewImage';
+import type { AiCallKind } from '../utils/aiStats';
+
+export interface FlyerAiCall {
+  kind: AiCallKind;
+  costUsd: number;
+}
 
 interface UseAIFlyerReturn {
   generate: (
@@ -21,16 +27,16 @@ interface UseAIFlyerReturn {
     brief: string,
     tone: FlyerTone,
     options?: { modelId?: string }
-  ) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean }>;
+  ) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean; aiCall?: FlyerAiCall }>;
   refine: (
     flyer: Flyer,
     action: FlyerRefineAction,
     options?: { modelId?: string }
-  ) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean }>;
+  ) => Promise<{ flyer: Flyer; changes: string[]; rawResponse?: string; applied: boolean; aiCall?: FlyerAiCall }>;
   generateHero: (
     flyer: Flyer,
     options?: { sector?: FlyerSector; tone?: FlyerTone; promptOverride?: string; imageModel?: string }
-  ) => Promise<{ flyer: Flyer; applied: boolean; error?: string }>;
+  ) => Promise<{ flyer: Flyer; applied: boolean; error?: string; aiCall?: FlyerAiCall }>;
   reset: () => void;
   logs: ReturnType<typeof useAILogs>['logs'];
   isProcessing: boolean;
@@ -102,7 +108,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         if (!result.applied && errorChanges.length === 0) {
           info('Nessuna modifica applicata', undefined, { requestId });
         }
-        return result;
+        return { ...result, aiCall: { kind: 'flyerCopy' as const, costUsd: cost } };
       } catch (err: any) {
         const msg = err?.message || 'Errore AI';
         const hint = mapAiError(err);
@@ -204,7 +210,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
 
         success('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, modelId: imageModel, costUsd: imageCost, hasImage: true });
         saveGeneratedImage(userEmail, heroImage, 'flyers', 'hero').catch(() => {});
-        return { flyer: updated, applied: true };
+        return { flyer: updated, applied: true, aiCall: { kind: 'hero' as const, costUsd: imageCost } };
       } catch (err) {
         const hint = mapAiError(err);
         logger.error('Flyer AI generateHero failed', { route: 'useAIFlyer.generateHero', err: hint });
