@@ -53,6 +53,7 @@ export default function Topbar({
     admin: { kicker: 'Pannello di controllo', title: 'Admin' },
     settings: { kicker: 'Gestione credenziali', title: 'Impostazioni' },
     collection: { kicker: 'Raccolta documenti', title: 'Collection' },
+    customers: { kicker: 'CRM', title: 'Clienti' },
     card: { kicker: 'Bigliettino da visita', title: 'Bigliettini' },
     qr: { kicker: 'Generatore QR Code', title: 'QR Code' },
     flyer: { kicker: 'Volantino / Locandina', title: 'Volantini' },

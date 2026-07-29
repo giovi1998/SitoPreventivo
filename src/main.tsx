@@ -6,7 +6,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import AdminRoute from '../src/components/AdminRoute';
-import { EditorPage, CollectionPage, QrPage, CardPage, LogoPage, FlyerPage, SettingsRoute, AdminPage } from './pages/app';
+import { EditorPage, CollectionPage, CustomersPage, QrPage, CardPage, LogoPage, FlyerPage, SettingsRoute, AdminPage } from './pages/app';
 import SocialPage from './pages/app/SocialPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -52,6 +52,8 @@ function AppWrapper() {
             <Route path="editor" element={<AdminEditorRoute><EditorPage /></AdminEditorRoute>} />
             <Route path="editor/:docId" element={<AdminEditorRoute><EditorPage /></AdminEditorRoute>} />
             <Route path="collection" element={<CollectionPage />} />
+            <Route path="customers" element={<AdminRoute><CustomersPage /></AdminRoute>} />
+            <Route path="customers/:customerId" element={<AdminRoute><CustomersPage /></AdminRoute>} />
             <Route path="qr" element={<QrPage />} />
             <Route path="qr/:docId" element={<QrPage />} />
             <Route path="card" element={<CardPage />} />

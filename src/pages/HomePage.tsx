@@ -4,6 +4,7 @@ import CardPreview from '../components/CardPreview';
 import '../components/CardEditor.css';
 import { createGiovanniCardTemplate } from '../utils/documentSchemas';
 import type { Tier } from '../utils/watermark';
+import dataService from '../utils/dataService';
 
 interface HomePageProps {
   user: any;
@@ -41,6 +42,17 @@ function useReveal() {
 
 export default function HomePage({ user }: HomePageProps) {
   const [flipped, setFlipped] = useState(false);
+  // TB-027: link "Registrati" solo se flag abilitato, altrimenti punta a login.
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  useEffect(() => {
+    let mounted = true;
+    dataService.getConfig().then((cfg) => {
+      if (!mounted) return;
+      setRegistrationEnabled(!!(cfg?.data && (cfg.data as Record<string, unknown>).registrationEnabled));
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+  const authHref = registrationEnabled ? '/login?register=1' : '/login';
   const toggle = () => setFlipped((f) => !f);
   useReveal();
 
@@ -61,7 +73,7 @@ export default function HomePage({ user }: HomePageProps) {
             ) : (
               <>
                 <Link to="/login" className="hp-btn-ghost">Accedi</Link>
-                <Link to="/login?register=1" className="hp-btn-primary">Registrati</Link>
+                <Link to={authHref} className="hp-btn-primary">Registrati</Link>
               </>
             )}
           </nav>
@@ -85,7 +97,7 @@ export default function HomePage({ user }: HomePageProps) {
             {user ? (
               <Link to="/app" className="hp-cta">Vai all'App →</Link>
             ) : (
-              <Link to="/login?register=1" className="hp-cta">Crea il tuo brand →</Link>
+              <Link to={authHref} className="hp-cta">Crea il tuo brand →</Link>
             )}
             <a href="#pricing" className="hp-cta-ghost">Vedi i pacchetti</a>
           </div>
@@ -255,7 +267,7 @@ export default function HomePage({ user }: HomePageProps) {
             {user ? (
               <Link to="/app" className="hp-price-cta">Vai all'App</Link>
             ) : (
-              <Link to="/login?register=1" className="hp-price-cta">Inizia gratis</Link>
+              <Link to={authHref} className="hp-price-cta">Inizia gratis</Link>
             )}
           </div>
 

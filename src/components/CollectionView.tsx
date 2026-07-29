@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useContext, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useContext, useRef, useCallback, lazy, Suspense } from 'react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import Icon from './Icon';
@@ -14,6 +14,9 @@ import { buildQuotePreviewSvg } from '../utils/quote/quotePreviewImage';
 import { migrateFromLegacy, type PremiumQuote } from '../utils/quoteSchema';
 import { formatAiStatsCompact, type AiStats, aiStatsTotalCalls, documentAiStatsTitle } from '../utils/aiStats';
 import { useToast } from '../hooks/useToast';
+
+// TB-019: brief intake in Collection (admin only)
+const IntakeList = lazy(() => import('./crm/IntakeList'));
 
 type TabId = 'all' | 'quote' | 'qrCode' | 'businessCard' | 'flyer' | 'logo' | 'generatedImage';
 
@@ -500,6 +503,12 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
             : 'Tutti i tuoi documenti: QR, bigliettini e loghi.'}
         </span>
       </div>
+
+      {isAdmin && (
+        <Suspense fallback={null}>
+          <IntakeList />
+        </Suspense>
+      )}
 
       <div role="tablist" aria-label="Tipo documento" className="collection-tabs">
         {/* Phase 7: preventivi are admin-only. The "Preventivi" tab is

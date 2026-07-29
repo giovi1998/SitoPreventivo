@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 export const ROUTE_PATHS = {
   editor: '/app/editor',
   collection: '/app/collection',
+  customers: '/app/customers',
   qr: '/app/qr',
   card: '/app/card',
   logo: '/app/logo',

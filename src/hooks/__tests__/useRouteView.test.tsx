@@ -118,8 +118,8 @@ describe('useRouteView', () => {
     expect(buildPath('qr', 'qr-1')).toBe('/app/qr/qr-1');
   });
 
-  it('exposes ROUTE_PATHS map with all 9 view keys', () => {
-    expect(Object.keys(ROUTE_PATHS).sort()).toEqual(['admin', 'card', 'collection', 'editor', 'flyer', 'logo', 'qr', 'settings', 'social']);
+  it('exposes ROUTE_PATHS map with all 10 view keys', () => {
+    expect(Object.keys(ROUTE_PATHS).sort()).toEqual(['admin', 'card', 'collection', 'customers', 'editor', 'flyer', 'logo', 'qr', 'settings', 'social']);
     expect(ROUTE_PATHS.editor).toBe('/app/editor');
     expect(ROUTE_PATHS.admin).toBe('/app/admin');
     expect(ROUTE_PATHS.logo).toBe('/app/logo');

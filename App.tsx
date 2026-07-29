@@ -21,6 +21,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   const register = async (email: string, password: string, username: string, gender: string) => {
+    // TB-027: gate signup via feature flag (locale + prod). REGISTRATION_ENABLED
+    // default false (CRM admin-only). WHITELABEL: VITE_REGISTRATION_ENABLED / REGISTRATION_ENABLED=true.
+    const cfg = await dataService.getConfig();
+    if (cfg?.data && !(cfg.data as Record<string, unknown>).registrationEnabled) {
+      return { success: false, error: 'Registrazione non disponibile' };
+    }
     const result: any = await dataService.register(email, password, username, gender);
     if (result.success) {
       const uData = result.user || {};

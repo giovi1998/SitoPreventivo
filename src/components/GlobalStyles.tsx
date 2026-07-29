@@ -494,6 +494,8 @@ export default function GlobalStyles() {
     .drawer-close{background:none;border:none;color:#8896ab;padding:6px;cursor:pointer;border-radius:8px;display:grid;place-items:center;transition:color var(--transition-fast),background var(--transition-fast)}
     .drawer-close:hover{color:#fff;background:rgba(255,255,255,.1);transform:none;box-shadow:none}
     .drawer-nav{display:grid;gap:4px;flex:1}
+    .drawer-nav .nav-group-label{font-size:.62rem;font-weight:var(--weight-extrabold);text-transform:uppercase;letter-spacing:.14em;color:#5a6b82;padding:14px 14px 4px}
+    .drawer-nav .nav-group-label:first-child{padding-top:4px}
     .drawer-nav button{display:flex;align-items:center;gap:12px;background:transparent;color:#8896ab;border:none;border-radius:10px;padding:12px 14px;text-align:left;font-size:.95rem;font-weight:var(--weight-semibold);cursor:pointer;transition:all var(--transition-fast)}
     .drawer-nav button svg{flex-shrink:0;opacity:.6;transition:opacity var(--transition-fast);width:20px;height:20px}
     .drawer-nav button:hover{background:rgba(255,255,255,.06);color:#cfe0f2;transform:none;box-shadow:none}

@@ -1,6 +1,7 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../../App';
+import dataService from '../utils/dataService';
 
 export default function LoginPage() {
   const [searchParams] = useSearchParams();
@@ -11,9 +12,22 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [isRegister, setIsRegister] = useState(() => searchParams.get('register') === '1');
   const { login, register } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  // TB-027: fetch feature flag once. Hide register tab if disabled.
+  useEffect(() => {
+    let mounted = true;
+    dataService.getConfig().then((cfg: any) => {
+      if (!mounted) return;
+      const enabled = !!(cfg?.data && (cfg.data as Record<string, unknown>).registrationEnabled);
+      setRegistrationEnabled(enabled);
+      if (!enabled) setIsRegister(false);
+    }).catch(() => { /* best-effort: default mostra login */ });
+    return () => { mounted = false; };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +36,12 @@ export default function LoginPage() {
 
     if (!email || !password) {
       setError('Compila tutti i campi obbligatori');
+      setLoading(false);
+      return;
+    }
+
+    if (isRegister && !registrationEnabled) {
+      setError('Registrazione chiusa. Contattaci per un account.');
       setLoading(false);
       return;
     }
@@ -217,10 +237,15 @@ export default function LoginPage() {
 
           <div className="auth-footer">
             <div className="auth-toggle">
-              {isRegister ? 'Hai già un account?' : "Non hai un account?"}
-              <button type="button" onClick={() => { setIsRegister(!isRegister); setError(''); }}>
-                {isRegister ? 'Accedi' : 'Registrati'}
-              </button>
+              {isRegister ? 'Hai già un account?' : (registrationEnabled ? "Non hai un account?" : 'Admin accesso')}
+              {registrationEnabled && (
+                <button type="button" onClick={() => { setIsRegister(!isRegister); setError(''); }}>
+                  {isRegister ? 'Accedi' : 'Registrati'}
+                </button>
+              )}
+              {!registrationEnabled && !isRegister && (
+                <span style={{ fontSize: '.85rem', color: '#94a3b8' }}>· CRM admin-only</span>
+              )}
             </div>
             <Link to="/" className="auth-back">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
