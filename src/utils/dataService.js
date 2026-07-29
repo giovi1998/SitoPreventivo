@@ -645,10 +645,7 @@ const dataService = {
   // ─── USER SETTINGS ──────────────────────────────
   async getUserSettings(email) {
     if (IS_LOCAL) {
-      if (email === 'admin@gmail.com') {
-        return { userEmail: email, onboardingDone: true };
-      }
-      return lsGet(`userSettings_${email}`) || { userEmail: email, onboardingDone: false };
+      return lsGet(`userSettings_${email}`) || { userEmail: email, onboardingDone: email === 'admin@gmail.com' };
     }
     const result = await api('GET', `/user-settings?email=${encodeURIComponent(email)}`);
     if (result.error) return { error: result.error, userEmail: email, onboardingDone: false };
@@ -782,8 +779,290 @@ const dataService = {
 
   generateUnlockCode,
 
-};
+  // ─── TB-027 CRM: customers ──────────────────────────
+  // Admin-only. LOCAL usa localStorage (key pq_customers:v1), PROD API.
+  // ponytail: localStorage come cache/seed per dev, POST crea su API.
 
+  async getCustomers(status) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_customers:v1') || [];
+      const filtered = status ? all.filter((c) => c.status === status) : all;
+      return { data: filtered.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)) };
+    }
+    const q = status ? `?status=${encodeURIComponent(status)}` : '';
+    return api('GET', `/customers${q}&adminEmail=${encodeURIComponent('admin@gmail.com')}`);
+  },
+
+  async createCustomer(payload) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_customers:v1') || [];
+      const cust = {
+        id: 'cust_' + cryptoRandomId(),
+        ...payload,
+        source: 'manual',
+        status: 'new',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      all.push(cust);
+      lsSet('pq_customers:v1', all);
+      return { data: cust };
+    }
+    return api('POST', '/customers', { adminEmail: 'admin@gmail.com', ...payload });
+  },
+
+  async getCustomer(id) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_customers:v1') || [];
+      const cust = all.find((c) => c.id === id);
+      if (!cust) return { error: 'Cliente non trovato' };
+      const docs = (lsGet('precisionQuote_documents:v1') || []).filter((d) => d.customerId === id);
+      return { data: { ...cust, documents: docs } };
+    }
+    return api('GET', `/customers/${id}?adminEmail=${encodeURIComponent('admin@gmail.com')}`);
+  },
+
+  async updateCustomer(id, patch) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_customers:v1') || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx < 0) return { error: 'Cliente non trovato' };
+      all[idx] = { ...all[idx], ...patch, updatedAt: new Date().toISOString() };
+      lsSet('pq_customers:v1', all);
+      return { data: all[idx] };
+    }
+    return api('PATCH', `/customers/${id}`, { adminEmail: 'admin@gmail.com', ...patch });
+  },
+
+  async deleteCustomer(id) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_customers:v1') || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx < 0) return { error: 'Cliente non trovato' };
+      all.splice(idx, 1);
+      lsSet('pq_customers:v1', all);
+      // scollega documenti
+      const docs = lsGet('precisionQuote_documents:v1') || [];
+      let changed = false;
+      for (const d of docs) {
+        if (d.customerId === id) { d.customerId = null; changed = true; }
+      }
+      if (changed) lsSet('precisionQuote_documents:v1', docs);
+      return { data: { id, deleted: true } };
+    }
+    return api('DELETE', `/customers/${id}`, { adminEmail: 'admin@gmail.com' });
+  },
+
+  async researchCustomer(id) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_customers:v1') || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx < 0) return { error: 'Cliente non trovato' };
+      all[idx].status = 'researched';
+      all[idx].researchStatus = { places: 'no_key (local)', logo: 'no_logo' };
+      all[idx].updatedAt = new Date().toISOString();
+      lsSet('pq_customers:v1', all);
+      return { data: { id, researchStatus: all[idx].researchStatus } };
+    }
+    return api('POST', `/customers/${id}/research`, { adminEmail: 'admin@gmail.com' });
+  },
+
+  async aiFillCustomer(id) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_customers:v1') || [];
+      const idx = all.findIndex((c) => c.id === id);
+      if (idx < 0) return { error: 'Cliente non trovato' };
+      const c = all[idx];
+      const ai = {};
+      if (!c.mood) ai.mood = 'moderno';
+      if (!c.target) ai.target = 'Clienti locali settore ' + (c.sector || 'generico');
+      if (!c.preferredColors) ai.preferredColors = 'palette settore';
+      if (!c.activity) ai.activity = 'Attività settore ' + (c.sector || 'generico');
+      all[idx] = { ...c, ...ai, aiSuggestedFields: ai, updatedAt: new Date().toISOString() };
+      lsSet('pq_customers:v1', all);
+      return { data: { id, aiSuggestedFields: ai } };
+    }
+    return api('POST', `/customers/${id}/ai-fill`, { adminEmail: 'admin@gmail.com' });
+  },
+
+  async autoBuildCustomer(id, autoGenerate = false) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_customers:v1') || [];
+      const cust = all.find((c) => c.id === id);
+      if (!cust) return { error: 'Cliente non trovato' };
+      const docs = lsGet('precisionQuote_documents:v1') || [];
+      const now = new Date().toISOString();
+      const ids = [];
+      const contacts = cust.contacts || {};
+      const photos = Array.isArray(cust.customerPhotos) ? cust.customerPhotos : [];
+      const firstPhoto = photos.length > 0 ? photos[0] : null;
+      // Logo: se già caricato/detected → NON creare draft logo (l'admin ha già il logo)
+      const detectedLogo = cust.detectedLogoUrl || cust.logoUrl || null;
+      const hasManualLogo = !!detectedLogo;
+      const autoGeneratePending = autoGenerate ? true : false;
+      // Brief context stringa per AI (passato ai draft come briefContext)
+      const briefContext = buildBriefContext(cust);
+      // Shape allineate a createEmpty*() factories (documentSchemas.ts).
+      // Deve rimanere identico al path PROD api/index.ts auto-build.
+      const drafts = [
+        {
+          type: 'logo',
+          title: `Logo ${cust.businessName}`,
+          data: {
+            documentType: 'logo',
+            title: `Logo ${cust.businessName}`,
+            source: 'builder',
+            builder: {
+              primaryText: cust.businessName, tagline: cust.activity || '',
+              iconType: 'lucide', iconGlyph: 'sparkles', iconShape: 'circle',
+              primaryColor: '#01696F', secondaryColor: '#1a1a2e',
+              fontFamily: 'Inter', layout: 'horizontal', icons: [],
+              backgroundImage: detectedLogo, backgroundColor: null, gradientFill: false,
+              decorativeElements: [], imagePrompt: null, textBackdrop: 'none',
+              textColorMode: 'auto', textOffsetX: 0, textOffsetY: 0, textScale: 1,
+              taglineOffsetX: 0, taglineOffsetY: 0, textPosition: 'overlay',
+            },
+            brief: cust.activity || '', briefContext, concepts: [], selected: -1,
+            edits: { primaryText: cust.businessName, primaryColor: '#01696F', secondaryColor: '#1a1a2e' },
+            aiStats: { totalCostUsd: '0', calls: {} },
+            autoGeneratePending: !detectedLogo,
+            createdAt: now, updatedAt: now,
+          },
+        },
+        {
+          type: 'businessCard',
+          title: `Card ${cust.businessName}`,
+          data: {
+            documentType: 'businessCard',
+            title: `Card ${cust.businessName}`,
+            front: {
+              name: cust.ownerName || '', title: cust.sector || '', company: cust.businessName,
+              photoUrl: firstPhoto, logoUrl: detectedLogo, coverImageUrl: null,
+              logoBackground: 'none', layout: 'left', useGrid: false,
+            },
+            back: {
+              phone: String(contacts.phone || ''), email: String(contacts.email || ''),
+              website: String(contacts.website || ''), address: String(contacts.address || ''),
+              vatNumber: '', services: [], servicesLabel: 'Servizi', socials: [],
+              qrPayload: '', qrLabel: 'Scansiona per visitare il sito',
+              qrSize: 'medium', coverImageUrl: null, useGrid: false,
+            },
+            style: {
+              sizePreset: 'eu-85x55', bgColor: '#FFFFFF', textColor: '#1a1a2e',
+              accentColor: '#01696F', fontFamily: 'Inter', borderStyle: 'accent-strip-left', fontScale: 1,
+            },
+            decorations: { pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null }, userLocked: false },
+            grid: {}, backGrid: {},
+            aiStats: { totalCostUsd: '0', calls: {} },
+            autoGeneratePending,
+            briefContext: buildBriefContext(cust),
+            createdAt: now, updatedAt: now,
+          },
+        },
+        {
+          type: 'flyer',
+          title: `Flyer ${cust.businessName}`,
+          data: {
+            documentType: 'flyer',
+            title: `Flyer ${cust.businessName}`,
+            size: 'A5', orientation: 'portrait',
+            content: {
+              headline: cust.businessName, subheadline: cust.activity || '', body: cust.activity || '',
+              cta: { label: 'Scopri di più', url: String(contacts.website || '') },
+              heroImage: firstPhoto, qrPayload: '', qrLabel: '',
+            },
+            style: {
+              bgColor: '#FFFFFF', textColor: '#1a1a2e', accentColor: '#01696F',
+              layout: 'classic', fontFamily: 'Inter', fontScale: 1,
+            },
+            decorations: { pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null }, userLocked: false },
+            sector: cust.sector || 'generico',
+            aiStats: { totalCostUsd: '0', calls: {} },
+            autoGeneratePending,
+            briefContext: buildBriefContext(cust),
+            createdAt: now, updatedAt: now,
+          },
+        },
+      ];
+      for (const d of drafts) {
+        // Skip logo draft se admin ha già caricato un logo manuale/detected
+        if (d.type === 'logo' && hasManualLogo) continue;
+        const did = d.type + '_' + cryptoRandomId();
+        docs.push({
+          id: did, userEmail: 'admin@gmail.com', customerId: id,
+          documentType: d.type, title: d.title,
+          status: 'BOZZA', documentTheme: 'corporate', data: d.data,
+          createdAt: now, updatedAt: now,
+        });
+        ids.push(did);
+      }
+      try { lsSet('precisionQuote_documents:v1', docs); } catch (e) {
+        return { error: 'Quota storage locale piena. Rimuovi vecchi documenti.' };
+      }
+      cust.status = 'done';
+      cust.updatedAt = now;
+      lsSet('pq_customers:v1', all);
+      return { data: { customerId: id, createdDocuments: ids } };
+    }
+    return api('POST', `/customers/${id}/auto-build`, { adminEmail: 'admin@gmail.com', autoGenerate });
+  },
+
+  // ─── TB-019 intake ──────────────────────────────────
+
+  async getIntakes(status) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_intakes:v1') || [];
+      const filtered = status ? all.filter((i) => i.status === status) : all;
+      return { data: filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) };
+    }
+    const q = status ? `?status=${encodeURIComponent(status)}` : '';
+    return api('GET', `/intakes${q}&adminEmail=${encodeURIComponent('admin@gmail.com')}`);
+  },
+
+  async getIntake(id) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_intakes:v1') || [];
+      const intake = all.find((i) => i.id === id);
+      return intake ? { data: intake } : { error: 'Brief non trovato' };
+    }
+    return api('GET', `/intakes/${id}?adminEmail=${encodeURIComponent('admin@gmail.com')}`);
+  },
+
+  async updateIntake(id, patch) {
+    if (IS_LOCAL) {
+      const all = lsGet('pq_intakes:v1') || [];
+      const idx = all.findIndex((i) => i.id === id);
+      if (idx < 0) return { error: 'Brief non trovato' };
+      all[idx] = { ...all[idx], ...patch, updatedAt: new Date().toISOString() };
+      lsSet('pq_intakes:v1', all);
+      return { data: all[idx] };
+    }
+    return api('PATCH', `/intakes/${id}`, { adminEmail: 'admin@gmail.com', ...patch });
+  },
+
+  // ─── TB-027 config pubblica ──────────────────────────
+  async getConfig() {
+    if (IS_LOCAL) {
+      // LOCAL: leggiamo env client Vite. Default false (CRM admin-only).
+      // WHITELABEL: impostare VITE_REGISTRATION_ENABLED=true in .env
+      // IMPORTANTE: riavviare `npm run dev` dopo aver modificato .env
+      // (Vite non reloada env a caldo).
+      let enabled = false;
+      try {
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+          const v = import.meta.env.VITE_REGISTRATION_ENABLED;
+          enabled = v === true || v === 'true';
+        }
+      } catch { /* import.meta non disponibile */ }
+      if (typeof console !== 'undefined') {
+        console.log('[getConfig] VITE_REGISTRATION_ENABLED →', enabled);
+      }
+      return { data: { registrationEnabled: enabled } };
+    }
+    return api('GET', '/config');
+  },
+
+};
 
 // ─── HELPERS ─────────────────────────────────────────
 function randomHex(n) {
@@ -791,6 +1070,34 @@ function randomHex(n) {
   const chars = '0123456789ABCDEF';
   for (let i = 0; i < n; i++) s += chars[Math.floor(Math.random() * 16)];
   return s;
+}
+
+// TB-027 B2: costruisce stringa brief contesto per AI dagli dati cliente.
+// Passato ai draft come `briefContext` così gli orchestratori AI hanno il contesto.
+function buildBriefContext(cust) {
+  const c = cust || {};
+  const contacts = c.contacts || {};
+  const parts = [];
+  if (c.businessName) parts.push(`Attività: ${c.businessName}`);
+  if (c.ownerName) parts.push(`Referente: ${c.ownerName}`);
+  if (c.sector) parts.push(`Settore: ${c.sector}`);
+  if (c.activity) parts.push(`Descrizione: ${c.activity}`);
+  if (c.mood) parts.push(`Mood: ${c.mood}`);
+  if (c.target) parts.push(`Target: ${c.target}`);
+  if (c.preferredColors) parts.push(`Palette: ${c.preferredColors}`);
+  if (contacts.address) parts.push(`Indirizzo: ${contacts.address}`);
+  if (contacts.website) parts.push(`Sito: ${contacts.website}`);
+  if (contacts.phone) parts.push(`Telefono: ${contacts.phone}`);
+  if (contacts.email) parts.push(`Email: ${contacts.email}`);
+  return parts.join('\n');
+}
+
+function cryptoRandomId() {
+  try {
+    return (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)) ;
+  } catch {
+    return Math.random().toString(36).slice(2);
+  }
 }
 
 function generateUnlockCode() {

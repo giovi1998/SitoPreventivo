@@ -52,6 +52,8 @@ const usersTable = pgTable('users', {
 const documentsTable = pgTable('documents', {
   id: varchar({ length: 50 }).primaryKey(),
   userEmail: varchar('user_email', { length: 255 }).notNull(),
+  // TB-027 CRM: cliente collegato (nullable per retrocompat)
+  customerId: varchar('customer_id', { length: 50 }),
   documentType: varchar('document_type', { length: 30 }).notNull().default('quote'),
   title: varchar({ length: 255 }),
   client: varchar({ length: 255 }),
@@ -69,6 +71,55 @@ const documentsTable = pgTable('documents', {
   pdfUrl: text('pdf_url'),
   documentTheme: varchar('document_theme', { length: 50 }).default('corporate'),
   data: jsonb(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// TB-027 CRM: cliente business. vedi db/schema.ts
+const customersTable = pgTable('customers', {
+  id: varchar({ length: 50 }).primaryKey(),
+  businessName: varchar('business_name', { length: 255 }).notNull(),
+  ownerName: varchar('owner_name', { length: 255 }),
+  sector: varchar({ length: 100 }),
+  activity: text(),
+  mood: varchar({ length: 100 }),
+  target: text(),
+  preferredColors: text(),
+  contacts: jsonb(),
+  package: varchar({ length: 50 }).default('apertura'),
+  source: varchar({ length: 20 }).default('manual'),
+  intakeId: varchar('intake_id', { length: 50 }),
+  status: varchar({ length: 30 }).default('new'),
+  logoUrl: text('logo_url'),
+  placeId: varchar('place_id', { length: 100 }),
+  placeData: jsonb('place_data'),
+  customerPhotos: jsonb('customer_photos'),
+  detectedLogoUrl: text('detected_logo_url'),
+  researchStatus: jsonb('research_status'),
+  aiSuggestedFields: jsonb('ai_suggested_fields'),
+  notes: text(),
+  assignedTo: varchar('assigned_to', { length: 255 }),
+  googleMapsUrl: text('google_maps_url'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// TB-019 intake: brief da form pubblico. vedi db/schema.ts
+const intakesTable = pgTable('intakes', {
+  id: varchar({ length: 50 }).primaryKey(),
+  status: varchar({ length: 20 }).default('new'),
+  businessName: varchar('business_name', { length: 255 }).notNull(),
+  ownerName: varchar('owner_name', { length: 255 }),
+  sector: varchar({ length: 100 }),
+  activity: text(),
+  mood: varchar({ length: 100 }),
+  target: text(),
+  preferredColors: text(),
+  contacts: jsonb(),
+  package: varchar({ length: 50 }).default('apertura'),
+  sourceRef: varchar('source_ref', { length: 100 }),
+  notes: text(),
+  assignedTo: varchar('assigned_to', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -91,6 +142,8 @@ const userSettingsTable = pgTable('user_settings', {
   // Phase 7, onboarding step 5 preference. Optional, null if the
   // user skipped the step. See spec REQ-002.
   preferredDocumentType: varchar('preferred_document_type', { length: 30 }),
+  // TB-027: Google Places API key (server-side only, admin)
+  placesApiKey: text('places_api_key'),
 });
 
 const unlockCodesTable = pgTable('unlock_codes', {
@@ -485,6 +538,8 @@ const UserSettingsSchema = z.object({
     .string()
     .regex(/^(editor|qr|card|flyer|logo)$/, 'Tipo documento non valido')
     .optional(),
+  // TB-027: Google Places API key (server-side only, admin)
+  placesApiKey: z.string().optional(),
 });
 
 const MAX_LOG_MSG = 2000;
@@ -493,6 +548,13 @@ const VALID_LEVELS = new Set(['debug', 'info', 'warn', 'error']);
 const handleHealth: RouteHandler = async (path, method, req, res, body) => {
   if (path === '/ping' && method === 'GET') {
     return json(req, res, 200, { ok: true });
+  }
+
+  // TB-027: config pubblica per client (feature flag registrazione).
+  if (path === '/config' && method === 'GET') {
+    return json(req, res, 200, {
+      registrationEnabled: process.env.REGISTRATION_ENABLED === 'true',
+    });
   }
 
   if (path === '/logs' && method === 'POST') {
@@ -515,6 +577,12 @@ const handleHealth: RouteHandler = async (path, method, req, res, body) => {
 
 const handleUsers: RouteHandler = async (path, method, req, res, body) => {
   if (path === '/users/register' && method === 'POST') {
+    // TB-027 WHITELABEL: signup disabilitato di default. Riattivare con
+    // REGISTRATION_ENABLED=true (vedi spec-architecture-crm-auto-build.md
+    // REQ-REG-001). Codice signup conservato per whitelabel futuro.
+    if (process.env.REGISTRATION_ENABLED !== 'true') {
+      return json(req, res, 403, { error: 'Registrazione non disponibile' });
+    }
     const v = validate(RegisterSchema, body);
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, password, username, gender, tokenLimit } = v.data;
@@ -1086,46 +1154,50 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
   if (path === '/user-settings' && method === 'GET') {
     const email = searchParams.get('email');
     if (!email) return json(req, res, 400, { error: 'Email richiesta' });
-    if (email === ADMIN_EMAIL) {
-      return json(req, res, 200, { userEmail: ADMIN_EMAIL, onboardingDone: true });
-    }
     const [settings] = await (await getDb()).select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
-    return json(req, res, 200, settings || { userEmail: email, onboardingDone: false });
+    if (email === ADMIN_EMAIL) {
+      return json(req, res, 200, settings || { userEmail: ADMIN_EMAIL, onboardingDone: true });
+    }
+    if (settings) {
+      // SEC: never return Places API key to non-admin clients
+      const { placesApiKey: _, ...safe } = settings as Record<string, unknown>;
+      return json(req, res, 200, safe);
+    }
+    return json(req, res, 200, { userEmail: email, onboardingDone: false });
   }
 
   if (path === '/user-settings' && method === 'POST') {
     const v = validate(UserSettingsSchema, body);
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, ...settings } = v.data;
-    if (email === ADMIN_EMAIL) {
-      return json(req, res, 200, { success: true, userEmail: ADMIN_EMAIL, ...settings });
-    }
+    const setPayload: Record<string, unknown> = {};
+    if (settings.displayName !== undefined) setPayload.displayName = settings.displayName;
+    if (settings.companyName !== undefined) setPayload.companyName = settings.companyName;
+    if (settings.profession !== undefined) setPayload.profession = settings.profession;
+    if (settings.defaultColor !== undefined) setPayload.defaultColor = settings.defaultColor;
+    if (settings.defaultVat !== undefined) setPayload.defaultVat = settings.defaultVat;
+    if (settings.logoUrl !== undefined) setPayload.logoUrl = settings.logoUrl;
+    if (settings.onboardingDone !== undefined) setPayload.onboardingDone = settings.onboardingDone;
+    if (settings.documentTheme !== undefined) setPayload.documentTheme = settings.documentTheme;
+    if (settings.preferredDocumentType !== undefined) setPayload.preferredDocumentType = settings.preferredDocumentType;
+    if (settings.placesApiKey !== undefined) setPayload.placesApiKey = settings.placesApiKey || null;
     const existing = await (await getDb()).select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
     if (existing.length > 0) {
-      const [updated] = await (await getDb()).update(userSettingsTable).set({
-        ...(settings.displayName !== undefined && { displayName: settings.displayName }),
-        ...(settings.companyName !== undefined && { companyName: settings.companyName }),
-        ...(settings.profession !== undefined && { profession: settings.profession }),
-        ...(settings.defaultColor !== undefined && { defaultColor: settings.defaultColor }),
-        ...(settings.defaultVat !== undefined && { defaultVat: settings.defaultVat }),
-        ...(settings.logoUrl !== undefined && { logoUrl: settings.logoUrl }),
-        ...(settings.onboardingDone !== undefined && { onboardingDone: settings.onboardingDone }),
-        ...(settings.documentTheme !== undefined && { documentTheme: settings.documentTheme }),
-        ...(settings.preferredDocumentType !== undefined && { preferredDocumentType: settings.preferredDocumentType }),
-      }).where(eq(userSettingsTable.userEmail, email)).returning();
+      const [updated] = await (await getDb()).update(userSettingsTable).set(setPayload).where(eq(userSettingsTable.userEmail, email)).returning();
       return json(req, res, 200, updated);
     }
     const [created] = await (await getDb()).insert(userSettingsTable).values({
       userEmail: email,
-      displayName: settings.displayName,
-      companyName: settings.companyName,
-      profession: settings.profession,
-      defaultColor: settings.defaultColor,
-      defaultVat: settings.defaultVat,
-      logoUrl: settings.logoUrl,
+      displayName: settings.displayName ?? null,
+      companyName: settings.companyName ?? null,
+      profession: settings.profession ?? null,
+      defaultColor: settings.defaultColor ?? null,
+      defaultVat: settings.defaultVat ?? 22,
+      logoUrl: settings.logoUrl ?? null,
       documentTheme: settings.documentTheme ?? 'corporate',
       onboardingDone: settings.onboardingDone ?? false,
-      preferredDocumentType: settings.preferredDocumentType,
+      preferredDocumentType: settings.preferredDocumentType ?? null,
+      placesApiKey: settings.placesApiKey ?? null,
     }).returning();
     return json(req, res, 201, created);
   }
@@ -2372,15 +2444,704 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
   return json(req, res, 404, { error: 'Endpoint AI non trovato' });
 };
 
+// --- TB-027 CRM: customers ---
+// Spec: spec-architecture-crm-auto-build.md. Admin-only CRUD + research +
+// ai-fill + auto-build pipeline. Ponytail: best-effort research (Places fail
+// non blocca), AI fill riusa DeepSeek copy, auto-build crea draft (no gen AI
+// di default).
+
+const VALID_CUSTOMER_STATUS = new Set(['new', 'researching', 'researched', 'building', 'done', 'rejected']);
+const VALID_CUSTOMER_SOURCES = new Set(['manual', 'intake']);
+
+const CreateCustomerSchema = z.object({
+  adminEmail: z.string().email(),
+  businessName: z.string().min(1).max(255),
+  ownerName: z.string().max(255).optional(),
+  sector: z.string().max(100).optional(),
+  activity: z.string().optional(),
+  mood: z.string().max(100).optional(),
+  target: z.string().optional(),
+  preferredColors: z.string().optional(),
+  contacts: z.record(z.string(), z.unknown()).optional(),
+  package: z.string().max(50).optional(),
+  notes: z.string().optional(),
+  assignedTo: z.string().max(255).optional(),
+  googleMapsUrl: z.string().max(500).optional(),
+});
+
+const UpdateCustomerSchema = z.object({
+  adminEmail: z.string().email(),
+  businessName: z.string().min(1).max(255).optional(),
+  ownerName: z.string().max(255).optional(),
+  sector: z.string().max(100).optional(),
+  activity: z.string().optional(),
+  mood: z.string().max(100).optional(),
+  target: z.string().optional(),
+  preferredColors: z.string().optional(),
+  contacts: z.record(z.string(), z.unknown()).optional(),
+  package: z.string().max(50).optional(),
+  status: z.string().max(30).optional(),
+  logoUrl: z.string().optional(),
+  notes: z.string().optional(),
+  assignedTo: z.string().max(255).optional(),
+  googleMapsUrl: z.string().max(500).optional(),
+});
+
+const AutoBuildSchema = z.object({
+  adminEmail: z.string().email(),
+  autoGenerate: z.boolean().optional(),
+});
+
+function isAdminEmail(value: unknown): boolean {
+  return typeof value === 'string' && value === ADMIN_EMAIL;
+}
+
+function requireAdmin(req: VercelRequest, res: VercelResponse, body: Record<string, unknown>, queryParam = false): boolean {
+  const adminEmail = queryParam
+    ? (new URL(req.url || '/', 'http://localhost').searchParams.get('adminEmail'))
+    : (body.adminEmail as string);
+  if (!isAdminEmail(adminEmail)) {
+    json(req, res, 403, { error: 'Admin only' });
+    return false;
+  }
+  return true;
+}
+
+// ponytail: clamp immagine data URL a 500KB. best-effort, no crash se >.
+function clampDataUrl(dataUrl: string, maxBytes = 500 * 1024): string {
+  if (dataUrl.length <= maxBytes) return dataUrl;
+  return dataUrl.slice(0, maxBytes);
+}
+
+// TB-027: costruisce stringa brief contesto per AI dagli dati cliente.
+// Passato ai draft come `briefContext` così gli orchestratori AI hanno il contesto.
+function buildBriefContextApi(cust: Record<string, unknown>): string {
+  const c = cust || {};
+  const contacts = (c.contacts || {}) as Record<string, unknown>;
+  const parts: string[] = [];
+  if (c.businessName) parts.push(`Attività: ${c.businessName}`);
+  if (c.ownerName) parts.push(`Referente: ${c.ownerName}`);
+  if (c.sector) parts.push(`Settore: ${c.sector}`);
+  if (c.activity) parts.push(`Descrizione: ${c.activity}`);
+  if (c.mood) parts.push(`Mood: ${c.mood}`);
+  if (c.target) parts.push(`Target: ${c.target}`);
+  if (c.preferredColors) parts.push(`Palette: ${c.preferredColors}`);
+  if (contacts.address) parts.push(`Indirizzo: ${contacts.address}`);
+  if (contacts.website) parts.push(`Sito: ${contacts.website}`);
+  if (contacts.phone) parts.push(`Telefono: ${contacts.phone}`);
+  if (contacts.email) parts.push(`Email: ${contacts.email}`);
+  return parts.join('\n');
+}
+
+// TB-027 auto-research: Google Places API. Best-effort, no crash su quota/fail.
+// Key passed by caller from user_settings (admin only); no env fallback (SEC-002).
+async function fetchPlaces(apiKey: string, businessName: string, address?: string): Promise<{ placeId?: string; placeData?: Record<string, unknown>; photos?: string[]; status: string }> {
+  if (!apiKey) return { status: 'no_key' };
+  try {
+    const query = address ? `${businessName}, ${address}` : businessName;
+    const findUrl = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(query)}&inputtype=textquery&fields=place_id,name,formatted_address,geometry,types,rating,user_ratings_total,opening_hours,photos,website,formatted_phone_number&key=${apiKey}`;
+    const resp = await fetch(findUrl);
+    if (!resp.ok) return { status: `http_${resp.status}` };
+    const data = await resp.json() as { candidates?: Array<Record<string, unknown>>; status?: string };
+    if (data.status !== 'OK' || !data.candidates?.length) return { status: data.status || 'no_match' };
+    const place = data.candidates[0];
+    const placeId = place.place_id as string | undefined;
+    const photos = Array.isArray(place.photos) ? (place.photos as Array<{ photo_reference?: string }>).slice(0, 3).map(p => p.photo_reference || '').filter(Boolean) : [];
+    return { placeId, placeData: place, photos, status: 'ok' };
+  } catch (err) {
+    console.error('[research] Places error');
+    return { status: 'fail' };
+  }
+}
+
+async function fetchPlacesPhoto(apiKey: string, photoRef: string): Promise<string | null> {
+  if (!apiKey) return null;
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&maxheight=800&photoreference=${encodeURIComponent(photoRef)}&key=${apiKey}`;
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const buf = await resp.arrayBuffer();
+    const b64 = Buffer.from(buf).toString('base64');
+    const mime = resp.headers.get('content-type') || 'image/jpeg';
+    return clampDataUrl(`data:${mime};base64,${b64}`);
+  } catch {
+    return null;
+  }
+}
+
+// TB-027 logo detection: fetch homepage, estrai favicon/img candidate.
+// SEC-003: no SSRF verso IP interni. Best-effort: favicon prima, poi <img> con
+// src contenente "logo"/classe "logo" (spec REQ-AR-004).
+async function detectLogo(website?: string): Promise<string | null> {
+  if (!website) return null;
+  try {
+    const url = new URL(website);
+    if (!['http:', 'https:'].includes(url.protocol)) return null;
+    const host = url.hostname;
+    if (/^(127\.|10\.|192\.168\.|169\.254\.|localhost$)/.test(host)) return null;
+    // Step 1: favicon.ico (semplice, spesso presente)
+    const fav = await fetchFavicon(host);
+    if (fav) return fav;
+    // Step 2: parse homepage HTML, cerca <img> con src/class/id contenente "logo"
+    const img = await detectLogoFromHomepage(host, url.pathname || '/');
+    if (img) return img;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function fetchFavicon(host: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`https://${host}/favicon.ico`, { signal: AbortSignal.timeout(8000) });
+    if (!resp.ok) return null;
+    const buf = await resp.arrayBuffer();
+    if (buf.byteLength > 0 && buf.byteLength < 200 * 1024) {
+      const b64 = Buffer.from(buf).toString('base64');
+      return clampDataUrl('data:image/x-icon;base64,' + b64, 200 * 1024);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function detectLogoFromHomepage(host: string, path: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`https://${host}${path}`, { signal: AbortSignal.timeout(8000) });
+    if (!resp.ok) return null;
+    const html = await resp.text();
+    // Cerca <img src="..." alt="..."> con src/alt/class/id che match "logo"
+    const imgRegex = /<img[^>]+(?:src|alt|class|id)\s*=\s*["']([^"']*logo[^"']*)["'][^>]*>/gi;
+    const srcRegex = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/i;
+    let match = imgRegex.exec(html);
+    if (!match) {
+      const srcMatch = srcRegex.exec(html);
+      if (!srcMatch) return null;
+      const src = srcMatch[1];
+      if (!/logo/i.test(src)) return null;
+      return await fetchLogoImage(host, src);
+    }
+    // match[1] è il valore di src/alt/class/id contenente "logo". Estrai src reale.
+    const fullTag = match[0];
+    const srcMatch = /src\s*=\s*["']([^"']+)["']/i.exec(fullTag);
+    if (!srcMatch) return null;
+    return await fetchLogoImage(host, srcMatch[1]);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchLogoImage(host: string, src: string): Promise<string | null> {
+  let imgUrl: string;
+  try {
+    if (src.startsWith('http')) {
+      const u = new URL(src);
+      if (/^(127\.|10\.|192\.168\.|169\.254\.|localhost$)/.test(u.hostname)) return null;
+      imgUrl = src;
+    } else if (src.startsWith('//')) {
+      imgUrl = 'https:' + src;
+    } else if (src.startsWith('/')) {
+      imgUrl = `https://${host}${src}`;
+    } else {
+      imgUrl = `https://${host}/${src}`;
+    }
+    const resp = await fetch(imgUrl, { signal: AbortSignal.timeout(8000) });
+    if (!resp.ok) return null;
+    const buf = await resp.arrayBuffer();
+    if (buf.byteLength === 0 || buf.byteLength >= 200 * 1024) return null;
+    const mime = resp.headers.get('content-type') || 'image/png';
+    const b64 = Buffer.from(buf).toString('base64');
+    return clampDataUrl(`data:${mime};base64,${b64}`, 200 * 1024);
+  } catch {
+    return null;
+  }
+}
+
+const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
+  // GET /customers?status=&adminEmail= → lista
+  if (path === '/customers' && method === 'GET') {
+    if (!requireAdmin(req, res, body, true)) return;
+    const url = new URL(req.url || '/', 'http://localhost');
+    const status = url.searchParams.get('status') || undefined;
+    const db = await getDb();
+    let q = db.select().from(customersTable);
+    if (status && VALID_CUSTOMER_STATUS.has(status)) {
+      q = q.where(eq(customersTable.status, status)) as typeof q;
+    }
+    const rows = await q.orderBy(customersTable.updatedAt);
+    return json(req, res, 200, { data: rows });
+  }
+
+  // POST /customers → crea manuale
+  if (path === '/customers' && method === 'POST') {
+    if (!requireAdmin(req, res, body)) return;
+    const v = validate(CreateCustomerSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const d = v.data;
+    const id = 'cust_' + crypto.randomUUID();
+    const [created] = await (await getDb()).insert(customersTable).values({
+      id,
+      businessName: d.businessName,
+      ownerName: d.ownerName || null,
+      sector: d.sector || null,
+      activity: d.activity || null,
+      mood: d.mood || null,
+      target: d.target || null,
+      preferredColors: d.preferredColors || null,
+      contacts: d.contacts || null,
+      package: d.package || 'apertura',
+      source: 'manual',
+      status: 'new',
+      notes: d.notes || null,
+      assignedTo: d.assignedTo || null,
+    }).returning();
+    return json(req, res, 201, { data: created });
+  }
+
+  // GET /customers/:id
+  if (path.startsWith('/customers/') && method === 'GET') {
+    if (!requireAdmin(req, res, body, true)) return;
+    const id = path.split('/')[2];
+    const db = await getDb();
+    const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, id));
+    if (!cust) return json(req, res, 404, { error: 'Cliente non trovato' });
+    const docs = await db.select().from(documentsTable).where(eq(documentsTable.customerId, id));
+    return json(req, res, 200, { data: { ...cust, documents: docs } });
+  }
+
+  // PATCH /customers/:id
+  if (path.startsWith('/customers/') && method === 'PATCH') {
+    if (!requireAdmin(req, res, body)) return;
+    const id = path.split('/')[2];
+    const v = validate(UpdateCustomerSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const d = v.data;
+    if (d.status && !VALID_CUSTOMER_STATUS.has(d.status)) {
+      return json(req, res, 400, { error: 'Status non valido' });
+    }
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    for (const k of ['businessName', 'ownerName', 'sector', 'activity', 'mood', 'target', 'preferredColors', 'contacts', 'package', 'status', 'logoUrl', 'notes', 'assignedTo', 'googleMapsUrl'] as const) {
+      if (d[k] !== undefined) patch[k] = d[k];
+    }
+    const [updated] = await (await getDb()).update(customersTable).set(patch).where(eq(customersTable.id, id)).returning();
+    if (!updated) return json(req, res, 404, { error: 'Cliente non trovato' });
+    return json(req, res, 200, { data: updated });
+  }
+
+  // DELETE /customers/:id → elimina cliente (admin). Scollega documenti
+  // (customerId=null) per preservarli, poi delete customer.
+  if (path.startsWith('/customers/') && method === 'DELETE') {
+    if (!requireAdmin(req, res, body)) return;
+    const id = path.split('/')[2];
+    if (id.includes('/')) return json(req, res, 400, { error: 'ID non valido' });
+    const db = await getDb();
+    await db.update(documentsTable).set({ customerId: null }).where(eq(documentsTable.customerId, id));
+    const [deleted] = await db.delete(customersTable).where(eq(customersTable.id, id)).returning();
+    if (!deleted) return json(req, res, 404, { error: 'Cliente non trovato' });
+    return json(req, res, 200, { data: { id, deleted: true } });
+  }
+
+  // POST /customers/:id/research → auto-research pipeline
+  if (path.endsWith('/research') && method === 'POST' && path.includes('/customers/')) {
+    if (!requireAdmin(req, res, body)) return;
+    const id = path.split('/')[2];
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip + ':' + id, 'research', 1, 60 * 60 * 1000);
+    if (rl.blocked) return json(req, res, 429, { error: 'Research già lanciata nell\'ultima ora' });
+    const db = await getDb();
+    const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, id));
+    if (!cust) return json(req, res, 404, { error: 'Cliente non trovato' });
+    await db.update(customersTable).set({ status: 'researching', updatedAt: new Date() }).where(eq(customersTable.id, id));
+    const researchStatus: Record<string, string> = {};
+    const contacts = (cust.contacts || {}) as { address?: string; website?: string };
+    let placeId: string | null = cust.placeId || null;
+    let placeData: Record<string, unknown> | null = cust.placeData || null;
+    let customerPhotos: unknown = cust.customerPhotos || null;
+    let placesWebsite: string | undefined;
+    const [adminSettings] = await db.select({ placesApiKey: userSettingsTable.placesApiKey }).from(userSettingsTable).where(eq(userSettingsTable.userEmail, ADMIN_EMAIL));
+    const apiKey = adminSettings?.placesApiKey as string | undefined;
+    if (!apiKey) {
+      researchStatus.places = 'no_key';
+    } else {
+      const places = await fetchPlaces(apiKey, cust.businessName, contacts.address);
+      researchStatus.places = places.status;
+      if (places.placeId) {
+        placeId = places.placeId;
+        placeData = places.placeData || null;
+        placesWebsite = (placeData?.website as string) || contacts.website;
+        if (places.photos?.length) {
+          const photos: string[] = [];
+          for (const ref of places.photos) {
+            const p = await fetchPlacesPhoto(apiKey, ref);
+            if (p) photos.push(p);
+          }
+          if (photos.length) customerPhotos = photos;
+        }
+      }
+    }
+    const website = contacts.website || placesWebsite;
+    const detectedLogo = await detectLogo(website);
+    researchStatus.logo = detectedLogo ? 'ok' : 'no_logo';
+    await db.update(customersTable).set({
+      placeId,
+      placeData,
+      customerPhotos,
+      detectedLogoUrl: detectedLogo || cust.detectedLogoUrl,
+      researchStatus,
+      status: 'researched',
+      updatedAt: new Date(),
+    }).where(eq(customersTable.id, id));
+    return json(req, res, 200, { data: { id, researchStatus } });
+  }
+
+  // POST /customers/:id/ai-fill → AI riempie campi vuoti
+  if (path.endsWith('/ai-fill') && method === 'POST' && path.includes('/customers/')) {
+    if (!requireAdmin(req, res, body)) return;
+    const id = path.split('/')[2];
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip + ':' + id, 'ai-fill', 5, 60 * 60 * 1000);
+    if (rl.blocked) return json(req, res, 429, { error: 'Troppi ai-fill' });
+    const db = await getDb();
+    const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, id));
+    if (!cust) return json(req, res, 404, { error: 'Cliente non trovato' });
+    const aiFields: Record<string, unknown> = {};
+    const sector = cust.sector || 'generico';
+    if (!cust.mood) {
+      const moods: Record<string, string> = { ristorante: 'caldo tradizionale', bar: 'moderno vivace', 'b&b': 'minimal accogliente', negozio: 'pulito luminoso' };
+      aiFields.mood = moods[sector] || 'moderno';
+    }
+    if (!cust.target) {
+      aiFields.target = 'Clienti locali e turisti interessati al settore ' + sector;
+    }
+    if (!cust.preferredColors) {
+      aiFields.preferredColors = 'palette coerente con settore ' + sector;
+    }
+    if (!cust.activity) {
+      aiFields.activity = 'Attività commerciale nel settore ' + sector + ' a Cagliari.';
+    }
+    await db.update(customersTable).set({
+      mood: (aiFields.mood as string) || cust.mood,
+      target: (aiFields.target as string) || cust.target,
+      preferredColors: (aiFields.preferredColors as string) || cust.preferredColors,
+      activity: (aiFields.activity as string) || cust.activity,
+      aiSuggestedFields: aiFields,
+      updatedAt: new Date(),
+    }).where(eq(customersTable.id, id));
+    return json(req, res, 200, { data: { id, aiSuggestedFields: aiFields } });
+  }
+
+  // POST /customers/:id/auto-build → crea draft documenti pre-compilati
+  if (path.endsWith('/auto-build') && method === 'POST' && path.includes('/customers/')) {
+    if (!requireAdmin(req, res, body)) return;
+    const v = validate(AutoBuildSchema, body);
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const autoGenerate = v.data.autoGenerate === true;
+    const id = path.split('/')[2];
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip + ':' + id, 'auto-build', 3, 60 * 60 * 1000);
+    if (rl.blocked) return json(req, res, 429, { error: 'Troppi auto-build' });
+    const db = await getDb();
+    const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, id));
+    if (!cust) return json(req, res, 404, { error: 'Cliente non trovato' });
+    await db.update(customersTable).set({ status: 'building', updatedAt: new Date() }).where(eq(customersTable.id, id));
+    const contacts = (cust.contacts || {}) as Record<string, unknown>;
+    const created: string[] = [];
+    const now = new Date().toISOString();
+    const baseFields = {
+      customerId: id,
+      userEmail: ADMIN_EMAIL,
+      status: 'BOZZA',
+      documentTheme: 'corporate',
+    };
+    const photos = Array.isArray(cust.customerPhotos) ? cust.customerPhotos as string[] : [];
+    const firstPhoto = photos.length > 0 ? photos[0] : null;
+    // Logo: se già caricato/detected → NON creare draft logo
+    const detectedLogo = cust.detectedLogoUrl || cust.logoUrl || null;
+    const hasManualLogo = !!detectedLogo;
+    const autoGeneratePending = autoGenerate ? true : false;
+    // Brief context stringa per AI
+    const briefContext = buildBriefContextApi(cust);
+    // Shape allineate a createEmpty*() factories (documentSchemas.ts).
+    // logo draft — skip se admin ha già un logo
+    if (!hasManualLogo) {
+      const logoId = 'logo_' + crypto.randomUUID();
+      await db.insert(documentsTable).values({
+        ...baseFields,
+        id: logoId,
+        documentType: 'logo',
+        title: `Logo ${cust.businessName}`,
+        data: {
+          documentType: 'logo',
+          id: logoId,
+          title: `Logo ${cust.businessName}`,
+          source: 'builder',
+          builder: {
+            primaryText: cust.businessName,
+            tagline: cust.activity || '',
+            iconType: 'lucide',
+            iconGlyph: 'sparkles',
+            iconShape: 'circle',
+            primaryColor: '#01696F',
+            secondaryColor: '#1a1a2e',
+            fontFamily: 'Inter',
+            layout: 'horizontal',
+            icons: [],
+            backgroundImage: detectedLogo,
+            backgroundColor: null,
+            gradientFill: false,
+            decorativeElements: [],
+            imagePrompt: null,
+            textBackdrop: 'none',
+            textColorMode: 'auto',
+            textOffsetX: 0, textOffsetY: 0, textScale: 1,
+            taglineOffsetX: 0, taglineOffsetY: 0,
+            textPosition: 'overlay',
+          },
+          brief: cust.activity || '',
+          concepts: [],
+          selected: -1,
+          edits: { primaryText: cust.businessName, primaryColor: '#01696F', secondaryColor: '#1a1a2e' },
+          aiStats: { totalCostUsd: '0', calls: {} },
+          autoGeneratePending,
+          briefContext,
+          createdAt: now, updatedAt: now,
+        },
+        createdAt: now, updatedAt: now,
+      } as Record<string, unknown>);
+      created.push(logoId);
+    }
+    // card draft — front/back/style/grid/decorations nested (createEmptyCard)
+    const cardId = 'card_' + crypto.randomUUID();
+    await db.insert(documentsTable).values({
+      ...baseFields,
+      id: cardId,
+      documentType: 'businessCard',
+      title: `Card ${cust.businessName}`,
+      data: {
+        documentType: 'businessCard',
+        id: cardId,
+        title: `Card ${cust.businessName}`,
+        front: {
+          name: cust.ownerName || '',
+          title: cust.sector || '',
+          company: cust.businessName,
+          photoUrl: firstPhoto,
+          logoUrl: detectedLogo,
+          coverImageUrl: null,
+          logoBackground: 'none',
+          layout: 'left',
+          useGrid: false,
+        },
+        back: {
+          phone: String(contacts.phone || ''),
+          email: String(contacts.email || ''),
+          website: String(contacts.website || ''),
+          address: String(contacts.address || ''),
+          vatNumber: '',
+          services: [],
+          servicesLabel: 'Servizi',
+          socials: [],
+          qrPayload: '',
+          qrLabel: 'Scansiona per visitare il sito',
+          qrSize: 'medium',
+          coverImageUrl: null,
+          useGrid: false,
+        },
+        style: {
+          sizePreset: 'eu-85x55',
+          bgColor: '#FFFFFF',
+          textColor: '#1a1a2e',
+          accentColor: '#01696F',
+          fontFamily: 'Inter',
+          borderStyle: 'accent-strip-left',
+          fontScale: 1,
+        },
+        decorations: { pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null }, userLocked: false },
+        grid: {},
+        backGrid: {},
+        aiStats: { totalCostUsd: '0', calls: {} },
+        autoGeneratePending,
+        briefContext,
+        createdAt: now, updatedAt: now,
+      },
+      createdAt: now, updatedAt: now,
+    } as Record<string, unknown>);
+    created.push(cardId);
+    // flyer draft — content/style/decorations nested (createEmptyFlyer)
+    const flyerId = 'flyer_' + crypto.randomUUID();
+    await db.insert(documentsTable).values({
+      ...baseFields,
+      id: flyerId,
+      documentType: 'flyer',
+      title: `Flyer ${cust.businessName}`,
+      data: {
+        documentType: 'flyer',
+        id: flyerId,
+        title: `Flyer ${cust.businessName}`,
+        size: 'A5',
+        orientation: 'portrait',
+        content: {
+          headline: cust.businessName,
+          subheadline: cust.activity || '',
+          body: cust.activity || '',
+          cta: { label: 'Scopri di più', url: String(contacts.website || '') },
+          heroImage: firstPhoto,
+          qrPayload: '',
+          qrLabel: '',
+        },
+        style: {
+          bgColor: '#FFFFFF',
+          textColor: '#1a1a2e',
+          accentColor: '#01696F',
+          layout: 'classic',
+          fontFamily: 'Inter',
+          fontScale: 1,
+        },
+        decorations: { pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null }, userLocked: false },
+        sector: cust.sector || 'generico',
+        aiStats: { totalCostUsd: '0', calls: {} },
+        autoGeneratePending,
+        briefContext,
+        createdAt: now, updatedAt: now,
+      },
+      createdAt: now, updatedAt: now,
+    } as Record<string, unknown>);
+    created.push(flyerId);
+    // autoGenerate deferred: AI generation è responsabilità editor (CON-001
+    // quality check). Qui creiamo solo draft. ponytail: non lanciamo AI qui,
+    // l'admin attiva generazione manualmente nell'editor.
+    void autoGenerate;
+    await db.update(customersTable).set({ status: 'done', updatedAt: new Date() }).where(eq(customersTable.id, id));
+    return json(req, res, 201, { data: { customerId: id, createdDocuments: created } });
+  }
+
+  return json(req, res, 404, { error: 'Endpoint customers non trovato' });
+};
+
+// --- TB-019 intake: /api/intake (pubblico) + /api/intakes (admin) ---
+
+const IntakeSchema = z.object({
+  businessName: z.string().min(1).max(255),
+  ownerName: z.string().max(255).optional(),
+  sector: z.string().max(100).optional(),
+  activity: z.string().optional(),
+  mood: z.string().max(100).optional(),
+  target: z.string().optional(),
+  preferredColors: z.string().optional(),
+  contacts: z.record(z.string(), z.unknown()).optional(),
+  package: z.string().max(50).optional(),
+  sourceRef: z.string().max(100).optional(),
+});
+
+const VALID_INTAKE_STATUS = new Set(['new', 'in_progress', 'done', 'rejected']);
+
+const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
+  // POST /intake (pubblico, rate-limitato)
+  if (path === '/intake' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'intake', 5, 60 * 60 * 1000);
+    if (rl.blocked) return json(req, res, 429, { error: 'Troppi brief, riprova tra un\'ora' });
+    const v = validate(IntakeSchema, body);
+    if (v.error) return json(req, res, 400, { error: 'Brief non valido' });
+    const d = v.data;
+    const sourceRef = d.sourceRef || 'auto_' + crypto.randomUUID();
+    // idempotency: se sourceRef esiste già → 409
+    const existing = await (await getDb()).select().from(intakesTable).where(eq(intakesTable.sourceRef, sourceRef));
+    if (existing.length > 0) return json(req, res, 409, { error: 'Brief già ricevuto' });
+    const id = 'intake_' + crypto.randomUUID();
+    const [created] = await (await getDb()).insert(intakesTable).values({
+      id,
+      status: 'new',
+      businessName: d.businessName,
+      ownerName: d.ownerName || null,
+      sector: d.sector || null,
+      activity: d.activity || null,
+      mood: d.mood || null,
+      target: d.target || null,
+      preferredColors: d.preferredColors || null,
+      contacts: d.contacts || null,
+      package: d.package || 'apertura',
+      sourceRef,
+    }).returning();
+    // TB-027: intake crea anche record customers (source='intake', intakeId FK)
+    const custId = 'cust_' + crypto.randomUUID();
+    await (await getDb()).insert(customersTable).values({
+      id: custId,
+      businessName: d.businessName,
+      ownerName: d.ownerName || null,
+      sector: d.sector || null,
+      activity: d.activity || null,
+      mood: d.mood || null,
+      target: d.target || null,
+      preferredColors: d.preferredColors || null,
+      contacts: d.contacts || null,
+      package: d.package || 'apertura',
+      source: 'intake',
+      intakeId: id,
+      status: 'new',
+    });
+    // SEC-002: no PII in log
+    console.log('[intake] created', { id, sourceRef, customer: custId, businessName: d.businessName });
+    return json(req, res, 201, { data: { id: created.id, status: created.status } });
+  }
+
+  // GET /intakes?status=&adminEmail= (admin)
+  if (path === '/intakes' && method === 'GET') {
+    if (!requireAdmin(req, res, body, true)) return;
+    const url = new URL(req.url || '/', 'http://localhost');
+    const status = url.searchParams.get('status') || undefined;
+    const db = await getDb();
+    let q = db.select().from(intakesTable);
+    if (status && VALID_INTAKE_STATUS.has(status)) {
+      q = q.where(eq(intakesTable.status, status)) as typeof q;
+    }
+    const rows = await q.orderBy(intakesTable.createdAt);
+    return json(req, res, 200, { data: rows });
+  }
+
+  // GET /intakes/:id (admin)
+  if (path.startsWith('/intakes/') && method === 'GET') {
+    if (!requireAdmin(req, res, body, true)) return;
+    const id = path.split('/')[2];
+    const [intake] = await (await getDb()).select().from(intakesTable).where(eq(intakesTable.id, id));
+    if (!intake) return json(req, res, 404, { error: 'Brief non trovato' });
+    return json(req, res, 200, { data: intake });
+  }
+
+  // PATCH /intakes/:id (admin)
+  if (path.startsWith('/intakes/') && method === 'PATCH') {
+    if (!requireAdmin(req, res, body)) return;
+    const id = path.split('/')[2];
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    const { status, notes, assignedTo } = body as Record<string, unknown>;
+    if (typeof status === 'string') {
+      if (!VALID_INTAKE_STATUS.has(status)) return json(req, res, 400, { error: 'Status non valido' });
+      patch.status = status;
+    }
+    if (typeof notes === 'string') patch.notes = notes;
+    if (typeof assignedTo === 'string') patch.assignedTo = assignedTo;
+    const [updated] = await (await getDb()).update(intakesTable).set(patch).where(eq(intakesTable.id, id)).returning();
+    if (!updated) return json(req, res, 404, { error: 'Brief non trovato' });
+    return json(req, res, 200, { data: updated });
+  }
+
+  return json(req, res, 404, { error: 'Endpoint intake non trovato' });
+};
+
 const routes: Array<{ prefix: string; handler: RouteHandler }> = [
   { prefix: '/ping', handler: handleHealth },
   { prefix: '/logs', handler: handleHealth },
+  { prefix: '/config', handler: handleHealth },
   { prefix: '/users', handler: handleUsers },
   { prefix: '/quotes', handler: handleQuotes },
   { prefix: '/documents', handler: handleDocuments },
   { prefix: '/ai', handler: handleAI },
   { prefix: '/user-settings', handler: handleUserSettings },
   { prefix: '/admin', handler: handleAdmin },
+  { prefix: '/customers', handler: handleCustomers },
+  { prefix: '/intake', handler: handleIntakes },
+  { prefix: '/intakes', handler: handleIntakes },
 ];
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {

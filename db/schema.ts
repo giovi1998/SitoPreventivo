@@ -17,6 +17,8 @@ export const users = pgTable("users", {
 export const documents = pgTable("documents", {
   id: varchar({ length: 50 }).primaryKey(),
   userEmail: varchar("user_email", { length: 255 }).notNull(),
+  // TB-027 CRM: cliente collegato (nullable per retrocompat)
+  customerId: varchar("customer_id", { length: 50 }),
   documentType: varchar("document_type", { length: 30 }).notNull().default("quote"),
   title: varchar({ length: 255 }),
   client: varchar({ length: 255 }),
@@ -34,6 +36,56 @@ export const documents = pgTable("documents", {
   pdfUrl: text("pdf_url"),
   documentTheme: varchar("document_theme", { length: 50 }).default("corporate"),
   data: jsonb(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// TB-027 CRM: cliente business gestito dall'admin.
+// Il cliente NON ha account Quickbrand (source manual o intake).
+export const customers = pgTable("customers", {
+  id: varchar({ length: 50 }).primaryKey(),
+  businessName: varchar("business_name", { length: 255 }).notNull(),
+  ownerName: varchar("owner_name", { length: 255 }),
+  sector: varchar({ length: 100 }),
+  activity: text(),
+  mood: varchar({ length: 100 }),
+  target: text(),
+  preferredColors: text(),
+  contacts: jsonb(),
+  package: varchar({ length: 50 }).default("apertura"),
+  source: varchar({ length: 20 }).default("manual"),
+  intakeId: varchar("intake_id", { length: 50 }),
+  status: varchar({ length: 30 }).default("new"),
+  logoUrl: text("logo_url"),
+  placeId: varchar("place_id", { length: 100 }),
+  placeData: jsonb("place_data"),
+  customerPhotos: jsonb("customer_photos"),
+  detectedLogoUrl: text("detected_logo_url"),
+  researchStatus: jsonb("research_status"),
+  aiSuggestedFields: jsonb("ai_suggested_fields"),
+  notes: text(),
+  assignedTo: varchar("assigned_to", { length: 255 }),
+  googleMapsUrl: text("google_maps_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// TB-019 intake: brief da form pubblico (Google/Tally) → webhook /api/intake.
+export const intakes = pgTable("intakes", {
+  id: varchar({ length: 50 }).primaryKey(),
+  status: varchar({ length: 20 }).default("new"),
+  businessName: varchar("business_name", { length: 255 }).notNull(),
+  ownerName: varchar("owner_name", { length: 255 }),
+  sector: varchar({ length: 100 }),
+  activity: text(),
+  mood: varchar({ length: 100 }),
+  target: text(),
+  preferredColors: text(),
+  contacts: jsonb(),
+  package: varchar({ length: 50 }).default("apertura"),
+  sourceRef: varchar("source_ref", { length: 100 }),
+  notes: text(),
+  assignedTo: varchar("assigned_to", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -59,6 +111,8 @@ export const userSettings = pgTable("user_settings", {
   // same as "no preference" and the user lands on the default
   // (editor) view per spec AC-003.
   preferredDocumentType: varchar("preferred_document_type", { length: 30 }),
+  // TB-027: Google Places API key (server-side only, admin)
+  placesApiKey: text("places_api_key"),
 });
 
 export const unlockCodes = pgTable("unlock_codes", {
