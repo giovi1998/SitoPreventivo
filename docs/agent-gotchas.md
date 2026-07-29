@@ -628,7 +628,178 @@ Ogni documento salva il proprio costo AI cumulato (`aiStats`). Regole:
     useAICard/useAIIconHero), `useAICard.test.ts` (assert aiCall
     kind/cost), `useAIIconHero.test.tsx` (url → r.dataUrl),
     `providerPricing.test.ts` (per-image senza usage).
-12. **Social escluso**: post social non sono documenti salvati nella
-    Collection (sono output generati, copiabili). Se in futuro si
-    vuole persistere post social come documenti, aggiungere
-    `socialSchema` + aiStats — per ora out of scope.
+ 12. **Social escluso**: post social non sono documenti salvati nella
+     Collection (sono output generati, copiabili). Se in futuro si
+     vuole persistere post social come documenti, aggiungere
+     `socialSchema` + aiStats — per ora out of scope.
+
+## 17. CRM + intake pipeline (TB-027 + TB-019, v2.17)
+
+TB-027 (CRM admin-only + auto-research + auto-build) e TB-019 (intake
+pipeline → porta ingresso CRM) implementati 2026-07-28. App smette di
+essere editor multi-utente con signup pubblica → diventa CRM founder-only.
+Codice signup/onboarding **conservato** dietro feature flag
+`REGISTRATION_ENABLED` (default `false`).
+
+**Spec**: `spec/spec-architecture-crm-auto-build.md` (TB-027),
+`spec/spec-intake-pipeline.md` (TB-019, riposizionato come prereq CRM).
+
+### TB-027 CRM
+
+1. **Schema**: `db/schema.ts` tabella `customers` (id, businessName,
+   ownerName, sector, activity, mood, target, preferredColors, contacts
+   JSONB, package, source `'manual'|'intake'`, intakeId FK nullable,
+   status `new|researching|researched|building|done|rejected`, logoUrl,
+   placeId, placeData JSONB, customerPhotos JSONB, detectedLogoUrl,
+   researchStatus JSONB, aiSuggestedFields JSONB, notes, assignedTo,
+   timestamps). Colonna `documents.customerId` (FK nullable,
+   retrocompatibile). Mirror in `api/index.ts` (`customersTable`,
+   `documentsTable` aggiornata).
+2. **Endpoint** (tutti admin, guard `requireAdmin` helper):
+   - `GET /api/customers?status=&adminEmail=` — lista filtrata.
+   - `POST /api/customers` — crea manuale (`CreateCustomerSchema`).
+   - `GET /api/customers/:id?adminEmail=` — dettaglio + documenti collegati.
+   - `PATCH /api/customers/:id` — update (`UpdateCustomerSchema`).
+    - `POST /api/customers/:id/research` — auto-research pipeline
+      (Google Places + foto + logo detection). Rate limit 1/ora/cliente.
+      Best-effort: `placesApiKey` assente in `user_settings` admin →
+      `researchStatus.places='no_key'`, pipeline non blocca. `fetchPlaces`/
+      `fetchPlacesPhoto`/`detectLogo` server-side only. SEC-003 anti-SSRF:
+      reject IP privati in `detectLogo`. Foto clamp 500KB, logo clamp 200KB.
+      **TB-027b**: la chiave Places API non è più un env var obbligatorio;
+      l'admin la inserisce da UI (`CustomerDetail` → "Chiave API Google Places")
+      e viene salvata in `user_settings.placesApiKey` (LOCAL localStorage,
+      PROD DB). Lo stesso vale per `imageGenModel`.
+    - `POST /api/customers/:id/ai-fill` — AI riempie campi vuoti (mood,
+      target, preferredColors, activity). Basato su settore (lookup
+      table, no chiamata AI in v1 per costi). Rate limit 5/ora.
+   - `POST /api/customers/:id/auto-build` — crea 4 draft (logo, card,
+     flyer, social) pre-compilati con `customerId`. `autoGenerate=true`
+     flag accettato ma deferred (CON-001: AI generation manuale nell'
+     editor). Rate limit 3/ora.
+3. **Feature flag registrazione**: `REGISTRATION_ENABLED` env (default
+   `false`). `POST /api/users/register` → 403 se false (commento
+   `// WHITELABEL`). `GET /api/config` endpoint pubblico ritorna
+   `{ registrationEnabled }`. LoginPage nasconde tab registrati se false
+   (TODO frontend: integrare flag in UI — v1 lato server enforced).
+4. **dataService.js**: `getCustomers`, `createCustomer`, `getCustomer`,
+   `updateCustomer`, `researchCustomer`, `aiFillCustomer`,
+   `autoBuildCustomer`, `getConfig`. LOCAL usa `pq_customers:v1`
+   (localStorage), PROD API. Stesso pattern `IS_LOCAL` esistente.
+5. **UI**: `src/components/crm/CustomerList.tsx` (lista card con status
+   badge + form creazione inline), `CustomerDetail.tsx` (brief + contatti
+   + research status + campi AI + bottoni research/ai-fill/auto-build +
+   documenti collegati), `IntakeList.tsx` (TB-019, vedi sotto). CSS in
+   `crm/crm.css`. Route `/app/customers` + `/app/customers/:customerId`,
+   `AdminRoute` guard. Sidebar: voce "Clienti" sopra "Documenti"
+   (admin-only) sia desktop che mobile drawer. `ROUTE_PATHS.customers`
+   in `useRouteView.ts` (auto-mappa via `pathToView`).
+ 6. **Auto-research best-effort**: Ponytail — Places fallisce → status
+    `no_key`/`fail`/`no_match`, cliente non bloccato, auto-build
+    procede con AI fill. Logo detection: fetch favicon.ico, clamp 200KB,
+    reject SSRF verso `127.*|10.*|192.168.*|169.254.*|localhost`.
+    `AbortSignal.timeout(8000)` per non impicciare la lambda.
+    **Google Maps URL vs Places API key**: il cliente ha un campo
+    `googleMapsUrl` (link pubblico, es.
+    `https://maps.app.goo.gl/...`) editabile inline; la chiave privata
+    `placesApiKey` è invece nelle `user_settings` admin e non esposta al
+    browser.
+ 7. **Auto-build draft**: 3 documenti (logo/card/flyer) con `customerId`
+    popolato, `documentTheme='corporate'`, campi pre-compilati da customer +
+    research (detectedLogoUrl → logoUrl, customerPhotos[0] →
+    card.photoUrl/flyer.heroImage). Social escluso da v1. AI generation NON
+    lanciata qui (CON-001 quality check): l'admin apre ogni draft nell'
+    editor e attiva AI manualmente.
+ 8. **CustomerDetail UI v2**:
+    - Inline edit di tutti i campi brief/contatti/Google Maps URL.
+    - Upload logo/foto con preview logo grande e check verde.
+    - Log AI persistente in `sessionStorage` (`pq_crm_log:<customerId>`),
+      espandibile: click su riga mostra payload/response JSON.
+    - Status logo: `manual` se `logoUrl` caricato, `detected` se
+      `detectedLogoUrl` trovato online, `no_logo` altrimenti.
+    - Selettore provider text per palette AI (`deepseek-chat`, `ollama-*`).
+    - Selettore modello image-gen (`gemini-3.1-flash-image`,
+      `gemini-2.0-flash-preview-image-generation`) salvato in user settings
+      e sincronizzato con pannelli AI logo/card/flyer.
+ 9. **Test**: `api/__tests__/customers.test.ts` (16: CRUD guard, research
+    no_key/ok, ai-fill, auto-build 3 draft no social, registration flag
+    false/true, /config). `src/components/__tests__/CustomerList.test.tsx`
+    (4: render, empty, click, create). `CustomerDetail.test.tsx` (15:
+    dettaglio, bottoni azione, errore, research log, upload, palette, log
+    detail, Google Maps URL, image model, logo status).
+
+### TB-019 Intake
+
+1. **Schema**: `db/schema.ts` tabella `intakes` (id, status
+   `new|in_progress|done|rejected`, businessName, ownerName, sector,
+   activity, mood, target, preferredColors, contacts JSONB, package,
+   sourceRef UNIQUE nullable, notes, assignedTo, timestamps). Mirror in
+   `api/index.ts` (`intakesTable`).
+2. **Endpoint**:
+   - `POST /api/intake` (pubblico, rate limit 5/ora/IP via
+     `consumeRateLimit(ip, 'intake', 5, 60*60*1000)`). Zod
+     `IntakeSchema`. Idempotency via `sourceRef` unique: se esiste →
+     409. Se `sourceRef` assente, genera `auto_<uuid>`. **TB-027**: ogni
+     intake crea anche record `customers` (source='intake', intakeId FK).
+     SEC-002: log senza PII (solo id, sourceRef, customerId, businessName).
+   - `GET /api/intakes?status=&adminEmail=` (admin) — lista filtrata.
+   - `GET /api/intakes/:id?adminEmail=` (admin) — dettaglio.
+   - `PATCH /api/intakes/:id` (admin) — update status/notes/assignedTo.
+3. **dataService.js**: `getIntakes`, `getIntake`, `updateIntake`. LOCAL
+   usa `pq_intakes:v1`, PROD API.
+4. **intakeToDocument.ts**: `intakeToLogo`/`intakeToCard`/`intakeToFlyer`/
+   `intakeToSocial`/`intakeToAllDocuments`. Riusa `createEmpty*`
+   factories, sovrascrive campi brief. Nessuna generazione AI qui
+   (CON-001). Tipo `IntakeBrief` + `IntakeDocumentDraft`.
+5. **IntakeList in CollectionView**: `crm/IntakeList.tsx` montato in
+   `CollectionView.tsx` sopra la griglia (admin-only, lazy). Mostra brief
+   `status='new'`. Click "Apri" → `intakeToAllDocuments` + salva 4 draft
+   via `dataService.saveDocument` + PATCH intake status `in_progress`.
+6. **Test**: `api/__tests__/intake.test.ts` (7: POST valido, idempotency
+   409, validation 400, GET admin/non-admin, PATCH valido/invalido).
+   `src/utils/__tests__/intakeToDocument.test.ts` (6: mappa logo/card/
+   flyer/social, all documents, fallback vuoto).
+
+### Gotchas specifici
+
+- **z.record 2 args**: zod v3 richiede `z.record(z.string(), z.unknown())`
+  non `z.record(z.unknown())` (TS error in api/index.ts mirror).
+- **b&b come key object**: `b&b` non quotato in TS rompe il parser
+  (`&` → TS1005). Quota: `'b&b': '...'`.
+- **mock DB select.where**: chain mock in test deve ritornare array con
+  `.orderBy` attached (non `this`), perché il handler chiama
+  `.where().orderBy()`. Pattern: `where: vi.fn(() => { const r = shift();
+  r.orderBy = () => r; return r; })`.
+- **REGISTRATION_ENABLED false in test**: `beforeEach` setta
+  `process.env.REGISTRATION_ENABLED='false'` (test register 403); test
+  flag true lo override a `'true'`. Reset tra test per evitare leak.
+- **PLACES_API_KEY in test**: `delete process.env.PLACES_API_KEY` in
+  beforeEach → research pipeline salta, status `no_key`. Test non
+  chiama Places reale.
+- **ROUTE_PATHS 10 keys**: `useRouteView.test.tsx` aggiornato a 10
+  (aggiunto `customers`). Verifica count ogni volta che si aggiunge view.
+- **autoGenerate deferred**: flag accettato in `AutoBuildSchema` e body
+  ma non usato (auto-build crea solo draft). AI generation resta
+  manuale nell'editor (CON-001 quality check). Se in futuro si vuole
+  full-auto, lanciare orchestratori in sequenza qui (rate limit Gemini).
+- **B1 shape allineata a createEmpty***: auto-build e intakeToDocument
+  DEVONO usare shape nested (`card.front.name`, `card.back.phone`,
+  `logo.builder.primaryText`, `flyer.content.headline`). Scrivere campi
+  al top-level (`card.name`, `card.contacts`) → `mergeCardWithDefaults`
+  resetta a vuoto → card vuota nell'editor. Entrambi i path (api auto-
+  build + utility intake) devono allinearsi a `createEmpty*()` factories.
+- **B3 LOCAL bypass registration**: `dataService.register` branch
+  `IS_LOCAL` scrive localStorage senza chiamare `/users/register` →
+  flag server-side bypassato in dev. Fix: `App.tsx` `register()` chiama
+  `dataService.getConfig()` prima (LOCAL legge `VITE_REGISTRATION_ENABLED`,
+  PROD legge `/api/config`). `LoginPage` nasconde tab "Registrati" se
+  false. `HomePage` link "Registrati" condizionali su `authHref`.
+- **B5 PaletteOrchestrator provider.id**: `AIProvider` non ha `id`.
+  Usa `options.modelId || 'deepseek-chat'` come `providerId` string per
+  `executeWithFallback`. `trackUsage` accetta `providerId` string.
+- **B5 paletteConceptsSchema length(3)**: zod `.length(3)` valida
+  array esattamente 3. `.min(1)` su `name` per rifiutare stringa vuota.
+- **B7 detectLogo img parsing**: favicon primo, poi parse homepage HTML
+  con regex `<img ... src|alt|class|id contains "logo" ...>`. Anti-SSRF
+  su URL assoluti (reject IP privati). `AbortSignal.timeout(8000)`.
+  Best-effort: fallisce silenziosamente, customer non bloccato.

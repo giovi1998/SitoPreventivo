@@ -67,8 +67,6 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/hooks/useRouteView.ts` | Bridge `pathname ↔ view`, prefix-match `:docId` |
 | `src/hooks/useDocumentLoader.ts` | Hydration condivisa editor: `:docId` → fetch → context, redirect not-found |
 | `api/index.ts` | Unica Vercel function, intera REST API (monolite intenzionale) |
-| `db/schema.ts` | Drizzle schema (users, documents, user_settings, unlock_codes) |
-| `src/utils/dataService.js` | Data layer: API o localStorage |
 | `src/utils/generatePDF.ts` | PDF preventivi (pdfmake, client-side) |
 | `src/utils/cardGenerator.ts` | Card PDF/PNG/SVG + `buildCardSvg` |
 | `src/utils/qrGenerator.ts` | QR SVG/PNG (`qrcode` lib) |
@@ -79,6 +77,14 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/DocumentAiStats.tsx` | TB-026: widget riusabile "🤖 3 icone · 2 elaborazioni · $0.08" per editor e Collection |
 | `src/utils/documentSchemas.ts` | Zod schemas: quote, QR, businessCard, cardGrid, logo, flyer, presets (+ opzionale `aiStats` per-document TB-026) |
 | `src/utils/gridUtils.ts` | Grid collision helpers (BLOCK su sovrapposizione) |
+| `db/schema.ts` | Drizzle schema (users, documents, user_settings, unlock_codes, **customers** TB-027, **intakes** TB-019) |
+| `src/utils/dataService.js` | Data layer: API o localStorage (+ metodi customers/intakes/config TB-027/019) |
+| `src/utils/intakeToDocument.ts` | TB-019: mapping brief intake → draft document data (logo/card/flyer/social), shape allineata a createEmpty*() |
+| `src/components/crm/` | TB-027 CRM UI: `CustomerList`, `CustomerDetail`, `IntakeList` + `crm.css` |
+| `src/ai/PaletteOrchestrator.ts` | TB-027 B5: 3 palette AI suggerite (DeepSeek JSON, paletteConceptsSchema) |
+| `src/hooks/useAIPalette.ts` | TB-027 B5: hook palette generation |
+| `src/utils/palettePreview.ts` | TB-027 B5: SVG swatch card preview palette (zero costo AI) |
+| `src/pages/app/CustomersPage.tsx` | TB-027 route `/app/customers` (admin guard) |
 | `src/ai/BaseOrchestrator.ts` | Abstract condivisa (sanitize, parseJson, handleStream, trackUsage) |
 | `src/ai/*Orchestrator.ts` | card / flyer / logo / social / onboarding |
 | `src/ai/prompts/registry.ts` | promptRegistry: lookup centralizzato 7 prompt |
@@ -106,6 +112,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `/` | `HomePage` | — |
 | `/app` → `/app/editor` | `EditorPage` → `EditorView` | login |
 | `/app/collection` | `CollectionPage` → `CollectionView` | login |
+| `/app/customers`, `/app/customers/:customerId` | `CustomersPage` → `CustomerList`/`CustomerDetail` | `AdminRoute` |
 | `/app/qr`, `/app/card`, `/app/logo`, `/app/flyer`, `/app/social` | Editor (lazy) | login |
 | `.../:docId` | Stessi editor, caricano documento per ID | login |
 | `/app/settings` | `SettingsRoute` → `SettingsPage` | login |
@@ -229,14 +236,15 @@ calibrate in `geometry.ts`; `GLYPH_HEIGHT_FACTOR=1.15`;
 Fasi 0-10 (Phase 7 polish done; Volantino/Phase 3 done), 12-15 completate.
 Phase 11 (flyer refactor/Volantino) parziale: gap test matrix. Spec attivi in
 `spec/`: flyer refactor (TB-007),
-`spec-api-saas-monetization.md`, `spec-intake-pipeline.md` (TB-019).
-Issue aperti: `docs/post-tb023-known-issues.md`. Verifica TB-023:
-`docs/tb023-verification.md`. TB-024 (logo export multi-formato) ✅
-completed 2026-07-27 — vedi `docs/agent-gotchas.md` §14. TB-025
-(Collection preview SVG inline logo/card/flyer/quote) ✅ completed
+`spec-api-saas-monetization.md`. Issue aperti: `docs/post-tb023-known-issues.md`.
+Verifica TB-023: `docs/tb023-verification.md`. TB-024 (logo export
+multi-formato) ✅ completed 2026-07-27 — vedi `docs/agent-gotchas.md` §14.
+TB-025 (Collection preview SVG inline logo/card/flyer/quote) ✅ completed
 2026-07-27 — vedi `docs/agent-gotchas.md` §15. TB-026 (cost tracker
 per-document aiStats + Collection badge) ✅ completed 2026-07-27 —
-vedi `docs/agent-gotchas.md` §16.
+vedi `docs/agent-gotchas.md` §16. TB-027 (CRM + auto-research + auto-build) +
+TB-019 (intake pipeline → porta ingresso CRM) ✅ completed 2026-07-28 —
+vedi `docs/agent-gotchas.md` §17.
 
 ## Responsive Patterns
 
@@ -260,9 +268,12 @@ vedi `docs/agent-gotchas.md` §16.
 | `ALLOWED_ORIGIN` | Vercel | CORS origin (default `*.vercel.app`) |
 | `OLLAMA_API_KEY` | Vercel + .env | Ollama Pro Cloud (senza → 503 solo su quel provider) |
 | `REPLICATE_API_TOKEN` | opzionale, deprecato | Fallback logo AI |
+| `REGISTRATION_ENABLED` | Vercel | TB-027: flag signup. Default `false` (CRM admin-only). `true` riattiva whitelabel |
+| `PLACES_API_KEY` | opzionale | Deprecato: ora la chiave Google Places si salva da UI in `user_settings` admin. Può rimanere env per fallback retrocompat |
 
-**Mai esporre `DEEPSEEK_API_KEY`/`GEMINI_API_KEY`/`OLLAMA_API_KEY` al
-browser.** Il frontend chiama solo il proxy serverless.
+**Mai esporre `DEEPSEEK_API_KEY`/`GEMINI_API_KEY`/`OLLAMA_API_KEY`/
+`PLACES_API_KEY` al browser.** Il frontend chiama solo il proxy serverless.
+La chiave Places API inserita da UI è server-side e mai restituita ai client.
 
 ## PDF Generation, Client-Side Only
 
@@ -317,7 +328,9 @@ Per debug usa `e2e/debug-ai.spec.ts` (temporaneo, da rimuovere prima del push).
 - Email: `admin@gmail.com`, mai in DB, password vs `ADMIN_PASSWORD`
   (constant-time compare). Token illimitati.
 - Endpoint admin (`GET /users`, `GET /quotes/all`, `PATCH /users/limits`,
-  `GET /users/cost-breakdown`) richiedono `adminEmail=admin@gmail.com`:
+  `GET /users/cost-breakdown`, `GET/POST/PATCH /customers*`,
+  `POST /customers/:id/research|ai-fill|auto-build`, `GET /intakes`,
+  `PATCH /intakes/:id`) richiedono `adminEmail=admin@gmail.com`:
   **query string per GET, body per PATCH/POST** (non mischiare — regression
   test `api/__tests__/users.test.ts`).
 
@@ -343,6 +356,8 @@ Chiavi **versionate** `nome:vN`; cambio schema → `v(N+1)` + fallback lettura
 - `pq_ui:v1` — preferenze UI (`uiPrefs.ts`)
 - `logoAiChat:v1` — backup best-effort chat logo AI (TTL 24h, try/catch, senza bgImages se quota)
 - `cardIconPromptLibrary:v1`, `logoPromptLibrary:v1` — librerie prompt
+- `pq_customers:v1` — TB-027 CRM clienti (dev/local cache, PROD via API)
+- `pq_intakes:v1` — TB-019 brief intake (dev/local cache, PROD via API)
 
 ## Git Guardrails
 

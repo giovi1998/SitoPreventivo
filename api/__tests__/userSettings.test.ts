@@ -118,7 +118,7 @@ describe('GET /api/user-settings (onboarding)', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('returns 200 with onboardingDone=true for admin without DB hit', async () => {
+  it('returns 200 with onboardingDone=true for admin (DB-backed, no row)', async () => {
     const res = await callHandler({
       method: 'GET',
       url: '/api/user-settings?email=admin%40gmail.com',
@@ -127,6 +127,33 @@ describe('GET /api/user-settings (onboarding)', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ userEmail: 'admin@gmail.com', onboardingDone: true });
+  });
+
+  it('GET admin returns placesApiKey; non-admin GET strips it', async () => {
+    mockDbState.selectResults = [[
+      { userEmail: 'admin@gmail.com', onboardingDone: true, placesApiKey: 'AIzaAdmin' },
+    ]];
+    const adminRes = await callHandler({
+      method: 'GET',
+      url: '/api/user-settings?email=admin%40gmail.com',
+      headers: { origin: 'http://localhost' },
+      body: {},
+    });
+    expect(adminRes.statusCode).toBe(200);
+    expect(adminRes.body.placesApiKey).toBe('AIzaAdmin');
+
+    mockDbState.selectResults = [[
+      { userEmail: 'user@test.com', onboardingDone: true, placesApiKey: 'AIzaUser' },
+    ]];
+    const userRes = await callHandler({
+      method: 'GET',
+      url: '/api/user-settings?email=user%40test.com',
+      headers: { origin: 'http://localhost' },
+      body: {},
+    });
+    expect(userRes.statusCode).toBe(200);
+    expect(userRes.body.placesApiKey).toBeUndefined();
+    expect(userRes.body.userEmail).toBe('user@test.com');
   });
 
   it('returns 200 with existing user settings (onboarding complete)', async () => {
@@ -177,15 +204,18 @@ describe('POST /api/user-settings (onboarding save)', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('returns 200 for admin without DB hit (save is a no-op for admin)', async () => {
+  it('persists admin settings including placesApiKey (now DB-backed)', async () => {
+    mockDbState.selectResults = [[]]; // no existing row → insert
     const res = await callHandler({
       method: 'POST',
       url: '/api/user-settings',
       headers: { origin: 'http://localhost' },
-      body: { email: 'admin@gmail.com', displayName: 'Admin' },
+      body: { email: 'admin@gmail.com', displayName: 'Admin', placesApiKey: 'AIzaAdmin' },
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.body.success).toBe(true);
+    expect(res.statusCode).toBe(201);
+    expect(res.body.userEmail).toBe('admin@gmail.com');
+    expect(res.body.placesApiKey).toBe('AIzaAdmin');
+    expect(mockDbState.inserted.length).toBe(1);
   });
 
   it('returns 201 + inserted row when user has no settings yet (onboarding first run)', async () => {

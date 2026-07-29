@@ -169,6 +169,13 @@ Sprint 5 ✅ done 2026-07-27:
 
 Sprint 6 ✅ done 2026-07-27: TB-026 cost tracker per-document (aiStats)
                     in document.data + Collection badge costi/contatori
+
+Sprint 7 ✅ done 2026-07-28: TB-027 CRM + auto-research + auto-build +
+                    TB-019 intake pipeline (porta ingresso CRM). customers/
+                    intakes tables, /api/customers*, /api/intake, /api/intakes,
+                    REGISTRATION_ENABLED flag, /api/config, CustomerList/
+                    CustomerDetail/IntakeList UI, intakeToDocument mapping,
+                    sidebar "Clienti", Collection IntakeList. 2554 test verdi.
 ```
 
 ### Sprint business (dopo qualità prodotto)
@@ -208,8 +215,10 @@ ingresso clienti), poi infrastruttura addizionale, monetizzazione
 automatizzata per ultima. TB-019 non è più post-validazione: è
 prerequisito del CRM (vedi spec `spec-architecture-crm-auto-build.md`).
 
-**Effort rimanente**: business fasi 1-2 (~35h). TB-024 ✅ closed 2026-07-27.
-TB-023 ✅ closed 2026-07-27.
+**Effort rimanente**: business fasi 1-2 (~35h, TB-022/017/018/016).
+TB-024 ✅ closed 2026-07-27. TB-023 ✅ closed 2026-07-27.
+TB-027 ✅ closed 2026-07-28 (CRM + auto-research + auto-build).
+TB-019 ✅ closed 2026-07-28 (intake pipeline → porta CRM).
 
 **Quick win già fatti**: TB-003 + 4 file test Gemini.
 
@@ -413,7 +422,7 @@ primi clienti paganti.
 - **Trigger riattivazione**: TB-023 drag foto done + 1 cliente reale
   outreach avviato (portfolio serve per il pitch).
 
-#### TB-027 CRM + auto-research + auto-build 🔴 P0 business (NUOVO)
+#### TB-027 CRM + auto-research + auto-build ✅ COMPLETED 2026-07-28
 - **Spec**: `spec/spec-architecture-crm-auto-build.md` (2026-07-28)
 - **Perché**: Quickbrand smette di essere editor multi-utente e
   diventa CRM admin-only. Ogni cliente è record first-class;
@@ -427,11 +436,15 @@ primi clienti paganti.
   - Feature flag `REGISTRATION_ENABLED` (default false). Codice
     signup/onboarding conservato, nascosto dietro flag.
   - CRM UI: vista Clienti in sidebar, dettaglio cliente, azioni.
-  - Auto-research: Google Places API, foto Places, logo detection
-    da sito, settore inferenza. Best-effort, fail soft.
+  - Auto-research: Google Places API key salvata da UI in
+    `user_settings.placesApiKey` (locale + prod); campo cliente
+    `googleMapsUrl` per link pubblico Maps.
+  - Logo detection da sito, settore inferenza. Best-effort, fail soft.
   - AI gap-filling: mood/target/palette/copy da settore + placeData.
-  - Auto-build: draft logo/card/flyer/social pre-compilati;
+  - Auto-build: draft logo/card/flyer pre-compilati (social escluso v1);
     opzione `autoGenerate` per AI in sequenza.
+  - Log AI espandibili con JSON detail; status logo manual/detected/no_logo.
+  - Selettore modello image-gen in user settings sincronizzato con editor.
   - Admin review obbligatorio (CON-001 quality check).
 - **Riposiziona TB-019**: intake non è più "dopo 5+ clienti". È la
   porta di ingresso del CRM. Ogni intake crea `customers` + `intakes`.
@@ -439,7 +452,7 @@ primi clienti paganti.
 - **Out of scope**: sito publish (TB-012 spec separata), Stripe
   self-service (TB-011 spec separata), portal cliente self-service.
 
-#### TB-019 Intake pipeline → porta ingresso CRM 🔴 P0 business (RIPOSIZIONATO)
+#### TB-019 Intake pipeline → porta ingresso CRM ✅ COMPLETED 2026-07-28
 - **Spec**: `spec/spec-intake-pipeline.md` (Architettura A ibrida) +
   `spec-architecture-crm-auto-build.md` §REQ-INT
 - **Perché**: NON più "SOLO dopo 5+ clienti reali". È la porta di
@@ -457,6 +470,50 @@ primi clienti paganti.
 - **Costo ricorrente**: €0 (Google Form + Apps Script + Neon free).
 - **Effort**: ~20h. **Prereq**: TB-027 CRM (tabelle + flag) per
   collegare intake a cliente.
+
+---
+
+### 🟣 P3 — Ricerca & visione automatica (TB-028)
+
+#### TB-028 Web scraping + RAG + vision per auto-generazione brand kit
+- **Perché**: oggi auto-build pre-compila i draft usando solo i dati
+  del brief e (se presenti) Google Places. Manca il 90% del
+  contesto reale del cliente: immagini dal sito, testi dei servizi,
+  stile visivo, recensioni, competitor locali. Con un modello
+  vision-capable si potrebbe generare automaticamente logo, card,
+  flyer e palette di alta qualità partendo dal sito + foto + brief.
+- **Scope**:
+  1. **Scraper etico del sito** (server-side):
+     - fetch homepage + 2-3 pagine chiave (chi siamo, servizi),
+     - estrai testo, meta, immagini pubbliche,
+     - rispetta robots.txt e no SSRF (SEC-003).
+  2. **Vector store/RAG**:
+     - OpenAI `text-embedding-3-small` (o equivalente) per chunkare
+       testo sito + recensioni Places.
+     - Storage: nuova tabella `customer_knowledge` (customerId,
+       chunk text, embedding vector, source, timestamps) su Neon
+       (pgvector oppure semplici chunk full-text in v1).
+  3. **Vision model**:
+     - Prendi logo esistente, foto locale, screenshot sito,
+       immagini social.
+     - Passale a modello multimodale (Gemini/Ollama MiniMax M3)
+       con prompt strutturato per generare:
+       - 3 concept logo (testo + immagine),
+       - biglietto da visita fronte/retro,
+       - flyer A5 con copy e hero,
+       - palette coerente.
+  4. **Auto-generazione completa**:
+     - Endpoint `/customers/:id/auto-generate` (rate limit 1/giorno).
+     - Pipeline: scrape → RAG → vision → 3 draft generati e già
+       popolati con immagini AI (non solo placeholder).
+     - Admin review obbligatoria prima di esporta.
+- **Costo ricorrente**: ~$5-20/mese in volume basso (OpenAI embedding
+  + chiamate vision Gemini/Ollama).
+- **Effort**: ~60h.
+- **Prereq**: TB-027 stabilizzato, customer photos/logo/logo detection
+  funzionanti, `imageGenModel` selector in produzione.
+- **Rischio principale**: qualità immagini AI per brand reali;
+  necessario gating umano e fallback a draft placeholder.
 
 ### Compliance / fiscale (non-codice)
 
