@@ -111,8 +111,16 @@ export const userSettings = pgTable("user_settings", {
   // same as "no preference" and the user lands on the default
   // (editor) view per spec AC-003.
   preferredDocumentType: varchar("preferred_document_type", { length: 30 }),
-  // TB-027: Google Places API key (server-side only, admin)
-  placesApiKey: text("places_api_key"),
+});
+
+export const customerKnowledge = pgTable("customer_knowledge", {
+  id: serial().primaryKey(),
+  customerId: varchar("customer_id", { length: 50 }).notNull().references(() => customers.id),
+  chunk: text().notNull(),
+  embedding: jsonb(),
+  source: varchar({ length: 100 }).notNull().default("firecrawl:homepage"),
+  metadata: jsonb().default({}),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const unlockCodes = pgTable("unlock_codes", {

@@ -20,7 +20,7 @@ vi.mock('../../utils/dataService', () => ({
     autoBuildCustomer: vi.fn().mockResolvedValue({ data: {} }),
     updateCustomer: vi.fn().mockResolvedValue({ data: {} }),
     saveDocument: vi.fn().mockResolvedValue({ data: {} }),
-    getUserSettings: vi.fn().mockResolvedValue({ userEmail: 'admin@gmail.com', placesApiKey: '' }),
+    getUserSettings: vi.fn().mockResolvedValue({ userEmail: 'admin@gmail.com' }),
     saveUserSettings: vi.fn().mockResolvedValue({ success: true }),
   },
 }));
@@ -83,9 +83,9 @@ describe('TB-027 CustomerDetail', () => {
     });
   });
 
-  it('mostra NAP quando placeData popolato', async () => {
+  it('mostra dati dal sito quando webData popolato', async () => {
     (dataService.getCustomer as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      data: { ...baseCustomer, placeData: { name: 'Bar Da Mario', formatted_address: 'Via Roma 1', rating: 4.5 } },
+      data: { ...baseCustomer, webData: { title: 'Bar Da Mario', description: 'Il miglior bar', markdownPreview: 'Via Roma 1' } },
     });
     renderDetail();
     await waitFor(() => {

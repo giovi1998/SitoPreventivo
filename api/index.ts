@@ -142,8 +142,17 @@ const userSettingsTable = pgTable('user_settings', {
   // Phase 7, onboarding step 5 preference. Optional, null if the
   // user skipped the step. See spec REQ-002.
   preferredDocumentType: varchar('preferred_document_type', { length: 30 }),
-  // TB-027: Google Places API key (server-side only, admin)
-  placesApiKey: text('places_api_key'),
+});
+
+// TB-027 RAG: chunk di conoscenza cliente con embedding Gemini.
+const customerKnowledgeTable = pgTable('customer_knowledge', {
+  id: serial().primaryKey(),
+  customerId: varchar('customer_id', { length: 50 }).notNull(),
+  chunk: text().notNull(),
+  embedding: jsonb(),
+  source: varchar({ length: 100 }).notNull().default('firecrawl:homepage'),
+  metadata: jsonb().default({}),
+  createdAt: timestamp('created_at').defaultNow(),
 });
 
 const unlockCodesTable = pgTable('unlock_codes', {
@@ -538,8 +547,6 @@ const UserSettingsSchema = z.object({
     .string()
     .regex(/^(editor|qr|card|flyer|logo)$/, 'Tipo documento non valido')
     .optional(),
-  // TB-027: Google Places API key (server-side only, admin)
-  placesApiKey: z.string().optional(),
 });
 
 const MAX_LOG_MSG = 2000;
@@ -1159,8 +1166,11 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
       return json(req, res, 200, settings || { userEmail: ADMIN_EMAIL, onboardingDone: true });
     }
     if (settings) {
-      // SEC: never return Places API key to non-admin clients
-      const { placesApiKey: _, ...safe } = settings as Record<string, unknown>;
+      // SEC: user_settings may contain server-only keys; return only known safe fields
+      const safe: Record<string, unknown> = {};
+      for (const k of ['userEmail', 'displayName', 'companyName', 'profession', 'defaultColor', 'defaultVat', 'logoUrl', 'documentTheme', 'onboardingDone', 'tier', 'unlockCode', 'unlockedAt', 'documentCount', 'preferredDocumentType']) {
+        if ((settings as Record<string, unknown>)[k] !== undefined) safe[k] = (settings as Record<string, unknown>)[k];
+      }
       return json(req, res, 200, safe);
     }
     return json(req, res, 200, { userEmail: email, onboardingDone: false });
@@ -1170,6 +1180,16 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
     const v = validate(UserSettingsSchema, body);
     if (v.error) return json(req, res, 400, { errors: v.errors });
     const { email, ...settings } = v.data;
+    // Preserve fields not in schema but known to be persisted by dataService (imageGenModel etc.)
+    const bodyRecord = body as Record<string, unknown>;
+    const settingsRecord = settings as Record<string, unknown>;
+    const extraFields = ['imageGenModel', 'tier', 'unlockCode', 'documentCount'];
+    for (const k of extraFields) {
+      const val = bodyRecord[k];
+      if (val !== undefined && settingsRecord[k] === undefined) {
+        settingsRecord[k] = val;
+      }
+    }
     const setPayload: Record<string, unknown> = {};
     if (settings.displayName !== undefined) setPayload.displayName = settings.displayName;
     if (settings.companyName !== undefined) setPayload.companyName = settings.companyName;
@@ -1180,7 +1200,10 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
     if (settings.onboardingDone !== undefined) setPayload.onboardingDone = settings.onboardingDone;
     if (settings.documentTheme !== undefined) setPayload.documentTheme = settings.documentTheme;
     if (settings.preferredDocumentType !== undefined) setPayload.preferredDocumentType = settings.preferredDocumentType;
-    if (settings.placesApiKey !== undefined) setPayload.placesApiKey = settings.placesApiKey || null;
+    if (settingsRecord.imageGenModel !== undefined) setPayload.imageGenModel = settingsRecord.imageGenModel || null;
+    if (settingsRecord.tier !== undefined) setPayload.tier = settingsRecord.tier;
+    if (settingsRecord.unlockCode !== undefined) setPayload.unlockCode = settingsRecord.unlockCode;
+    if (settingsRecord.documentCount !== undefined) setPayload.documentCount = settingsRecord.documentCount;
     const existing = await (await getDb()).select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
     if (existing.length > 0) {
       const [updated] = await (await getDb()).update(userSettingsTable).set(setPayload).where(eq(userSettingsTable.userEmail, email)).returning();
@@ -1197,7 +1220,10 @@ const handleUserSettings: RouteHandler = async (path, method, req, res, body) =>
       documentTheme: settings.documentTheme ?? 'corporate',
       onboardingDone: settings.onboardingDone ?? false,
       preferredDocumentType: settings.preferredDocumentType ?? null,
-      placesApiKey: settings.placesApiKey ?? null,
+      imageGenModel: settingsRecord.imageGenModel ?? null,
+      tier: settingsRecord.tier ?? 'free',
+      unlockCode: settingsRecord.unlockCode ?? null,
+      documentCount: settingsRecord.documentCount ?? 0,
     }).returning();
     return json(req, res, 201, created);
   }
@@ -1581,6 +1607,42 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     const usage = (data as { usage?: { total_tokens?: number } }).usage;
     logAI({ tag: 'ai_copy_flyer', requestId, model: model || 'deepseek-chat', durationMs: Date.now() - startedAt, outcome: 'ok', tokens: usage?.total_tokens });
     return json(req, res, 200, { data: parsed, raw: content, requestId });
+  }
+
+  // POST /ai/embeddings → Gemini text-embedding-004 (RAG customer knowledge)
+  if (path === '/ai/embeddings' && method === 'POST') {
+    const ip = getClientIp(req);
+    const rl = consumeRateLimit(ip, 'embeddings', 30, 60 * 1000);
+    if (rl.blocked) {
+      res.setHeader('Retry-After', String(Math.ceil((rl.retryAfterMs || 60_000) / 1000)));
+      return json(req, res, 429, { error: 'Troppe richieste embeddings. Attendi un minuto.' });
+    }
+    const v = validate(
+      z.object({
+        input: z.string().max(8000),
+        model: z.enum(['text-embedding-004']).optional(),
+      }),
+      body
+    );
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return json(req, res, 503, { error: 'Gemini non configurato. Configura GEMINI_API_KEY su Vercel.' });
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const result = await ai.models.embedContent({
+        model: 'models/text-embedding-004',
+        contents: v.data.input,
+      });
+      const embedding = (result as unknown as { embedding?: { values?: number[] } })?.embedding?.values || [];
+      if (!Array.isArray(embedding) || embedding.length === 0) {
+        return json(req, res, 502, { error: 'Embedding vuoto da Gemini' });
+      }
+      return json(req, res, 200, { data: { embedding, model: v.data.model || 'text-embedding-004' } });
+    } catch (err) {
+      console.error('[embeddings] Gemini error', (err as Error)?.message);
+      return json(req, res, 502, { error: 'Errore embedding Gemini' });
+    }
   }
 
   if (path === '/ai/chat/stream' && method === 'POST') {
@@ -2533,39 +2595,76 @@ function buildBriefContextApi(cust: Record<string, unknown>): string {
   return parts.join('\n');
 }
 
-// TB-027 auto-research: Google Places API. Best-effort, no crash su quota/fail.
-// Key passed by caller from user_settings (admin only); no env fallback (SEC-002).
-async function fetchPlaces(apiKey: string, businessName: string, address?: string): Promise<{ placeId?: string; placeData?: Record<string, unknown>; photos?: string[]; status: string }> {
-  if (!apiKey) return { status: 'no_key' };
-  try {
-    const query = address ? `${businessName}, ${address}` : businessName;
-    const findUrl = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(query)}&inputtype=textquery&fields=place_id,name,formatted_address,geometry,types,rating,user_ratings_total,opening_hours,photos,website,formatted_phone_number&key=${apiKey}`;
-    const resp = await fetch(findUrl);
-    if (!resp.ok) return { status: `http_${resp.status}` };
-    const data = await resp.json() as { candidates?: Array<Record<string, unknown>>; status?: string };
-    if (data.status !== 'OK' || !data.candidates?.length) return { status: data.status || 'no_match' };
-    const place = data.candidates[0];
-    const placeId = place.place_id as string | undefined;
-    const photos = Array.isArray(place.photos) ? (place.photos as Array<{ photo_reference?: string }>).slice(0, 3).map(p => p.photo_reference || '').filter(Boolean) : [];
-    return { placeId, placeData: place, photos, status: 'ok' };
-  } catch (err) {
-    console.error('[research] Places error');
-    return { status: 'fail' };
+// TB-027 RAG: chunking semplice per customer knowledge.
+function chunkMarkdown(markdown: string, maxLen = 1000): string[] {
+  if (!markdown) return [];
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < markdown.length) {
+    let end = Math.min(start + maxLen, markdown.length);
+    if (end < markdown.length) {
+      const breakAt = markdown.lastIndexOf('\n\n', end);
+      if (breakAt > start) end = breakAt;
+    }
+    chunks.push(markdown.slice(start, end).trim());
+    start = end;
   }
+  return chunks.filter(Boolean);
 }
 
-async function fetchPlacesPhoto(apiKey: string, photoRef: string): Promise<string | null> {
-  if (!apiKey) return null;
+async function saveCustomerKnowledge(customerId: string, chunks: string[], source: string, metadata?: Record<string, unknown>): Promise<number> {
+  if (!chunks.length) return 0;
+  const db = await getDb();
+  let inserted = 0;
+  for (const chunk of chunks) {
+    await db.insert(customerKnowledgeTable).values({
+      customerId,
+      chunk,
+      source,
+      metadata: metadata || {},
+    });
+    inserted++;
+  }
+  return inserted;
+}
+
+// TB-027 auto-research: Firecrawl website scrape. Best-effort, no crash.
+// Requires env FIRECRAWL_API_KEY. SEC-002: key server-side only.
+type FirecrawlResult = {
+  markdown?: string;
+  branding?: { logo?: string; colors?: Record<string, unknown>; fonts?: string[] };
+  images?: string[];
+  title?: string;
+  description?: string;
+  status: 'ok' | 'no_key' | 'fail' | 'no_website';
+};
+
+async function fetchFirecrawlPage(url?: string): Promise<FirecrawlResult> {
+  if (!url) return { status: 'no_website' };
+  const key = process.env.FIRECRAWL_API_KEY;
+  if (!key) return { status: 'no_key' };
   try {
-    const url = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&maxheight=800&photoreference=${encodeURIComponent(photoRef)}&key=${apiKey}`;
-    const resp = await fetch(url);
-    if (!resp.ok) return null;
-    const buf = await resp.arrayBuffer();
-    const b64 = Buffer.from(buf).toString('base64');
-    const mime = resp.headers.get('content-type') || 'image/jpeg';
-    return clampDataUrl(`data:${mime};base64,${b64}`);
-  } catch {
-    return null;
+    const u = new URL(url);
+    if (!['http:', 'https:'].includes(u.protocol)) return { status: 'fail' };
+    if (/^(127\.|10\.|192\.168\.|169\.254\.|localhost$)/.test(u.hostname)) return { status: 'fail' };
+    const resp = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ url, formats: ['markdown', 'branding'], onlyMainContent: true, timeout: 30000 }),
+    });
+    if (!resp.ok) return { status: 'fail' };
+    const data = await resp.json() as Record<string, unknown>;
+    const scraped = (data.data || data) as Record<string, unknown>;
+    const markdown = typeof scraped.markdown === 'string' ? scraped.markdown : '';
+    const branding = (scraped.branding || {}) as FirecrawlResult['branding'];
+    const metadata = (scraped.metadata || {}) as Record<string, unknown>;
+    const title = typeof metadata.title === 'string' ? metadata.title : '';
+    const description = typeof metadata.description === 'string' ? metadata.description : '';
+    const images = Array.isArray(scraped.images) ? scraped.images.filter((i): i is string => typeof i === 'string') : [];
+    return { markdown, branding, images, title, description, status: 'ok' };
+  } catch (err) {
+    console.error('[research] Firecrawl error', (err as Error)?.message);
+    return { status: 'fail' };
   }
 }
 
@@ -2742,7 +2841,7 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
     return json(req, res, 200, { data: { id, deleted: true } });
   }
 
-  // POST /customers/:id/research → auto-research pipeline
+  // POST /customers/:id/research → auto-research pipeline (Firecrawl + logo detection)
   if (path.endsWith('/research') && method === 'POST' && path.includes('/customers/')) {
     if (!requireAdmin(req, res, body)) return;
     const id = path.split('/')[2];
@@ -2753,46 +2852,45 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
     const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, id));
     if (!cust) return json(req, res, 404, { error: 'Cliente non trovato' });
     await db.update(customersTable).set({ status: 'researching', updatedAt: new Date() }).where(eq(customersTable.id, id));
-    const researchStatus: Record<string, string> = {};
     const contacts = (cust.contacts || {}) as { address?: string; website?: string };
-    let placeId: string | null = cust.placeId || null;
-    let placeData: Record<string, unknown> | null = cust.placeData || null;
-    let customerPhotos: unknown = cust.customerPhotos || null;
-    let placesWebsite: string | undefined;
-    const [adminSettings] = await db.select({ placesApiKey: userSettingsTable.placesApiKey }).from(userSettingsTable).where(eq(userSettingsTable.userEmail, ADMIN_EMAIL));
-    const apiKey = adminSettings?.placesApiKey as string | undefined;
-    if (!apiKey) {
-      researchStatus.places = 'no_key';
+    const website = contacts.website || cust.googleMapsUrl;
+    const researchStatus: Record<string, string> = {};
+    let knowledgeCount = 0;
+    let webData: Record<string, unknown> = {};
+    let detectedLogoUrl: string | null = null;
+    if (!website) {
+      researchStatus.web = 'no_website';
     } else {
-      const places = await fetchPlaces(apiKey, cust.businessName, contacts.address);
-      researchStatus.places = places.status;
-      if (places.placeId) {
-        placeId = places.placeId;
-        placeData = places.placeData || null;
-        placesWebsite = (placeData?.website as string) || contacts.website;
-        if (places.photos?.length) {
-          const photos: string[] = [];
-          for (const ref of places.photos) {
-            const p = await fetchPlacesPhoto(apiKey, ref);
-            if (p) photos.push(p);
-          }
-          if (photos.length) customerPhotos = photos;
-        }
+      const firecrawl = await fetchFirecrawlPage(website);
+      researchStatus.web = firecrawl.status;
+      if (firecrawl.status === 'ok') {
+        const chunks = chunkMarkdown(firecrawl.markdown || '');
+        knowledgeCount = await saveCustomerKnowledge(id, chunks, 'firecrawl:homepage', {
+          title: firecrawl.title,
+          description: firecrawl.description,
+          url: website,
+        });
+        webData = {
+          title: firecrawl.title,
+          description: firecrawl.description,
+          markdownPreview: (firecrawl.markdown || '').slice(0, 500),
+          brandingColors: firecrawl.branding?.colors,
+          brandingFonts: firecrawl.branding?.fonts,
+        };
+        detectedLogoUrl = firecrawl.branding?.logo || null;
       }
     }
-    const website = contacts.website || placesWebsite;
-    const detectedLogo = await detectLogo(website);
-    researchStatus.logo = detectedLogo ? 'ok' : 'no_logo';
+    if (!detectedLogoUrl) {
+      detectedLogoUrl = await detectLogo(contacts.website);
+    }
+    researchStatus.logo = detectedLogoUrl ? 'ok' : 'no_logo';
     await db.update(customersTable).set({
-      placeId,
-      placeData,
-      customerPhotos,
-      detectedLogoUrl: detectedLogo || cust.detectedLogoUrl,
+      detectedLogoUrl: detectedLogoUrl || cust.detectedLogoUrl,
       researchStatus,
       status: 'researched',
       updatedAt: new Date(),
     }).where(eq(customersTable.id, id));
-    return json(req, res, 200, { data: { id, researchStatus } });
+    return json(req, res, 200, { data: { id, researchStatus, knowledgeCount, webData } });
   }
 
   // POST /customers/:id/ai-fill → AI riempie campi vuoti

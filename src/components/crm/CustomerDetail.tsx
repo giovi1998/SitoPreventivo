@@ -21,7 +21,7 @@ type Customer = Record<string, unknown> & {
   package?: string | null;
   status?: string;
   notes?: string | null;
-  placeData?: Record<string, unknown> | null;
+  webData?: Record<string, unknown> | null;
   customerPhotos?: string[] | null;
   logoUrl?: string | null;
   googleMapsUrl?: string | null;
@@ -94,9 +94,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
   const [paletteCost, setPaletteCost] = useState<number | null>(null);
   const [paletteProvider, setPaletteProvider] = useState<string>('deepseek-chat');
-  const [placesApiKey, setPlacesApiKey] = useState<string>('');
-  const [savedKey, setSavedKey] = useState<string>('');
-  const [showKey, setShowKey] = useState(false);
+
   const [imageGenModel, setImageGenModel] = useState<string>('gemini-3.1-flash-image');
   const palette = useAIPalette();
   const logoInputRef = useRef<HTMLInputElement | null>(null);
@@ -132,9 +130,6 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     setLog(loadLog(customerId));
     void load();
     void dataService.getUserSettings('admin@gmail.com').then((res) => {
-      const k = (res.placesApiKey || '') as string;
-      setPlacesApiKey(k);
-      setSavedKey(k);
       const img = (res.imageGenModel || 'gemini-flash-image') as string;
       setImageGenModel(img);
       setAiImageModelDefault(img);
@@ -308,20 +303,6 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     setBusy(null);
   };
 
-  const savePlacesKey = async (value: string) => {
-    const trimmed = value.trim();
-    if (trimmed === savedKey) return;
-    appendLog('info', trimmed ? 'Salvataggio API key Google Places…' : 'Rimozione API key Google Places…', undefined, { length: trimmed.length });
-    const res = await dataService.saveUserSettings('admin@gmail.com', { placesApiKey: trimmed });
-    if (res.success) {
-      setSavedKey(trimmed);
-      setPlacesApiKey(trimmed);
-      appendLog('success', trimmed ? 'API key Google Places salvata' : 'API key Google Places rimossa', undefined, { saved: !!trimmed });
-    } else {
-      appendLog('error', `Errore salvataggio API key: ${res.error}`, undefined, { error: String(res.error) });
-    }
-  };
-
   const propagateLogoToDrafts = async (cid: string, logoUrl: string) => {
     const rel = docs.filter((d) => d.documentType === 'businessCard' || d.documentType === 'flyer' || d.documentType === 'logo');
     if (rel.length === 0) return;
@@ -358,7 +339,6 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   if (!customer) return null;
 
   const contacts = (customer.contacts || {}) as Record<string, unknown>;
-  const placeData = (customer.placeData || {}) as Record<string, unknown>;
   const photos = Array.isArray(customer.customerPhotos) ? customer.customerPhotos : [];
   const aiFields = customer.aiSuggestedFields || {};
   const hasAiFields = Object.keys(aiFields).length > 0;
@@ -519,9 +499,9 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
           <h3>Research</h3>
           <div className="crm-timeline">
             <div className="crm-timeline-row">
-              <span className="crm-timeline-label">Google Places</span>
-              <span className={`crm-status-pill crm-status-${customer.researchStatus.places === 'ok' ? 'ok' : 'warn'}`}>
-                {customer.researchStatus.places}
+              <span className="crm-timeline-label">Sito web</span>
+              <span className={`crm-status-pill crm-status-${customer.researchStatus.web === 'ok' ? 'ok' : 'warn'}`}>
+                {customer.researchStatus.web}
               </span>
             </div>
             <div className="crm-timeline-row">
@@ -534,14 +514,12 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         </section>
       )}
 
-      {placeData.name || placeData.formatted_address || placeData.formatted_phone_number ? (
+      {customer.webData?.title || customer.webData?.description ? (
         <section className="crm-section" data-testid="crm-nap-section">
-          <h3>NAP (da Places)</h3>
-          <Field label="Nome" value={placeData.name} />
-          <Field label="Indirizzo" value={placeData.formatted_address} />
-          <Field label="Telefono" value={placeData.formatted_phone_number} />
-          <Field label="Sito" value={placeData.website} />
-          <Field label="Rating" value={placeData.rating != null ? `${placeData.rating} ★` : null} />
+          <h3>Dati dal sito</h3>
+          <Field label="Titolo" value={customer.webData.title} />
+          <Field label="Descrizione" value={customer.webData.description} />
+          <Field label="Preview" value={customer.webData.markdownPreview} />
         </section>
       ) : null}
 
@@ -554,31 +532,6 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
           ))}
         </section>
       )}
-
-      <section className="crm-section">
-        <h3>Chiave API Google Places</h3>
-        <p className="crm-note">Server-side, non esposta al browser. Salvata per admin in user settings (locale) o DB (prod). Senza chiave, research usa solo lookup locale.</p>
-        <div className="crm-key-row">
-          <input
-            type={showKey ? 'text' : 'password'}
-            value={placesApiKey}
-            onChange={(e) => setPlacesApiKey(e.target.value)}
-            onBlur={(e) => savePlacesKey(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') savePlacesKey((e.target as HTMLInputElement).value); }}
-            placeholder="Incolla qui la tua Google Places API key"
-            data-testid="crm-places-api-key"
-            className="crm-key-input"
-          />
-          <button
-            type="button"
-            className="crm-btn-secondary"
-            onClick={() => setShowKey((s) => !s)}
-            aria-label={showKey ? 'Nascondi chiave' : 'Mostra chiave'}
-          >
-            {showKey ? '🙈' : '👁️'}
-          </button>
-        </div>
-      </section>
 
       <section className="crm-actions-row">
         <button onClick={() => runAction('research', () => dataService.researchCustomer(customerId), 'Lanciata auto-research', 'Research completata')} disabled={busy !== null} data-testid="crm-research-btn">

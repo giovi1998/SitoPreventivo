@@ -129,9 +129,9 @@ describe('GET /api/user-settings (onboarding)', () => {
     expect(res.body).toEqual({ userEmail: 'admin@gmail.com', onboardingDone: true });
   });
 
-  it('GET admin returns placesApiKey; non-admin GET strips it', async () => {
+  it('GET admin returns imageGenModel; non-admin GET strips server-only keys', async () => {
     mockDbState.selectResults = [[
-      { userEmail: 'admin@gmail.com', onboardingDone: true, placesApiKey: 'AIzaAdmin' },
+      { userEmail: 'admin@gmail.com', onboardingDone: true, imageGenModel: 'gemini-3.1-flash-image' },
     ]];
     const adminRes = await callHandler({
       method: 'GET',
@@ -140,10 +140,10 @@ describe('GET /api/user-settings (onboarding)', () => {
       body: {},
     });
     expect(adminRes.statusCode).toBe(200);
-    expect(adminRes.body.placesApiKey).toBe('AIzaAdmin');
+    expect(adminRes.body.imageGenModel).toBe('gemini-3.1-flash-image');
 
     mockDbState.selectResults = [[
-      { userEmail: 'user@test.com', onboardingDone: true, placesApiKey: 'AIzaUser' },
+      { userEmail: 'user@test.com', onboardingDone: true, imageGenModel: 'gemini-3.1-flash-image' },
     ]];
     const userRes = await callHandler({
       method: 'GET',
@@ -152,7 +152,7 @@ describe('GET /api/user-settings (onboarding)', () => {
       body: {},
     });
     expect(userRes.statusCode).toBe(200);
-    expect(userRes.body.placesApiKey).toBeUndefined();
+    expect(userRes.body.imageGenModel).toBeUndefined();
     expect(userRes.body.userEmail).toBe('user@test.com');
   });
 
@@ -204,17 +204,17 @@ describe('POST /api/user-settings (onboarding save)', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('persists admin settings including placesApiKey (now DB-backed)', async () => {
+  it('persists admin settings including imageGenModel (now DB-backed)', async () => {
     mockDbState.selectResults = [[]]; // no existing row → insert
     const res = await callHandler({
       method: 'POST',
       url: '/api/user-settings',
       headers: { origin: 'http://localhost' },
-      body: { email: 'admin@gmail.com', displayName: 'Admin', placesApiKey: 'AIzaAdmin' },
+      body: { email: 'admin@gmail.com', displayName: 'Admin', imageGenModel: 'gemini-3.1-flash-image' },
     });
     expect(res.statusCode).toBe(201);
     expect(res.body.userEmail).toBe('admin@gmail.com');
-    expect(res.body.placesApiKey).toBe('AIzaAdmin');
+    expect(mockDbState.inserted[0].imageGenModel).toBe('gemini-3.1-flash-image');
     expect(mockDbState.inserted.length).toBe(1);
   });
 

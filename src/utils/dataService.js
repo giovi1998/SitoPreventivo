@@ -859,12 +859,22 @@ const dataService = {
       const idx = all.findIndex((c) => c.id === id);
       if (idx < 0) return { error: 'Cliente non trovato' };
       all[idx].status = 'researched';
-      all[idx].researchStatus = { places: 'no_key (local)', logo: 'no_logo' };
+      all[idx].researchStatus = { web: 'no_key', logo: 'no_logo' };
       all[idx].updatedAt = new Date().toISOString();
       lsSet('pq_customers:v1', all);
-      return { data: { id, researchStatus: all[idx].researchStatus } };
+      return { data: { id, researchStatus: all[idx].researchStatus, knowledgeCount: 0, webData: {} } };
     }
     return api('POST', `/customers/${id}/research`, { adminEmail: 'admin@gmail.com' });
+  },
+
+  async getCustomerKnowledge(id) {
+    if (IS_LOCAL) return { data: [] };
+    return api('GET', `/customers/${id}/knowledge?adminEmail=${encodeURIComponent('admin@gmail.com')}`);
+  },
+
+  async generateEmbedding(text) {
+    if (IS_LOCAL) return { error: 'Embedding non disponibile in modalità locale' };
+    return api('POST', '/ai/embeddings', { input: text });
   },
 
   async aiFillCustomer(id) {

@@ -78,6 +78,7 @@ beforeEach(() => {
   process.env.DATABASE_URL = 'postgres://test';
   process.env.ADMIN_PASSWORD = 'test-admin-pass';
   process.env.GEMINI_API_KEY = 'test';
+  process.env.FIRECRAWL_API_KEY = '';
   process.env.REGISTRATION_ENABLED = 'false';
   mockDbState.selectResults = [];
   mockDbState.inserted = [];
@@ -143,50 +144,52 @@ describe('TB-027 /api/customers', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('POST /customers/:id/research senza key in user_settings → researchStatus no_key', async () => {
-    mockDbState.selectResults.push(
-      [{ id: 'cust_1', businessName: 'Bar', contacts: {} }],
-      [{ placesApiKey: null }]
-    );
+  it('POST /customers/:id/research senza sito → no_website', async () => {
+    mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', contacts: {}, googleMapsUrl: null }]);
     const res = await callHandler({
       method: 'POST', url: '/api/customers/cust_1/research', body: { adminEmail: 'admin@gmail.com' },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.body.data.researchStatus.places).toBe('no_key');
+    expect(res.body.data.researchStatus.web).toBe('no_website');
   });
 
-  it('POST /customers/:id/research con key in user_settings → chiama Places e restituisce ok', async () => {
-    mockDbState.selectResults.push(
-      [{ id: 'cust_1', businessName: 'Bar', contacts: { website: 'https://bar.example.com' } }],
-      [{ placesApiKey: 'AIzaTest' }]
-    );
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+  it('POST /customers/:id/research senza FIRECRAWL_API_KEY → web no_key', async () => {
+    delete process.env.FIRECRAWL_API_KEY;
+    mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', contacts: { website: 'https://bar.example.com' } }]);
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/research', body: { adminEmail: 'admin@gmail.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.researchStatus.web).toBe('no_key');
+  });
+
+  it('POST /customers/:id/research con sito valido → scrapes with Firecrawl', async () => {
+    process.env.FIRECRAWL_API_KEY = 'fc_test';
+    mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', contacts: { website: 'https://bar.example.com' } }]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
       const u = String(url);
-      if (u.includes('maps.googleapis.com/maps/api/place/findplacefromtext')) {
+      if (u.includes('api.firecrawl.dev/v1/scrape')) {
         return new Response(JSON.stringify({
-          status: 'OK',
-          candidates: [{
-            place_id: 'ChIJtest',
-            name: 'Bar',
-            formatted_address: 'Via Roma 1',
-            website: 'https://bar.example.com',
-            photos: [{ photo_reference: 'ref1' }],
-          }],
+          data: {
+            markdown: 'Bar Da Mario\n\nIl miglior bar di Cagliari. Aperto tutti i giorni.',
+            branding: { logo: 'https://bar.example.com/logo.png', colors: { primary: '#01696F' }, fonts: ['Inter'] },
+            metadata: { title: 'Bar Da Mario', description: 'Il miglior bar' },
+          },
         }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
-      if (u.includes('maps.googleapis.com/maps/api/place/photo')) {
-        return new Response(Buffer.from('fake-image'), { status: 200, headers: { 'content-type': 'image/jpeg' } });
-      }
+      // logo detection fallback: favicon.ico not found
       return new Response('not found', { status: 404 });
     });
     const res = await callHandler({
       method: 'POST', url: '/api/customers/cust_1/research', body: { adminEmail: 'admin@gmail.com' },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.body.data.researchStatus.places).toBe('ok');
+    expect(res.body.data.researchStatus.web).toBe('ok');
+    expect(res.body.data.knowledgeCount).toBeGreaterThanOrEqual(1);
+    expect(res.body.data.webData.markdownPreview).toContain('Bar Da Mario');
     expect(globalThis.fetch).toHaveBeenCalled();
-    const placesCall = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => String(url).includes('findplacefromtext'));
-    expect(placesCall?.[0]).toContain('key=AIzaTest');
+    const firecrawlCall = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => String(url).includes('api.firecrawl.dev'));
+    expect(firecrawlCall?.[0]).toBe('https://api.firecrawl.dev/v1/scrape');
   });
 
   it('POST /customers/:id/ai-fill popola campi vuoti', async () => {
