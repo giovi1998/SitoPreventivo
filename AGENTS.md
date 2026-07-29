@@ -269,11 +269,10 @@ vedi `docs/agent-gotchas.md` §17.
 | `OLLAMA_API_KEY` | Vercel + .env | Ollama Pro Cloud (senza → 503 solo su quel provider) |
 | `REPLICATE_API_TOKEN` | opzionale, deprecato | Fallback logo AI |
 | `REGISTRATION_ENABLED` | Vercel | TB-027: flag signup. Default `false` (CRM admin-only). `true` riattiva whitelabel |
-| `PLACES_API_KEY` | opzionale | Deprecato: ora la chiave Google Places si salva da UI in `user_settings` admin. Può rimanere env per fallback retrocompat |
+| `FIRECRAWL_API_KEY` | opzionale | TB-027: scraping sito cliente per research + RAG. Senza key, status `web: no_key` |
 
 **Mai esporre `DEEPSEEK_API_KEY`/`GEMINI_API_KEY`/`OLLAMA_API_KEY`/
-`PLACES_API_KEY` al browser.** Il frontend chiama solo il proxy serverless.
-La chiave Places API inserita da UI è server-side e mai restituita ai client.
+`FIRECRAWL_API_KEY` al browser.** Il frontend chiama solo il proxy serverless.
 
 ## PDF Generation, Client-Side Only
 

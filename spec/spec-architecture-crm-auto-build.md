@@ -202,7 +202,7 @@ Collaboratori futuri (admin aggiuntivi manuali).
 - **SEC-001**: Endpoint `/api/customers*` e `/api/customers/:id/research|ai-fill|auto-build`
   richiedono `adminEmail=admin@gmail.com` (pattern esistente). 403 per
   non-admin.
-- **SEC-002**: Google Places API key solo server-side (`PLACES_API_KEY`
+- **SEC-002**: Firecrawl API key solo server-side (`FIRECRAWL_API_KEY`
   env var). Mai esposta al browser.
 - **SEC-003**: Fetch di siti terzi (logo detection) server-side solo.
   Sanitizza URL, niente SSRF verso IP interni (allow http/https,
@@ -491,10 +491,10 @@ validazione. La roadmap viene ristrutturata in to-be-done.md.
 
 ### External Systems
 
-- **EXT-001**: Google Places API — NAP, categorie, foto, orari.
-  Free tier 2850 req/mese. Key `PLACES_API_KEY` server-side.
-- **EXT-002**: Google Places Photo API — foto reali locale. Quota
-  separata.
+- **EXT-001**: Firecrawl — scraping sito cliente per testo, branding,
+  logo. Key `FIRECRAWL_API_KEY` server-side.
+- **EXT-002**: Gemini Embeddings (`text-embedding-004`) — RAG sui chunk
+  salvati in `customer_knowledge`.
 - **EXT-003**: Google Forms / Tally.so — intake form (riuso spec
   intake-pipeline).
 - **EXT-004**: HTTP fetch server-side — logo detection da sito cliente

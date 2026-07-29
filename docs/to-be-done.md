@@ -436,9 +436,9 @@ primi clienti paganti.
   - Feature flag `REGISTRATION_ENABLED` (default false). Codice
     signup/onboarding conservato, nascosto dietro flag.
   - CRM UI: vista Clienti in sidebar, dettaglio cliente, azioni.
-  - Auto-research: Google Places API key salvata da UI in
-    `user_settings.placesApiKey` (locale + prod); campo cliente
-    `googleMapsUrl` per link pubblico Maps.
+  - Auto-research: Firecrawl API key server-side (`FIRECRAWL_API_KEY`);
+    scraping sito cliente → chunking → tabella `customer_knowledge`.
+    `googleMapsUrl` campo pubblico Maps.
   - Logo detection da sito, settore inferenza. Best-effort, fail soft.
   - AI gap-filling: mood/target/palette/copy da settore + placeData.
   - Auto-build: draft logo/card/flyer pre-compilati (social escluso v1);

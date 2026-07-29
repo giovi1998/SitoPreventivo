@@ -660,16 +660,16 @@ Codice signup/onboarding **conservato** dietro feature flag
    - `POST /api/customers` — crea manuale (`CreateCustomerSchema`).
    - `GET /api/customers/:id?adminEmail=` — dettaglio + documenti collegati.
    - `PATCH /api/customers/:id` — update (`UpdateCustomerSchema`).
-    - `POST /api/customers/:id/research` — auto-research pipeline
-      (Google Places + foto + logo detection). Rate limit 1/ora/cliente.
-      Best-effort: `placesApiKey` assente in `user_settings` admin →
-      `researchStatus.places='no_key'`, pipeline non blocca. `fetchPlaces`/
-      `fetchPlacesPhoto`/`detectLogo` server-side only. SEC-003 anti-SSRF:
-      reject IP privati in `detectLogo`. Foto clamp 500KB, logo clamp 200KB.
-      **TB-027b**: la chiave Places API non è più un env var obbligatorio;
-      l'admin la inserisce da UI (`CustomerDetail` → "Chiave API Google Places")
-      e viene salvata in `user_settings.placesApiKey` (LOCAL localStorage,
-      PROD DB). Lo stesso vale per `imageGenModel`.
+     - `POST /api/customers/:id/research` — auto-research pipeline
+       (Firecrawl scraping sito + chunking RAG + logo detection). Rate limit
+       1/ora/cliente. Best-effort: `FIRECRAWL_API_KEY` assente →
+       `researchStatus.web='no_key'`, pipeline non blocca. `fetchFirecrawlPage`/
+       `saveCustomerKnowledge`/`detectLogo` server-side only. SEC-003 anti-SSRF:
+       reject IP privati in `detectLogo` e `fetchFirecrawlPage`. Logo clamp 200KB.
+       Chunk markdown salvati in `customer_knowledge` con
+       source=`firecrawl:homepage`; embedding futuro via `POST /api/ai/embeddings`
+       (Gemini `text-embedding-004`). **TB-027b**: nessuna chiave salvata in UI;
+       l'env `FIRECRAWL_API_KEY` è server-side only.
     - `POST /api/customers/:id/ai-fill` — AI riempie campi vuoti (mood,
       target, preferredColors, activity). Basato su settore (lookup
       table, no chiamata AI in v1 per costi). Rate limit 5/ora.
@@ -694,16 +694,15 @@ Codice signup/onboarding **conservato** dietro feature flag
    `AdminRoute` guard. Sidebar: voce "Clienti" sopra "Documenti"
    (admin-only) sia desktop che mobile drawer. `ROUTE_PATHS.customers`
    in `useRouteView.ts` (auto-mappa via `pathToView`).
- 6. **Auto-research best-effort**: Ponytail — Places fallisce → status
-    `no_key`/`fail`/`no_match`, cliente non bloccato, auto-build
-    procede con AI fill. Logo detection: fetch favicon.ico, clamp 200KB,
-    reject SSRF verso `127.*|10.*|192.168.*|169.254.*|localhost`.
-    `AbortSignal.timeout(8000)` per non impicciare la lambda.
-    **Google Maps URL vs Places API key**: il cliente ha un campo
-    `googleMapsUrl` (link pubblico, es.
-    `https://maps.app.goo.gl/...`) editabile inline; la chiave privata
-    `placesApiKey` è invece nelle `user_settings` admin e non esposta al
-    browser.
+  6. **Auto-research best-effort**: Ponytail — Firecrawl fallisce → status
+     `no_key`/`fail`/`no_website`, cliente non bloccato, auto-build
+     procede con AI fill. Logo detection: fetch favicon.ico, clamp 200KB,
+     reject SSRF verso `127.*|10.*|192.168.*|169.254.*|localhost`.
+     `AbortSignal.timeout(8000)` per non impicciare la lambda.
+     **Google Maps URL**: il cliente ha un campo `googleMapsUrl` (link
+     pubblico, es. `https://maps.app.goo.gl/...`) editabile inline; il sito
+     web è letto da `contacts.website` o fallback `googleMapsUrl`.
+     Se nessuno dei due è presente → `web: no_website`.
  7. **Auto-build draft**: 3 documenti (logo/card/flyer) con `customerId`
     popolato, `documentTheme='corporate'`, campi pre-compilati da customer +
     research (detectedLogoUrl → logoUrl, customerPhotos[0] →
@@ -721,12 +720,13 @@ Codice signup/onboarding **conservato** dietro feature flag
     - Selettore modello image-gen (`gemini-3.1-flash-image`,
       `gemini-2.0-flash-preview-image-generation`) salvato in user settings
       e sincronizzato con pannelli AI logo/card/flyer.
- 9. **Test**: `api/__tests__/customers.test.ts` (16: CRUD guard, research
-    no_key/ok, ai-fill, auto-build 3 draft no social, registration flag
-    false/true, /config). `src/components/__tests__/CustomerList.test.tsx`
-    (4: render, empty, click, create). `CustomerDetail.test.tsx` (15:
-    dettaglio, bottoni azione, errore, research log, upload, palette, log
-    detail, Google Maps URL, image model, logo status).
+  9. **Test**: `api/__tests__/customers.test.ts` (17: CRUD guard, research
+     no_website/no_key/ok, ai-fill, auto-build 3 draft no social, registration flag
+     false/true, /config). `src/components/__tests__/CustomerList.test.tsx`
+     (4: render, empty, click, create). `CustomerDetail.test.tsx` (16:
+     dettaglio, bottoni azione, errore, research log, upload, palette, log
+     detail, Google Maps URL, image model, logo status).
+     `api/__tests__/embeddings.test.ts` (3: missing key, valid input, too long).
 
 ### TB-019 Intake
 
@@ -773,9 +773,9 @@ Codice signup/onboarding **conservato** dietro feature flag
 - **REGISTRATION_ENABLED false in test**: `beforeEach` setta
   `process.env.REGISTRATION_ENABLED='false'` (test register 403); test
   flag true lo override a `'true'`. Reset tra test per evitare leak.
-- **PLACES_API_KEY in test**: `delete process.env.PLACES_API_KEY` in
+- **FIRECRAWL_API_KEY in test**: `delete process.env.FIRECRAWL_API_KEY` in
   beforeEach → research pipeline salta, status `no_key`. Test non
-  chiama Places reale.
+  chiama Firecrawl reale; mock `globalThis.fetch` per test ok.
 - **ROUTE_PATHS 10 keys**: `useRouteView.test.tsx` aggiornato a 10
   (aggiunto `customers`). Verifica count ogni volta che si aggiunge view.
 - **autoGenerate deferred**: flag accettato in `AutoBuildSchema` e body
