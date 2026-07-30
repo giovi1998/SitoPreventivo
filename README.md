@@ -619,7 +619,7 @@ SitoPreventivo/
 │       ├── generatePDF.ts     # PDF preventivi con pdfmake
 │       ├── cardGenerator.ts   # PDF/PNG/SVG export bigliettini
 │       ├── qrGenerator.ts     # QR Code SVG/PNG generation
-│       ├── logoGenerator.ts   # ← fase 4: SVG builder + sanitize + PNG/PDF/JPG/ICO/FaviconZIP (TB-024)
+│       ├── logoGenerator.ts   # ← fase 4: facade → logo/svgBuilder.ts (SVG builder + sanitize) + logo/exporters.ts (PNG/PDF/JPG/ICO/FaviconZIP, TB-024)
 │       ├── lucideIconPaths.ts # ← fase 4: path SVG icone lucide (auto-generato)
 │       ├── watermark.ts       # ← fase 5: tier-aware watermark
 │       ├── documentSchemas.ts # Zod schema (quote, QR, card, logo, grid presets)

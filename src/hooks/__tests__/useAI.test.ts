@@ -14,7 +14,7 @@ vi.mock('../../utils/dataService', () => ({
 
 const orchestratorInstances = vi.hoisted(() => [] as { processPrompt: ReturnType<typeof vi.fn> }[]);
 
-vi.mock('../../ai/index', () => ({
+vi.mock('../../ai/quoteOrchestrator', () => ({
   AIOrchestrator: vi.fn().mockImplementation(function () {
     const instance = {
       processPrompt: vi.fn().mockResolvedValue({
@@ -146,7 +146,7 @@ describe('useAI', () => {
   });
 
   it('error:invalid_quote:* entries are classified as errors, not shown as modifications', async () => {
-    vi.doMock('../../ai/index', () => ({
+    vi.doMock('../../ai/quoteOrchestrator', () => ({
       AIOrchestrator: vi.fn().mockImplementation(function () {
         return {
           processPrompt: vi.fn().mockResolvedValue({
@@ -172,12 +172,12 @@ describe('useAI', () => {
     expect(successLog).toBeUndefined();
     const errorLog = result.current.aiLogs.find((l) => l.type === 'error');
     expect(errorLog).toBeDefined();
-    vi.doUnmock('../../ai/index');
+    vi.doUnmock('../../ai/quoteOrchestrator');
     vi.resetModules();
   });
 
   it('any error:* prefix is classified as error, not modification', async () => {
-    vi.doMock('../../ai/index', () => ({
+    vi.doMock('../../ai/quoteOrchestrator', () => ({
       AIOrchestrator: vi.fn().mockImplementation(function () {
         return {
           processPrompt: vi.fn().mockResolvedValue({
@@ -201,7 +201,7 @@ describe('useAI', () => {
     });
     const successLog = result.current.aiLogs.find((l) => l.type === 'success');
     expect(successLog).toBeUndefined();
-    vi.doUnmock('../../ai/index');
+    vi.doUnmock('../../ai/quoteOrchestrator');
     vi.resetModules();
   });
 

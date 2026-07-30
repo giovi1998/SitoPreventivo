@@ -71,7 +71,9 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/utils/generatePDF.ts` | PDF preventivi (pdfmake, client-side) |
 | `src/utils/cardGenerator.ts` | Card PDF/PNG/SVG + `buildCardSvg` |
 | `src/utils/qrGenerator.ts` | QR SVG/PNG (`qrcode` lib) |
-| `src/utils/logoGenerator.ts` | Logo SVG builder + sanitize + PNG/PDF/JPG/ICO/FaviconZIP, render `builder.backgroundImage` |
+| `src/utils/logoGenerator.ts` | Facade → `logo/svgBuilder.ts` (SVG builder + sanitize, render `builder.backgroundImage`) + `logo/exporters.ts` (PNG/PDF/JPG/ICO/FaviconZIP) |
+| `src/utils/card/svgRenderer.ts` | Facade → `card/frontSvg.ts` / `card/backSvg.ts` / `card/fontEmbed.ts` / `card/svgShared.ts` (`buildCardSvg` resta nella facade) |
+| `src/utils/xml.ts` | `escapeXml` condiviso (input `unknown`, coerced) |
 | `src/utils/flyer/` | Flyer engine: `layoutEngine`, `svgRenderer`, `textFit`, `geometry`, `budgets`, `templateCatalog/Factory`, `qrRenderer`, `pdf/pngExport` |
 | `src/utils/watermark.ts` | Tier-aware watermark (free vs unlocked) |
 | `src/utils/aiStats.ts` | TB-026: per-document AI cost tracker (aiStats: totalCostUsd + calls breakdown) + `withAiCall`, `incrementAiStats`, `formatAiStatsCompact` |
@@ -89,6 +91,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/utils/docPreviewSvg.ts` | Preview SVG inline logo/card/flyer/quote (condiviso CollectionView + CustomerDetail) |
 | `src/pages/app/CustomersPage.tsx` | TB-027 route `/app/customers` (admin guard) |
 | `src/ai/BaseOrchestrator.ts` | Abstract condivisa (sanitize, parseJson, handleStream, trackUsage) |
+| `src/ai/quoteOrchestrator.ts` | Orchestratore quote (ex `ai/index.ts`): `AIOrchestrator`, `needsTools`, tool registry quote |
 | `src/ai/*Orchestrator.ts` | card / flyer / logo / social / onboarding |
 | `src/ai/prompts/registry.ts` | promptRegistry: lookup centralizzato 7 prompt |
 | `src/ai/providers/gemini.ts` | `GeminiImageProvider` (Nano Banana, SDK `@google/genai`) |
@@ -182,7 +185,7 @@ Tutte le `/app/*` sono servite dalla catch-all SPA in `vercel.json`.
   stato sollevato al genitore (`aiStateRef` in `LogoEditor`), localStorage
   solo backup try/catch. Vedi `docs/agent-gotchas.md` §2.12.
 - **Export multi-formato (TB-024, v2.5)**: 9 voci nel menu Esporta di
-  `LogoEditor` ActionBar. `logoGenerator.ts` esporta: `builderToSvg`,
+  `LogoEditor` ActionBar. `utils/logo/exporters.ts` esporta:
   `svgToPng` (512/1024/2048), `svgToPdf` (vettoriale via svg2pdf.js +
   jspdf, dimensioni pt = viewBox), `svgToJpg` (sfondo opaco, default
   bianco), `svgToIco` (PNG embedded 16/32/48, Vista+), `svgToFaviconZip`
@@ -267,8 +270,10 @@ logo/card/flyer, fix Collection non aggiornata dopo "Genera bozze AI")
 
 ## TODO (prossimi task)
 
-I TODO sono stati spostati in **[to-be-done.md](to-be-done.md)** per tenere
-questo file focalizzato su architettura e convenzioni.
+Kanban in due file: **[to-be-done.md](to-be-done.md)** (da fare, backlog
+tecnico e business) e **[docs/done.md](docs/done.md)** (completati, con
+date e riferimenti ai gotchas). Questo file resta focalizzato su
+architettura e convenzioni.
 
 ## Responsive Patterns
 
@@ -344,7 +349,6 @@ Posizione test: componenti → `src/components/__tests__/`, hook →
 **E2E AI logs (TB-023):** quando tocchi hook AI (`useAI*`) o `AILogPanel`,
 mantieni `e2e/ai-log-preview.spec.ts` verde: verifica che le preview nei log
 flyer/logo/quote non siano nere/CSS e che il brief testuale sia presente.
-Per debug usa `e2e/debug-ai.spec.ts` (temporaneo, da rimuovere prima del push).
 
 ## Admin User
 

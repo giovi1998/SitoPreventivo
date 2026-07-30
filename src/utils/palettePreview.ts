@@ -1,5 +1,6 @@
 // TB-027 B5: SVG swatch card per preview palette. Zero costo AI, render puro.
 import type { PaletteConcept } from '../ai/PaletteOrchestrator';
+import { escapeXml } from './xml';
 
 export function buildPaletteSvg(concept: PaletteConcept): string {
   const swatches: Array<{ color: string; label: string }> = [
@@ -27,10 +28,6 @@ export function buildPaletteSvg(concept: PaletteConcept): string {
   ${dots}
   <text x="12" y="110" font-family="Inter,sans-serif" font-size="10" fill="#6b7280">${escapeXml(rationale)}</text>
 </svg>`;
-}
-
-function escapeXml(s: string): string {
-  return s.replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c] as string));
 }
 
 export function palettePreviewDataUrl(concept: PaletteConcept): string {

@@ -1,7 +1,7 @@
 import { useRef, useCallback, useState } from 'react';
 import type { PremiumQuote } from '../utils/quoteSchema';
 import type { AIStreamChunk } from '../ai/types';
-import { AIOrchestrator } from '../ai/index';
+import { AIOrchestrator } from '../ai/quoteOrchestrator';
 import { useAILogs } from './useAILogs';
 import { formatToolCall, formatToolResult } from '../ai/toolLabels';
 import dataService from '../utils/dataService';

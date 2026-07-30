@@ -28,7 +28,7 @@ vi.mock('../chat/store', () => {
   };
 });
 
-import { AIOrchestrator, needsTools } from '../index';
+import { AIOrchestrator, needsTools } from '../quoteOrchestrator';
 import { providerRegistry } from '../providers/registry';
 import { createEmptyQuote, addEmptyOption, addEmptyItem } from '../../utils/quoteSchema';
 
