@@ -96,6 +96,7 @@ const customersTable = pgTable('customers', {
   customerPhotos: jsonb('customer_photos'),
   detectedLogoUrl: text('detected_logo_url'),
   researchStatus: jsonb('research_status'),
+  webData: jsonb('web_data'),
   aiSuggestedFields: jsonb('ai_suggested_fields'),
   notes: text(),
   assignedTo: varchar('assigned_to', { length: 255 }),
@@ -3042,6 +3043,7 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
     await db.update(customersTable).set({
       detectedLogoUrl: cust.logoUrl ? cust.detectedLogoUrl : (detectedLogoUrl || cust.detectedLogoUrl),
       researchStatus,
+      webData,
       status: 'researched',
       updatedAt: new Date(),
     }).where(eq(customersTable.id, id));

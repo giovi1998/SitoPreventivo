@@ -62,6 +62,7 @@ export const customers = pgTable("customers", {
   customerPhotos: jsonb("customer_photos"),
   detectedLogoUrl: text("detected_logo_url"),
   researchStatus: jsonb("research_status"),
+  webData: jsonb("web_data"),
   aiSuggestedFields: jsonb("ai_suggested_fields"),
   notes: text(),
   assignedTo: varchar("assigned_to", { length: 255 }),

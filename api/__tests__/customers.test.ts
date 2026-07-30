@@ -216,6 +216,13 @@ describe('TB-027 /api/customers', () => {
     expect(globalThis.fetch).toHaveBeenCalled();
     const firecrawlCall = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => String(url).includes('api.firecrawl.dev'));
     expect(firecrawlCall?.[0]).toBe('https://api.firecrawl.dev/v2/scrape');
+    // Regression: webData deve essere PERSISTITO (altrimenti il pannello
+    // "Dati del sito" sparisce al reload — bug prod 2026-07-30).
+    const lastUpdate = mockDbState.updated[mockDbState.updated.length - 1];
+    expect(lastUpdate.webData).toBeDefined();
+    expect(lastUpdate.webData.markdownFull).toContain('Cagliari');
+    expect(lastUpdate.webData.json.company_name).toBe('Bar Da Mario');
+    expect(lastUpdate.webData.images).toHaveLength(1);
   });
 
   it('POST /customers/:id/ai-fill senza DeepSeek key → fallback lookup, costUsd 0', async () => {
