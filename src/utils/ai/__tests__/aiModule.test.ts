@@ -66,7 +66,8 @@ describe('useAIHarness', () => {
     expect(result.current.visionEnabled).toBe(false);
     expect(result.current.autoFallbackEnabled).toBe(true);
     expect(result.current.totalCostUsd).toBe(0);
-    expect(result.current.availableImageModels.length).toBe(2);
+    // Solo Nano Banana: gemini-2.0-flash-preview-image-generation ritirato da Google.
+    expect(result.current.availableImageModels.length).toBe(1);
   });
 
   it('toggle vision calls setAiVisionEnabled and refreshes', async () => {

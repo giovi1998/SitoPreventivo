@@ -203,6 +203,15 @@ function json(req: VercelRequest, res: VercelResponse, status: number, data: unk
   res.status(status).json(data);
 }
 
+// Modello immagine Gemini corrente. `gemini-2.0-flash-preview-image-generation`
+// è stato ritirato da Google (404 upstream → 502, bug prod 2026-07-30):
+// normalizza i pref client stale verso il modello corrente.
+const GEMINI_IMAGE_MODEL = 'gemini-3.1-flash-image';
+const RETIRED_GEMINI_IMAGE_MODEL = 'gemini-2.0-flash-preview-image-generation';
+function normalizeGeminiImageModel(id?: string): string {
+  return !id || id === RETIRED_GEMINI_IMAGE_MODEL ? GEMINI_IMAGE_MODEL : id;
+}
+
 function getRequestId(req: VercelRequest): string {
   const header = req.headers['x-request-id'];
   const value = Array.isArray(header) ? header[0] : header;
@@ -2008,7 +2017,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       ]);
       const interaction = await ai.interactions.create(
         {
-          model: v.data.imageModel || 'gemini-3.1-flash-image',
+          model: normalizeGeminiImageModel(v.data.imageModel),
           input,
           generation_config: {
             image_config: { image_size: '512', aspect_ratio: '1:1' },
@@ -2173,7 +2182,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       ]);
       const interaction = await ai.interactions.create(
         {
-          model: v.data.imageModel || 'gemini-3.1-flash-image',
+          model: normalizeGeminiImageModel(v.data.imageModel),
           input,
           generation_config: {
             image_config: { image_size: '512', aspect_ratio: v.data.aspectRatio ?? '3:2' },
@@ -2248,7 +2257,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         : v.data.prompt;
       const interaction = await ai.interactions.create(
         {
-          model: v.data.imageModel || 'gemini-3.1-flash-image',
+          model: normalizeGeminiImageModel(v.data.imageModel),
           input: finalPrompt,
           generation_config: {
             image_config: { image_size: '512', aspect_ratio: '3:4' },
@@ -2347,7 +2356,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         const styleHint = v.data.style || 'minimalist';
         finalPrompt = `Stylized flat hero illustration of ${v.data.prompt}. Two colors only: ${v.data.primaryColor} and ${v.data.secondaryColor}. ${bgPrompt} No text, no border. Simple geometric shapes, editorial style. 16:9 composition. Style: ${styleHint}.`;
       }
-      const modelId = v.data.imageModel || 'gemini-2.0-flash-preview-image-generation';
+      const modelId = normalizeGeminiImageModel(v.data.imageModel);
       const interaction = await ai.interactions.create(
         {
           model: modelId,

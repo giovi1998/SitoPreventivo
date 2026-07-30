@@ -98,11 +98,13 @@ export function setAiProviderDefault(providerId: string): void {
 
 export const AI_IMAGE_MODELS = [
   { id: 'gemini-3.1-flash-image', name: 'Gemini Nano Banana', description: 'Qualità alta, dettagli ricchi' },
-  { id: 'gemini-2.0-flash-preview-image-generation', name: 'Gemini 2.0 Flash', description: 'Più veloce e economico' },
+  // Rimosso gemini-2.0-flash-preview-image-generation: ritirato da Google
+  // (404 upstream). Il server normalizza pref stale → gemini-3.1-flash-image.
 ];
 
 export function getAiImageModelDefault(): string {
-  return getUiPrefs().aiImageModelDefault ?? AI_IMAGE_MODELS[0].id;
+  const pref = getUiPrefs().aiImageModelDefault;
+  return pref && AI_IMAGE_MODELS.some((m) => m.id === pref) ? pref : AI_IMAGE_MODELS[0].id;
 }
 
 export function setAiImageModelDefault(modelId: string): void {

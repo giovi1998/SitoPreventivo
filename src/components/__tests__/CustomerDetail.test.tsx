@@ -317,9 +317,9 @@ describe('TB-027 CustomerDetail', () => {
       expect(screen.getByTestId('crm-image-model')).toBeTruthy();
     });
     const select = screen.getByTestId('crm-image-model') as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: 'gemini-2.0-flash-preview-image-generation' } });
+    fireEvent.change(select, { target: { value: 'gemini-3.1-flash-image' } });
     await waitFor(() => {
-      expect(dataService.saveUserSettings).toHaveBeenCalledWith('admin@gmail.com', expect.objectContaining({ imageGenModel: 'gemini-2.0-flash-preview-image-generation' }));
+      expect(dataService.saveUserSettings).toHaveBeenCalledWith('admin@gmail.com', expect.objectContaining({ imageGenModel: 'gemini-3.1-flash-image' }));
     });
   });
 
