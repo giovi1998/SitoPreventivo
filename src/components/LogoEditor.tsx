@@ -74,6 +74,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
   >(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedIdRef = useRef<string | undefined>(initialLogo?.id);
+  const loadedUpdatedAtRef = useRef<string | undefined>(initialLogo?.updatedAt);
   const { addToast } = useToast();
 
   // When the URL-driven document changes, reset local state to the new logo.
@@ -82,8 +83,14 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
   // lo stato (chat, concept, immagini) del documento precedente.
   useEffect(() => {
     if (!initialLogo?.id) return;
-    if (initialLogo.id === loadedIdRef.current) return;
+    // Aggiorna se ID diverso O stesso ID ma documento aggiornato (rigenerato dal CRM).
+    // Confronto con un ref (non con `logo.updatedAt` locale): le modifiche locali
+    // bumpano `updatedAt` via deepSetBuilder e non devono triggerare un reload.
+    const isNewDoc = initialLogo.id !== loadedIdRef.current;
+    const isUpdated = initialLogo.updatedAt !== loadedUpdatedAtRef.current;
+    if (!isNewDoc && !isUpdated) return;
     loadedIdRef.current = initialLogo.id;
+    loadedUpdatedAtRef.current = initialLogo.updatedAt;
     const merged = mergeLogoWithDefaults(initialLogo);
     setLogo(merged);
     aiStateRef.current = undefined;

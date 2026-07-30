@@ -169,12 +169,17 @@ function hydrateDocument(row) {
     };
   }
 
-  // logo / businessCard / flyer / quote: spread jsonb data onto top level
+  // logo / businessCard / flyer / quote: spread jsonb data onto top level.
+  // Preserva i meta colonnari (customerId/status/documentTheme): i draft CRM
+  // envelope li hanno solo al top level e CollectionView filtra per `status`.
   const body = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
   return {
     documentType,
     id,
     userEmail,
+    customerId: rest.customerId,
+    status: rest.status,
+    documentTheme: rest.documentTheme,
     title: title ?? '',
     ...body,
     createdAt: createdAt ?? body.createdAt,
@@ -360,15 +365,34 @@ const dataService = {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_documents:v1') || [];
       const ownerEmail = email || document.userEmail;
+      // Storage canonico locale FLAT per logo/card/flyer: un save envelope
+      // (CRM "Genera bozze AI" via saveDraft) senza flatten lascerebbe nel
+      // record sia i campi flat stale dell'existing sia il `data` fresco,
+      // e CollectionView (che legge flat) mostrerebbe il contenuto vecchio.
+      // QR/quote/altri tipi mantengono `data` (payload QR legittimo).
+      const isFlatDomainType = document.documentType === 'logo'
+        || document.documentType === 'businessCard'
+        || document.documentType === 'flyer';
+      let incoming = document;
+      if (isFlatDomainType && incoming.data && typeof incoming.data === 'object' && !Array.isArray(incoming.data)) {
+        incoming = { ...incoming, ...incoming.data };
+        delete incoming.data;
+      }
       // Preserva customerId dal documento esistente se il caller non lo passa
       // (editor che salvano senza conoscere il customerId).
-      const existing = all.find((d) => d.id === document.id);
+      const existing = all.find((d) => d.id === incoming.id);
       const toStore = await compressDocumentImages({
         ...existing,
-        ...document,
+        ...incoming,
         userEmail: ownerEmail,
-        customerId: document.customerId ?? existing?.customerId,
+        customerId: incoming.customerId ?? existing?.customerId,
+        // Sempre "now": senza bump il CRM auto-build risalva con lo stesso
+        // updatedAt del draft e l'editor (LogoEditor reset effect) non
+        // rileva l'aggiornamento → UI stale (background AI perso).
+        updatedAt: new Date().toISOString(),
       });
+      // Rimuove anche il rimasuglio envelope stale ereditato dall'existing.
+      if (isFlatDomainType) delete toStore.data;
       const isNew = !all.some(d => d.id === toStore.id);
       const owned = all.filter(d => d.userEmail === ownerEmail);
       const others = all.filter(d => d.userEmail !== ownerEmail);
@@ -430,7 +454,11 @@ const dataService = {
       if (documentType) {
         filtered = filtered.filter(d => d.documentType === documentType);
       }
-      return { documents: filtered };
+      // Idrata anche in locale: i draft CRM sono salvati envelope
+      // (data.builder/...) mentre CollectionView legge flat (doc.builder).
+      // I doc flat degli editor passano invariati (branch hasFlatDomain).
+      const hydrated = filtered.map(hydrateDocument);
+      return { documents: hydrated };
     }
     const qs = new URLSearchParams({ email });
     if (documentType) qs.set('type', documentType);
@@ -870,8 +898,13 @@ const dataService = {
       const all = lsGet('pq_customers:v1') || [];
       const cust = all.find((c) => c.id === id);
       if (!cust) return { error: 'Cliente non trovato' };
-      const docs = (lsGet('precisionQuote_documents:v1') || []).filter((d) => d.customerId === id);
-      return { data: { ...cust, documents: docs } };
+      const customerDocs = (lsGet('precisionQuote_documents:v1') || []).filter((d) => d.customerId === id);
+      // Shim CRM: CustomerDetail legge doc.data.builder / autoGeneratePending /
+      // aiStats. Con storage canonico flat i campi dominio sono top-level →
+      // espongo `data` come alias del doc stesso (i QR hanno già un data
+      // legittimo e passano invariati).
+      const docsForCrm = customerDocs.map((d) => (d.data ? d : { ...d, data: d }));
+      return { data: { ...cust, documents: docsForCrm } };
     }
     return api('GET', `/customers/${id}?adminEmail=${encodeURIComponent('admin@gmail.com')}`);
   },
@@ -1141,10 +1174,14 @@ const dataService = {
         // Skip logo draft se admin ha già caricato un logo manuale/detected
         if (d.type === 'logo' && hasManualLogo) continue;
         const did = d.type + '_' + cryptoRandomId();
+        // Draft FLAT (storage canonico locale): dominio al top level, meta
+        // DOPO lo spread così id/userEmail/customerId/status/documentTheme
+        // sovrascrivono eventuali omonimi dentro d.data.
         docs.push({
+          ...d.data,
           id: did, userEmail: 'admin@gmail.com', customerId: id,
           documentType: d.type, title: d.title,
-          status: 'BOZZA', documentTheme: 'corporate', data: d.data,
+          status: 'BOZZA', documentTheme: 'corporate',
           createdAt: now, updatedAt: now,
         });
         ids.push(did);

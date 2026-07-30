@@ -1089,7 +1089,7 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     const extractDocumentData = (doc: any): unknown => {
       if (doc.documentType === 'qrCode') return doc.data ?? null;
       if (doc.data != null) return doc.data;
-      const META = new Set(['id', 'documentType', 'title', 'userEmail', 'createdAt', 'updatedAt', 'isTemplate', 'data']);
+      const META = new Set(['id', 'documentType', 'title', 'userEmail', 'customerId', 'createdAt', 'updatedAt', 'isTemplate', 'data']);
       const domain: Record<string, unknown> = {};
       for (const [k, val] of Object.entries(doc)) {
         if (!META.has(k)) domain[k] = val;

@@ -3,7 +3,7 @@ import { renderHook, act } from '@testing-library/react';
 
 vi.mock('../../utils/dataService', () => ({
   default: {
-    saveDocument: vi.fn().mockResolvedValue({ success: true }),
+    saveDocument: mocks.saveDocument,
   },
 }));
 
@@ -47,6 +47,7 @@ const mocks = vi.hoisted(() => ({
   getAiVisionEnabled: vi.fn(() => false),
   svgToPng: vi.fn(),
   compressDataUrl: vi.fn(async (v: string) => v),
+  saveDocument: vi.fn(),
 }));
 
 vi.mock('../../ai/logoOrchestrator', () => ({
@@ -281,6 +282,25 @@ describe('useAutoBuildGenerate', () => {
     expect(result.current.state.statuses.logo_1).toBe('done');
     const save = mockSave.mock.calls.find((c) => c[1].id === 'logo_1')!;
     expect(save[1].data.builder).toEqual({ ...logoBuilder, backgroundImage: 'data:image/png;base64,QUJD' });
+  });
+
+  it('storage quota: NON strippa builder.backgroundImage, fallisce e logga errore', async () => {
+    // La policy cambia: il background logo è contenuto essenziale,
+    // rimuoverlo silenziosamente produceva un logo diverso nel CRM.
+    mockSave
+      .mockResolvedValueOnce({ success: false, error: 'Spazio locale esaurito (immagine troppo grande)' })
+      .mockResolvedValueOnce({ success: false, error: 'Spazio locale esaurito (immagine troppo grande)' });
+    const doc: AutoBuildDoc = { id: 'logo_1', documentType: 'logo', title: 'Logo', data: { briefContext: 'bar', builder: {} } };
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    await act(async () => {
+      await result.current.generateOne(doc, customer);
+    });
+    expect(result.current.state.statuses.logo_1).toBe('error');
+    // L'errore è esplicito (non più silenzioso con strip)
+    expect(result.current.state.errors.logo_1).toMatch(/Spazio locale esaurito|Storage pieno/i);
+    // backgroundImage NON deve essere mai rimosso dai dati salvati
+    const save = mockSave.mock.calls.find((c) => c[1].id === 'logo_1')!;
+    expect(save[1].data.builder.backgroundImage).toBe('data:image/png;base64,QUJD');
   });
 
   it('mood del cliente mappato a tone flyer', async () => {

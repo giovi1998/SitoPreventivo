@@ -118,26 +118,32 @@ async function saveDraft(doc: AutoBuildDoc, data: Record<string, unknown>): Prom
   } as Record<string, unknown>;
   let compressed = await compressDraftImages(data);
   let res = await dataService.saveDocument('admin@gmail.com', {
-    ...basePayload,
+    id: basePayload.id,
+    documentType: basePayload.documentType,
+    title: basePayload.title,
+    // customerId a top-level per getCustomer (filtra d.customerId), non solo in data
+    customerId: basePayload.customerId,
+    status: basePayload.status,
     data: { ...compressed, autoGeneratePending: false },
   });
   // Retry con compressione più aggressiva se quota superata.
   if (res?.error && /spazio|quota/i.test(String(res.error))) {
+    logger.warn('Auto-build: quota superata, riprovo con compressione più aggressiva', { route: 'useAutoBuildGenerate', docId: doc.id });
     compressed = await compressDraftImages(data, 512, 100_000);
     res = await dataService.saveDocument('admin@gmail.com', {
-      ...basePayload,
+      id: basePayload.id,
+      documentType: basePayload.documentType,
+      title: basePayload.title,
+      customerId: basePayload.customerId,
+      status: basePayload.status,
       data: { ...compressed, autoGeneratePending: false },
     });
   }
-  // Ultima spiaggia: rimuovi immagini opzionali (cover/hero/background) e riprova.
-  if (res?.error && /spazio|quota/i.test(String(res.error))) {
-    const stripped = stripOptionalImages(compressed);
-    res = await dataService.saveDocument('admin@gmail.com', {
-      ...basePayload,
-      data: { ...stripped, autoGeneratePending: false },
-    });
+  // Se quota: errore esplicito, non corrompere il documento.
+  if (res?.error) {
+    logger.error('Auto-build: save document fallita', { route: 'useAutoBuildGenerate', docId: doc.id, error: res.error });
+    throw new Error(String(res.error));
   }
-  if (res?.error) throw new Error(String(res.error));
 }
 
 // ~225KB raw in caratteri base64: oltre questa soglia comprimiamo prima del
@@ -154,11 +160,13 @@ const DRAFT_IMAGE_PATHS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 // Immagini opzionali che possiamo sacrificare se lo storage è pieno.
-// Manteniamo photoUrl/logoUrl perché servono alla resa del documento.
+// NON includiamo `builder.backgroundImage`: per il logo è il contenuto
+// principale atteso dall'utente, rimuoverlo silenziosamente produce
+// un logo diverso (bug: CRM preview senza sfondo). Se quota, fallisce
+// e logga errore, non corrompe il documento.
 const STRIPPABLE_IMAGE_PATHS: ReadonlyArray<readonly [string, string]> = [
   ['front', 'coverImageUrl'],
   ['back', 'coverImageUrl'],
-  ['builder', 'backgroundImage'],
   ['content', 'heroImage'],
 ];
 
@@ -265,7 +273,10 @@ async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: Aut
       { userEmail: 'admin@gmail.com', imageModel: getAiImageModelDefault() },
     );
     if (bgResult.applied && bgResult.logo.builder.backgroundImage) {
-      builder = { ...builder, backgroundImage: bgResult.logo.builder.backgroundImage };
+      // Comprimi subito come per flyer hero: Gemini 1024px → ~1-2MB base64,
+      // supera quota localStorage e saveDraft falliva silenziosamente.
+      const compressed = await compressDataUrl(bgResult.logo.builder.backgroundImage, 512, 150_000);
+      builder = { ...builder, backgroundImage: compressed ?? bgResult.logo.builder.backgroundImage };
       logger.info('Auto-build: background logo generato', { route: 'useAutoBuildGenerate', docId: doc.id });
     } else {
       logger.warn('Auto-build: background logo non applicato', { route: 'useAutoBuildGenerate', docId: doc.id, error: bgResult.error });

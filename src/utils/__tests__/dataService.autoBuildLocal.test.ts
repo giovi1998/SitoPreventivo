@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
-describe('TB-027 A1: autoBuildCustomer LOCAL shape nested (regression bozze vuote)', () => {
+describe('TB-027 A1: autoBuildCustomer LOCAL shape flat (storage canonico, regression bozze vuote/doppio formato)', () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it('crea 3 draft (no social v1) con shape nested + briefContext', async () => {
+  it('crea 3 draft (no social v1) con shape flat + briefContext', async () => {
     localStorage.setItem('pq_customers:v1', JSON.stringify([{
       id: 'cust_1', businessName: 'Bar Da Mario', ownerName: 'Mario', sector: 'bar',
       activity: 'Cucina sarda', contacts: { email: 'm@e.it', phone: '333' }, customerPhotos: [],
@@ -16,17 +16,23 @@ describe('TB-027 A1: autoBuildCustomer LOCAL shape nested (regression bozze vuot
     const docs = JSON.parse(localStorage.getItem('precisionQuote_documents:v1') || '[]');
     expect(docs).toHaveLength(3);
     expect(docs.map((d: any) => d.documentType)).toEqual(['logo', 'businessCard', 'flyer']);
+    // Shape flat: dominio al top level, nessuna chiave `data` envelope.
+    for (const d of docs) {
+      expect(d.data).toBeUndefined();
+      expect(d.status).toBe('BOZZA');
+      expect(d.customerId).toBe('cust_1');
+    }
     const card = docs.find((d: any) => d.documentType === 'businessCard');
-    expect(card.data.front.name).toBe('Mario');
-    expect(card.data.back.email).toBe('m@e.it');
-    expect(card.data.briefContext).toContain('Bar Da Mario');
-    expect(card.data.briefContext).toContain('m@e.it');
+    expect(card.front.name).toBe('Mario');
+    expect(card.back.email).toBe('m@e.it');
+    expect(card.briefContext).toContain('Bar Da Mario');
+    expect(card.briefContext).toContain('m@e.it');
     const logo = docs.find((d: any) => d.documentType === 'logo');
-    expect(logo.data.builder.primaryText).toBe('Bar Da Mario');
-    expect(logo.data.briefContext).toContain('Bar Da Mario');
+    expect(logo.builder.primaryText).toBe('Bar Da Mario');
+    expect(logo.briefContext).toContain('Bar Da Mario');
     const flyer = docs.find((d: any) => d.documentType === 'flyer');
-    expect(flyer.data.content.headline).toBe('Bar Da Mario');
-    expect(flyer.data.briefContext).toContain('Bar Da Mario');
+    expect(flyer.content.headline).toBe('Bar Da Mario');
+    expect(flyer.briefContext).toContain('Bar Da Mario');
   });
 
   it('skip logo draft se detectedLogoUrl presente (admin ha già logo)', async () => {
@@ -53,7 +59,7 @@ describe('TB-027 A1: autoBuildCustomer LOCAL shape nested (regression bozze vuot
     expect(docs.find((d: any) => d.documentType === 'logo')).toBeUndefined();
     // card usa il logoUrl manuale
     const card = docs.find((d: any) => d.documentType === 'businessCard');
-    expect(card.data.front.logoUrl).toBe('data:image/png;base64,abc');
+    expect(card.front.logoUrl).toBe('data:image/png;base64,abc');
   });
 
   it('usa customerPhotos e detectedLogoUrl nei draft', async () => {
@@ -65,9 +71,9 @@ describe('TB-027 A1: autoBuildCustomer LOCAL shape nested (regression bozze vuot
     await ds.autoBuildCustomer('cust_1', false);
     const docs = JSON.parse(localStorage.getItem('precisionQuote_documents:v1') || '[]');
     const card = docs.find((d: any) => d.documentType === 'businessCard');
-    expect(card.data.front.photoUrl).toBe('data:image/png;base64,abc');
+    expect(card.front.photoUrl).toBe('data:image/png;base64,abc');
     const flyer = docs.find((d: any) => d.documentType === 'flyer');
-    expect(flyer.data.content.heroImage).toBe('data:image/png;base64,abc');
+    expect(flyer.content.heroImage).toBe('data:image/png;base64,abc');
   });
 
   it('rerun sostituisce le BOZZE esistenti (no duplicati), non tocca i non-BOZZA', async () => {

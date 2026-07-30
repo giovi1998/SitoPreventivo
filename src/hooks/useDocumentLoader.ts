@@ -23,6 +23,7 @@ export function useDocumentLoader({ view, documentType, contextField }: UseDocum
   const ctxDoc = ctx?.[contextField];
   const userEmail = user?.email || '';
   const [loading, setLoading] = React.useState(false);
+  const [freshDoc, setFreshDoc] = React.useState<unknown>(null);
   const ctxRef = useRef(ctx);
   React.useEffect(() => { ctxRef.current = ctx; }, [ctx]);
   const addToastRef = useRef(addToast);
@@ -48,12 +49,13 @@ export function useDocumentLoader({ view, documentType, contextField }: UseDocum
   useEffect(() => {
     if (!docId) {
       lastLoadedRef.current = null;
+      setFreshDoc(null);
       return;
     }
     if (!userEmail) return;
     // Ricarica sempre da dataService al mount / cambio docId: il ctxDoc può
     // essere una versione cache più vecchia (es. documento rigenerato dal CRM).
-    if (lastLoadedRef.current === docId) return;
+    if (lastLoadedRef.current === docId && freshDoc) return;
     if (!DOC_ID_REGEX.test(docId)) {
       addToastRef.current('error', 'ID documento non valido');
       navigateRef.current(`/app/${view}`, { replace: true });
@@ -70,6 +72,7 @@ export function useDocumentLoader({ view, documentType, contextField }: UseDocum
           navigateRef.current(`/app/${view}`, { replace: true });
           return;
         }
+        setFreshDoc(doc);
         if (ctxRef.current?.[setterName]) {
           ctxRef.current[setterName](doc);
         }
@@ -79,9 +82,15 @@ export function useDocumentLoader({ view, documentType, contextField }: UseDocum
         addToastRef.current('error', `Errore caricamento: ${err.message}`);
         navigateRef.current(`/app/${view}`, { replace: true });
       });
-  }, [docId, userEmail, view, documentType, contextField]);
+  }, [docId, userEmail, view, documentType, contextField, freshDoc]);
 
-  const initialDoc = docId ? (ctxDoc?.id === docId ? ctxDoc : null) : undefined;
+  const initialDoc = docId
+    ? ((freshDoc as { id?: string } | null)?.id === docId
+        ? freshDoc
+        : ctxDoc?.id === docId
+          ? ctxDoc
+          : null)
+    : undefined;
 
   return { docId, initialDoc, loading, onReset, onSaved };
 }

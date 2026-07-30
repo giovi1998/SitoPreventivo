@@ -219,6 +219,14 @@ client char-per-char. `loadEnv()` esplicito in `vite.config.js`.
 avere localStorage come unica persistenza → QuotaExceededError non gestito
 = crash app. Stato sollevato al genitore + try/catch obbligatorio.
 
+**Shape documenti locali (§23)**: in IS_LOCAL lo storage di
+logo/card/flyer è **canonico FLAT** (dominio top level, mai chiave `data`).
+`saveDocument` appiattisce envelope in ingresso e fa `delete toStore.data`;
+`getCustomer` ritorna shim `{...d, data: d}` per il CRM (non romperlo);
+`getDocuments` idrata come PROD. QR esclusi (usano `data` legittimamente).
+Mai importare `src/utils/logger.ts` da `dataService.js` (test CJS
+`require()` → risoluzione fallisce); log debug temporanei via `console.*`.
+
 **Card export SVG (§4-6)**: contatti retro `dominant-baseline="alphabetic"`
 (altri testi `text-before-edge`); `gridPlacement` swap assi per celle text
 column; font-size rem-based (pxH proporzionali), grid padding/gap
@@ -253,7 +261,14 @@ embedding `gemini-embedding-2`) ✅ completed 2026-07-29 —
 vedi `docs/agent-gotchas.md` §18. TB-027e (dev proxy Ollama M3, research
 errori/immagini/colori, ai-fill AI reale, flyer text-only, auto-build
 dedupe, dataService SSR-safe) ✅ completed 2026-07-29 —
-vedi `docs/agent-gotchas.md` §20.
+vedi `docs/agent-gotchas.md` §20. TB-027h (storage locale canonico FLAT
+logo/card/flyer, fix Collection non aggiornata dopo "Genera bozze AI")
+✅ completed 2026-07-30 — vedi `docs/agent-gotchas.md` §23.
+
+## TODO (prossimi task)
+
+I TODO sono stati spostati in **[to-be-done.md](to-be-done.md)** per tenere
+questo file focalizzato su architettura e convenzioni.
 
 ## Responsive Patterns
 
@@ -355,7 +370,7 @@ Per debug usa `e2e/debug-ai.spec.ts` (temporaneo, da rimuovere prima del push).
 Chiavi **versionate** `nome:vN`; cambio schema → `v(N+1)` + fallback lettura
 `vN`. Chiavi attuali:
 
-- `precisionQuote_documents:v1` — documenti unificati (preventivi, QR, card, logo)
+- `precisionQuote_documents:v1` — documenti unificati (preventivi, QR, card, logo). Logo/card/flyer: shape canonica FLAT in locale (dominio top level, no `data`; vedi gotcha §23)
 - `precisionQuote_quotes` — legacy deprecata; `pq_migration_v1_done_<email>` flag
 - `userSettings_<email>` — include `tier`, `documentCount`, `unlockCode`, `preferredDocumentType`
 - `unlock_codes`, `registeredUsers`, `deepseekApiKey` — dev only

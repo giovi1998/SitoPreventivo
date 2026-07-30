@@ -470,9 +470,10 @@ describe('LogoEditor', () => {
    * Il fix replica il reset di `handleNew` nell'effect di doc-change.
    */
   describe('doc change via initialLogo prop (regression: stato AI leaked tra documenti)', () => {
-    const logoDoc = (id: string, builderPatch: Partial<Logo['builder']> = {}): Logo => ({
+    const logoDoc = (id: string, builderPatch: Partial<Logo['builder']> = {}, updatedAt?: string): Logo => ({
       ...createEmptyLogo(),
       id,
+      ...(updatedAt ? { updatedAt } : {}),
       builder: { ...createEmptyLogo().builder, ...builderPatch },
     });
 
@@ -505,6 +506,35 @@ describe('LogoEditor', () => {
       expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'true');
       rerender(<LogoEditor userEmail="user@test.com" initialLogo={logoDoc('logoC', { primaryText: 'Acme' })} />);
       expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('reloads content when the SAME doc id arrives with a newer updatedAt (CRM regeneration)', () => {
+      // Regressione: aprendo /app/logo/:id dopo una rigenerazione CRM,
+      // loadedIdRef bloccava il reload (stesso id) e l'editor mostrava la
+      // versione cache vecchia mentre il CRM mostrava quella nuova.
+      const { rerender } = render(
+        <LogoEditor userEmail="user@test.com" initialLogo={logoDoc('logoA', { primaryText: 'Acme' }, '2026-01-01T00:00:00.000Z')} />
+      );
+      expect((screen.getByLabelText(/Testo principale/i) as HTMLInputElement).value).toBe('Acme');
+      rerender(
+        <LogoEditor userEmail="user@test.com" initialLogo={logoDoc('logoA', { primaryText: 'NuovoBrand' }, '2026-01-02T00:00:00.000Z')} />
+      );
+      expect((screen.getByLabelText(/Testo principale/i) as HTMLInputElement).value).toBe('NuovoBrand');
+    });
+
+    it('does NOT wipe local edits when the same doc re-renders with unchanged updatedAt', () => {
+      // Guardia contro la regressione opposta: le modifiche locali bumpano
+      // `logo.updatedAt` (deepSetBuilder); l'effect non deve interpretarle
+      // come "documento esterno più nuovo" e sovrascriverle.
+      const { rerender } = render(
+        <LogoEditor userEmail="user@test.com" initialLogo={logoDoc('logoA', { primaryText: 'Acme' }, '2026-01-01T00:00:00.000Z')} />
+      );
+      fireEvent.change(screen.getByLabelText(/Testo principale/i), { target: { value: 'Acme Modificato' } });
+      // Nuova identità oggetto, stesso id + stesso updatedAt (re-render parent)
+      rerender(
+        <LogoEditor userEmail="user@test.com" initialLogo={logoDoc('logoA', { primaryText: 'Acme' }, '2026-01-01T00:00:00.000Z')} />
+      );
+      expect((screen.getByLabelText(/Testo principale/i) as HTMLInputElement).value).toBe('Acme Modificato');
     });
   });
 });

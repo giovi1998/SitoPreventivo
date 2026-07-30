@@ -85,6 +85,142 @@ describe('dataService documents (local path)', () => {
     expect(documents[0].id).toBe('qr-1');
   });
 
+  describe('getDocuments hydration (regression: draft CRM envelope invisibili in Collection)', () => {
+    // Shape identica a autoBuildCustomer (dataService.js): dominio dentro `data`.
+    const seedCrmDraft = () => {
+      const draft = {
+        id: 'logo_crm1',
+        userEmail: 'user@test.com',
+        customerId: 'cust_pad',
+        documentType: 'logo',
+        title: 'Logo PAD thai',
+        status: 'BOZZA',
+        documentTheme: 'corporate',
+        data: {
+          documentType: 'logo',
+          title: 'Logo PAD thai',
+          builder: { primaryText: 'PAD thai', backgroundImage: 'data:image/png;base64,BG' },
+          briefContext: 'ristorante thai',
+          autoGeneratePending: false,
+        },
+        createdAt: '2026-07-30T00:00:00.000Z',
+        updatedAt: '2026-07-30T00:00:00.000Z',
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify([draft]));
+      return draft;
+    };
+
+    it('appiattisce i draft CRM envelope: builder.backgroundImage leggibile flat', async () => {
+      seedCrmDraft();
+      const { documents } = await dataService.getDocuments('user@test.com');
+      expect(documents).toHaveLength(1);
+      expect(documents[0].builder.backgroundImage).toBe('data:image/png;base64,BG');
+      expect(documents[0].builder.primaryText).toBe('PAD thai');
+    });
+
+    it('preserva customerId/status/documentTheme dai draft envelope', async () => {
+      seedCrmDraft();
+      const { documents } = await dataService.getDocuments('user@test.com');
+      expect(documents[0].customerId).toBe('cust_pad');
+      expect(documents[0].status).toBe('BOZZA');
+      expect(documents[0].documentTheme).toBe('corporate');
+    });
+
+    it('doc flat da editor passa invariato', async () => {
+      const flatLogo = {
+        id: 'logo_flat',
+        userEmail: 'user@test.com',
+        documentType: 'logo',
+        title: 'Logo flat',
+        customerId: 'cust_9',
+        status: 'BOZZA',
+        builder: { primaryText: 'Flat', backgroundImage: 'data:image/png;base64,FLAT' },
+        createdAt: '2026-07-30T00:00:00.000Z',
+        updatedAt: '2026-07-30T00:00:00.000Z',
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify([flatLogo]));
+      const { documents } = await dataService.getDocuments('user@test.com');
+      expect(documents[0]).toMatchObject({
+        id: 'logo_flat',
+        customerId: 'cust_9',
+        builder: { primaryText: 'Flat', backgroundImage: 'data:image/png;base64,FLAT' },
+      });
+    });
+
+    it('doc QR flat con style passa invariato (no ramo qrCode su dati flat)', async () => {
+      const qr = { ...createGiovanniQrTemplate(), id: 'qr-flat', userEmail: 'user@test.com' };
+      await dataService.saveDocument('user@test.com', qr);
+      const { documents } = await dataService.getDocuments('user@test.com');
+      expect(documents[0].id).toBe('qr-flat');
+      expect(documents[0].documentType).toBe('qrCode');
+      expect(documents[0].style).toEqual(qr.style);
+    });
+  });
+
+  describe('storage canonico flat per logo/card/flyer (regression doppio formato)', () => {
+    it('save envelope dopo save flat: niente chiave data, builder NUOVO in storage e in getDocuments', async () => {
+      // (1) save editor precedente: doc FLAT con builder vecchio
+      await dataService.saveDocument('user@test.com', {
+        id: 'logo-mix',
+        documentType: 'logo',
+        title: 'Logo PAD thai',
+        userEmail: 'user@test.com',
+        builder: { primaryText: 'Vecchio', backgroundImage: null },
+      });
+      // (2) save CRM "Genera bozze AI" (saveDraft): ENVELOPE con builder nuovo
+      await dataService.saveDocument('user@test.com', {
+        id: 'logo-mix',
+        documentType: 'logo',
+        title: 'Logo PAD thai',
+        customerId: 'cust_pad',
+        status: 'BOZZA',
+        data: { builder: { primaryText: 'Nuovo', backgroundImage: 'data:image/jpeg;base64,NEW' } },
+      });
+      // (3) il record in storage è flat: niente doppio formato
+      const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      expect(stored).toHaveLength(1);
+      expect(stored[0].data).toBeUndefined();
+      expect(stored[0].builder.backgroundImage).toBe('data:image/jpeg;base64,NEW');
+      expect(stored[0].builder.primaryText).toBe('Nuovo');
+      expect(stored[0].status).toBe('BOZZA');
+      expect(stored[0].customerId).toBe('cust_pad');
+      // getDocuments (CollectionView) vede il builder NUOVO, non quello stale
+      const { documents } = await dataService.getDocuments('user@test.com');
+      expect(documents[0].builder.backgroundImage).toBe('data:image/jpeg;base64,NEW');
+      expect(documents[0].builder.primaryText).toBe('Nuovo');
+    });
+
+    it('QR flat con data payload NON viene spogliato della chiave data', async () => {
+      const qr = { ...createGiovanniQrTemplate(), id: 'qr-data', userEmail: 'user@test.com' };
+      await dataService.saveDocument('user@test.com', qr);
+      const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      expect(stored[0].data).toBeDefined();
+      expect(stored[0].data.type).toBe('url');
+      expect(stored[0].data.payload).toBe(qr.data.payload);
+    });
+
+    it('getCustomer espone lo shim data sui doc flat (CRM legge doc.data.*)', async () => {
+      localStorage.setItem('pq_customers:v1', JSON.stringify([
+        { id: 'cust_shim', businessName: 'Bar Da Mario', status: 'new' },
+      ]));
+      localStorage.setItem(LS_KEY, JSON.stringify([{
+        id: 'logo_shim',
+        userEmail: 'admin@gmail.com',
+        customerId: 'cust_shim',
+        documentType: 'logo',
+        title: 'Logo Bar Da Mario',
+        status: 'BOZZA',
+        autoGeneratePending: true,
+        builder: { primaryText: 'Bar Da Mario', backgroundImage: 'data:image/png;base64,BG' },
+      }]));
+      const res = await dataService.getCustomer('cust_shim');
+      expect(res.data.documents).toHaveLength(1);
+      expect(res.data.documents[0].data.autoGeneratePending).toBe(true);
+      expect(res.data.documents[0].data.builder.primaryText).toBe('Bar Da Mario');
+      expect(res.data.documents[0].data.builder.backgroundImage).toBe('data:image/png;base64,BG');
+    });
+  });
+
   it('deleteDocument removes by id', async () => {
     const qr = { ...createGiovanniQrTemplate(), id: 'qr-1', userEmail: 'user@test.com' };
     await dataService.saveDocument('user@test.com', qr);
@@ -100,6 +236,23 @@ describe('dataService documents (local path)', () => {
     const { documents } = await dataService.getDocuments('user@test.com');
     expect(documents).toHaveLength(1);
     expect(documents[0].userEmail).toBe('user@test.com');
+  });
+
+  it('saveDocument bumps updatedAt on every local save (regression: editor reset effect non scattava su doc risalvato dal CRM)', async () => {
+    const logo = {
+      ...createGiovanniQrTemplate(),
+      id: 'logo-bump',
+      documentType: 'logo',
+      userEmail: 'user@test.com',
+      builder: { primaryText: 'Pad thai', backgroundImage: null },
+    };
+    await dataService.saveDocument('user@test.com', logo);
+    const first = JSON.parse(localStorage.getItem(LS_KEY) || '[]')[0];
+    await new Promise((r) => setTimeout(r, 10));
+    await dataService.saveDocument('user@test.com', { ...logo, builder: { primaryText: 'Pad thai', backgroundImage: 'data:image/png;base64,BG' } });
+    const second = JSON.parse(localStorage.getItem(LS_KEY) || '[]')[0];
+    expect(second.updatedAt).not.toBe(first.updatedAt);
+    expect(second.builder.backgroundImage).toBe('data:image/png;base64,BG');
   });
 
   it('saveDocument returns a structured error when localStorage.setItem fails (QuotaExceeded)', async () => {
@@ -151,7 +304,7 @@ describe('dataService documents (local path)', () => {
       expect(mockCompressDataUrl).toHaveBeenCalledTimes(4);
     });
 
-    it('comprime builder.backgroundImage e content.heroImage dentro data (envelope)', async () => {
+    it('comprime builder.backgroundImage e content.heroImage da payload envelope (appiattito a flat)', async () => {
       const doc = {
         id: 'env-1',
         documentType: 'logo',
@@ -165,8 +318,10 @@ describe('dataService documents (local path)', () => {
       const result = await dataService.saveDocument('user@test.com', doc);
       expect(result.success).toBe(true);
       const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
-      expect(stored[0].data.builder.backgroundImage).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
-      expect(stored[0].data.content.heroImage).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
+      // Storage canonico flat: l'envelope viene appiattito, niente chiave data.
+      expect(stored[0].data).toBeUndefined();
+      expect(stored[0].builder.backgroundImage).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
+      expect(stored[0].content.heroImage).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
     });
 
     it('non tocca immagini piccole o valori non data-URL', async () => {

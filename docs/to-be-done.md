@@ -469,7 +469,29 @@ primi clienti paganti.
   (TB-012), email/WhatsApp notifica (badge basta in v1).
 - **Costo ricorrente**: €0 (Google Form + Apps Script + Neon free).
 - **Effort**: ~20h. **Prereq**: TB-027 CRM (tabelle + flag) per
-  collegare intake a cliente.
+  collegare intake a cliente.\r
+\r
+#### TB-027h Storage locale canonico FLAT logo/card/flyer ✅ COMPLETED 2026-07-30\r
+- **Bug**: CRM "Genera bozze AI" logo — background AI salvato ma Collection\r
+  sempre col logo vecchio. Record localStorage in doppia shape (flat stale\r
+  + envelope fresco), `hydrateDocument` preferiva il flat stale.\r
+- **Fix**: storage IS_LOCAL canonico FLAT per logo/card/flyer\r
+  (`saveDocument` appiattisce + `delete toStore.data`), shim envelope in\r
+  `getCustomer`, draft `autoBuildCustomer` flat, `getDocuments` locale\r
+  idrata come PROD. Dettaglio: `docs/agent-gotchas.md` §23.\r
+- **Perché la card "funzionava" già** (nota, nessuna azione): la preview\r
+  Collection di card/flyer passa per `mergeCardWithDefaults`/\r
+  `mergeFlyerWithDefaults` che tollerano i campi mancanti e renderizzano\r
+  comunque un SVG; inoltre al primo passaggio nell'editor l'auto-save\r
+  risalva flat e "sana" il record. Il logo invece richiede `doc.builder`\r
+  esplicito in `buildPreviewSvg` → preview vuota, bug visibile.\r
+- **Follow-up residui** (🟢 P3, nessuno bloccante):\r
+  - Verifica end-to-end flusso CRM auto-build in PROD (envelope jsonb\r
+    server-side → `hydrateDocument`): atteso OK per costruzione, mai\r
+    provato live dopo TB-027h.\r
+  - Record legacy doppia-shape nel localStorage degli utenti: si sanano\r
+    al primo save; se serve, migrazione one-shot da console (snippet in\r
+    §23) invece di attendere il risalvataggio.
 
 ---
 

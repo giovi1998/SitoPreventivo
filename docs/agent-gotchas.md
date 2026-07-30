@@ -1006,3 +1006,53 @@ Contesto cliente:
   con webData; `src/utils/__tests__/firecrawlLocal.test.js` copre scrape,
   fallback, extract logo/images, knowledge chunks; `CustomerDetail.test.tsx`
   verifica screenshot/JSON/links UI.
+
+## 23. TB-027h — Storage locale canonico FLAT per logo/card/flyer (2026-07-30)
+
+Bug: CRM "Genera bozze AI" logo — il background AI veniva generato e salvato,
+ma la Collection mostrava sempre il logo vecchio ("non si aggiorna mai").
+
+**Causa**: doppia shape nello stesso record localStorage
+(`precisionQuote_documents:v1`). Gli editor salvano FLAT (`builder` top
+level), il CRM `saveDraft` salvava ENVELOPE (`data.builder`). Il merge
+`{...existing, ...document}` in `saveDocument` (IS_LOCAL) non rimuoveva mai
+le chiavi dell'altro formato → record con **flat stale + envelope fresco**.
+`hydrateDocument` (branch `hasFlatDomain`) preferisce il flat → Collection
+(e `getDocument`/editor) leggevano il builder vecchio; il CRM
+(`getCustomer` raw → `doc.data`) quello nuovo. Evidenza dai log debug:
+`flatBuilder: true, envelopeData: true, flatBgLen: 0, envBgLen: 27035`.
+Card/flyer non mostravano il problema in modo evidente perché
+`buildPreviewSvg` usa `mergeCardWithDefaults`/`mergeFlyerWithDefaults`
+(tollerano campi mancanti e renderizzano comunque un SVG) e perché al primo
+passaggio nell'editor l'auto-save risalva flat "sanando" il record; il logo
+invece richiede `doc.builder` esplicito → preview vuota/icona fallback.
+
+**Regole ora in vigore (path IS_LOCAL)**:
+
+- Storage **canonico FLAT** per `logo`/`businessCard`/`flyer`: dominio al
+  top level, **mai** chiave `data`. `saveDocument` appiattisce l'envelope in
+  ingresso (`incoming = {...incoming, ...incoming.data}`) e fa
+  `delete toStore.data` dopo il merge (pulisce anche i record legacy doppi
+  al primo risalvataggio). QR/quote esclusi: i QR locali usano `data`
+  legittimamente (`{type, payload}`).
+- `getCustomer` (IS_LOCAL) ritorna i doc con **shim envelope**
+  `{...d, data: d}` quando `data` manca: `CustomerDetail` e
+  `useAutoBuildGenerate` leggono `doc.data.*` — non rompere questo shim.
+- `autoBuildCustomer` (IS_LOCAL) crea i draft direttamente flat (spread
+  `...d.data` + meta dopo).
+- `getDocuments` (IS_LOCAL) applica `hydrateDocument` come già faceva il
+  path PROD: i record envelope legacy (mai risalvati) vengono comunque
+  appiattiti in lettura. `hydrateDocument` preserva
+  `customerId`/`status`/`documentTheme` nel branch envelope (CollectionView
+  filtra per `status`).
+- Record legacy in doppia forma: si sanano al primo save; in alternativa
+  migrazione manuale da console (spread `...d.data` + meta top-level).
+- PROD invariato: API ritorna envelope jsonb `data`, `hydrateDocument`
+  appiattisce; shim solo nel branch IS_LOCAL.
+- **Mai importare `src/utils/logger.ts` da `dataService.js`**: alcuni test
+  (`TierLimitModal.test.tsx`) caricano dataService via `require()` CJS e la
+  risoluzione extensionless di `./logger` fallisce. Per log debug temporanei
+  in dataService usare `console.*` e rimuoverli a fine diagnosi.
+- **Test**: `dataService.documents.test.ts` describe "storage canonico flat"
+  (regression doppio formato, QR intatto, shim getCustomer) + "getDocuments
+  hydration"; `dataService.autoBuildLocal.test.ts` attese flat.

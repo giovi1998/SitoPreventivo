@@ -110,15 +110,27 @@ describe('useDocumentLoader', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/app/card/new', { replace: true });
   });
 
-  it('onReset clears context doc and navigates to root', async () => {
-    mocks.params.docId = 'card-1';
-    const setCardDocument = vi.fn();
-    const ctx = { cardDocument: { id: 'card-1' }, setCardDocument };
-    const { result } = renderHook(() => useDocumentLoader({ view: 'card', documentType: 'businessCard', contextField: 'cardDocument' }), { wrapper: wrapper('/app/card/card-1', ctx) });
-    await act(async () => {
-      result.current.onReset();
-    });
-    expect(setCardDocument).toHaveBeenCalledWith(null);
-    expect(mocks.navigate).toHaveBeenCalledWith('/app/card', { replace: true });
+  it('returns fresh copy when ctx has stale doc (regression: editor apre versione vecchia senza background AI)', async () => {
+    mocks.params.docId = 'logo-1';
+    const stale = { id: 'logo-1', documentType: 'logo', builder: { primaryText: 'Pad thai' } };
+    const fresh = { id: 'logo-1', documentType: 'logo', builder: { primaryText: 'Pad thai', backgroundImage: 'data:image/png;base64,BG' } };
+    getDocumentSpy.mockResolvedValueOnce(fresh);
+    const setLogoDocument = vi.fn();
+    const ctx = { logoDocument: stale, setLogoDocument };
+    const { result } = renderHook(() => useDocumentLoader({ view: 'logo', documentType: 'logo', contextField: 'logoDocument' }), { wrapper: wrapper('/app/logo/logo-1', ctx) });
+    // Espone subito lo stale (per UX), poi lo sostituisce con il fetch
+    expect(result.current.initialDoc).toBe(stale);
+    await waitFor(() => expect(getDocumentSpy).toHaveBeenCalledWith('u@t.com', 'logo-1', 'logo'));
+    await waitFor(() => expect(setLogoDocument).toHaveBeenCalledWith(fresh));
+    // Dopo il fetch, initialDoc è la versione fresca
+    await waitFor(() => expect(result.current.initialDoc).toBe(fresh));
+  });
+
+  it('fetch di default ritorna null per documento non trovato', async () => {
+    mocks.params.docId = 'missing';
+    getDocumentSpy.mockResolvedValueOnce(null);
+    const ctx = { logoDocument: null, setLogoDocument: vi.fn() };
+    renderHook(() => useDocumentLoader({ view: 'logo', documentType: 'logo', contextField: 'logoDocument' }), { wrapper: wrapper('/app/logo/missing', ctx) });
+    await waitFor(() => expect(getDocumentSpy).toHaveBeenCalled());
   });
 });
