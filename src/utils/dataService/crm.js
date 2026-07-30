@@ -18,8 +18,10 @@ export function createCrmMethods(svc) {
         const filtered = status ? all.filter((c) => c.status === status) : all;
         return { data: filtered.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)) };
       }
-      const q = status ? `?status=${encodeURIComponent(status)}` : '';
-      return api('GET', `/customers${q}&adminEmail=${encodeURIComponent('admin@gmail.com')}`);
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      params.set('adminEmail', 'admin@gmail.com');
+      return api('GET', `/customers?${params}`);
     },
 
     async createCustomer(payload) {
@@ -352,8 +354,10 @@ export function createCrmMethods(svc) {
         const filtered = status ? all.filter((i) => i.status === status) : all;
         return { data: filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) };
       }
-      const q = status ? `?status=${encodeURIComponent(status)}` : '';
-      return api('GET', `/intakes${q}&adminEmail=${encodeURIComponent('admin@gmail.com')}`);
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      params.set('adminEmail', 'admin@gmail.com');
+      return api('GET', `/intakes?${params}`);
     },
 
     async getIntake(id) {
