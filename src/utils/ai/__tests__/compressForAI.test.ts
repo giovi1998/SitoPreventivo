@@ -86,3 +86,59 @@ describe('compressForAI', () => {
     await expect(compressForAI(longInvalid, 100, 512)).rejects.toThrow();
   });
 });
+
+describe('inlineSvgExternalImages (tainted canvas regression)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns the SVG unchanged when there are no external images', async () => {
+    const { inlineSvgExternalImages } = await import('../compressForAI');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const svg = '<svg><image href="data:image/png;base64,AAAA" width="10" height="10"/></svg>';
+    expect(await inlineSvgExternalImages(svg)).toBe(svg);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('inlines http(s) image hrefs as data URLs (canvas stays untainted)', async () => {
+    const { inlineSvgExternalImages } = await import('../compressForAI');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob(['fake'], { type: 'image/png' })),
+    }));
+    const svg = '<svg><image href="https://example.com/hero.png" width="10" height="10"/><text>hi</text></svg>';
+    const result = await inlineSvgExternalImages(svg);
+    expect(result).not.toContain('https://example.com/hero.png');
+    expect(result).toMatch(/<image href="data:image\/png;base64,/);
+    expect(result).toContain('<text>hi</text>');
+  });
+
+  it('handles xlink:href external references', async () => {
+    const { inlineSvgExternalImages } = await import('../compressForAI');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob(['fake'], { type: 'image/jpeg' })),
+    }));
+    const svg = '<svg><image xlink:href="https://example.com/a.jpg" width="5" height="5"/></svg>';
+    const result = await inlineSvgExternalImages(svg);
+    expect(result).not.toContain('https://example.com/a.jpg');
+    expect(result).toContain('data:image/jpeg;base64,');
+  });
+
+  it('drops images that cannot be fetched instead of failing', async () => {
+    const { inlineSvgExternalImages } = await import('../compressForAI');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('CORS blocked')));
+    const svg = '<svg><image href="https://example.com/no-cors.png" width="10" height="10"/><rect width="10" height="10"/></svg>';
+    const result = await inlineSvgExternalImages(svg);
+    expect(result).not.toContain('<image');
+    expect(result).toContain('<rect width="10" height="10"/>');
+  });
+
+  it('drops images on non-ok HTTP responses', async () => {
+    const { inlineSvgExternalImages } = await import('../compressForAI');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403, blob: () => Promise.resolve(new Blob()) }));
+    const svg = '<svg><image href="https://example.com/403.png"/></svg>';
+    expect(await inlineSvgExternalImages(svg)).toBe('<svg></svg>');
+  });
+});

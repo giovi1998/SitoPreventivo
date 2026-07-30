@@ -78,10 +78,10 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/utils/watermark.ts` | Tier-aware watermark (free vs unlocked) |
 | `src/utils/aiStats.ts` | TB-026: per-document AI cost tracker (aiStats: totalCostUsd + calls breakdown) + `withAiCall`, `incrementAiStats`, `formatAiStatsCompact` |
 | `src/components/DocumentAiStats.tsx` | TB-026: widget riusabile "🤖 3 icone · 2 elaborazioni · $0.08" per editor e Collection |
-| `src/utils/documentSchemas.ts` | Zod schemas: quote, QR, businessCard, cardGrid, logo, flyer, presets (+ opzionale `aiStats` per-document TB-026) |
+| `src/utils/documentSchemas.ts` | Facade sottile → `src/utils/schemas/` (split per tipo: `shared`, `qr`, `card` incl. cardGrid + grid preset, `logo`, `flyer`, `social`). Zod schemas + `createEmpty*` + `mergeWithDefaults` (+ opzionale `aiStats` per-document TB-026). API pubblica invariata |
 | `src/utils/gridUtils.ts` | Grid collision helpers (BLOCK su sovrapposizione) |
 | `db/schema.ts` | Drizzle schema (users, documents, user_settings, unlock_codes, **customers** TB-027, **intakes** TB-019) |
-| `src/utils/dataService.js` | Data layer: API o localStorage (+ metodi customers/intakes/config TB-027/019) |
+| `src/utils/dataService.js` | Facade → `dataService/` (core, auth, documents, settings, ai, crm, images — solo `.js`, vincolo CJS §23). Data layer: API o localStorage (+ customers/intakes/config TB-027/019) |
 | `src/utils/intakeToDocument.ts` | TB-019: mapping brief intake → draft document data (logo/card/flyer/social), shape allineata a createEmpty*() |
 | `src/components/crm/` | TB-027 CRM UI: `CustomerList`, `CustomerDetail`, `IntakeList` + `crm.css` |
 | `src/ai/PaletteOrchestrator.ts` | TB-027 B5: 3 palette AI suggerite (DeepSeek JSON, paletteConceptsSchema) |
@@ -249,9 +249,10 @@ calibrate in `geometry.ts`; `GLYPH_HEIGHT_FACTOR=1.15`;
 
 Fasi 0-10 (Phase 7 polish done; Volantino/Phase 3 done), 12-15 completate.
 Phase 11 (flyer refactor/Volantino) parziale: gap test matrix. Spec attivi in
-`spec/`: flyer refactor (TB-007),
-`spec-api-saas-monetization.md`. Issue aperti: `docs/post-tb023-known-issues.md`.
-Verifica TB-023: `docs/tb023-verification.md`. TB-024 (logo export
+`docs/spec/`: flyer refactor (TB-007),
+`spec-api-saas-monetization.md`. (`docs/post-tb023-known-issues.md` e
+`docs/tb023-verification.md` eliminati 2026-07-30, recuperabili in git
+history.) TB-024 (logo export
 multi-formato) ✅ completed 2026-07-27 — vedi `docs/agent-gotchas.md` §14.
 TB-025 (Collection preview SVG inline logo/card/flyer/quote) ✅ completed
 2026-07-27 — vedi `docs/agent-gotchas.md` §15. TB-026 (cost tracker
@@ -270,10 +271,20 @@ logo/card/flyer, fix Collection non aggiornata dopo "Genera bozze AI")
 
 ## TODO (prossimi task)
 
-Kanban in due file: **[to-be-done.md](to-be-done.md)** (da fare, backlog
-tecnico e business) e **[docs/done.md](docs/done.md)** (completati, con
-date e riferimenti ai gotchas). Questo file resta focalizzato su
+Kanban in due file: **[docs/to-be-done.md](docs/to-be-done.md)** (da fare,
+backlog tecnico e business) e **[docs/done.md](docs/done.md)** (completati,
+con date e riferimenti ai gotchas). Questo file resta focalizzato su
 architettura e convenzioni.
+
+**Regola kanban (OBBLIGATORIA)**: quando completi un task presente in
+`docs/to-be-done.md`, rimuovilo da lì e aggiungilo a `docs/done.md` con
+data di completamento (stessa sessione, stesso commit). Mai lasciare
+task completati spuntati in to-be-done.
+
+**Struttura docs (2026-07-30)**: documenti in `docs/` (inclusi
+`AI_ARCHITECTURE.md`, `to-be-done.md`, `done.md`), spec attivi in
+`docs/spec/`. Root solo: `AGENTS.md`, `README.md`, `DESIGN.md`,
+`REQUIREMENTS.md`.
 
 ## Responsive Patterns
 
@@ -409,7 +420,7 @@ Hook installati via `husky` 9 (`.husky/`), attivi dopo `npm install`
 |------|--------|---------|--------|
 | `pre-commit` | `git commit` | `scripts/check-api-imports.mjs` (serverless import safety, gotcha §1) + `lint-staged` (vitest related su file staged + check api/ su `api/**/*.ts`) | <30s |
 | `pre-push` | `git push` | `npm run typecheck` + `npm run test` + `npm run build` (full gate, intercetta ERR_MODULE_NOT_FOUND pre-Vercel) | ~1-3min |
-| `post-commit` | dopo `git commit` | `scripts/docs-sync-check.mjs HEAD~1..HEAD` — reminder non bloccante se `src/`/`api/`/`db/` cambiati ma `docs/`/`spec/`/`README.md`/`AGENTS.md` no | <1s |
+| `post-commit` | dopo `git commit` | `scripts/docs-sync-check.mjs HEAD~1..HEAD` — reminder non bloccante se `src/`/`api/`/`db/` cambiati ma `docs/` (incl. `docs/spec/`)/`README.md`/`AGENTS.md` no | <1s |
 
 E2E gate (manuale, non in pre-push perché lento ~5-10min):
 
@@ -467,7 +478,7 @@ On-demand (solo se il task lo richiede): `deploy-to-vercel`,
 `muapi-nano-banana` (prompt `imagePrompt` AI), `imagegen-frontend-*`,
 `redesign-existing-projects`, `brandkit`, `image-to-code`,
 `playwright-cli` (debug E2E), `full-output-enforcement` (output lungo),
-`create-specification` (nuove spec in `spec/`), `frontend-design`,
+`create-specification` (nuove spec in `docs/spec/`), `frontend-design`,
 `minimalist-ui`, `industrial-brutalist-ui`, `stitch-design-taste`, ecc.
 
 Le skill sono **solo per l'agente di coding**, non per l'app: l'app usa

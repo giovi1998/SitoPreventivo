@@ -1,6 +1,6 @@
 # To Be Done — Quickbrand
 
-Colonna "To do" della kanban. Completati → **[docs/done.md](docs/done.md)**.
+Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ## 🔴 Da fare (prodotto)
 
@@ -16,6 +16,9 @@ Colonna "To do" della kanban. Completati → **[docs/done.md](docs/done.md)**.
 - [ ] **Miglioria caricamento immagine logo in clienti**: preview persistente
   anche dopo navigazione, compressione ottimale, opzione "usa questo logo
   ovunque" (card/flyer/logo).
+- [ ] **Google Form intake operativo**: creare il Google Form + Apps
+  Script webhook → `/api/intake` (guida pronta: `intake-google-form-setup.md`).
+  Senza questo la pipeline intake → CRM non ha porta di ingresso reale.
 - [ ] **TB-027h follow-up**: verifica end-to-end flusso CRM auto-build in
   PROD (envelope jsonb → `hydrateDocument`, mai provato live). Record
   legacy doppia-shape in localStorage: si sanano al primo save; se serve,
@@ -26,12 +29,6 @@ Colonna "To do" della kanban. Completati → **[docs/done.md](docs/done.md)**.
 
 ## 🟡 Debito tecnico / refactor
 
-- [ ] **`dataService.js` (1322 righe)**: 4 domini (auth / documenti /
-  CRM-intakes / image compression) in un file, 44 branch `IS_LOCAL`.
-  Split in moduli `.js` (vincolo test CJS, gotchas §23) + helper
-  `localOrApi`. Facade per non toccare gli import.
-- [ ] **`documentSchemas.ts` (1315 righe)**: 6 tipi documento in un file.
-  Split per tipo in `schemas/` (card + grid preset separati), facade.
 - [ ] **`CardEditorShell.tsx` (~1170 righe)**: god component. Estrarre
   hook `useCardAiImages` + `useCardPromptLibrary`; target <600 righe.
 - [ ] **`CustomerDetail.tsx` (~840 righe)**: estrarre research/webData
@@ -41,7 +38,7 @@ Colonna "To do" della kanban. Completati → **[docs/done.md](docs/done.md)**.
 - [ ] **Componenti flyer orfani** (`FlyerContentFields`, `FlyerExportActions`,
   `FlyerFormatControls`, `FlyerLayoutControls`, `FlyerTemplatePicker`):
   nessun import — sono il layout previsto dallo spec TB-007
-  (`spec-design-flyer-refactor-preview-ai.md`). Cablare o cancellare
+  (`spec/spec-design-flyer-refactor-preview-ai.md`). Cablare o cancellare
   quando lo spec evolve.
 - [ ] **Test harness** (da vecchia gap analysis):
   - fixture builders e2e condivisi (`e2e/fixtures/`: giovanniTemplate,
@@ -54,7 +51,7 @@ Colonna "To do" della kanban. Completati → **[docs/done.md](docs/done.md)**.
 - [ ] **TB-010** Estensioni `cardHarness` e2e (verifica copertura
   `parseCardSvg` sugli 8 file e2e).
 
-## 🟢 Backlog business (da `docs/business-plan.md`)
+## 🟢 Backlog business (da `business-plan.md`)
 
 Ordine: validazione → portfolio → monetizzazione.
 
@@ -64,7 +61,7 @@ Ordine: validazione → portfolio → monetizzazione.
 - [ ] **TB-018** Portfolio 5 esempi settore (8-10h) — DEFERRED, trigger:
   1 cliente reale in outreach.
 - [ ] **TB-011** Stripe Checkout + subscription Pro (spec parziale in
-  `spec-api-saas-monetization.md`; trigger: 15+ transazioni/mese).
+  `spec/spec-api-saas-monetization.md`; trigger: 15+ transazioni/mese).
 - [ ] **TB-012** Landing page generator interno (~40h step 2: da flyer →
   HTML statico → ZIP; NO builder self-service). Step 3 (publish 1-click
   `nome.quickbrand.it` via Vercel API, ~80h) solo dopo 5+ siti/mese.
@@ -99,6 +96,7 @@ Ordine: validazione → portfolio → monetizzazione.
 
 ---
 
-Storico dettagliato dei task completati: `docs/done.md` +
-`docs/agent-gotchas.md`. Il vecchio `docs/to-be-done.md` (gap analysis
-2026-07-18) resta recuperabile in git history (`git show HEAD:docs/to-be-done.md`).
+Storico dettagliato dei task completati: `done.md` +
+`agent-gotchas.md`. Il vecchio `docs/to-be-done.md` (gap analysis
+2026-07-18, cancellato nel refactor 2026-07-30) resta recuperabile in git
+history: `git show c61b66d:docs/to-be-done.md`.

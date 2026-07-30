@@ -543,12 +543,8 @@ SitoPreventivo/
 ├── vite.config.ts             # Porta 8000, React plugin
 ├── vercel.json                # SPA rewrites + API routing
 ├── AGENTS.md                  # Convenzioni progetto, regole test, lezioni apprese
-├── spec/                      # Specifiche di fase
-│   ├── spec-process-phase0-autosave-fix.md
-│   ├── spec-tool-phase1-qr-code.md
-│   ├── spec-design-phase2-business-card.md
-│   ├── spec-tool-phase4-logo-builder.md  # ← fase corrente
-│   └── ...
+├── docs/                      # Docs interni (gotchas, business plan, kanban done/to-do, AI_ARCHITECTURE)
+│   └── spec/                  # Specifiche di fase attive
 ├── drizzle.config.ts          # Drizzle ORM config
 ├── drizzle/                   # Migrazioni database
 ├── api/

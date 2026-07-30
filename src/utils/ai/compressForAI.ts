@@ -220,6 +220,10 @@ export async function pngUint8ArrayToJpegDataUrl(
  * as a JPEG. If the export exceeds targetBytes, it is re-compressed
  * by the shared pipeline.
  *
+ * External http(s) `<image>` references are inlined first: a
+ * cross-origin image would taint the canvas and make the export fail
+ * with a SecurityError (flyer hero with a remote image URL).
+ *
  * @param svg the SVG markup
  * @param targetBytes target byte size
  * @param maxLongSide maximum long side in pixels
@@ -232,7 +236,8 @@ export async function svgToJpegDataUrlForAI(
   if (typeof Blob === 'undefined' || typeof URL === 'undefined' || typeof document === 'undefined') {
     throw new Error('Ambiente browser richiesto per svgToJpegDataUrlForAI');
   }
-  const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  const inlined = await inlineSvgExternalImages(svg);
+  const blob = new Blob([inlined], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   try {
     const dataUrl = await imageToJpegDataUrl(url, maxLongSide);
@@ -240,6 +245,50 @@ export async function svgToJpegDataUrlForAI(
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/**
+ * Replaces http(s) `href`s of `<image>` tags in an SVG with fetched
+ * data URLs. Cross-origin images drawn from an SVG taint the canvas
+ * and block `toBlob`/`toDataURL` with a SecurityError; inlining them
+ * keeps the canvas clean. Images that cannot be fetched (CORS,
+ * network error) are dropped — the rest of the SVG still renders.
+ */
+export async function inlineSvgExternalImages(svg: string): Promise<string> {
+  const imageTagRe = /<image\b[^>]*?(?:\/>|>\s*<\/image>)/g;
+  const hrefRe = /(?:xlink:)?href="(https?:\/\/[^"]+)"/;
+  const tags = svg.match(imageTagRe);
+  if (!tags) return svg;
+  const urls = [...new Set(tags.map((tag) => tag.match(hrefRe)?.[1]).filter((u): u is string => Boolean(u)))];
+  if (urls.length === 0) return svg;
+
+  const fetched = new Map<string, string | null>();
+  await Promise.all(urls.map(async (url) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      fetched.set(url, await blobToDataUrl(blob));
+    } catch {
+      fetched.set(url, null);
+    }
+  }));
+
+  return svg.replace(imageTagRe, (tag) => {
+    const url = tag.match(hrefRe)?.[1];
+    if (!url) return tag;
+    const dataUrl = fetched.get(url);
+    return dataUrl == null ? '' : tag.replace(url, dataUrl);
+  });
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error('FileReader error'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 /** Loads any image URL (blob or http) into a canvas and returns a JPEG data URL at the target long side. */

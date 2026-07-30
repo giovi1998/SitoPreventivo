@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Docs sync reminder: warn when src/ or api/ changed but docs/ + spec/ + README
+// Docs sync reminder: warn when src/ or api/ changed but docs/ + README
 // were not touched in the same commit range. Non-blocking (exit 0 always),
-// pure nudge to keep AGENTS.md/docs/agent-gotchas.md/spec/ in sync.
+// pure nudge to keep AGENTS.md/docs/agent-gotchas.md/docs/spec/ in sync.
 //
 // Usage: node scripts/docs-sync-check.mjs [base..head]
 // Default: HEAD~1..HEAD (last commit).
@@ -24,11 +24,11 @@ function changed(range) {
 
 const files = changed(range);
 const code = files.filter(f => f.startsWith('src/') || f.startsWith('api/') || f.startsWith('db/'));
-const docs = files.filter(f => f.startsWith('docs/') || f.startsWith('spec/') || f === 'README.md' || f === 'AGENTS.md');
+const docs = files.filter(f => f.startsWith('docs/') || f === 'README.md' || f === 'AGENTS.md');
 
 if (code.length === 0) process.exit(0);
 
-const touchedSpecOrGotchas = docs.some(f => f.includes('agent-gotchas') || f.startsWith('spec/'));
+const touchedSpecOrGotchas = docs.some(f => f.includes('agent-gotchas') || f.startsWith('docs/spec/'));
 const stale = code.length > 0 && docs.length === 0;
 
 if (stale || (code.length > 0 && !touchedSpecOrGotchas)) {
@@ -36,7 +36,7 @@ if (stale || (code.length > 0 && !touchedSpecOrGotchas)) {
   console.warn('  Code: ' + code.slice(0, 5).join(', ') + (code.length > 5 ? ' ...' : ''));
   console.warn('  Consider updating:');
   console.warn('    - docs/agent-gotchas.md (module-specific rules)');
-  console.warn('    - spec/  (active specs)');
+  console.warn('    - docs/spec/  (active specs)');
   console.warn('    - README.md / AGENTS.md (public surface)');
   console.warn('');
 }

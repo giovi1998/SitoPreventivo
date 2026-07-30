@@ -314,6 +314,14 @@ threshold 0.35→0.30 per lo shrink da padding+gap.
 
 Violare queste regole reintroduce overflow del testo fuori dai box.
 
+0. **Canvas tainted con immagini remote**: se l'SVG del flyer contiene
+   `<image href="https://...">` (hero da URL esterna), il raster su canvas
+   contamina il canvas → `toBlob`/`toDataURL` lancia `SecurityError` e lo
+   screenshot AI salta (fallback text-only). Fix centralizzato:
+   `inlineSvgExternalImages` in `src/utils/ai/compressForAI.ts` — inline
+   fetch → data URL prima di rasterizzare, drop dell'immagine se il fetch
+   fallisce. Vale per OGNI pipeline SVG→canvas→AI.
+
 1. **Unità `font-size` in SVG con viewBox in mm**: `font-size="8.5pt"` o
    `"3mm"` vengono convertiti in px a 96dpi e interpretati come user unit
    (= mm) → font ~3.78× troppo grande. Fix: **unitless**,
@@ -364,7 +372,7 @@ Issue aperti (scope minore):
 
 ## 9. Post-TB-023 known issues
 
-Dettagli in `docs/post-tb023-known-issues.md`. Stato: fixati cover PNG
+Dettagli in `docs/post-tb023-known-issues.md` (eliminato 2026-07-30, in git history). Stato: fixati cover PNG
 export, wash opacity retro, icona AI pixelata, header CONTATTI stacking
 (`position:relative; z-index:2` su `.card-back-header`). Aperti:
 - Log image preview persa al refresh (by design, QuotaExceeded).
@@ -373,7 +381,7 @@ export, wash opacity retro, icona AI pixelata, header CONTATTI stacking
 
 ## 10. Phase status & roadmap (storico completo)
 
-Spec attivi in `spec/`: `spec-design-flyer-refactor-preview-ai.md`
+Spec attivi in `docs/spec/`: `spec-design-flyer-refactor-preview-ai.md`
 (Phase 11, solo gap test TB-007), `spec-api-saas-monetization.md`
 (NOT-STARTED), `spec-intake-pipeline.md` (TB-019, NOT-STARTED). Gli spec
 implementati sono cancellati dopo verifica (traccia in git history +
@@ -397,7 +405,7 @@ implementati sono cancellati dopo verifica (traccia in git history +
 | 12, AI Observability | ✅ | `useAILogs` condiviso, fix `trackUsage`, `IMAGE_TOKEN_COST`, `X-Request-Id` end-to-end, log server JSON, rate limit ghost fix, `pq_ai_logs:v1`. 6 hook AI migrati. |
 | 13, Design System & UX | ✅ | Token "The Classic" + ghost in `GlobalStyles :root`, purge teal/blu (`designTokens.test.ts`), Outfit/Inter/JetBrains Mono, font picker lazy, kit `ai-ui/ai-ui.css`, ToastProvider, sidebar gruppi + collapsed in `pq_ui:v1`, `BP_SHELL=768`/`BP_WORKSPACE=1024`, `AILogPanel` prop `theme`, copy AI-first, unlock `QB-` (PQ- legacy validi), HomePage AIDA + bento, `ActionBar` (logo+QR). Deviazioni: token esistenti non rimappati; breakpoint storici migrati progressivamente; card/flyer/quote mantengono cluster azioni. |
 | 14, AI Console & AI-first | ✅ | `AIConsole` rail (collapse per editorKind, suggestedPrompt+focus, hidePrompt, quickActions, AIProviderBadge). Migrati social/flyer/card/quote. Onboarding AI-first. Deviazioni: logo mantiene tab Builder/AI top-level (tab default `ai` su logo vuoto); QR resta manuale (eccezione documentata); mobile mantiene bottom sheet/overlay. |
-| 15, AI Harness Upgrade (TB-023) | ✅ | Spec `spec/spec-design-ai-harness-upgrade.md`. Multi-provider (Ollama Pro + DeepSeek), badge provider menu (apre verso il basso, fix clipping), tracking costi, 5 pattern decorativi SVG preview+export, generic `placement`, Icona AI card, dev-proxy `/api/ai/chat(/stream)` + `/api/ai/image-flash`. **A/B provider rimosso deliberatamente** (commit `15aa0d5`): `resolveProviderId` è solo resolver modelId→pref→default. **Bottone "Analizza preview" rimosso deliberatamente**: `/api/ai/design-review` + `useAIDesignReview` restano orfani (vedi `docs/post-tb023-known-issues.md`). **v2.16**: screenshot preview allegato ai log e inviato al modello vision-enabled tramite `data-*-preview` + `captureElementAsBase64`; `imagePreviewBase64` nel dettaglio log; `hasImage`/`modelId`/`costUsd` propagati. Verifica completa 2026-07-22: `docs/tb023-verification.md`. |
+| 15, AI Harness Upgrade (TB-023) | ✅ | Spec `spec/spec-design-ai-harness-upgrade.md`. Multi-provider (Ollama Pro + DeepSeek), badge provider menu (apre verso il basso, fix clipping), tracking costi, 5 pattern decorativi SVG preview+export, generic `placement`, Icona AI card, dev-proxy `/api/ai/chat(/stream)` + `/api/ai/image-flash`. **A/B provider rimosso deliberatamente** (commit `15aa0d5`): `resolveProviderId` è solo resolver modelId→pref→default. **Bottone "Analizza preview" rimosso deliberatamente**: `/api/ai/design-review` + `useAIDesignReview` restano orfani (vedi `docs/post-tb023-known-issues.md`, eliminato 2026-07-30, in git history). **v2.16**: screenshot preview allegato ai log e inviato al modello vision-enabled tramite `data-*-preview` + `captureElementAsBase64`; `imagePreviewBase64` nel dettaglio log; `hasImage`/`modelId`/`costUsd` propagati. Verifica completa 2026-07-22: `docs/tb023-verification.md` (eliminato 2026-07-30, in git history). |
 
 ## 11. Notes su skill e scope AI (storico)
 
@@ -641,8 +649,8 @@ essere editor multi-utente con signup pubblica → diventa CRM founder-only.
 Codice signup/onboarding **conservato** dietro feature flag
 `REGISTRATION_ENABLED` (default `false`).
 
-**Spec**: `spec/spec-architecture-crm-auto-build.md` (TB-027),
-`spec/spec-intake-pipeline.md` (TB-019, riposizionato come prereq CRM).
+**Spec**: `docs/spec/spec-architecture-crm-auto-build.md` (TB-027),
+`docs/spec/spec-intake-pipeline.md` (TB-019, riposizionato come prereq CRM).
 
 ### TB-027 CRM
 
