@@ -27,33 +27,6 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   dashboard Google AI Studio / GCP billing al primo volume produttivo
   (i `perImage` in `providerPricing.ts` sono stime conservative). No codice.
 
-## 🟡 Debito tecnico / refactor
-
-- [ ] **`CardEditorShell.tsx` (1121 righe, era 1281)**: god component.
-  Fatti: hook `useCardPromptLibrary` + `useCardAiImages` (2026-07-30).
-  Restano da estrarre: grid handlers (~155 righe) → `useCardGridEditor`,
-  services/socials/decorations (~90) → `useCardBackContent`, save/auto-save
-  (~125) → `useCardAutoSave`, `formContent` → `<CardFormSections>`.
-- [ ] **`CustomerDetail.tsx` (~840 righe)**: estrarre research/webData
-  panel e log helpers in sub-componenti/hook.
-- [ ] **`LogoAiPanel.tsx` (~520 righe)**: estrarre `ConceptCard` e
-  persistenza stato in file propri.
-- [ ] **Componenti flyer orfani** (`FlyerContentFields`, `FlyerExportActions`,
-  `FlyerFormatControls`, `FlyerLayoutControls`, `FlyerTemplatePicker`):
-  nessun import — sono il layout previsto dallo spec TB-007
-  (`spec/spec-design-flyer-refactor-preview-ai.md`). Cablare o cancellare
-  quando lo spec evolve.
-- [ ] **Test harness** (da vecchia gap analysis):
-  - fixture builders e2e condivisi (`e2e/fixtures/`: giovanniTemplate,
-    sampleFlyer, sampleQuote, adminUser/freeUser/unlockedUser);
-  - `api/__tests__/setup.ts` comune (mock Drizzle standardizzati);
-  - mock provider centralizzato in `src/ai/__mocks__/` (`createMockProvider`);
-  - reset globale chiavi localStorage in `beforeEach` (`test:db`);
-  - coverage `--coverage` in `npm run test` + threshold 60% su `src/`;
-  - script `test:e2e:ci` (playwright seriale `--workers=1`) in package.json.
-- [ ] **TB-010** Estensioni `cardHarness` e2e (verifica copertura
-  `parseCardSvg` sugli 8 file e2e).
-
 ## 🟢 Backlog business (da `business-plan.md`)
 
 Ordine: validazione → portfolio → monetizzazione.

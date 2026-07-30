@@ -7,7 +7,9 @@ npm run dev          # Dev server: Vite (port 8000)
 npm run build        # Production build → dist/
 npm run test         # Run tests (vitest)
 npm run test:watch   # Watch mode
+npm run test:coverage # Vitest + coverage v8 (thresholds in vitest.config.ts)
 npm run test:e2e     # Playwright
+npm run test:e2e:ci  # Playwright seriale (--workers=1)
 npm run typecheck    # tsc --noEmit
 npm run db:generate  # Generate Drizzle migration
 npm run db:migrate   # Apply migrations to Neon
@@ -83,7 +85,8 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `db/schema.ts` | Drizzle schema (users, documents, user_settings, unlock_codes, **customers** TB-027, **intakes** TB-019) |
 | `src/utils/dataService.js` | Facade → `dataService/` (core, auth, documents, settings, ai, crm, images — solo `.js`, vincolo CJS §23). Data layer: API o localStorage (+ customers/intakes/config TB-027/019) |
 | `src/utils/intakeToDocument.ts` | TB-019: mapping brief intake → draft document data (logo/card/flyer/social), shape allineata a createEmpty*() |
-| `src/components/crm/` | TB-027 CRM UI: `CustomerList`, `CustomerDetail`, `IntakeList` + `crm.css` |
+| `src/components/crm/` | TB-027 CRM UI: `CustomerList`, `CustomerDetail`, `IntakeList` + sub-panel `CustomerAiLogPanel`/`CustomerResearchSection`/`CustomerWebDataPanel` + `crm.css` |
+| `src/hooks/useCustomerLogger.ts` | Log AI CRM: stato + persistenza sessionStorage (estratto da CustomerDetail) |
 | `src/ai/PaletteOrchestrator.ts` | TB-027 B5: 3 palette AI suggerite (DeepSeek JSON, paletteConceptsSchema) |
 | `src/hooks/useAIPalette.ts` | TB-027 B5: hook palette generation |
 | `src/utils/palettePreview.ts` | TB-027 B5: SVG swatch card preview palette (zero costo AI) |
@@ -105,6 +108,13 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/CollectionView.tsx` | Collection griglia documenti: tab, filtri, ricerca, preview SVG inline (logo/card/flyer/quote), export ZIP |
 | `src/hooks/useAI*.ts` | Hook AI: useAI, useAICard, useAIFlyer, useAILogo, useAISocial, useAIOnboarding |
 | `src/hooks/useCard{PromptLibrary,AiImages}.ts` | Hook estratti da CardEditorShell: prompt library (photo/icon/cover) e generazione immagini AI (cover/photo/icona, CON-IS-001) |
+| `src/hooks/useCard{GridEditor,BackContent,AutoSave}.ts` | Hook estratti da CardEditorShell batch 2: grid state+handlers, services/socials/decorations retro, save/auto-save 30s (+ `cardHasContent`, `defaultCardTitle`). Shell 658 righe |
+| `src/components/card/form/CardFormSections.tsx` | `formContent` estratto dalla shell: compone le sezioni `form/` via barrel |
+| `src/components/logo/ConceptCard.tsx` | Card concept logo AI (preview+bg, badge "AI bg ✓", rigenera) estratta da LogoAiPanel |
+| `src/utils/logo/logoAiPersistence.ts` | Persistenza chat logo AI: `storageKeyFor(docId)`, TTL 24h, quota fallback senza bgImages |
+| `e2e/fixtures/` | Fixture e2e condivise: `testUser`/`adminUser`/`freeUser`/`unlockedUser`, `giovanniTemplate`, `sampleFlyer`, `sampleQuote` (usate da cardHarness + spec) |
+| `api/__tests__/setup.ts` | `createMockDrizzleDb`: mock Drizzle standardizzato per test API |
+| `src/test-setup.ts` | Setup vitest globale: cleanup RTL + reset localStorage/sessionStorage in `beforeEach` |
 | `src/hooks/useMediaQuery.ts` | Breakpoint canonici `BP_SHELL=768`/`BP_WORKSPACE=1024` + hook mobile |
 | `src/utils/uiPrefs.ts` | `pq_ui:v1` (sidebarCollapsed, aiConsoleExpanded per editor) |
 | `vite.config.js` | Port 8000, SPA fallback, dev proxy `/api/ai/*`, `loadEnv()` esplicito |

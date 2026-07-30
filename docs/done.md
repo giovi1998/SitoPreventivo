@@ -48,6 +48,42 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 - **TB-027h** Storage locale canonico FLAT logo/card/flyer; fix Collection
   non aggiornata dopo "Genera bozze AI" (gotchas §23).
+- **CardEditorShell batch 2**: estratti `useCardGridEditor`,
+  `useCardBackContent`, `useCardAutoSave` (+ `cardHasContent`/
+  `defaultCardTitle`) e `<CardFormSections>` — shell 1121 → 658 righe.
+- **CustomerDetail split**: estratti `CustomerAiLogPanel`,
+  `CustomerResearchSection`, `CustomerWebDataPanel` + hook
+  `useCustomerLogger` (~840 → 766 righe).
+- **LogoAiPanel split**: estratti `src/components/logo/ConceptCard.tsx` e
+  `src/utils/logo/logoAiPersistence.ts` (chiavi per-doc, TTL 24h, quota
+  fallback senza bgImages).
+- **Fix leak stato AI tra documenti (LogoEditor)**: `aiStateRef` ora
+  taggato con `docId`; il remount intermedio del pannello (chiave
+  `resetKey-docId`) non eredita più la chat del documento precedente.
+  Regression test esistente ("doc A → doc B") tornato verde.
+- **Componenti flyer "orfani": verificato NON orfani** — tutti e 5
+  cablati in `FlyerManualPanel` (layout dello spec TB-007). Rimossi dal
+  debito tecnico.
+- **Test harness**: fixture e2e condivise (`e2e/fixtures/`: `testUser`
+  aggiunto, `adminUser`/`freeUser`/`unlockedUser`, `giovanniTemplate`,
+  `sampleFlyer`, `sampleQuote`) cablate in `cardHarness` (24 spec) +
+  admin/ai-log-preview/url-routing/home/flyer-visual;
+  `api/__tests__/setup.ts` (`createMockDrizzleDb`, 6 consumer); reset
+  globale localStorage/sessionStorage in `src/test-setup.ts`
+  (`beforeEach`, guard per environment node); script `test:e2e:ci` in
+  package.json; **`npm run test` ora include `--coverage` con threshold
+  60% globali** in `vitest.config.ts` (misurato: 68.5 stmts / 62.4 branch
+  / 65.1 funcs / 70.5 lines — costo runtime ~nullo, 451s vs 455s).
+  `createMockProvider` centralizzato valutato ed **eliminato**: zero
+  consumer, shape senza `supportsTools`; i mock inline per-orchestratore
+  (chunk `AIStreamChunk`, code di risposte per-test) restano superiori.
+- **Fix test stale/flaky**: `home.spec.ts` CTA anon allineate al flag
+  `VITE_REGISTRATION_ENABLED=false` (TB-027, attese `/login` o
+  `/login?register=1`); `cardGenerator.test.ts` "handles all 3 size
+  presets" timeout 15s → 60s (3 PDF in loop, flaky solo sotto carico di
+  suite intera).
+- **TB-010**: `parseCardSvg` + `assertInside` aggiunti a
+  `card-grid-export-roundtrip.spec.ts` → copertura 8/8 file e2e.
 
 ## 2026-07-29
 
