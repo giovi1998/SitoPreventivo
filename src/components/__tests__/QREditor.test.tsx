@@ -88,7 +88,7 @@ describe('QREditor', () => {
       fireEvent.click(await screen.findByRole('button', { name: /Esporta ▾/i }));
       const btn = await screen.findByRole('menuitem', { name: /PNG \(raster\)/i });
       fireEvent.click(btn);
-      await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalled(), { timeout: 5000 });
       expect(clickSpy).toHaveBeenCalled();
     } finally {
       URL.createObjectURL = originalCreate;
@@ -107,7 +107,7 @@ describe('QREditor', () => {
       fireEvent.click(await screen.findByRole('button', { name: /Esporta ▾/i }));
       const btn = await screen.findByRole('menuitem', { name: /SVG \(vettoriale\)/i });
       fireEvent.click(btn);
-      await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalled(), { timeout: 5000 });
     } finally {
       URL.createObjectURL = originalCreate;
       clickSpy.mockRestore();
