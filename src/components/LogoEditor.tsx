@@ -328,9 +328,9 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
   // perse. Non serve useState: non deve triggerare un re-render di
   // LogoEditor, solo fornire il valore più recente al momento in cui
   // LogoAiPanel rimonta.
-  const aiStateRef = useRef<LogoAiState | undefined>(undefined);
+  const aiStateRef = useRef<{ docId: string | undefined; state: LogoAiState } | undefined>(undefined);
   const handleAiStateChange = useCallback((s: LogoAiState) => {
-    aiStateRef.current = s;
+    aiStateRef.current = { docId: loadedIdRef.current, state: s };
   }, []);
 
   const handleNew = useCallback(() => {
@@ -417,7 +417,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
           <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} userEmail={userEmail} onAiCall={(kind, costUsd) => setLogo((prev) => withAiCall(prev, kind, costUsd))} />
         ) : (
           <LogoAiPanel
-            key={aiPanelResetKey}
+            key={`${aiPanelResetKey}-${initialLogo?.id ?? 'new'}`}
             docId={initialLogo?.id}
             logo={logo}
             onPatch={(patch) => {
@@ -425,7 +425,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
             }}
             tier={tier}
             userEmail={userEmail}
-            initialState={aiStateRef.current}
+            initialState={aiStateRef.current && aiStateRef.current.docId === initialLogo?.id ? aiStateRef.current.state : undefined}
             onStateChange={handleAiStateChange}
             onAiCall={(kind, costUsd) => setLogo((prev) => withAiCall(prev, kind, costUsd))}
           />
