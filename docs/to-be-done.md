@@ -27,6 +27,13 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   dashboard Google AI Studio / GCP billing al primo volume produttivo
   (i `perImage` in `providerPricing.ts` sono stime conservative). No codice.
 
+## 🟡 Debito tecnico / refactor
+
+- [ ] **Audit responsiveness + layout UX/UI**: controllare responsive di tutte le
+  pagine (`/app/*`, editor, CRM, Collection, landing) e studiare un passaggio
+  di LAYOUT UX/UI (spaziature, gerarchia, mobile-first, breakpoint canonici
+  `BP_SHELL`/`BP_WORKSPACE`).
+
 ## 🟢 Backlog business (da `business-plan.md`)
 
 Ordine: validazione → portfolio → monetizzazione.
