@@ -1,11 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
+import { testUser } from './fixtures';
 
-const TEST_USER = {
-  email: 'test@example.com',
-  password: 'Password123!',
-  username: 'Test',
-  role: 'user',
-};
+const TEST_USER = testUser;
 
 const ADMIN_USER = {
   email: 'admin-test@example.com',

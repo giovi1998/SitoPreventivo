@@ -11,6 +11,9 @@ import {
   alignGrid,
   exportCard,
   resetScroll,
+  parseCardSvg,
+  getTextBounds,
+  assertInside,
 } from './helpers/cardHarness';
 
 test.describe('Card grid round-trip: preview -> export', () => {
@@ -44,6 +47,11 @@ test.describe('Card grid round-trip: preview -> export', () => {
     const { buffer } = await exportCard(page, 'svg-front');
     const svg = buffer.toString('utf8');
     expect(svg).toContain('WebdevCA');
+
+    const parsed = parseCardSvg(svg);
+    const company = getTextBounds(parsed, 'WebdevCA');
+    expect(company).not.toBeNull();
+    assertInside({ width: parsed.width, height: parsed.height }, [company!], 1);
 
     await page.screenshot({ path: 'e2e/__screenshots__/roundtrip-move-company-export.png', fullPage: false });
   });

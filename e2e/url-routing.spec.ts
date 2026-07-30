@@ -1,7 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 import { seedAuth } from './helpers/cardHarness';
+import { testUser } from './fixtures';
 
-const TEST_USER = { email: 'test@example.com', password: 'Password123!', username: 'Test', role: 'user' };
+const TEST_USER = testUser;
 const SEED_DOC_ID = 'card_e2e_routing_test';
 
 function seedCardDocument(page: Page): Promise<void> {

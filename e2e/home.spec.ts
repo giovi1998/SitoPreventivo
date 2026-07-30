@@ -1,28 +1,29 @@
 import { test, expect } from '@playwright/test';
+import { testUser } from './fixtures';
 
 test.describe('Home page — CTA functional', () => {
-  test('anon user: hero CTA goes to register', async ({ page }) => {
+  // TB-027: con VITE_REGISTRATION_ENABLED=false (default dev) le CTA anon
+  // puntano a /login, non a /login?register=1.
+  test('anon user: hero CTA goes to login', async ({ page }) => {
     await page.goto('/');
     const cta = page.locator('.hp-cta').first();
-    await expect(cta).toHaveAttribute('href', /login\?register=1/);
+    await expect(cta).toHaveAttribute('href', /\/login(\?register=1)?$/);
   });
 
   test('anon user: header shows Accedi + Registrati', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.hp-btn-ghost')).toHaveAttribute('href', '/login');
-    await expect(page.locator('.hp-btn-primary')).toHaveAttribute('href', /register=1/);
+    await expect(page.locator('.hp-btn-primary')).toHaveAttribute('href', /\/login(\?register=1)?$/);
   });
 
   test('logged user: hero CTA goes to /app', async ({ page }) => {
     await page.goto('/login');
-    await page.evaluate(() => {
+    await page.evaluate((u) => {
       localStorage.setItem('authToken', 'test-token');
-      localStorage.setItem('userEmail', 'test@example.com');
-      localStorage.setItem('userRole', 'user');
-      localStorage.setItem('registeredUsers', JSON.stringify([
-        { email: 'test@example.com', password: 'Password123!', username: 'Test', role: 'user' },
-      ]));
-    });
+      localStorage.setItem('userEmail', u.email);
+      localStorage.setItem('userRole', u.role);
+      localStorage.setItem('registeredUsers', JSON.stringify([u]));
+    }, testUser);
     await page.goto('/');
     const cta = page.locator('.hp-cta').first();
     await expect(cta).toHaveAttribute('href', '/app');

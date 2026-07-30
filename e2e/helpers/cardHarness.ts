@@ -3,6 +3,7 @@ import { expect } from '@playwright/test';
 import fs from 'fs/promises';
 import path from 'path';
 import { auditExportSvg as _auditExportSvg } from '../../src/utils/card/layoutAudit';
+import { testUser } from '../fixtures';
 
 export const auditExportSvg = _auditExportSvg;
 
@@ -23,12 +24,7 @@ export interface ParsedCardSvg {
   qrRects: Array<{ x: number; y: number; width: number; height: number }>;
 }
 
-const TEST_USER = {
-  email: 'test@example.com',
-  password: 'Password123!',
-  username: 'Test',
-  role: 'user',
-};
+const TEST_USER = testUser;
 
 export function seedAuth(page: Page): Promise<void> {
   return page.evaluate((user) => {
@@ -207,26 +203,62 @@ export function parseCardSvg(svg: string): ParsedCardSvg {
   const viewBox = svg.match(/viewBox="0 0 (-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)"/);
   const width = viewBox ? parseFloat(viewBox[1]) : 0;
   const height = viewBox ? parseFloat(viewBox[2]) : 0;
-  const texts = Array.from(svg.matchAll(/<text[^>]* x="([^"]+)"[^>]* y="([^"]+)"[^>]* font-size="([^"]+)"[^>]*>([^<]*)<\/text>/g)).map((m) => ({
-    x: parseFloat(m[1]),
-    y: parseFloat(m[2]),
-    fontSize: parseFloat(m[3]),
-    text: m[4],
-    anchor: (m[0].match(/text-anchor="([^"]+)"/)?.[1]) ?? undefined,
-  }));
-  const images = Array.from(svg.matchAll(/<image[^>]* href="([^"]+)"[^>]* x="([^"]+)"[^>]* y="([^"]+)"[^>]* width="([^"]+)"[^>]* height="([^"]+)"[^>]*>/g)).map((m) => ({
-    href: m[1],
-    x: parseFloat(m[2]),
-    y: parseFloat(m[3]),
-    width: parseFloat(m[4]),
-    height: parseFloat(m[5]),
-  }));
-  const qrRects = Array.from(svg.matchAll(/<rect[^>]* x="([^"]+)"[^>]* y="([^"]+)"[^>]* width="([^"]+)"[^>]* height="([^"]+)"[^>]* fill="#FFFFFF"[^>]*stroke="#01696F"[^>]*\/>/g)).map((m) => ({
-    x: parseFloat(m[1]),
-    y: parseFloat(m[2]),
-    width: parseFloat(m[3]),
-    height: parseFloat(m[4]),
-  }));
+
+  const textBlocks = Array.from(svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/gi));
+  const texts = textBlocks.map((m) => {
+    const attrs = m[1];
+    const rawContent = m[2];
+    const xMatch = attrs.match(/\bx="([^"]+)"/i);
+    const yMatch = attrs.match(/\by="([^"]+)"/i);
+    const fsMatch = attrs.match(/\bfont-size="([^"]+)"/i);
+    const anchorMatch = attrs.match(/\btext-anchor="([^"]+)"/i);
+    const innerText = rawContent.replace(/<[^>]+>/g, '').trim();
+
+    return {
+      x: xMatch ? parseFloat(xMatch[1]) : 0,
+      y: yMatch ? parseFloat(yMatch[1]) : 0,
+      fontSize: fsMatch ? parseFloat(fsMatch[1]) : 0,
+      text: innerText,
+      anchor: anchorMatch ? anchorMatch[1] : undefined,
+    };
+  });
+
+  const imageBlocks = Array.from(svg.matchAll(/<image\b([^>]*)\/?>/gi));
+  const images = imageBlocks.map((m) => {
+    const attrs = m[1];
+    const hrefMatch = attrs.match(/\b(?:href|xlink:href)="([^"]+)"/i);
+    const xMatch = attrs.match(/\bx="([^"]+)"/i);
+    const yMatch = attrs.match(/\by="([^"]+)"/i);
+    const wMatch = attrs.match(/\bwidth="([^"]+)"/i);
+    const hMatch = attrs.match(/\bheight="([^"]+)"/i);
+
+    return {
+      href: hrefMatch ? hrefMatch[1] : '',
+      x: xMatch ? parseFloat(xMatch[1]) : 0,
+      y: yMatch ? parseFloat(yMatch[1]) : 0,
+      width: wMatch ? parseFloat(wMatch[1]) : 0,
+      height: hMatch ? parseFloat(hMatch[1]) : 0,
+    };
+  });
+
+  const rectBlocks = Array.from(svg.matchAll(/<rect\b([^>]*)\/?>/gi));
+  const qrRects = rectBlocks
+    .filter((m) => m[1].includes('stroke="#01696F"') || m[1].includes('stroke='))
+    .map((m) => {
+      const attrs = m[1];
+      const xMatch = attrs.match(/\bx="([^"]+)"/i);
+      const yMatch = attrs.match(/\by="([^"]+)"/i);
+      const wMatch = attrs.match(/\bwidth="([^"]+)"/i);
+      const hMatch = attrs.match(/\bheight="([^"]+)"/i);
+
+      return {
+        x: xMatch ? parseFloat(xMatch[1]) : 0,
+        y: yMatch ? parseFloat(yMatch[1]) : 0,
+        width: wMatch ? parseFloat(wMatch[1]) : 0,
+        height: hMatch ? parseFloat(hMatch[1]) : 0,
+      };
+    });
+
   return { width, height, texts, images, qrRects };
 }
 

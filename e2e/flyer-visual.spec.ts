@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { testUser } from './fixtures';
 
 const FLYER_SECTORS = ['ristorante', 'evento', 'salone', 'negozio'] as const;
 const FLYER_LAYOUTS = ['classic', 'centered', 'split', 'magazine'] as const;
@@ -17,15 +18,14 @@ const LAYOUT_LABELS: Record<typeof FLYER_LAYOUTS[number], string> = {
 
 async function login(page: any) {
   await page.goto('/login');
-  await page.evaluate(() => {
-    const user = { email: 'test@example.com', password: 'Password123!' };
+  await page.evaluate((user: typeof testUser) => {
     localStorage.setItem('authToken', 'test-token');
     localStorage.setItem('userEmail', user.email);
-    localStorage.setItem('username', 'Test');
-    localStorage.setItem('userRole', 'user');
-    localStorage.setItem('registeredUsers', JSON.stringify([{ email: user.email, password: user.password, username: 'Test', role: 'user' }]));
+    localStorage.setItem('username', user.username);
+    localStorage.setItem('userRole', user.role);
+    localStorage.setItem('registeredUsers', JSON.stringify([user]));
     localStorage.setItem('userSettings_test@example.com', JSON.stringify({ userEmail: user.email, onboardingDone: true, displayName: 'Test', companyName: 'Test', profession: 'Test', defaultColor: '#2563EB', defaultVat: 22, documentTheme: 'modern' }));
-  });
+  }, testUser);
 }
 
 test.describe('Flyer editor visual regression', () => {

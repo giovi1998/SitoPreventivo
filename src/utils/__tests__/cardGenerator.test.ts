@@ -420,7 +420,8 @@ describe('cardGenerator - generateCardPDF (AC-009)', () => {
     expect(serialized).not.toContain('"image":"data:image/svg+xml');
   });
 
-  it('handles all 3 size presets', async () => {
+  // 3 PDF completi in loop: sotto carico di suite intera supera i 15s di default.
+  it('handles all 3 size presets', { timeout: 60000 }, async () => {
     for (const preset of ['eu-85x55', 'us-89x51', 'square-65x65'] as const) {
       const card = { ...createEmptyCard(), style: { ...createEmptyCard().style, sizePreset: preset } };
       const buf = await generateCardPDF(card, { tier: 'free' });

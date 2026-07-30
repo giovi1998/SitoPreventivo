@@ -1,11 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
+import { adminUser } from './fixtures';
 
-const ADMIN_USER = {
-  email: 'admin@gmail.com',
-  password: 'AdminPassword123!',
-  username: 'Admin',
-  role: 'admin',
-};
+const ADMIN_USER = adminUser;
 
 async function seedAdmin(page: Page): Promise<void> {
   await page.evaluate((u) => {
