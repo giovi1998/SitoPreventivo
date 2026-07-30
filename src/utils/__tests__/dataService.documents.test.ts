@@ -177,6 +177,51 @@ describe('dataService documents (local path)', () => {
         imageSource: 'icon',
       });
     });
+
+    it('righe PROD con colonne legacy null: sparge jsonb data (regression doc vuoto)', async () => {
+      // Postgres ha colonne legacy (quote/card) a null per tutti i tipi.
+      // hydrateDocument deve ignorarle e spargere il dominio dentro `data`.
+      const prodRow = {
+        id: 'flyer_prod1',
+        userEmail: 'user@test.com',
+        documentType: 'flyer',
+        title: 'Volantino Pad Thai',
+        customerId: 'cust_pad',
+        status: 'BOZZA',
+        documentTheme: 'corporate',
+        // Colonne legacy presenti in tutte le righe Postgres, qui null
+        client: null,
+        options: null,
+        project: null,
+        vat: null,
+        clauses: null,
+        color: null,
+        date: null,
+        intro: null,
+        owner: null,
+        isTemplate: null,
+        shareToken: null,
+        isShared: null,
+        pdfUrl: null,
+        // jsonb reale del flyer
+        data: {
+          documentType: 'flyer',
+          title: 'Volantino Pad Thai',
+          content: { headline: 'Pad Thai', subheadline: 'Osteria thailandese' },
+          layout: { format: 'a5', layout: 'classic' },
+        },
+        createdAt: '2026-07-30T00:00:00.000Z',
+        updatedAt: '2026-07-30T00:00:00.000Z',
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify([prodRow]));
+      const { documents } = await dataService.getDocuments('user@test.com');
+      expect(documents).toHaveLength(1);
+      expect(documents[0].content.headline).toBe('Pad Thai');
+      expect(documents[0].content.subheadline).toBe('Osteria thailandese');
+      expect(documents[0].layout.format).toBe('a5');
+      expect(documents[0].customerId).toBe('cust_pad');
+      expect(documents[0].documentTheme).toBe('corporate');
+    });
   });
 
   describe('storage canonico flat per logo/card/flyer (regression doppio formato)', () => {

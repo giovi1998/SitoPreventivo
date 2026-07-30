@@ -93,20 +93,6 @@ export function hydrateDocument(row) {
     ...rest
   } = row;
 
-  // Already flat (localStorage path): domain fields live on the row.
-  const hasFlatDomain = Object.keys(rest).some((k) => !DOC_META_KEYS.has(k));
-  if (hasFlatDomain && (rest.builder || rest.front || rest.content || rest.data?.payload !== undefined || rest.style || rest.options || rest.project || rest.client !== undefined || rest.imageData)) {
-    return {
-      id,
-      userEmail,
-      documentType,
-      title: title ?? '',
-      ...rest,
-      createdAt,
-      updatedAt,
-    };
-  }
-
   if (documentType === 'qrCode') {
     // Stored as { type, payload } or { type, payload, style } or nested data.
     const payload = data && typeof data === 'object' ? data : {};
@@ -125,21 +111,37 @@ export function hydrateDocument(row) {
     };
   }
 
-  // logo / businessCard / flyer / quote: spread jsonb data onto top level.
-  // Preserva i meta colonnari (customerId/status/documentTheme): i draft CRM
-  // envelope li hanno solo al top level e CollectionView filtra per `status`.
+  // logo / businessCard / flyer / quote: preferisci jsonb `data` se presente
+  // (righe PROD). In LOCAL i campi dominio vivono top-level e `data` è assente.
+  // ATTENZIONE: non usare colonne legacy (client, options, project, vat...)
+  // come euristica flat-domain: esistono in tutte le righe e nasconderebbero
+  // il vero contenuto dentro `data` (bug prod 2026-07-30).
   const body = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+  if (Object.keys(body).length > 0) {
+    return {
+      documentType,
+      id,
+      userEmail,
+      customerId: rest.customerId,
+      status: rest.status,
+      documentTheme: rest.documentTheme,
+      title: title ?? '',
+      ...body,
+      createdAt: createdAt ?? body.createdAt,
+      updatedAt: updatedAt ?? body.updatedAt,
+    };
+  }
+
+  // Already flat (localStorage path): domain fields live on the row.
+  // quote può usare colonne legacy come client/options/project direttamente.
   return {
-    documentType,
     id,
     userEmail,
-    customerId: rest.customerId,
-    status: rest.status,
-    documentTheme: rest.documentTheme,
+    documentType,
     title: title ?? '',
-    ...body,
-    createdAt: createdAt ?? body.createdAt,
-    updatedAt: updatedAt ?? body.updatedAt,
+    ...rest,
+    createdAt,
+    updatedAt,
   };
 }
 
