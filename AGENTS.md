@@ -104,6 +104,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/ActionBar.tsx` | Cluster azioni Salva/Esporta/Nuovo (logo, QR) |
 | `src/components/CollectionView.tsx` | Collection griglia documenti: tab, filtri, ricerca, preview SVG inline (logo/card/flyer/quote), export ZIP |
 | `src/hooks/useAI*.ts` | Hook AI: useAI, useAICard, useAIFlyer, useAILogo, useAISocial, useAIOnboarding |
+| `src/hooks/useCard{PromptLibrary,AiImages}.ts` | Hook estratti da CardEditorShell: prompt library (photo/icon/cover) e generazione immagini AI (cover/photo/icona, CON-IS-001) |
 | `src/hooks/useMediaQuery.ts` | Breakpoint canonici `BP_SHELL=768`/`BP_WORKSPACE=1024` + hook mobile |
 | `src/utils/uiPrefs.ts` | `pq_ui:v1` (sidebarCollapsed, aiConsoleExpanded per editor) |
 | `vite.config.js` | Port 8000, SPA fallback, dev proxy `/api/ai/*`, `loadEnv()` esplicito |

@@ -4,6 +4,7 @@ import { newRequestId } from '../utils/ai/requestId';
 import { mapAiError } from '../utils/ai/mapAiError';
 import { logger } from '../utils/logger';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
+import { saveGeneratedImage } from '../utils/saveGeneratedImage';
 import dataService from '../utils/dataService';
 
 export type IconHeroKind = 'icon' | 'hero';
@@ -54,7 +55,9 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
             prompt: prompt.slice(0, 1000),
             kind,
             aspectRatio: kind === 'hero' ? '16:9' : '1:1',
-            size: '1K',
+            // '512': il clamp server è 500KB (gotcha §2-3) — a '1K' Gemini
+            // produce PNG >500KB e l'endpoint risponde 413.
+            size: '512',
             primaryColor: options?.primaryColor,
             secondaryColor: options?.secondaryColor,
             style: options?.style || 'minimalist',
@@ -101,6 +104,9 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
             imagePreviewBase64: finalDataUrl,
           },
         );
+        // Persistenza Collection "Immagini Generate" (fire-and-forget,
+        // stesso pattern di useAICard cover/photo).
+        saveGeneratedImage(userEmail, finalDataUrl, 'cards', kind, prompt).catch(() => {});
         return { dataUrl: finalDataUrl, aiCall: { kind, costUsd } };
       } catch (err: any) {
         const is404Hint = err?.message?.includes('Endpoint icona AI non trovato');

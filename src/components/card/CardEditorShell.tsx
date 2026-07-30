@@ -15,10 +15,7 @@ import {
 import { CardGridControls, type GridSide } from './CardGridControls';
 import CardAIControls from './CardAIControls';
 import AIConsole from '../ai/AIHarnessConsole';
-import {
-  useAIIconHero,
-  type IconBackground,
-} from '../../hooks/useAIIconHero';
+import { useAIIconHero } from '../../hooks/useAIIconHero';
 import {
   CardFrontFields,
   CardBackFields,
@@ -33,7 +30,9 @@ import { useCardExport } from '../../hooks/useCardExport';
 import { isAllowedLogoMime, isHttpUrl } from '../../utils/qrGenerator';
 import { useToast } from '../../hooks/useToast';
 import { useAICard } from '../../hooks/useAICard';
-import { withAiCall, type AiCallKind } from '../../utils/aiStats';
+import { withAiCall } from '../../utils/aiStats';
+import { useCardPromptLibrary } from '../../hooks/useCardPromptLibrary';
+import { useCardAiImages } from '../../hooks/useCardAiImages';
 
 import { findCardQuickAction } from '../../ai/prompts/cardQuickActions';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -52,15 +51,6 @@ import CardAIFab from '../CardAIFab';
 import CardAIBottomSheet from '../CardAIBottomSheet';
 import { DocumentAiStats } from '../DocumentAiStats';
 import SaveDialog from '../SaveDialog';
-import {
-  loadPromptLibrary,
-  addPromptEntry,
-  removePromptEntry,
-  PROMPT_LIBRARY_KEYS,
-  type PromptLibraryEntry,
-} from '../../utils/promptLibrary';
-import { buildCardPhotoBrief } from '../../utils/card/photoBrief';
-import { buildCardCoverPromptBrief } from '../../utils/card/coverPrompt';
 import { pruneCardGrids } from '../../utils/card/gridElements';
 import { compressCardImages } from '../../utils/card/saveCompression';
 import {
@@ -120,7 +110,6 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   // Phase 14: lo stato expanded della rail AI è gestito da AIConsole in
   // pq_ui:v1 (editorKind='card'), non più da useState locale.
   const [showGrid, setShowGrid] = useState(false);
-  const [isCoverGenerating, setIsCoverGenerating] = useState(false);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedIdRef = useRef<string | undefined>(initialCard?.id);
   const [isSaved, setIsSaved] = useState(false);
@@ -154,16 +143,6 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
   const { addToast } = useToast();
   const { processCardPrompt, generateCover, generatePhoto, resetCardChat, cardAiLogs, isCardProcessing, availableModels, totalCostUsd, lastCostUsd } = useAICard(userEmail);
   const { generate: generateIconHero, isProcessing: isIconHeroProcessing, logs: iconHeroLogs, clear: clearIconHeroLogs } = useAIIconHero(userEmail);
-  const [isPhotoGenerating, setIsPhotoGenerating] = useState(false);
-  const [iconPrompt, setIconPrompt] = useState('');
-  const [showIconPromptEditor, setShowIconPromptEditor] = useState(false);
-  const [iconLibrary, setIconLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardIcon));
-  const [photoPrompt, setPhotoPrompt] = useState('');
-  const [showPhotoPromptEditor, setShowPhotoPromptEditor] = useState(false);
-  const [photoLibrary, setPhotoLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardPhoto));
-  const [coverPrompt, setCoverPrompt] = useState('');
-  const [showCoverPromptEditor, setShowCoverPromptEditor] = useState(false);
-  const [coverLibrary, setCoverLibrary] = useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.cardCover));
 
   useEffect(() => {
     if (!exportMenuOpen) return;
@@ -206,6 +185,59 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     });
     setCard((prev) => ({ ...prev, back: { ...prev.back, ...patch }, updatedAt: new Date().toISOString() }));
   }, []);
+
+  const {
+    photoPrompt,
+    setPhotoPrompt,
+    showPhotoPromptEditor,
+    setShowPhotoPromptEditor,
+    photoLibrary,
+    handleSavePhotoPrompt,
+    handleApplyPhotoPrompt,
+    handleDeletePhotoPrompt,
+    handleFillAutoPhotoPrompt,
+    iconPrompt,
+    setIconPrompt,
+    showIconPromptEditor,
+    setShowIconPromptEditor,
+    iconLibrary,
+    handleSaveIconPrompt,
+    handleApplyIconPrompt,
+    handleDeleteIconPrompt,
+    handleFillAutoIconPrompt,
+    coverPrompt,
+    setCoverPrompt,
+    showCoverPromptEditor,
+    setShowCoverPromptEditor,
+    coverLibrary,
+    handleSaveCoverPrompt,
+    handleApplyCoverPrompt,
+    handleDeleteCoverPrompt,
+    handleFillAutoCoverPrompt,
+    autoIconPrompt,
+  } = useCardPromptLibrary(card, addToast);
+
+  const {
+    isCoverGenerating,
+    isPhotoGenerating,
+    handleGenerateCover,
+    handleGeneratePhoto,
+    handleGenerateIcon,
+    handleRemoveCover,
+  } = useCardAiImages({
+    card,
+    tier,
+    setCard,
+    patchFront,
+    patchBack,
+    addToast,
+    generateCover,
+    generatePhoto,
+    generateIconHero,
+    photoPrompt,
+    iconPrompt,
+    autoIconPrompt,
+  });
 
   const patchStyle = useCallback((patch: Partial<BusinessCard['style']>) => {
     const keys = Object.keys(patch);
@@ -548,13 +580,6 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
     }
   }, [card, userEmail, addToast, saveDocumentGuarded, onSaved]);
 
-  const recordAiOnCard = useCallback((kind: AiCallKind, costUsd: number, transform?: (c: BusinessCard) => BusinessCard) => {
-    setCard((prev) => {
-      const next = transform ? transform(prev) : prev;
-      return withAiCall(next, kind, costUsd);
-    });
-  }, []);
-
   const runCardAI = useCallback(async (mode: string = 'custom') => {
     const quick = findCardQuickAction(mode);
     let userPrompt = quick?.prompt ?? aiText.trim();
@@ -592,191 +617,6 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
       addToast('error', err.message || 'Errore AI', 5000);
     }
   }, [card, aiText, aiModel, processCardPrompt, addToast]);
-
-  const handleGenerateCover = useCallback(async (side: 'front' | 'back' | 'both' = 'front', imageModel?: string, promptOverride?: string) => {
-    if (tier !== 'unlocked') {
-      addToast('info', 'Sblocca il piano per generare cover AI.', 4000);
-      return;
-    }
-    setIsCoverGenerating(true);
-    try {
-      if (side === 'both') {
-        // Serializziamo fronte e retro: due chiamate Gemini in parallelo
-        // possono sovraccaricare il dev proxy / l'upstream e ritornare 502.
-        const frontRes = await generateCover(card, 'front', promptOverride, { imageModel });
-        const backRes = await generateCover(card, 'back', promptOverride, { imageModel });
-        recordAiOnCard('cover', frontRes.aiCall.costUsd, (c) => ({ ...c, front: { ...c.front, coverImageUrl: frontRes.dataUrl } }));
-        recordAiOnCard('cover', backRes.aiCall.costUsd, (c) => ({ ...c, back: { ...c.back, coverImageUrl: backRes.dataUrl } }));
-        addToast('success', 'Cover AI generate per fronte e retro.', 4000);
-      } else {
-        const res = await generateCover(card, side, promptOverride, { imageModel });
-        recordAiOnCard('cover', res.aiCall.costUsd, (c) =>
-          side === 'front'
-            ? { ...c, front: { ...c.front, coverImageUrl: res.dataUrl } }
-            : { ...c, back: { ...c.back, coverImageUrl: res.dataUrl } },
-        );
-        addToast('success', `Cover AI generata e applicata al ${side === 'front' ? 'fronte' : 'retro'}.`, 4000);
-      }
-    } catch (err: any) {
-      addToast('error', err.message || 'Errore generazione cover AI', 5000);
-    } finally {
-      setIsCoverGenerating(false);
-    }
-  }, [card, tier, generateCover, recordAiOnCard, addToast]);
-
-  const handleGeneratePhoto = useCallback(async (imageModel?: string) => {
-    if (tier !== 'unlocked') {
-      addToast('info', 'Sblocca il piano per generare la foto AI.', 4000);
-      return;
-    }
-    setIsPhotoGenerating(true);
-    try {
-      const res = await generatePhoto(card, {
-        promptOverride: photoPrompt.trim() || undefined,
-        imageModel,
-      });
-      recordAiOnCard('photo', res.aiCall.costUsd, (c) => ({ ...c, front: { ...c.front, photoUrl: res.dataUrl } }));
-      addToast('success', 'Foto AI generata e applicata al bigliettino.', 4000);
-    } catch (err: any) {
-      addToast('error', err.message || 'Errore generazione foto AI', 5000);
-    } finally {
-      setIsPhotoGenerating(false);
-    }
-  }, [card, tier, generatePhoto, recordAiOnCard, addToast, photoPrompt]);
-
-  const handleFillAutoPhotoPrompt = useCallback(() => {
-    setPhotoPrompt(buildCardPhotoBrief(card).prompt);
-    setShowPhotoPromptEditor(true);
-  }, [card]);
-
-  const handleSavePhotoPrompt = useCallback(() => {
-    const text = photoPrompt.trim();
-    if (!text) {
-      addToast('info', 'Scrivi un prompt prima di salvarlo.');
-      return;
-    }
-    const label = window.prompt('Nome del prompt', text.slice(0, 40)) || text.slice(0, 40);
-    setPhotoLibrary(addPromptEntry(PROMPT_LIBRARY_KEYS.cardPhoto, {
-      label: label.trim() || 'Prompt foto',
-      prompt: text,
-      module: 'card-photo',
-    }));
-    addToast('success', 'Prompt salvato nella libreria.');
-  }, [photoPrompt, addToast]);
-
-  const handleApplyPhotoPrompt = useCallback((entry: PromptLibraryEntry) => {
-    if (entry.prompt) {
-      setPhotoPrompt(entry.prompt);
-      setShowPhotoPromptEditor(true);
-      addToast('info', `Prompt «${entry.label}» applicato.`);
-    }
-  }, [addToast]);
-
-  const handleDeletePhotoPrompt = useCallback((id: string) => {
-    setPhotoLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.cardPhoto, id));
-  }, []);
-
-  const buildAutoIconPrompt = useCallback(() => {
-    const subject = card.front.title?.trim() || card.front.company?.trim() || 'professional business';
-    return `minimal geometric icon representing ${subject}`;
-  }, [card]);
-
-  const handleGenerateIcon = useCallback(async (opts: { imageModel: string; background: IconBackground }) => {
-    if (tier !== 'unlocked') {
-      addToast('info', 'Sblocca il piano per generare icone AI.', 4000);
-      return;
-    }
-    try {
-      const res = await generateIconHero(iconPrompt.trim() || buildAutoIconPrompt(), 'icon', {
-        primaryColor: card.style.accentColor,
-        secondaryColor: card.style.textColor,
-        imageModel: opts.imageModel,
-        background: opts.background,
-      });
-      // CON-IS-001: sostituisce sempre la foto (photoUrl) esistente.
-      recordAiOnCard('icon', res.aiCall.costUsd, (c) => ({ ...c, front: { ...c.front, photoUrl: res.dataUrl } }));
-      addToast('success', 'Icona AI generata e applicata come foto.', 4000);
-    } catch (err: any) {
-      addToast('error', err.message || 'Errore generazione icona AI', 5000);
-    }
-  }, [card, tier, generateIconHero, iconPrompt, buildAutoIconPrompt, recordAiOnCard, addToast]);
-
-  const handleFillAutoIconPrompt = useCallback(() => {
-    setIconPrompt(buildAutoIconPrompt());
-    setShowIconPromptEditor(true);
-  }, [buildAutoIconPrompt]);
-
-  const handleSaveIconPrompt = useCallback(() => {
-    const text = iconPrompt.trim();
-    if (!text) {
-      addToast('info', 'Scrivi un prompt prima di salvarlo.');
-      return;
-    }
-    const label = window.prompt('Nome del prompt', text.slice(0, 40)) || text.slice(0, 40);
-    setIconLibrary(addPromptEntry(PROMPT_LIBRARY_KEYS.cardIcon, {
-      label: label.trim() || 'Prompt icona',
-      prompt: text,
-      module: 'card-icon',
-    }));
-    addToast('success', 'Prompt salvato nella libreria.');
-  }, [iconPrompt, addToast]);
-
-  const handleApplyIconPrompt = useCallback((entry: PromptLibraryEntry) => {
-    if (entry.prompt) {
-      setIconPrompt(entry.prompt);
-      setShowIconPromptEditor(true);
-      addToast('info', `Prompt «${entry.label}» applicato.`);
-    }
-  }, [addToast]);
-
-  const handleDeleteIconPrompt = useCallback((id: string) => {
-    setIconLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.cardIcon, id));
-  }, []);
-
-  const handleFillAutoCoverPrompt = useCallback(() => {
-    setCoverPrompt(buildCardCoverPromptBrief(card, 'front').prompt);
-    setShowCoverPromptEditor(true);
-  }, [card]);
-
-  const handleSaveCoverPrompt = useCallback(() => {
-    const text = coverPrompt.trim();
-    if (!text) {
-      addToast('info', 'Scrivi un prompt prima di salvarlo.');
-      return;
-    }
-    const label = window.prompt('Nome del prompt', text.slice(0, 40)) || text.slice(0, 40);
-    setCoverLibrary(addPromptEntry(PROMPT_LIBRARY_KEYS.cardCover, {
-      label: label.trim() || 'Prompt sfondo',
-      prompt: text,
-      module: 'card-cover',
-    }));
-    addToast('success', 'Prompt salvato nella libreria.');
-  }, [coverPrompt, addToast]);
-
-  const handleApplyCoverPrompt = useCallback((entry: PromptLibraryEntry) => {
-    if (entry.prompt) {
-      setCoverPrompt(entry.prompt);
-      setShowCoverPromptEditor(true);
-      addToast('info', `Prompt «${entry.label}» applicato.`);
-    }
-  }, [addToast]);
-
-  const handleDeleteCoverPrompt = useCallback((id: string) => {
-    setCoverLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.cardCover, id));
-  }, []);
-
-  const handleRemoveCover = useCallback(
-    (side: 'front' | 'back') => {
-      if (side === 'front') {
-        patchFront({ coverImageUrl: null });
-        addToast('info', 'Cover AI del fronte rimossa.', 2500);
-      } else {
-        patchBack({ coverImageUrl: null });
-        addToast('info', 'Cover AI del retro rimossa.', 2500);
-      }
-    },
-    [patchFront, patchBack, addToast],
-  );
 
   useEffect(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);

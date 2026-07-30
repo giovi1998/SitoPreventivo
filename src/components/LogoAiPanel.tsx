@@ -636,7 +636,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
       <h2>AI Assist</h2>
       {/* Phase 14 (REQ-AI-006): dicitura ad-hoc sostituita dal badge uniforme */}
       {config?.provider === 'gemini' && (
-        <p className="logo-ai-provider"><AIProviderBadge /></p>
+        <div className="logo-ai-provider"><AIProviderBadge /></div>
       )}
       {config?.provider === 'gemini' && (
         <div className="logo-ai-image-model">

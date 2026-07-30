@@ -1,10 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useAIIconHero } from '../useAIIconHero';
+import { saveGeneratedImage } from '../../utils/saveGeneratedImage';
+
+vi.mock('../../utils/saveGeneratedImage', () => ({
+  saveGeneratedImage: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe('useAIIconHero', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(saveGeneratedImage).mockClear();
     global.fetch = vi.fn();
   });
 
@@ -82,5 +88,45 @@ describe('useAIIconHero', () => {
     await waitFor(() => expect(result.current.isProcessing).toBe(true));
     resolveFetch!({ ok: true, json: async () => ({ data: { imageBase64: 'a', mimeType: 'image/png' } }) });
     await waitFor(() => expect(result.current.isProcessing).toBe(false));
+  });
+
+  it('requests size 512 (server clamp is 500KB — 1K returns 413)', async () => {
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { imageBase64: 'x', mimeType: 'image/png' } }),
+    });
+
+    const { result } = renderHook(() => useAIIconHero('user@test.com'));
+    await act(async () => { await result.current.generate('mela', 'icon'); });
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.size).toBe('512');
+  });
+
+  it('persists the generated icon via saveGeneratedImage (Collection "Immagini Generate")', async () => {
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { imageBase64: 'iconB64', mimeType: 'image/png' } }),
+    });
+
+    const { result } = renderHook(() => useAIIconHero('user@test.com'));
+    await act(async () => { await result.current.generate('mela rossa', 'icon'); });
+    expect(vi.mocked(saveGeneratedImage)).toHaveBeenCalledWith(
+      'user@test.com',
+      'data:image/png;base64,iconB64',
+      'cards',
+      'icon',
+      'mela rossa',
+    );
+  });
+
+  it('does not call saveGeneratedImage on failure', async () => {
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 413, json: async () => ({ error: 'Immagine troppo grande' }) });
+
+    const { result } = renderHook(() => useAIIconHero('user@test.com'));
+    await expect(act(async () => { await result.current.generate('x', 'icon'); })).rejects.toThrow();
+    expect(vi.mocked(saveGeneratedImage)).not.toHaveBeenCalled();
   });
 });

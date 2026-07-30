@@ -29,8 +29,11 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ## 🟡 Debito tecnico / refactor
 
-- [ ] **`CardEditorShell.tsx` (~1170 righe)**: god component. Estrarre
-  hook `useCardAiImages` + `useCardPromptLibrary`; target <600 righe.
+- [ ] **`CardEditorShell.tsx` (1121 righe, era 1281)**: god component.
+  Fatti: hook `useCardPromptLibrary` + `useCardAiImages` (2026-07-30).
+  Restano da estrarre: grid handlers (~155 righe) → `useCardGridEditor`,
+  services/socials/decorations (~90) → `useCardBackContent`, save/auto-save
+  (~125) → `useCardAutoSave`, `formContent` → `<CardFormSections>`.
 - [ ] **`CustomerDetail.tsx` (~840 righe)**: estrarre research/webData
   panel e log helpers in sub-componenti/hook.
 - [ ] **`LogoAiPanel.tsx` (~520 righe)**: estrarre `ConceptCard` e

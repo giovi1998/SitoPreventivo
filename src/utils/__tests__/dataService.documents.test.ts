@@ -155,6 +155,28 @@ describe('dataService documents (local path)', () => {
       expect(documents[0].documentType).toBe('qrCode');
       expect(documents[0].style).toEqual(qr.style);
     });
+
+    it('doc generatedImage flat conserva imageData (regression: preview Collection persa)', async () => {
+      const genImg = {
+        id: 'genimg_1',
+        userEmail: 'user@test.com',
+        documentType: 'generatedImage',
+        title: 'Bigliettino · Icona',
+        imageData: 'data:image/png;base64,ICON',
+        imageCategory: 'cards',
+        imageSource: 'icon',
+        createdAt: '2026-07-30T00:00:00.000Z',
+        updatedAt: '2026-07-30T00:00:00.000Z',
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify([genImg]));
+      const { documents } = await dataService.getDocuments('user@test.com');
+      expect(documents[0]).toMatchObject({
+        id: 'genimg_1',
+        imageData: 'data:image/png;base64,ICON',
+        imageCategory: 'cards',
+        imageSource: 'icon',
+      });
+    });
   });
 
   describe('storage canonico flat per logo/card/flyer (regression doppio formato)', () => {

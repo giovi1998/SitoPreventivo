@@ -622,7 +622,8 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                           alt={title}
                           className="collection-thumb"
                           style={{
-                            width: '100%', height: '120px', objectFit: 'cover',
+                            width: '100%', height: '120px', objectFit: 'contain',
+                            background: '#f3f4f6',
                             borderRadius: '8px', marginBottom: '8px',
                           }}
                         />

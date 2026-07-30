@@ -22,6 +22,23 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
   URL prima del raster (hero flyer con URL remota bloccava `toBlob` con
   `SecurityError`, screenshot AI saltava). 5 regression test.
   Gotcha §7.0.
+- **CardEditorShell batch 1**: estratti `useCardPromptLibrary` +
+  `useCardAiImages` da `CardEditorShell.tsx` (1281 → 1121 righe), 26 test
+  nuovi. Shell test invariato e verde. Seams residui in to-be-done.
+- **Fix icona AI**: `useAIIconHero` chiedeva `size: '1K'` → PNG >500KB →
+  413 clamp server (gotcha §2-3 impone `'512'`). Ora `'512'`. Aggiunto
+  `saveGeneratedImage` (mancava: l'icona era l'unica immagine AI non
+  persistita → tab Collection "Immagini Generate" sempre vuota). 3 test.
+- **Fix preview generatedImage in Collection**: `hydrateDocument` non
+  riconosceva `imageData` come chiave flat-domain → il doc veniva
+  annidato sotto `data` e la preview spariva (bug latente, emerso ora
+  che le icone AI si salvano). Regression test in
+  `dataService.documents.test.ts`. I record esistenti si sistemano da
+  soli (fix in lettura).
+- **Fix UI Collection/logo**: thumb `generatedImage` `objectFit: cover` →
+  `contain` (nel tab a 1 elemento la card full-width tagliava l'icona a
+  una fetta ingrandita); `<p>` → `<div>` wrapper AIProviderBadge in
+  LogoAiPanel (warning validateDOMNesting).
 - **Riorganizzazione docs** (utente): spec → `docs/spec/`,
   `AI_ARCHITECTURE.md` e `to-be-done.md` → `docs/`;
   `docs/post-tb023-known-issues.md` e `docs/tb023-verification.md`
