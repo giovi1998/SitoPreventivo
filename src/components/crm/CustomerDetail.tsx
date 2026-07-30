@@ -10,6 +10,10 @@ import { palettePreviewDataUrl } from '../../utils/palettePreview';
 import { AI_IMAGE_MODELS, setAiImageModelDefault } from '../../utils/uiPrefs';
 import type { PaletteConcept } from '../../ai/PaletteOrchestrator';
 import { providerRegistry } from '../../ai/providers/registry';
+import { useCustomerLogger } from '../../hooks/useCustomerLogger';
+import CustomerAiLogPanel from './CustomerAiLogPanel';
+import CustomerResearchSection from './CustomerResearchSection';
+import CustomerWebDataPanel from './CustomerWebDataPanel';
 
 type Customer = Record<string, unknown> & {
   id: string;
@@ -47,17 +51,6 @@ interface Props {
   onRefresh: () => void;
 }
 
-interface LogEntry {
-  ts: string;
-  type: 'info' | 'success' | 'error';
-  msg: string;
-  cost?: string;
-  detail?: unknown;
-}
-
-const LOG_KEY = (id: string) => `pq_crm_log:${id}`;
-const MAX_LOG = 50;
-
 const DOC_EDITOR_VIEW: Record<string, string> = {
   logo: 'logo',
   businessCard: 'card',
@@ -87,37 +80,6 @@ function truncateDataUrl(url: string): string {
   return url.length > 60 ? `${url.slice(0, 60)}…(${url.length} bytes)` : url;
 }
 
-async function copyTextToClipboard(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    // Fallback per contesti senza Clipboard API (http, permessi negati)
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); } catch { /* noop */ }
-    document.body.removeChild(ta);
-  }
-}
-
-function loadLog(customerId: string): LogEntry[] {
-  try {
-    const raw = sessionStorage.getItem(LOG_KEY(customerId));
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveLog(customerId: string, entries: LogEntry[]) {
-  try {
-    sessionStorage.setItem(LOG_KEY(customerId), JSON.stringify(entries.slice(-MAX_LOG)));
-  } catch { /* quota */ }
-}
-
 export default function CustomerDetail({ customerId, onBack, onRefresh }: Props) {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -125,14 +87,11 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [log, setLog] = useState<LogEntry[]>([]);
-  const [expandedLog, setExpandedLog] = useState<number | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
   const [paletteCost, setPaletteCost] = useState<number | null>(null);
   const [aiProvider, setAiProvider] = useState<string>(() => providerRegistry.getDefaultId());
-  const [logCopied, setLogCopied] = useState(false);
   const [aiFillCost, setAiFillCost] = useState<number | null>(null);
 
   const [imageGenModel, setImageGenModel] = useState<string>('gemini-3.1-flash-image');
@@ -144,14 +103,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const providers = providerRegistry.listProviders();
   const logoStatus = customer?.logoUrl ? 'manual' : customer?.detectedLogoUrl ? 'detected' : customer?.researchStatus?.logo || 'no_logo';
 
-  const appendLog = useCallback((type: LogEntry['type'], msg: string, cost?: string, detail?: unknown) => {
-    const ts = new Date().toLocaleTimeString('it-IT');
-    setLog((prev) => {
-      const next = [...prev.slice(-MAX_LOG + 1), { ts, type, msg, cost, detail }];
-      saveLog(customerId, next);
-      return next;
-    });
-  }, [customerId]);
+  const logger = useCustomerLogger(customerId);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -169,7 +121,6 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   }, [customerId]);
 
   useEffect(() => {
-    setLog(loadLog(customerId));
     void load();
     void dataService.getUserSettings('admin@gmail.com').then((res) => {
       const img = (res.imageGenModel || 'gemini-flash-image') as string;
@@ -181,28 +132,6 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const flashSaved = (field: string) => {
     setSavedFlash(field);
     setTimeout(() => setSavedFlash(null), 1500);
-  };
-
-  const formatLogText = () =>
-    log
-      .map((e) => {
-        const icon = e.type === 'success' ? '✓' : e.type === 'error' ? '✗' : '▶';
-        let line = `[${e.ts}] ${icon} ${e.msg}${e.cost ? ` ${e.cost}` : ''}`;
-        if (e.detail) line += `\n  ${JSON.stringify(e.detail, null, 2).split('\n').join('\n  ')}`;
-        return line;
-      })
-      .join('\n');
-
-  const copyLog = async () => {
-    await copyTextToClipboard(formatLogText());
-    setLogCopied(true);
-    setTimeout(() => setLogCopied(false), 2000);
-  };
-
-  const clearLog = () => {
-    setLog([]);
-    setExpandedLog(null);
-    try { sessionStorage.removeItem(LOG_KEY(customerId)); } catch { /* quota */ }
   };
 
   const saveField = async (field: string, value: string) => {
@@ -255,16 +184,16 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = reader.result as string;
-      appendLog('info', 'Caricamento logo manuale…', undefined, { fileName: file.name, sizeBytes: file.size, mime: file.type });
+      logger.appendLog('info', 'Caricamento logo manuale…', undefined, { fileName: file.name, sizeBytes: file.size, mime: file.type });
       try {
         await dataService.updateCustomer(customer.id, { logoUrl: dataUrl });
-        appendLog('success', 'Logo caricato', undefined, { logoUrl: truncateDataUrl(dataUrl) });
+        logger.appendLog('success', 'Logo caricato', undefined, { logoUrl: truncateDataUrl(dataUrl) });
         flashSaved('logoUrl');
         await load();
         onRefresh();
         await propagateLogoToDrafts(customer.id, dataUrl);
       } catch (err) {
-        appendLog('error', 'Caricamento logo fallito', undefined, { error: String(err) });
+        logger.appendLog('error', 'Caricamento logo fallito', undefined, { error: String(err) });
       }
     };
     reader.readAsDataURL(file);
@@ -275,7 +204,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     if (!customer) return;
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    appendLog('info', `Caricamento ${files.length} foto…`);
+    logger.appendLog('info', `Caricamento ${files.length} foto…`);
     const existing = Array.isArray(customer.customerPhotos) ? customer.customerPhotos : [];
     const newPhotos: string[] = [...existing];
     for (const file of files.slice(0, 5 - existing.length)) {
@@ -287,7 +216,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       newPhotos.push(dataUrl);
     }
     await dataService.updateCustomer(customer.id, { customerPhotos: newPhotos });
-    appendLog('success', `${files.length} foto caricate (${newPhotos.length} totali)`);
+    logger.appendLog('success', `${files.length} foto caricate (${newPhotos.length} totali)`);
     flashSaved('customerPhotos');
     await load();
     onRefresh();
@@ -308,15 +237,15 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const runAction = async (key: string, fn: () => Promise<ActionResult>, logStart: string, logOk: string, buildExtra?: (res: ActionResult) => ActionLogExtra) => {
     setBusy(key);
     setError(null);
-    appendLog('info', logStart, undefined, { action: key, customerId });
+    logger.appendLog('info', logStart, undefined, { action: key, customerId });
     const res = await fn();
     const extra = buildExtra?.(res) ?? {};
     if (res.error) {
       setError(String(res.error));
       const base = typeof extra.detail === 'object' && extra.detail !== null ? extra.detail as Record<string, unknown> : {};
-      appendLog('error', `${logOk} fallito: ${res.error}`, undefined, { action: key, ...base, error: String(res.error) });
+      logger.appendLog('error', `${logOk} fallito: ${res.error}`, undefined, { action: key, ...base, error: String(res.error) });
     } else {
-      appendLog('success', extra.msg ?? logOk, extra.cost, extra.detail);
+      logger.appendLog('success', extra.msg ?? logOk, extra.cost, extra.detail);
     }
     await load();
     setBusy(null);
@@ -372,12 +301,12 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     if (!customer) return;
     setBusy('auto-build');
     setError(null);
-    appendLog('info', 'Auto-build draft in corso…', undefined, { action: 'auto-build', customerId });
+    logger.appendLog('info', 'Auto-build draft in corso…', undefined, { action: 'auto-build', customerId });
     const prevIds = new Set(docs.map((d) => d.id));
     const res = await dataService.autoBuildCustomer(customerId, true);
     if (res.error) {
       setError(String(res.error));
-      appendLog('error', `Auto-build fallito: ${res.error}`, undefined, { action: 'auto-build', error: String(res.error) });
+      logger.appendLog('error', `Auto-build fallito: ${res.error}`, undefined, { action: 'auto-build', error: String(res.error) });
       setBusy(null);
       return;
     }
@@ -386,7 +315,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const created = freshDocs.filter((d) => createdIds.has(d.id) || !prevIds.has(d.id)).map((d) => d.documentType);
     const replaced = freshDocs.filter((d) => prevIds.has(d.id) && !createdIds.has(d.id) && DOC_EDITOR_VIEW[d.documentType]).length;
-    appendLog('success', 'Auto-build: draft creati', undefined, { created, replaced });
+    logger.appendLog('success', 'Auto-build: draft creati', undefined, { created, replaced });
     if (fresh.data) {
       setCustomer(fresh.data as Customer);
       setDocs(freshDocs);
@@ -402,7 +331,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     setBusy('palette');
     setError(null);
     const req = { businessName: customer.businessName, sector: customer.sector, mood: customer.mood, target: customer.target, activity: customer.activity, provider: aiProvider };
-    appendLog('info', `Generazione 3 palette AI (provider: ${aiProvider})…`, undefined, { request: req });
+    logger.appendLog('info', `Generazione 3 palette AI (provider: ${aiProvider})…`, undefined, { request: req });
     try {
       const result = await palette.generate({
         businessName: customer.businessName,
@@ -412,23 +341,21 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         activity: customer.activity,
       }, { modelId: aiProvider });
       setPaletteCost(result.costUsd);
-      appendLog('success', '3 palette generate', `$${result.costUsd.toFixed(4)}`, { provider: aiProvider, concepts: palette.concepts?.length, costUsd: result.costUsd });
+      logger.appendLog('success', '3 palette generate', `$${result.costUsd.toFixed(4)}`, { provider: aiProvider, concepts: palette.concepts?.length, costUsd: result.costUsd });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
-      appendLog('error', `Palette fallita: ${msg}`, undefined, { provider: aiProvider, error: msg });
+      logger.appendLog('error', `Palette fallita: ${msg}`, undefined, { provider: aiProvider, error: msg });
     }
     setBusy(null);
   };
 
-  // Applica palette ai documenti: patcha style.accentColor + decorations.palette
   const handleApplyPalette = async (concept: PaletteConcept) => {
     if (!customer) return;
     setBusy('apply-palette');
     const colorSummary = `${concept.name} · ${concept.primary} ${concept.secondary} ${concept.accent}`;
-    appendLog('info', `Applico palette "${concept.name}" a cliente + documenti…`, undefined, { concept, docsCount: docs.length });
+    logger.appendLog('info', `Applico palette "${concept.name}" a cliente + documenti…`, undefined, { concept, docsCount: docs.length });
     await dataService.updateCustomer(customer.id, { preferredColors: colorSummary });
-    // Patch ai documenti esistenti: card + flyer + logo
     for (const doc of docs) {
       if (doc.documentType === 'businessCard' || doc.documentType === 'flyer') {
         const data = (doc.data || {}) as Record<string, unknown>;
@@ -448,7 +375,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         await dataService.saveDocument('admin@gmail.com', { id: doc.id, documentType: doc.documentType, title: doc.title, customerId: customer.id, data: updated, status: 'BOZZA' } as Record<string, unknown>);
       }
     }
-    appendLog('success', `Palette "${concept.name}" applicata a ${docs.length} documenti`, undefined, { appliedTo: docs.map((d) => d.documentType) });
+    logger.appendLog('success', `Palette "${concept.name}" applicata a ${docs.length} documenti`, undefined, { appliedTo: docs.map((d) => d.documentType) });
     await load();
     onRefresh();
     setBusy(null);
@@ -457,7 +384,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const propagateLogoToDrafts = async (cid: string, logoUrl: string) => {
     const rel = docs.filter((d) => d.documentType === 'businessCard' || d.documentType === 'flyer' || d.documentType === 'logo');
     if (rel.length === 0) return;
-    appendLog('info', `Propago logo caricato a ${rel.length} draft…`, undefined, { docs: rel.map((d) => d.documentType) });
+    logger.appendLog('info', `Propago logo caricato a ${rel.length} draft…`, undefined, { docs: rel.map((d) => d.documentType) });
     let patched = 0;
     for (const doc of rel) {
       const data = (doc.data || {}) as Record<string, unknown>;
@@ -476,7 +403,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       await dataService.saveDocument('admin@gmail.com', { id: doc.id, documentType: doc.documentType, title: doc.title, customerId: cid, data: updated, status: 'BOZZA' } as Record<string, unknown>);
       patched++;
     }
-    appendLog('success', `Logo propagato a ${patched} draft`, undefined, { patched });
+    logger.appendLog('success', `Logo propagato a ${patched} draft`, undefined, { patched });
     await load();
   };
 
@@ -487,7 +414,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
 
   const handleGenerateAll = async () => {
     if (!customer) return;
-    appendLog('info', `Generazione bozze AI in corso (provider: ${aiProvider})…`, undefined, { docs: docs.length, provider: aiProvider });
+    logger.appendLog('info', `Generazione bozze AI in corso (provider: ${aiProvider})…`, undefined, { docs: docs.length, provider: aiProvider });
     const summary = await autoGen.generateAll(docs, customer, { providerId: aiProvider });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
@@ -508,7 +435,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         };
       });
     const hasError = perDoc.some((p) => p.status === 'error');
-    appendLog(hasError ? 'error' : 'success', hasError ? 'Generazione bozze AI completata con errori' : 'Generazione bozze AI completata', undefined, perDoc);
+    logger.appendLog(hasError ? 'error' : 'success', hasError ? 'Generazione bozze AI completata con errori' : 'Generazione bozze AI completata', undefined, perDoc);
     if (fresh.data) {
       setCustomer(fresh.data as Customer);
       setDocs(freshDocs);
@@ -520,7 +447,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
 
   const handleGenerateOne = async (doc: Doc) => {
     if (!customer) return;
-    appendLog('info', `Rigenero bozza ${doc.documentType} (provider: ${aiProvider})…`, undefined, { docId: doc.id, provider: aiProvider });
+    logger.appendLog('info', `Rigenero bozza ${doc.documentType} (provider: ${aiProvider})…`, undefined, { docId: doc.id, provider: aiProvider });
     await autoGen.generateOne(doc, customer, { providerId: aiProvider });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
@@ -528,7 +455,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     const aiStats = (freshDoc?.data as Record<string, unknown> | undefined)?.aiStats as { totalCostUsd?: string } | undefined;
     const costUsd = parseFloat(String(aiStats?.totalCostUsd ?? '0')) || 0;
     const genError = autoGen.state.errors?.[doc.id] ?? null;
-    appendLog(
+    logger.appendLog(
       genError ? 'error' : 'success',
       genError ? `Rigenerazione ${doc.documentType} fallita: ${genError}` : `Bozza ${doc.documentType} rigenerata`,
       costUsd > 0 ? `$${costUsd.toFixed(4)}` : undefined,
@@ -560,10 +487,6 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const siteScreenshot = typeof webData.screenshot === 'string' ? webData.screenshot : null;
   const siteLinks = normalizeLinks(webData.links);
   const siteJson = (webData.json || null) as Record<string, unknown> | null;
-  const siteBranding = (webData.branding || null) as Record<string, unknown> | null;
-  const brandingLogo = typeof siteBranding?.logo === 'string' ? siteBranding.logo : typeof webData.brandingLogo === 'string' ? webData.brandingLogo : null;
-  const brandingColors = Array.from(new Set(normalizeColors(siteBranding?.colors || webData.brandingColors || webData.colors)));
-  const brandingFonts = Array.isArray(siteBranding?.fonts) ? (siteBranding.fonts as unknown[]).filter((f): f is string => typeof f === 'string') : [];
   const hasWebData = Boolean(
     webData.title || webData.description || webData.markdownPreview || markdownFull || siteColors.length || siteImages.length || siteScreenshot || siteLinks.length || siteJson,
   );
@@ -697,147 +620,21 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         )}
       </section>
 
-      <section className="crm-ai-log" data-testid="crm-ai-log">
-        <div className="crm-ai-log-head">
-          <span>Registro operazioni AI</span>
-          {log.length > 0 && (
-            <div className="crm-ai-log-actions">
-              <button type="button" className="crm-ai-log-btn" onClick={copyLog} data-testid="crm-log-copy">
-                {logCopied ? '✓ Copiato' : 'Copia'}
-              </button>
-              <button type="button" className="crm-ai-log-btn" onClick={clearLog} data-testid="crm-log-clear">
-                Cancella
-              </button>
-            </div>
-          )}
-        </div>
-        {log.length === 0 ? (
-          <div className="crm-ai-log-empty">Nessuna operazione. Lancia research / AI fill / auto-build per vedere qui.</div>
-        ) : (
-          <div className="crm-ai-log-body">
-            {log.map((e, i) => (
-              <div key={i} className={`crm-ai-log-row crm-log-${e.type}`} onClick={() => setExpandedLog(expandedLog === i ? null : i)} style={{ cursor: e.detail ? 'pointer' : 'default' }} data-testid={`crm-log-row-${i}`}>
-                <span className="crm-log-ts">{e.ts}</span>
-                <span className="crm-log-icon">{e.type === 'success' ? '✓' : e.type === 'error' ? '✗' : '▶'}</span>
-                <span className="crm-log-msg">{e.msg}</span>
-                {e.cost && <span className="crm-log-cost">{e.cost}</span>}
-                {expandedLog === i && e.detail ? (
-                  <pre className="crm-log-detail" data-testid="crm-log-detail">{JSON.stringify(e.detail, null, 2)}</pre>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <CustomerAiLogPanel
+        log={logger.log}
+        expandedLog={logger.expandedLog}
+        setExpandedLog={logger.setExpandedLog}
+        logCopied={logger.logCopied}
+        copyLog={logger.copyLog}
+        clearLog={logger.clearLog}
+      />
 
       {customer.researchStatus && (
-        <section className="crm-section" data-testid="crm-research-section">
-          <h3>Research</h3>
-          <div className="crm-timeline">
-            <div className="crm-timeline-row">
-              <span className="crm-timeline-label">Sito web</span>
-              <span className={`crm-status-pill crm-status-${customer.researchStatus.web === 'ok' ? 'ok' : 'warn'}`}>
-                {customer.researchStatus.web}
-              </span>
-            </div>
-            <div className="crm-timeline-row">
-              <span className="crm-timeline-label">Logo detection</span>
-              <span className={`crm-status-pill crm-status-${logoStatus === 'ok' || logoStatus === 'manual' || logoStatus === 'detected' ? 'ok' : 'warn'}`} data-testid="crm-logo-status">
-                {logoStatus}
-              </span>
-            </div>
-          </div>
-        </section>
+        <CustomerResearchSection researchStatus={customer.researchStatus} logoStatus={logoStatus} />
       )}
 
       {hasWebData && (
-        <section className="crm-section" data-testid="crm-nap-section">
-          <h3>Dati dal sito</h3>
-          <div className="crm-webdata-grid">
-            <div className="crm-webdata-main">
-              <Field label="Titolo" value={webData.title} />
-              <Field label="Descrizione" value={webData.description || siteJson?.company_description} />
-              {siteJson?.company_name ? <Field label="Nome attività (AI)" value={siteJson.company_name} /> : null}
-              {markdownFull ? (
-                <details className="crm-markdown-toggle" data-testid="crm-markdown-toggle">
-                  <summary>Mostra tutto il markdown ({markdownFull.length} caratteri)</summary>
-                  <pre className="crm-markdown-full" data-testid="crm-markdown-full">{markdownFull}</pre>
-                </details>
-              ) : (
-                <>
-                  <Field label="Preview" value={webData.markdownPreview} />
-                  {webData.markdownPreview ? (
-                    <p className="crm-note" data-testid="crm-markdown-partial-note">Solo preview (500 caratteri): il markdown completo non è ancora persistito.</p>
-                  ) : null}
-                </>
-              )}
-              {siteJson && Object.keys(siteJson).length > 0 && (
-                <details className="crm-json-toggle" data-testid="crm-json-toggle">
-                  <summary>Dati strutturati JSON</summary>
-                  <pre className="crm-json-full" data-testid="crm-json-full">{JSON.stringify(siteJson, null, 2)}</pre>
-                </details>
-              )}
-              {siteLinks.length > 0 && (
-                <div className="crm-webdata-links" data-testid="crm-webdata-links">
-                  <span className="crm-field-label">Link trovati ({siteLinks.length})</span>
-                  <ul>
-                    {siteLinks.slice(0, 20).map((u, i) => (
-                      <li key={i}>
-                        <a href={u} target="_blank" rel="noreferrer">{u}</a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {brandingColors.length > 0 && (
-                <div className="crm-webdata-colors" data-testid="crm-webdata-colors">
-                  <span className="crm-field-label">Colori branding</span>
-                  {brandingColors.map((hex) => (
-                    <button key={hex} type="button" className="crm-color-chip" onClick={() => void copyTextToClipboard(hex)} title={`Copia ${hex}`} data-testid={`crm-color-chip-${hex}`}>
-                      <span className="crm-color-swatch" style={{ background: hex }} />
-                      <span className="crm-color-hex">{hex}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {brandingFonts.length > 0 && (
-                <div data-testid="crm-webdata-fonts">
-                  <Field label="Font branding" value={brandingFonts.join(', ')} />
-                </div>
-              )}
-            </div>
-            <div className="crm-webdata-side">
-              {siteScreenshot && (
-                <div className="crm-webdata-screenshot" data-testid="crm-webdata-screenshot">
-                  <span className="crm-field-label">Screenshot</span>
-                  <a href={siteScreenshot.startsWith('data:') ? undefined : siteScreenshot} target="_blank" rel="noreferrer">
-                    <img src={siteScreenshot} alt="Screenshot sito" className="crm-screenshot-img" />
-                  </a>
-                </div>
-              )}
-              {brandingLogo && (
-                <div className="crm-webdata-logo" data-testid="crm-webdata-logo">
-                  <span className="crm-field-label">Logo rilevato</span>
-                  <a href={brandingLogo} target="_blank" rel="noreferrer">
-                    <img src={brandingLogo} alt="Logo rilevato" className="crm-webdata-thumb" />
-                  </a>
-                </div>
-              )}
-              {siteImages.length > 0 && (
-                <div className="crm-webdata-images" data-testid="crm-webdata-images">
-                  <span className="crm-field-label">Immagini ({siteImages.length})</span>
-                  <div className="crm-webdata-image-grid">
-                    {siteImages.slice(0, 12).map((u, i) => (
-                      <a key={i} href={u} target="_blank" rel="noreferrer" title="Apri immagine in nuova scheda">
-                        <img src={u} loading="lazy" alt={`Immagine sito ${i + 1}`} className="crm-webdata-thumb" />
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
+        <CustomerWebDataPanel webData={webData} />
       )}
 
       {hasAiFields && (
