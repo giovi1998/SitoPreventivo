@@ -70,6 +70,31 @@ describe('TB-027 A1: autoBuildCustomer LOCAL shape nested (regression bozze vuot
     expect(flyer.data.content.heroImage).toBe('data:image/png;base64,abc');
   });
 
+  it('rerun sostituisce le BOZZE esistenti (no duplicati), non tocca i non-BOZZA', async () => {
+    localStorage.setItem('pq_customers:v1', JSON.stringify([{
+      id: 'cust_1', businessName: 'Bar Da Mario', ownerName: 'Mario', sector: 'bar', contacts: {},
+    }]));
+    // Documento confermato del cliente: non deve essere toccato dal rerun.
+    localStorage.setItem('precisionQuote_documents:v1', JSON.stringify([{
+      id: 'flyer_confirmed', userEmail: 'admin@gmail.com', customerId: 'cust_1',
+      documentType: 'flyer', title: 'Flyer confermato', status: 'CONFERMATO', data: {},
+    }]));
+    const ds = (await import('../dataService')).default;
+    const first = await ds.autoBuildCustomer('cust_1', false);
+    expect(first.data.createdDocuments).toHaveLength(3);
+    const second = await ds.autoBuildCustomer('cust_1', false);
+    expect(second.data.createdDocuments).toHaveLength(3);
+    const docs = JSON.parse(localStorage.getItem('precisionQuote_documents:v1') || '[]');
+    // 3 bozze nuove + 1 confermato = 4, non 7
+    expect(docs).toHaveLength(4);
+    expect(docs.filter((d: any) => d.status === 'BOZZA')).toHaveLength(3);
+    expect(docs.find((d: any) => d.id === 'flyer_confirmed')).toBeTruthy();
+    // le bozze del primo giro sono state eliminate
+    for (const oldId of first.data.createdDocuments) {
+      expect(docs.find((d: any) => d.id === oldId)).toBeUndefined();
+    }
+  });
+
   it('cliente non trovato → error', async () => {
     localStorage.setItem('pq_customers:v1', JSON.stringify([]));
     const ds = (await import('../dataService')).default;

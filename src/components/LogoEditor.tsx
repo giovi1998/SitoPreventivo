@@ -39,7 +39,10 @@ function deepSetBuilder(logo: Logo, patch: Partial<LogoBuilder>): Logo {
 
 function logoHasContent(logo: Logo): boolean {
   const b = logo.builder;
-  return !!(b.primaryText || b.tagline || b.iconGlyph);
+  // backgroundImage conta come contenuto: un logo con solo il background
+  // AI (pagato via Gemini) non deve aprirsi sul tab AI né essere saltato
+  // dall'auto-save.
+  return !!(b.primaryText || b.tagline || b.iconGlyph || b.backgroundImage);
 }
 
 export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', onReset, onSaved }: LogoEditorProps) {
@@ -74,11 +77,18 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
   const { addToast } = useToast();
 
   // When the URL-driven document changes, reset local state to the new logo.
+  // Stesso reset di `handleNew`: senza azzerare aiStateRef / aiPanelResetKey
+  // / tab, navigando da /app/logo/A a /app/logo/B il pannello AI mostrava
+  // lo stato (chat, concept, immagini) del documento precedente.
   useEffect(() => {
     if (!initialLogo?.id) return;
     if (initialLogo.id === loadedIdRef.current) return;
     loadedIdRef.current = initialLogo.id;
-    setLogo(mergeLogoWithDefaults(initialLogo));
+    const merged = mergeLogoWithDefaults(initialLogo);
+    setLogo(merged);
+    aiStateRef.current = undefined;
+    setAiPanelResetKey((k) => k + 1);
+    setTab(logoHasContent(merged) ? 'builder' : 'ai');
   }, [initialLogo]);
 
   // Auto-save ogni 30s se c'è contenuto
@@ -401,6 +411,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
         ) : (
           <LogoAiPanel
             key={aiPanelResetKey}
+            docId={initialLogo?.id}
             logo={logo}
             onPatch={(patch) => {
               for (const [k, v] of Object.entries(patch)) onPatch(`builder.${k}`, v);

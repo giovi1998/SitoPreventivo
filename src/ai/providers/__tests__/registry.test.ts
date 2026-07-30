@@ -5,7 +5,9 @@ import { DeepSeekProvider } from '../deepseek';
 describe('AIProviderRegistry', () => {
   it('has default id', () => {
     const r = new AIProviderRegistry();
-    expect(r.getDefaultId()).toBe('deepseek-chat');
+    // Default: MiniMax M3 (vision); DeepSeek resta fallback.
+    expect(r.getDefaultId()).toBe('ollama-minimax-m3');
+    expect(r.getFallbackProvider()).toMatchObject({ id: 'deepseek-chat' });
   });
   it('returns provider by id', () => {
     const r = new AIProviderRegistry();

@@ -1,0 +1,148 @@
+// @vitest-environment node
+import { describe, it, expect, vi, afterEach } from 'vitest';
+
+// Smoke test del dev API proxy inline in vite.config.js.
+// Regression: il fallback Ollama usava `json()` fuori scope → il client
+// riceveva "AI error: json is not defined" (502). Inoltre /api/logs non
+// era gestito in dev → 404 continui dal logger client.
+
+interface MockRes {
+  statusCode: number;
+  headers: Record<string, string>;
+  body: string;
+  ended: boolean;
+  setHeader: (k: string, v: string) => void;
+  write: (s: string) => void;
+  end: (s?: string) => void;
+}
+
+function mockReq(method: string, url: string, payload?: unknown) {
+  const chunks = payload !== undefined ? [Buffer.from(JSON.stringify(payload))] : [];
+  return {
+    method,
+    url,
+    async *[Symbol.asyncIterator]() {
+      for (const c of chunks) yield c;
+    },
+  };
+}
+
+function mockRes(): MockRes {
+  return {
+    statusCode: 200,
+    headers: {},
+    body: '',
+    ended: false,
+    setHeader(k, v) {
+      this.headers[k] = v;
+    },
+    write(s) {
+      this.body += s;
+    },
+    end(s) {
+      if (s) this.body += s;
+      this.ended = true;
+    },
+  };
+}
+
+type Middleware = (req: unknown, res: MockRes, next: () => void) => Promise<void>;
+
+async function loadApiMiddleware(ssrLoadModule: (id: string) => Promise<unknown>): Promise<Middleware> {
+  const cfgFactory = (await import('../../vite.config.js')).default as (
+    env: { mode: string; command: string }
+  ) => Promise<{ plugins: unknown[] }> | { plugins: unknown[] };
+  const config = await cfgFactory({ mode: 'development', command: 'serve' });
+  const plugins = (config.plugins as unknown[]).flat() as { name?: string }[];
+  const plugin = plugins.find((p) => p && p.name === 'spa-fallback') as {
+    configureServer: (server: unknown) => void;
+  };
+  expect(plugin, 'plugin spa-fallback non trovato in vite.config.js').toBeDefined();
+  const middlewares: Middleware[] = [];
+  plugin.configureServer({
+    middlewares: { use: (fn: Middleware) => middlewares.push(fn) },
+    ssrLoadModule,
+  });
+  // middlewares[0] = SPA fallback, middlewares[1] = dev API proxy
+  return middlewares[1];
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  delete process.env.OLLAMA_API_KEY;
+});
+
+describe('vite dev API proxy (vite.config.js)', () => {
+  it('POST /api/logs risponde 200 { data: { ok: true } } e stampa in console', async () => {
+    const api = await loadApiMiddleware(async () => null);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/logs', { level: 'warn', msg: 'boom', meta: { route: '/app/card' }, url: '/app/card', t: 123 }),
+      res,
+      () => {
+        throw new Error('next() non deve essere chiamato per /api/logs');
+      },
+    );
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ data: { ok: true } });
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('fallback Ollama senza OLLAMA_API_KEY → 503 strutturato (non "json is not defined")', async () => {
+    const api = await loadApiMiddleware(async () => null); // registry non caricabile → fallback Ollama
+    // delete DOPO il load: loadEnv() nella config factory ripopola
+    // process.env da .env (che in questo repo ha una key reale)
+    delete process.env.OLLAMA_API_KEY;
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/ai/chat', { provider: 'ollama-minimax-m3', messages: [{ role: 'user', content: 'hi' }] }),
+      res,
+      () => {
+        throw new Error('next() non deve essere chiamato per /api/ai/chat');
+      },
+    );
+    expect(res.statusCode).toBe(503);
+    const body = JSON.parse(res.body);
+    expect(body.error).toContain('OLLAMA_API_KEY');
+    expect(body.error).not.toContain('json is not defined');
+  });
+
+  it('fallback Ollama con fetch in errore → 502 JSON strutturato', async () => {
+    process.env.OLLAMA_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')));
+    const api = await loadApiMiddleware(async () => null);
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/ai/chat', { provider: 'ollama-minimax-m3', messages: [{ role: 'user', content: 'hi' }] }),
+      res,
+      () => {
+        throw new Error('next() non deve essere chiamato per /api/ai/chat');
+      },
+    );
+    expect(res.statusCode).toBe(502);
+    const body = JSON.parse(res.body);
+    expect(body.error).toMatch(/^Ollama error: /);
+    expect(body.error).toContain('ECONNREFUSED');
+    expect(body.error).not.toContain('json is not defined');
+  });
+
+  it('fallback Ollama con risposta upstream non-ok → passthrough status + errore Ollama', async () => {
+    process.env.OLLAMA_API_KEY = 'test-key';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => 'upstream down' }),
+    );
+    const api = await loadApiMiddleware(async () => null);
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/ai/chat', { provider: 'ollama-minimax-m3', messages: [] }),
+      res,
+      () => {},
+    );
+    expect(res.statusCode).toBe(500);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('Ollama (500): upstream down');
+  });
+});

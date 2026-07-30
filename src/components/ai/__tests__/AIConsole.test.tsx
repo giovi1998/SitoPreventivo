@@ -19,7 +19,7 @@ describe('AIConsole (REQ-AI-001/003/006)', () => {
   it('renderizza header "AI Assist" e AIProviderBadge', () => {
     render(<AIConsole {...baseProps} />);
     expect(screen.getByText('AI Assist')).toBeInTheDocument();
-    expect(screen.getByTestId('ai-provider-badge')).toHaveTextContent(/DeepSeek/);
+    expect(screen.getByTestId('ai-provider-badge')).toHaveTextContent(/Ollama/);
   });
 
   it('persiste lo stato expanded in pq_ui:v1 quando editorKind è settato (REQ-AI-003)', () => {

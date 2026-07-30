@@ -493,7 +493,7 @@ validazione. La roadmap viene ristrutturata in to-be-done.md.
 
 - **EXT-001**: Firecrawl — scraping sito cliente per testo, branding,
   logo. Key `FIRECRAWL_API_KEY` server-side.
-- **EXT-002**: Gemini Embeddings (`text-embedding-004`) — RAG sui chunk
+- **EXT-002**: Gemini Embeddings (`gemini-embedding-2`) — RAG sui chunk
   salvati in `customer_knowledge`.
 - **EXT-003**: Google Forms / Tally.so — intake form (riuso spec
   intake-pipeline).

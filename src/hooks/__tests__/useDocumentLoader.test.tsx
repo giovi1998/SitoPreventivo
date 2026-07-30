@@ -66,14 +66,18 @@ describe('useDocumentLoader', () => {
     expect(getDocumentSpy).not.toHaveBeenCalled();
   });
 
-  it('returns context doc as initialDoc when id matches', () => {
+  it('returns context doc as initialDoc when id matches, but refetches fresh copy', async () => {
     mocks.params.docId = 'card-1';
     const doc = { id: 'card-1', documentType: 'businessCard' };
-    const ctx = { cardDocument: doc, setCardDocument: vi.fn() };
+    const fresh = { id: 'card-1', documentType: 'businessCard', title: 'Fresh' };
+    getDocumentSpy.mockResolvedValueOnce(fresh);
+    const setCardDocument = vi.fn();
+    const ctx = { cardDocument: doc, setCardDocument };
     const { result } = renderHook(() => useDocumentLoader({ view: 'card', documentType: 'businessCard', contextField: 'cardDocument' }), { wrapper: wrapper('/app/card/card-1', ctx) });
     expect(result.current.docId).toBe('card-1');
     expect(result.current.initialDoc).toBe(doc);
-    expect(getDocumentSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(getDocumentSpy).toHaveBeenCalledWith('u@t.com', 'card-1', 'businessCard'));
+    await waitFor(() => expect(setCardDocument).toHaveBeenCalledWith(fresh));
   });
 
   it('fetches document when id does not match context', async () => {

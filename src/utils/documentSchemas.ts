@@ -614,6 +614,11 @@ export const businessCardSchema = z.object({
   grid: cardGridSchema.optional(),
   backGrid: cardGridSchema.optional(),
   aiStats: aiStatsSchema.optional(),
+  // TB-027 auto-build: brief cliente in chiaro (Attività:/Referente:/…)
+  // letto dagli orchestratori AI per contestualizzare la generazione.
+  briefContext: z.string().optional(),
+  // TB-027 auto-build: true finché la bozza non ha completato la generazione AI.
+  autoGeneratePending: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -857,6 +862,8 @@ export const logoSchema = z.object({
     secondaryColor: '#1a1a2e',
   }),
   aiStats: aiStatsSchema.optional(),
+  briefContext: z.string().optional(),
+  autoGeneratePending: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1118,6 +1125,8 @@ export const flyerSchema = z.object({
     userLocked: z.boolean().default(false),
   }).default(() => ({ pattern: null, opacity: 0.2, palette: { primary: '#01696F', secondary: '#E11D48', accent: null }, userLocked: false })),
   aiStats: aiStatsSchema.optional(),
+  briefContext: z.string().optional(),
+  autoGeneratePending: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

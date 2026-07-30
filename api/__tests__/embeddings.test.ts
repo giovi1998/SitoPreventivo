@@ -131,11 +131,11 @@ describe('POST /api/ai/embeddings', () => {
     const res = await callHandler({
       method: 'POST',
       url: '/api/ai/embeddings',
-      body: { input: 'hello world', model: 'text-embedding-004' },
+      body: { input: 'hello world', model: 'gemini-embedding-2' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.body.data.embedding).toEqual([0.1, 0.2, 0.3, 0.4]);
-    expect(res.body.data.model).toBe('text-embedding-004');
+    expect(res.body.data.model).toBe('gemini-embedding-2');
   });
 
   it('input too long → 400', async () => {

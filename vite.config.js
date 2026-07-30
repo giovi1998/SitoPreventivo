@@ -41,14 +41,25 @@ export default defineConfig(({ mode }) => {
           // per evitare che dev e prod divergano (bug storico: questo
           // proxy chiamava un modello/endpoint diverso da gemini.ts).
 
+          // Helper di risposta JSON condiviso da TUTTI gli handler del dev
+          // proxy (middleware + proxyOllamaChat). Deve vivere in questo
+          // scope: quando era definita dentro il middleware, il fallback
+          // Ollama lanciava `ReferenceError: json is not defined` e il
+          // client riceveva un 502 "AI error: json is not defined".
+          const json = (res, status, payload) => {
+            res.statusCode = status;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(payload));
+          };
+
           // ─── Fallback Ollama chat proxy (SSR-safe) ──────────────────
           async function proxyOllamaChat(res, body, isStream) {
             const ollamaKey = process.env.OLLAMA_API_KEY;
-            if (!ollamaKey) return json(503, { error: 'OLLAMA_API_KEY non configurata' });
+            if (!ollamaKey) return json(res, 503, { error: 'OLLAMA_API_KEY non configurata' });
             const model = body.model || 'minimax-m3:cloud';
             const messages = Array.isArray(body.messages) ? body.messages : [];
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 60_000);
+            const timeout = setTimeout(() => controller.abort(), 300_000);
             try {
               const apiRes = await fetch('https://ollama.com/api/chat', {
                 method: 'POST',
@@ -62,7 +73,7 @@ export default defineConfig(({ mode }) => {
               });
               if (!apiRes.ok) {
                 const text = await apiRes.text().catch(() => 'Unknown error');
-                return json(apiRes.status, { error: `Ollama (${apiRes.status}): ${text.slice(0, 200)}` });
+                return json(res, apiRes.status, { error: `Ollama (${apiRes.status}): ${text.slice(0, 200)}` });
               }
               if (isStream) {
                 res.statusCode = 200;
@@ -114,13 +125,13 @@ export default defineConfig(({ mode }) => {
                   if (parsed.eval_count != null) evalCount = parsed.eval_count;
                 } catch {}
               }
-              return json(200, {
+              return json(res, 200, {
                 choices: [{ message: { content: full } }],
                 usage: { prompt_tokens: promptEval, completion_tokens: evalCount, total_tokens: promptEval + evalCount },
               });
             } catch (err) {
               const msg = err?.message || 'unknown';
-              return json(502, { error: `Ollama error: ${msg.slice(0, 200)}` });
+              return json(res, 502, { error: `Ollama error: ${msg.slice(0, 200)}` });
             } finally {
               clearTimeout(timeout);
             }
@@ -142,15 +153,10 @@ export default defineConfig(({ mode }) => {
               '/api/ai/image-flash',
               '/api/ai/chat',
               '/api/ai/chat/stream',
+              '/api/logs',
             ];
             if (!handledPaths.includes(url)) return next();
             if (req.method !== 'GET' && req.method !== 'POST') return next();
-
-            const json = (status, payload) => {
-              res.statusCode = status;
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify(payload));
-            };
 
             try {
               let body = {};
@@ -165,18 +171,31 @@ export default defineConfig(({ mode }) => {
 
               const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
+              // Dev mirror di `POST /api/logs` (api/index.ts): in dev la
+              // Vercel function non gira, quindi stampiamo i log client
+              // nella console del dev server invece di rispondere 404.
+              if (url === '/api/logs') {
+                if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
+                const { level, msg, meta, url: logUrl, t } = body || {};
+                const safeLevel = ['debug', 'info', 'warn', 'error'].includes(level) ? level : 'info';
+                const text = typeof msg === 'string' ? msg.slice(0, 500) : JSON.stringify(body).slice(0, 500);
+                const tag = safeLevel === 'debug' ? 'log' : safeLevel;
+                console[tag](`[client] ${text}`, meta && Object.keys(meta).length ? meta : '', logUrl || '', t || '');
+                return json(res, 200, { data: { ok: true } });
+              }
+
               if (url === '/api/ai/logo-config' && req.method === 'GET') {
                 const enabled = !!apiKey;
-                return json(200, { enabled, provider: enabled ? 'gemini' : 'none' });
+                return json(res, 200, { enabled, provider: enabled ? 'gemini' : 'none' });
               }
 
               if (url === '/api/ai/logo-background' && req.method === 'POST') {
                 if (!apiKey) {
-                  return json(503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                  return json(res, 503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
                 }
                 const prompt = typeof body.prompt === 'string' ? body.prompt : '';
                 if (!prompt || prompt.length > 1000) {
-                  return json(400, { error: 'prompt mancante o troppo lungo' });
+                  return json(res, 400, { error: 'prompt mancante o troppo lungo' });
                 }
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
                 const provider = new mod.GeminiImageProvider(apiKey);
@@ -184,25 +203,25 @@ export default defineConfig(({ mode }) => {
                   const result = await provider.generateBackground(prompt, 30_000);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
                   if (sizeBytes > 500_000) {
-                    return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                    return json(res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
                   }
-                  return json(200, { data: result });
+                  return json(res, 200, { data: result });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
-                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(401, { error: 'Chiave Gemini non valida' });
-                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
-                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(504, { error: 'Gemini non ha risposto entro 30s.' });
-                  return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
+                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
+                  return json(res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
                 }
               }
 
               if (url === '/api/ai/card-cover' && req.method === 'POST') {
                 if (!apiKey) {
-                  return json(503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                  return json(res, 503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
                 }
                 const prompt = typeof body.prompt === 'string' ? body.prompt : '';
                 if (!prompt || prompt.length > 1000) {
-                  return json(400, { error: 'prompt mancante o troppo lungo' });
+                  return json(res, 400, { error: 'prompt mancante o troppo lungo' });
                 }
                 const context = typeof body.context === 'string' ? body.context.slice(0, 2000) : '';
                 const grounding =
@@ -220,25 +239,25 @@ export default defineConfig(({ mode }) => {
                   const result = await provider.generateCardCover(finalPrompt, 30_000, images);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
                   if (sizeBytes > 500_000) {
-                    return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                    return json(res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
                   }
-                  return json(200, { data: result });
+                  return json(res, 200, { data: result });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
-                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(401, { error: 'Chiave Gemini non valida' });
-                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
-                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(504, { error: 'Gemini non ha risposto entro 30s.' });
-                  return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
+                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
+                  return json(res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
                 }
               }
 
               if (url === '/api/ai/flyer-hero' && req.method === 'POST') {
                 if (!apiKey) {
-                  return json(503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                  return json(res, 503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
                 }
                 const prompt = typeof body.prompt === 'string' ? body.prompt : '';
                 if (!prompt || prompt.length > 1500) {
-                  return json(400, { error: 'prompt mancante o troppo lungo' });
+                  return json(res, 400, { error: 'prompt mancante o troppo lungo' });
                 }
                 const context = typeof body.context === 'string' ? body.context.slice(0, 1500) : '';
                 const grounding =
@@ -255,15 +274,15 @@ export default defineConfig(({ mode }) => {
                   const result = await provider.generateImage(finalPrompt, imageConfig, 30_000, images);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
                   if (sizeBytes > 500_000) {
-                    return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                    return json(res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
                   }
-                  return json(200, { data: result });
+                  return json(res, 200, { data: result });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
-                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(401, { error: 'Chiave Gemini non valida' });
-                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
-                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(504, { error: 'Gemini non ha risposto entro 30s.' });
-                  return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
+                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
+                  return json(res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
                 }
               }
 
@@ -271,11 +290,11 @@ export default defineConfig(({ mode }) => {
               // Same path as client/prod: /api/ai/card-photo
               if (url === '/api/ai/card-photo' && req.method === 'POST') {
                 if (!apiKey) {
-                  return json(503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                  return json(res, 503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
                 }
                 const prompt = typeof body.prompt === 'string' ? body.prompt : '';
                 if (!prompt || prompt.length > 1000) {
-                  return json(400, { error: 'prompt mancante o troppo lungo' });
+                  return json(res, 400, { error: 'prompt mancante o troppo lungo' });
                 }
                 const context = typeof body.context === 'string' ? body.context.slice(0, 1500) : '';
                 const finalPrompt = context
@@ -292,28 +311,28 @@ export default defineConfig(({ mode }) => {
                   );
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
                   if (sizeBytes > 500_000) {
-                    return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                    return json(res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
                   }
-                  return json(200, { data: result });
+                  return json(res, 200, { data: result });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
-                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(401, { error: 'Chiave Gemini non valida' });
-                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
-                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(504, { error: 'Gemini non ha risposto entro 30s.' });
+                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
+                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
                   if (String(msg).toLowerCase().includes('copyright') || String(msg).toLowerCase().includes('recitation')) {
-                    return json(400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' });
+                    return json(res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' });
                   }
-                  return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+                  return json(res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
                 }
               }
               // TB-023: Gemini 2.0 Flash image-flash (icon/hero/custom)
               if (url === '/api/ai/image-flash' && req.method === 'POST') {
                 if (!apiKey) {
-                  return json(503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                  return json(res, 503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
                 }
                 const prompt = typeof body.prompt === 'string' ? body.prompt : '';
                 if (!prompt || prompt.length > 1000) {
-                  return json(400, { error: 'prompt mancante o troppo lungo' });
+                  return json(res, 400, { error: 'prompt mancante o troppo lungo' });
                 }
                 const kind = typeof body.kind === 'string' ? body.kind : 'custom';
                 const aspectRatio = typeof body.aspectRatio === 'string' ? body.aspectRatio : (kind === 'hero' ? '16:9' : '1:1');
@@ -332,22 +351,25 @@ export default defineConfig(({ mode }) => {
                   const result = await provider.generateImage(finalPrompt, { image_size: size, aspect_ratio: aspectRatio }, 30_000, []);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
                   if (sizeBytes > 500_000) {
-                    return json(413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                    return json(res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
                   }
-                  return json(200, { data: result });
+                  return json(res, 200, { data: result });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
-                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(401, { error: 'Chiave Gemini non valida' });
-                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
-                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(504, { error: 'Gemini non ha risposto entro 30s.' });
-                  return json(502, { error: `Gemini error: ${msg.slice(0, 200)}` });
+                  if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
+                  if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
+                  if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
+                  return json(res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` });
                 }
               }
 
               // ─── /api/ai/chat and /api/ai/chat/stream proxy ───────
               if (url === '/api/ai/chat' || url === '/api/ai/chat/stream') {
                 const isStream = url === '/api/ai/chat/stream';
-                const providerId = body.provider || 'deepseek-chat';
+                let providerId = body.provider || 'deepseek-chat';
+                // Il client (OllamaProProvider) può inviare provider='ollama';
+                // il registry registra 'ollama-minimax-m3'. Normalizziamo.
+                if (providerId === 'ollama') providerId = 'ollama-minimax-m3';
                 const messages = Array.isArray(body.messages) ? body.messages : [];
                 const temperature = typeof body.temperature === 'number' ? body.temperature : 0.7;
                 const maxTokens = body.max_tokens || body.maxTokens;
@@ -356,15 +378,18 @@ export default defineConfig(({ mode }) => {
                 const options = { temperature, maxTokens, responseFormat, tools };
 
                 try {
-                  // Provider registry import may fail in SSR because
-                  // dataService.js touches `window`. We guard it below.
+                  // Ollama in SSR non può usare fetch relativo: bypassiamo il
+                  // provider e chiamiamo l'upstream direttamente, come fa il fallback.
+                  if (providerId.startsWith('ollama')) {
+                    return await proxyOllamaChat(res, body, isStream);
+                  }
                   const mod = await server.ssrLoadModule('/src/ai/providers/registry.ts').catch(() => null);
                   if (!mod) {
                     // Fallback: direct Ollama proxy using env key.
                     if (providerId.startsWith('ollama')) {
                       return await proxyOllamaChat(res, body, isStream);
                     }
-                    return json(503, { error: 'Provider non disponibile in SSR. Riprova con Ollama o riavvia il dev server.' });
+                    return json(res, 503, { error: 'Provider non disponibile in SSR. Riprova con Ollama o riavvia il dev server.' });
                   }
                   const registry = new mod.AIProviderRegistry();
                   // Register all providers (registry constructor already does this).
@@ -372,7 +397,7 @@ export default defineConfig(({ mode }) => {
 
                   if (isStream) {
                     if (!provider.supportsStreaming) {
-                      return json(400, { error: 'Provider non supporta streaming' });
+                      return json(res, 400, { error: 'Provider non supporta streaming' });
                     }
                     res.statusCode = 200;
                     res.setHeader('Content-Type', 'text/event-stream');
@@ -397,19 +422,19 @@ export default defineConfig(({ mode }) => {
 
                   const result = await provider.chat(messages, options);
                   if (result.error) {
-                    return json(503, { error: result.error });
+                    return json(res, 503, { error: result.error });
                   }
-                  return json(200, {
+                  return json(res, 200, {
                     choices: [{ message: { content: result.content, tool_calls: result.toolCalls } }],
                     usage: result.usage,
                   });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
-                  return json(502, { error: `AI error: ${msg.slice(0, 200)}` });
+                  return json(res, 502, { error: `AI error: ${msg.slice(0, 200)}` });
                 }
               }
             } catch (e) {
-              return json(500, { error: e.message || 'unknown' });
+              return json(res, 500, { error: e.message || 'unknown' });
             }
             next();
           });

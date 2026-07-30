@@ -24,8 +24,9 @@ describe('resolveProviderId', () => {
     expect(resolveProviderId()).toBe('deepseek-chat');
   });
 
-  it('falls back to registry default when pref is invalid', () => {
+  it('falls back to registry default when pref is invalid', async () => {
+    const { providerRegistry } = await import('../../ai/providers/registry');
     getAiProviderDefault.mockReturnValue('unknown-provider');
-    expect(resolveProviderId()).toBe('deepseek-chat');
+    expect(resolveProviderId()).toBe(providerRegistry.getDefaultId());
   });
 });

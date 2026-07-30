@@ -36,6 +36,12 @@ export function detectCardRelevantFields(prompt: string): Set<string> {
 export interface CardAIContext {
   payload: Record<string, unknown>;
   relevantFields: string[];
+  /**
+   * TB-027 auto-build: sezione testuale con il brief cliente, pronta da
+   * accodare al messaggio utente. Stringa vuota se la card non ha un
+   * `briefContext` valorizzato.
+   */
+  briefSection: string;
 }
 
 export function buildCardAIContext(card: BusinessCard, userPrompt: string): CardAIContext {
@@ -70,5 +76,14 @@ export function buildCardAIContext(card: BusinessCard, userPrompt: string): Card
     ? Array.from(fields)
     : ['front', 'back', 'style'];
 
-  return { payload, relevantFields };
+  // TB-027: il brief cliente dei draft auto-build guida l'AI verso il
+  // contesto reale dell'attività. Appeso come sezione testuale al
+  // messaggio utente (vedi cardOrchestrator), mai dentro `payload`
+  // perché non è un campo editabile della card.
+  const briefContext = typeof card.briefContext === 'string' ? card.briefContext.trim() : '';
+  const briefSection = briefContext
+    ? `Contesto cliente (brief attività):\n${briefContext}`
+    : '';
+
+  return { payload, relevantFields, briefSection };
 }

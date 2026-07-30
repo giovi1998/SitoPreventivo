@@ -4,7 +4,9 @@ import { OllamaProProvider } from './ollamaPro';
 
 export class AIProviderRegistry {
   private providers: Map<string, AIProvider> = new Map();
-  private defaultId: string = 'deepseek-chat';
+  // Default: MiniMax M3 (Ollama Pro Cloud) — multimodale/vision, flat rate.
+  // DeepSeek resta fallback (getFallbackProvider).
+  private defaultId: string = 'ollama-minimax-m3';
 
   constructor() {
     this.register('deepseek-chat', new DeepSeekProvider('deepseek-chat'));

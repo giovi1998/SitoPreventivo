@@ -70,7 +70,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
 
     const wantsAnalysis = needsAnalysis(prompt);
 
-    const { payload, relevantFields } = buildCardAIContext(card, prompt);
+    const { payload, relevantFields, briefSection } = buildCardAIContext(card, prompt);
 
     const session = chatStore.getSession(this.activeSessionId)!;
     if (session.messages.length === 0) {
@@ -92,6 +92,15 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       userContentParts.push(`Anteprima bigliettino allegata (base64 JPEG): ${options.imagePreviewBase64}`);
     }
     userContentParts.push(`Bigliettino (campi: ${relevantFields.join(', ')}):\n${JSON.stringify(payload)}\n\nRichiesta: ${prompt}`);
+    if (briefSection) {
+      userContentParts.push(briefSection);
+      // TB-027 auto-build: il brief deve guidare l'intera card, non solo i testi.
+      userContentParts.push(
+        'Usa il contesto cliente sopra per definire TUTTI gli aspetti del bigliettino: ' +
+        'STRUTTURA (layout fronte e posizioni grid senza collisioni), TESTI (nome, titolo, servizi) ' +
+        'e STILE (palette bgColor/textColor/accentColor, fontFamily, decorazioni). Non limitarti al copy.',
+      );
+    }
 
     const userMsg: ChatMessage = {
       role: 'user',

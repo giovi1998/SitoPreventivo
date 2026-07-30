@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import dataService from '../../utils/dataService';
 import { formatAiStatsCompact } from '../../utils/aiStats';
 import { useAIPalette } from '../../hooks/useAIPalette';
+import { useAutoBuildGenerate } from '../../hooks/useAutoBuildGenerate';
+import { useIsMobileWorkspace } from '../../hooks/useMediaQuery';
+import { buildPreviewSvg } from '../../utils/docPreviewSvg';
 import { palettePreviewDataUrl } from '../../utils/palettePreview';
 import { AI_IMAGE_MODELS, setAiImageModelDefault } from '../../utils/uiPrefs';
 import type { PaletteConcept } from '../../ai/PaletteOrchestrator';
@@ -65,6 +68,41 @@ function asStr(v: unknown): string {
   return v == null ? '' : String(v);
 }
 
+function normalizeColors(colors: unknown): string[] {
+  if (Array.isArray(colors)) return colors.filter((c): c is string => typeof c === 'string');
+  if (colors && typeof colors === 'object') return Object.values(colors).filter((c): c is string => typeof c === 'string');
+  return [];
+}
+
+function normalizeImages(images: unknown): string[] {
+  return Array.isArray(images) ? images.filter((u): u is string => typeof u === 'string') : [];
+}
+
+function normalizeLinks(links: unknown): string[] {
+  if (!Array.isArray(links)) return [];
+  return links.filter((u): u is string => typeof u === 'string' && /^https?:\/\//.test(u));
+}
+
+function truncateDataUrl(url: string): string {
+  return url.length > 60 ? `${url.slice(0, 60)}…(${url.length} bytes)` : url;
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Fallback per contesti senza Clipboard API (http, permessi negati)
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch { /* noop */ }
+    document.body.removeChild(ta);
+  }
+}
+
 function loadLog(customerId: string): LogEntry[] {
   try {
     const raw = sessionStorage.getItem(LOG_KEY(customerId));
@@ -93,10 +131,14 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const [editValue, setEditValue] = useState('');
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
   const [paletteCost, setPaletteCost] = useState<number | null>(null);
-  const [paletteProvider, setPaletteProvider] = useState<string>('deepseek-chat');
+  const [aiProvider, setAiProvider] = useState<string>(() => providerRegistry.getDefaultId());
+  const [logCopied, setLogCopied] = useState(false);
+  const [aiFillCost, setAiFillCost] = useState<number | null>(null);
 
   const [imageGenModel, setImageGenModel] = useState<string>('gemini-3.1-flash-image');
   const palette = useAIPalette();
+  const autoGen = useAutoBuildGenerate();
+  const isMobileWorkspace = useIsMobileWorkspace();
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const providers = providerRegistry.listProviders();
@@ -139,6 +181,28 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const flashSaved = (field: string) => {
     setSavedFlash(field);
     setTimeout(() => setSavedFlash(null), 1500);
+  };
+
+  const formatLogText = () =>
+    log
+      .map((e) => {
+        const icon = e.type === 'success' ? '✓' : e.type === 'error' ? '✗' : '▶';
+        let line = `[${e.ts}] ${icon} ${e.msg}${e.cost ? ` ${e.cost}` : ''}`;
+        if (e.detail) line += `\n  ${JSON.stringify(e.detail, null, 2).split('\n').join('\n  ')}`;
+        return line;
+      })
+      .join('\n');
+
+  const copyLog = async () => {
+    await copyTextToClipboard(formatLogText());
+    setLogCopied(true);
+    setTimeout(() => setLogCopied(false), 2000);
+  };
+
+  const clearLog = () => {
+    setLog([]);
+    setExpandedLog(null);
+    try { sessionStorage.removeItem(LOG_KEY(customerId)); } catch { /* quota */ }
   };
 
   const saveField = async (field: string, value: string) => {
@@ -194,7 +258,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       appendLog('info', 'Caricamento logo manuale…', undefined, { fileName: file.name, sizeBytes: file.size, mime: file.type });
       try {
         await dataService.updateCustomer(customer.id, { logoUrl: dataUrl });
-        appendLog('success', 'Logo caricato', undefined, { logoUrl: dataUrl.slice(0, 60) + '...' });
+        appendLog('success', 'Logo caricato', undefined, { logoUrl: truncateDataUrl(dataUrl) });
         flashSaved('logoUrl');
         await load();
         onRefresh();
@@ -230,18 +294,105 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
-  const runAction = async (key: string, fn: () => Promise<{ error?: unknown }>, logStart: string, logOk: string) => {
+  interface ActionResult {
+    error?: unknown;
+    data?: Record<string, unknown>;
+  }
+
+  interface ActionLogExtra {
+    msg?: string;
+    detail?: unknown;
+    cost?: string;
+  }
+
+  const runAction = async (key: string, fn: () => Promise<ActionResult>, logStart: string, logOk: string, buildExtra?: (res: ActionResult) => ActionLogExtra) => {
     setBusy(key);
     setError(null);
     appendLog('info', logStart, undefined, { action: key, customerId });
     const res = await fn();
+    const extra = buildExtra?.(res) ?? {};
     if (res.error) {
       setError(String(res.error));
-      appendLog('error', `${logOk} fallito: ${res.error}`, undefined, { action: key, error: String(res.error) });
+      const base = typeof extra.detail === 'object' && extra.detail !== null ? extra.detail as Record<string, unknown> : {};
+      appendLog('error', `${logOk} fallito: ${res.error}`, undefined, { action: key, ...base, error: String(res.error) });
     } else {
-      appendLog('success', logOk, undefined, { action: key });
+      appendLog('success', extra.msg ?? logOk, extra.cost, extra.detail);
     }
     await load();
+    setBusy(null);
+    onRefresh();
+  };
+
+  const researchExtra = (res: ActionResult): ActionLogExtra => {
+    const data = res.data ?? {};
+    const wd = (data.webData ?? {}) as Record<string, unknown>;
+    const researchStatus = (data.researchStatus ?? null) as Record<string, string> | null;
+    const webStatus = researchStatus?.web ?? 'unknown';
+    const hasError = webStatus !== 'ok';
+    const json = (wd.json || {}) as Record<string, unknown>;
+    const colorsCount = normalizeColors(wd.colors || (wd.branding as Record<string, unknown>)?.colors).length;
+    const imagesCount = normalizeImages(wd.images).length;
+    const linksCount = normalizeLinks(wd.links).length;
+    const markdownChars = typeof wd.markdownFull === 'string' ? wd.markdownFull.length : 0;
+    const title = asStr(wd.title);
+    const knowledgeCount = typeof data.knowledgeCount === 'number' ? data.knowledgeCount : 0;
+    const msg = hasError
+      ? `Research fallita (${webStatus})`
+      : `Research completata: ${title || 'sito'} · ${knowledgeCount} chunk · ${colorsCount} colori · ${imagesCount} immagini`;
+    return {
+      msg,
+      detail: {
+        title,
+        description: asStr(wd.description || json.company_description),
+        knowledgeCount,
+        logoStatus: researchStatus?.logo ?? 'no_logo',
+        colors: colorsCount,
+        images: imagesCount,
+        links: linksCount,
+        screenshot: Boolean(wd.screenshot),
+        markdownChars,
+        jsonFields: Object.keys(json),
+        researchStatus,
+      },
+    };
+  };
+
+  const aiFillExtra = (res: ActionResult): ActionLogExtra => {
+    const cost = Number(res.data?.costUsd ?? 0);
+    if (res.error) return {};
+    setAiFillCost(cost);
+    const fromAI = Boolean(res.data?.fromAI);
+    const fields = Object.keys((res.data?.aiSuggestedFields ?? {}) as Record<string, unknown>);
+    return fromAI
+      ? { msg: 'AI fill completato via AI', cost: `$${cost.toFixed(4)}`, detail: { costUsd: cost, fields, fromAI } }
+      : { msg: 'AI fill completato (lookup locale, $0.00)', detail: { costUsd: 0, fields, fromAI } };
+  };
+
+  const handleAutoBuild = async () => {
+    if (!customer) return;
+    setBusy('auto-build');
+    setError(null);
+    appendLog('info', 'Auto-build draft in corso…', undefined, { action: 'auto-build', customerId });
+    const prevIds = new Set(docs.map((d) => d.id));
+    const res = await dataService.autoBuildCustomer(customerId, true);
+    if (res.error) {
+      setError(String(res.error));
+      appendLog('error', `Auto-build fallito: ${res.error}`, undefined, { action: 'auto-build', error: String(res.error) });
+      setBusy(null);
+      return;
+    }
+    const createdIds = new Set(((res.data as Record<string, unknown> | undefined)?.createdDocuments ?? []) as string[]);
+    const fresh = await dataService.getCustomer(customerId);
+    const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
+    const created = freshDocs.filter((d) => createdIds.has(d.id) || !prevIds.has(d.id)).map((d) => d.documentType);
+    const replaced = freshDocs.filter((d) => prevIds.has(d.id) && !createdIds.has(d.id) && DOC_EDITOR_VIEW[d.documentType]).length;
+    appendLog('success', 'Auto-build: draft creati', undefined, { created, replaced });
+    if (fresh.data) {
+      setCustomer(fresh.data as Customer);
+      setDocs(freshDocs);
+    } else {
+      await load();
+    }
     setBusy(null);
     onRefresh();
   };
@@ -250,8 +401,8 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     if (!customer) return;
     setBusy('palette');
     setError(null);
-    const req = { businessName: customer.businessName, sector: customer.sector, mood: customer.mood, target: customer.target, activity: customer.activity, provider: paletteProvider };
-    appendLog('info', `Generazione 3 palette AI (provider: ${paletteProvider})…`, undefined, { request: req });
+    const req = { businessName: customer.businessName, sector: customer.sector, mood: customer.mood, target: customer.target, activity: customer.activity, provider: aiProvider };
+    appendLog('info', `Generazione 3 palette AI (provider: ${aiProvider})…`, undefined, { request: req });
     try {
       const result = await palette.generate({
         businessName: customer.businessName,
@@ -259,13 +410,13 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         mood: customer.mood,
         target: customer.target,
         activity: customer.activity,
-      }, { modelId: paletteProvider });
+      }, { modelId: aiProvider });
       setPaletteCost(result.costUsd);
-      appendLog('success', '3 palette generate', `$${result.costUsd.toFixed(4)}`, { concepts: palette.concepts?.length, costUsd: result.costUsd });
+      appendLog('success', '3 palette generate', `$${result.costUsd.toFixed(4)}`, { provider: aiProvider, concepts: palette.concepts?.length, costUsd: result.costUsd });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
-      appendLog('error', `Palette fallita: ${msg}`, undefined, { provider: paletteProvider, error: msg });
+      appendLog('error', `Palette fallita: ${msg}`, undefined, { provider: aiProvider, error: msg });
     }
     setBusy(null);
   };
@@ -289,12 +440,12 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
           style: { ...style, accentColor: concept.accent, textColor: concept.text, bgColor: concept.bg },
           decorations: { ...decorations, palette: { ...paletteObj, primary: concept.primary, secondary: concept.secondary, accent: concept.accent } },
         };
-        await dataService.saveDocument('admin@gmail.com', { id: doc.id, documentType: doc.documentType, title: doc.title, data: updated, status: 'BOZZA' } as Record<string, unknown>);
+        await dataService.saveDocument('admin@gmail.com', { id: doc.id, documentType: doc.documentType, title: doc.title, customerId: customer.id, data: updated, status: 'BOZZA' } as Record<string, unknown>);
       } else if (doc.documentType === 'logo') {
         const data = (doc.data || {}) as Record<string, unknown>;
         const builder = (data.builder || {}) as Record<string, unknown>;
         const updated = { ...data, builder: { ...builder, primaryColor: concept.primary, secondaryColor: concept.secondary } };
-        await dataService.saveDocument('admin@gmail.com', { id: doc.id, documentType: doc.documentType, title: doc.title, data: updated, status: 'BOZZA' } as Record<string, unknown>);
+        await dataService.saveDocument('admin@gmail.com', { id: doc.id, documentType: doc.documentType, title: doc.title, customerId: customer.id, data: updated, status: 'BOZZA' } as Record<string, unknown>);
       }
     }
     appendLog('success', `Palette "${concept.name}" applicata a ${docs.length} documenti`, undefined, { appliedTo: docs.map((d) => d.documentType) });
@@ -322,7 +473,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       } else {
         continue;
       }
-      await dataService.saveDocument('admin@gmail.com', { id: doc.id, documentType: doc.documentType, title: doc.title, data: updated, status: 'BOZZA' } as Record<string, unknown>);
+      await dataService.saveDocument('admin@gmail.com', { id: doc.id, documentType: doc.documentType, title: doc.title, customerId: cid, data: updated, status: 'BOZZA' } as Record<string, unknown>);
       patched++;
     }
     appendLog('success', `Logo propagato a ${patched} draft`, undefined, { patched });
@@ -334,6 +485,64 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     navigate(`/app/${view}/${doc.id}`);
   };
 
+  const handleGenerateAll = async () => {
+    if (!customer) return;
+    appendLog('info', `Generazione bozze AI in corso (provider: ${aiProvider})…`, undefined, { docs: docs.length, provider: aiProvider });
+    const summary = await autoGen.generateAll(docs, customer, { providerId: aiProvider });
+    const fresh = await dataService.getCustomer(customerId);
+    const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
+    const perDoc = docs
+      .filter((d) => DOC_EDITOR_VIEW[d.documentType])
+      .map((d) => {
+        const status = summary?.statuses?.[d.id] ?? autoGen.state.statuses[d.id];
+        const docError = summary?.errors?.[d.id] ?? autoGen.state.errors?.[d.id];
+        const freshDoc = freshDocs.find((x) => x.id === d.id);
+        const aiStats = (freshDoc?.data as Record<string, unknown> | undefined)?.aiStats as { totalCostUsd?: string } | undefined;
+        const costUsd = parseFloat(String(aiStats?.totalCostUsd ?? '0')) || 0;
+        return {
+          title: d.title || d.id,
+          status: status ?? 'skipped',
+          provider: aiProvider,
+          ...(costUsd > 0 ? { costUsd } : {}),
+          ...(docError ? { error: docError } : {}),
+        };
+      });
+    const hasError = perDoc.some((p) => p.status === 'error');
+    appendLog(hasError ? 'error' : 'success', hasError ? 'Generazione bozze AI completata con errori' : 'Generazione bozze AI completata', undefined, perDoc);
+    if (fresh.data) {
+      setCustomer(fresh.data as Customer);
+      setDocs(freshDocs);
+    } else {
+      await load();
+    }
+    onRefresh();
+  };
+
+  const handleGenerateOne = async (doc: Doc) => {
+    if (!customer) return;
+    appendLog('info', `Rigenero bozza ${doc.documentType} (provider: ${aiProvider})…`, undefined, { docId: doc.id, provider: aiProvider });
+    await autoGen.generateOne(doc, customer, { providerId: aiProvider });
+    const fresh = await dataService.getCustomer(customerId);
+    const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
+    const freshDoc = freshDocs.find((x) => x.id === doc.id);
+    const aiStats = (freshDoc?.data as Record<string, unknown> | undefined)?.aiStats as { totalCostUsd?: string } | undefined;
+    const costUsd = parseFloat(String(aiStats?.totalCostUsd ?? '0')) || 0;
+    const genError = autoGen.state.errors?.[doc.id] ?? null;
+    appendLog(
+      genError ? 'error' : 'success',
+      genError ? `Rigenerazione ${doc.documentType} fallita: ${genError}` : `Bozza ${doc.documentType} rigenerata`,
+      costUsd > 0 ? `$${costUsd.toFixed(4)}` : undefined,
+      { docId: doc.id, provider: aiProvider, ...(costUsd > 0 ? { costUsd } : {}), ...(genError ? { error: genError } : {}) },
+    );
+    if (fresh.data) {
+      setCustomer(fresh.data as Customer);
+      setDocs(freshDocs);
+    } else {
+      await load();
+    }
+    onRefresh();
+  };
+
   if (loading) return <div className="crm-detail"><p>Caricamento…</p></div>;
   if (error && !customer) return <div className="crm-detail"><p className="crm-error">{error}</p><button onClick={onBack}>Indietro</button></div>;
   if (!customer) return null;
@@ -343,6 +552,21 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const aiFields = customer.aiSuggestedFields || {};
   const hasAiFields = Object.keys(aiFields).length > 0;
   const logoPreview = customer.logoUrl || customer.detectedLogoUrl || null;
+  const pendingDrafts = docs.filter((d) => DOC_EDITOR_VIEW[d.documentType] && (d.data as Record<string, unknown> | undefined)?.autoGeneratePending);
+  const webData = (customer.webData || {}) as Record<string, unknown>;
+  const markdownFull = typeof webData.markdownFull === 'string' && webData.markdownFull ? webData.markdownFull : null;
+  const siteColors = normalizeColors(webData.colors);
+  const siteImages = normalizeImages(webData.images);
+  const siteScreenshot = typeof webData.screenshot === 'string' ? webData.screenshot : null;
+  const siteLinks = normalizeLinks(webData.links);
+  const siteJson = (webData.json || null) as Record<string, unknown> | null;
+  const siteBranding = (webData.branding || null) as Record<string, unknown> | null;
+  const brandingLogo = typeof siteBranding?.logo === 'string' ? siteBranding.logo : typeof webData.brandingLogo === 'string' ? webData.brandingLogo : null;
+  const brandingColors = Array.from(new Set(normalizeColors(siteBranding?.colors || webData.brandingColors || webData.colors)));
+  const brandingFonts = Array.isArray(siteBranding?.fonts) ? (siteBranding.fonts as unknown[]).filter((f): f is string => typeof f === 'string') : [];
+  const hasWebData = Boolean(
+    webData.title || webData.description || webData.markdownPreview || markdownFull || siteColors.length || siteImages.length || siteScreenshot || siteLinks.length || siteJson,
+  );
 
   const renderField = (field: string, label: string, value: unknown, textarea = false) => {
     const v = asStr(value);
@@ -474,7 +698,19 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       </section>
 
       <section className="crm-ai-log" data-testid="crm-ai-log">
-        <div className="crm-ai-log-head">Registro operazioni AI</div>
+        <div className="crm-ai-log-head">
+          <span>Registro operazioni AI</span>
+          {log.length > 0 && (
+            <div className="crm-ai-log-actions">
+              <button type="button" className="crm-ai-log-btn" onClick={copyLog} data-testid="crm-log-copy">
+                {logCopied ? '✓ Copiato' : 'Copia'}
+              </button>
+              <button type="button" className="crm-ai-log-btn" onClick={clearLog} data-testid="crm-log-clear">
+                Cancella
+              </button>
+            </div>
+          )}
+        </div>
         {log.length === 0 ? (
           <div className="crm-ai-log-empty">Nessuna operazione. Lancia research / AI fill / auto-build per vedere qui.</div>
         ) : (
@@ -514,19 +750,100 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         </section>
       )}
 
-      {customer.webData?.title || customer.webData?.description ? (
+      {hasWebData && (
         <section className="crm-section" data-testid="crm-nap-section">
           <h3>Dati dal sito</h3>
-          <Field label="Titolo" value={customer.webData.title} />
-          <Field label="Descrizione" value={customer.webData.description} />
-          <Field label="Preview" value={customer.webData.markdownPreview} />
+          <div className="crm-webdata-grid">
+            <div className="crm-webdata-main">
+              <Field label="Titolo" value={webData.title} />
+              <Field label="Descrizione" value={webData.description || siteJson?.company_description} />
+              {siteJson?.company_name ? <Field label="Nome attività (AI)" value={siteJson.company_name} /> : null}
+              {markdownFull ? (
+                <details className="crm-markdown-toggle" data-testid="crm-markdown-toggle">
+                  <summary>Mostra tutto il markdown ({markdownFull.length} caratteri)</summary>
+                  <pre className="crm-markdown-full" data-testid="crm-markdown-full">{markdownFull}</pre>
+                </details>
+              ) : (
+                <>
+                  <Field label="Preview" value={webData.markdownPreview} />
+                  {webData.markdownPreview ? (
+                    <p className="crm-note" data-testid="crm-markdown-partial-note">Solo preview (500 caratteri): il markdown completo non è ancora persistito.</p>
+                  ) : null}
+                </>
+              )}
+              {siteJson && Object.keys(siteJson).length > 0 && (
+                <details className="crm-json-toggle" data-testid="crm-json-toggle">
+                  <summary>Dati strutturati JSON</summary>
+                  <pre className="crm-json-full" data-testid="crm-json-full">{JSON.stringify(siteJson, null, 2)}</pre>
+                </details>
+              )}
+              {siteLinks.length > 0 && (
+                <div className="crm-webdata-links" data-testid="crm-webdata-links">
+                  <span className="crm-field-label">Link trovati ({siteLinks.length})</span>
+                  <ul>
+                    {siteLinks.slice(0, 20).map((u, i) => (
+                      <li key={i}>
+                        <a href={u} target="_blank" rel="noreferrer">{u}</a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {brandingColors.length > 0 && (
+                <div className="crm-webdata-colors" data-testid="crm-webdata-colors">
+                  <span className="crm-field-label">Colori branding</span>
+                  {brandingColors.map((hex) => (
+                    <button key={hex} type="button" className="crm-color-chip" onClick={() => void copyTextToClipboard(hex)} title={`Copia ${hex}`} data-testid={`crm-color-chip-${hex}`}>
+                      <span className="crm-color-swatch" style={{ background: hex }} />
+                      <span className="crm-color-hex">{hex}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {brandingFonts.length > 0 && (
+                <div data-testid="crm-webdata-fonts">
+                  <Field label="Font branding" value={brandingFonts.join(', ')} />
+                </div>
+              )}
+            </div>
+            <div className="crm-webdata-side">
+              {siteScreenshot && (
+                <div className="crm-webdata-screenshot" data-testid="crm-webdata-screenshot">
+                  <span className="crm-field-label">Screenshot</span>
+                  <a href={siteScreenshot.startsWith('data:') ? undefined : siteScreenshot} target="_blank" rel="noreferrer">
+                    <img src={siteScreenshot} alt="Screenshot sito" className="crm-screenshot-img" />
+                  </a>
+                </div>
+              )}
+              {brandingLogo && (
+                <div className="crm-webdata-logo" data-testid="crm-webdata-logo">
+                  <span className="crm-field-label">Logo rilevato</span>
+                  <a href={brandingLogo} target="_blank" rel="noreferrer">
+                    <img src={brandingLogo} alt="Logo rilevato" className="crm-webdata-thumb" />
+                  </a>
+                </div>
+              )}
+              {siteImages.length > 0 && (
+                <div className="crm-webdata-images" data-testid="crm-webdata-images">
+                  <span className="crm-field-label">Immagini ({siteImages.length})</span>
+                  <div className="crm-webdata-image-grid">
+                    {siteImages.slice(0, 12).map((u, i) => (
+                      <a key={i} href={u} target="_blank" rel="noreferrer" title="Apri immagine in nuova scheda">
+                        <img src={u} loading="lazy" alt={`Immagine sito ${i + 1}`} className="crm-webdata-thumb" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </section>
-      ) : null}
+      )}
 
       {hasAiFields && (
         <section className="crm-section" data-testid="crm-ai-fields-section">
-          <h3>Campi suggeriti da AI <span className="crm-badge-ai">AI · $0</span></h3>
-          <p className="crm-note">Lookup locale (zero costo AI). Quando integreremo DeepSeek copy, il costo sarà tracciato qui.</p>
+          <h3>Campi suggeriti da AI <span className="crm-badge-ai" data-testid="crm-ai-fields-badge">{aiFillCost != null && aiFillCost > 0 ? `AI · $${aiFillCost.toFixed(4)}` : 'AI · $0'}</span></h3>
+          <p className="crm-note">Suggerimenti generati da AI (MiniMax M3). Fallback lookup locale se AI non disponibile.</p>
           {Object.entries(aiFields).map(([k, v]) => (
             <Field key={k} label={k} value={v} />
           ))}
@@ -534,28 +851,31 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       )}
 
       <section className="crm-actions-row">
-        <button onClick={() => runAction('research', () => dataService.researchCustomer(customerId), 'Lanciata auto-research', 'Research completata')} disabled={busy !== null} data-testid="crm-research-btn">
+        <button onClick={() => runAction('research', () => dataService.researchCustomer(customerId), 'Lanciata auto-research', 'Research completata', researchExtra)} disabled={busy !== null} data-testid="crm-research-btn" title="Scarica dati dal sito cliente (Firecrawl) e rileva il logo (zero AI)">
           {busy === 'research' ? 'Ricerca…' : 'Lancia research'}
         </button>
-        <button onClick={() => runAction('ai-fill', () => dataService.aiFillCustomer(customerId), 'AI fill gap in corso…', 'AI fill completato (lookup locale, $0.00)')} disabled={busy !== null} data-testid="crm-ai-fill-btn">
+        <button onClick={() => runAction('ai-fill', () => dataService.aiFillCustomer(customerId), 'AI fill gap in corso…', 'AI fill completato', aiFillExtra)} disabled={busy !== null} data-testid="crm-ai-fill-btn" title="Compila i campi mancanti con AI (MiniMax M3); fallback lookup locale a costo zero">
           {busy === 'ai-fill' ? 'AI fill…' : 'AI fill gap'}
         </button>
-        <button onClick={() => runAction('auto-build', () => dataService.autoBuildCustomer(customerId, false), 'Auto-build draft in corso…', 'Auto-build: draft creati')} disabled={busy !== null} data-testid="crm-auto-build-btn">
+        <button onClick={handleAutoBuild} disabled={busy !== null} data-testid="crm-auto-build-btn" title="Crea/aggiorna bozze statiche dai dati cliente (zero AI)">
           {busy === 'auto-build' ? 'Costruzione…' : 'Auto-build draft'}
         </button>
-        <button onClick={handleGeneratePalettes} disabled={busy !== null} data-testid="crm-palette-btn">
+        <button onClick={handleGenerateAll} disabled={busy !== null || autoGen.state.running || pendingDrafts.length === 0} data-testid="crm-generate-drafts-btn" title="Genera contenuti reali con AI sui draft (costo AI)">
+          {autoGen.state.running ? (autoGen.state.currentStep || 'Generazione…') : 'Genera bozze AI'}
+        </button>
+        <button onClick={handleGeneratePalettes} disabled={busy !== null} data-testid="crm-palette-btn" title="Suggerisce 3 palette colori coerenti col brief via AI (costo AI)">
           {busy === 'palette' || palette.isProcessing ? 'Generando…' : 'Genera 3 palette'}
         </button>
       </section>
 
       <section className="crm-section">
-        <h3>Provider AI per palette</h3>
-        <select value={paletteProvider} onChange={(e) => setPaletteProvider(e.target.value)} data-testid="crm-palette-provider" className="crm-provider-select">
+        <h3>Provider AI</h3>
+        <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)} data-testid="crm-ai-provider" className="crm-provider-select">
           {providers.map((p) => (
             <option key={p.id} value={p.id}>{p.name} ({p.model})</option>
           ))}
         </select>
-        <p className="crm-note">Seleziona il provider per la generazione palette. Gemini è solo per immagini, non disponibile qui.</p>
+        <p className="crm-note">Provider usato per palette e "Genera bozze AI". Gemini è solo per immagini, non disponibile qui.</p>
       </section>
 
       <section className="crm-section">
@@ -590,7 +910,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
 
       <section className="crm-section" data-testid="crm-docs-section">
         <h3>Documenti collegati ({docs.length})</h3>
-        <p className="crm-note">Apri il draft nell'editor e click “Genera” per lanciare l'AI (CON-001 quality check).</p>
+        <p className="crm-note">Usa “Genera bozze AI” per generare i contenuti dei draft in sequenza (logo → card → flyer), oppure apri il singolo draft nell'editor.</p>
         {docs.length === 0 ? (
           <p>Nessun documento. Usa “Auto-build draft” per crearli.</p>
         ) : (
@@ -598,14 +918,35 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
             {docs.map((d) => {
               const aiStats = (d.data as Record<string, unknown> | undefined)?.aiStats as Record<string, unknown> | undefined;
               const costLabel = aiStats ? formatAiStatsCompact(aiStats as never) : null;
+              const genStatus = autoGen.state.statuses[d.id];
+              const previewSvg = DOC_EDITOR_VIEW[d.documentType]
+                ? buildPreviewSvg({ ...(d.data || {}), documentType: d.documentType })
+                : '';
               return (
                 <li key={d.id} className="crm-doc-row">
+                  {previewSvg && !isMobileWorkspace && (
+                    <div className="crm-doc-thumb" data-testid={`crm-doc-preview-${d.id}`} dangerouslySetInnerHTML={{ __html: previewSvg }} />
+                  )}
                   <div className="crm-doc-info">
                     <strong>{d.documentType}</strong> — {d.title || d.id}
                     {costLabel && <span className="crm-doc-cost">{costLabel}</span>}
+                    {genStatus && (
+                      <span className={`crm-doc-gen crm-doc-gen-${genStatus}`} data-testid={`crm-doc-gen-${d.id}`} title={autoGen.state.errors?.[d.id] || undefined}>
+                        {genStatus === 'running' ? '⏳ generazione…' : genStatus === 'done' ? '✓ generato' : genStatus === 'error' ? '✗ errore' : 'in coda'}
+                      </span>
+                    )}
                   </div>
-                  <button onClick={() => openDocInEditor(d)} className="crm-btn-secondary crm-doc-open" data-testid={`crm-open-doc-${d.id}`}>
-                    Apri editor →
+                  <button onClick={() => handleGenerateOne(d)} className="crm-btn-secondary crm-doc-regen" disabled={autoGen.state.running} data-testid={`crm-regen-doc-${d.id}`}>
+                    Rigenera
+                  </button>
+                  <button
+                    onClick={() => openDocInEditor(d)}
+                    className="crm-btn-secondary crm-doc-open"
+                    disabled={genStatus === 'running'}
+                    title={genStatus === 'running' ? 'Attendi il completamento della generazione AI' : undefined}
+                    data-testid={`crm-open-doc-${d.id}`}
+                  >
+                    {genStatus === 'running' ? 'Generazione…' : 'Apri editor →'}
                   </button>
                 </li>
               );

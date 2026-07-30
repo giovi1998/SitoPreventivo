@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { pgTable, serial, varchar, text, integer, jsonb, timestamp, bigint, boolean, numeric } from 'drizzle-orm/pg-core';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
@@ -1609,7 +1609,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     return json(req, res, 200, { data: parsed, raw: content, requestId });
   }
 
-  // POST /ai/embeddings → Gemini text-embedding-004 (RAG customer knowledge)
+  // POST /ai/embeddings → Gemini gemini-embedding-2 (RAG customer knowledge)
   if (path === '/ai/embeddings' && method === 'POST') {
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'embeddings', 30, 60 * 1000);
@@ -1620,7 +1620,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     const v = validate(
       z.object({
         input: z.string().max(8000),
-        model: z.enum(['text-embedding-004']).optional(),
+        model: z.enum(['gemini-embedding-2']).optional(),
       }),
       body
     );
@@ -1631,14 +1631,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const { GoogleGenAI } = await import('@google/genai');
       const ai = new GoogleGenAI({ apiKey });
       const result = await ai.models.embedContent({
-        model: 'models/text-embedding-004',
+        model: 'models/gemini-embedding-2',
         contents: v.data.input,
       });
       const embedding = (result as unknown as { embedding?: { values?: number[] } })?.embedding?.values || [];
       if (!Array.isArray(embedding) || embedding.length === 0) {
         return json(req, res, 502, { error: 'Embedding vuoto da Gemini' });
       }
-      return json(req, res, 200, { data: { embedding, model: v.data.model || 'text-embedding-004' } });
+      return json(req, res, 200, { data: { embedding, model: v.data.model || 'gemini-embedding-2' } });
     } catch (err) {
       console.error('[embeddings] Gemini error', (err as Error)?.message);
       return json(req, res, 502, { error: 'Errore embedding Gemini' });
@@ -2580,6 +2580,9 @@ function clampDataUrl(dataUrl: string, maxBytes = 500 * 1024): string {
 function buildBriefContextApi(cust: Record<string, unknown>): string {
   const c = cust || {};
   const contacts = (c.contacts || {}) as Record<string, unknown>;
+  const webData = (c.webData || {}) as Record<string, unknown>;
+  const webJson = (webData.json || {}) as Record<string, unknown>;
+  const brandingColors = webData.brandingColors || (webData.branding as Record<string, unknown>)?.colors;
   const parts: string[] = [];
   if (c.businessName) parts.push(`Attività: ${c.businessName}`);
   if (c.ownerName) parts.push(`Referente: ${c.ownerName}`);
@@ -2587,12 +2590,75 @@ function buildBriefContextApi(cust: Record<string, unknown>): string {
   if (c.activity) parts.push(`Descrizione: ${c.activity}`);
   if (c.mood) parts.push(`Mood: ${c.mood}`);
   if (c.target) parts.push(`Target: ${c.target}`);
-  if (c.preferredColors) parts.push(`Palette: ${c.preferredColors}`);
+  if (brandingColors) parts.push(`Colori sito (USA QUESTI per logo/card/flyer): ${JSON.stringify(brandingColors)}`);
+  if (c.preferredColors) parts.push(`Palette preferita cliente (secondaria): ${c.preferredColors}`);
   if (contacts.address) parts.push(`Indirizzo: ${contacts.address}`);
   if (contacts.website) parts.push(`Sito: ${contacts.website}`);
   if (contacts.phone) parts.push(`Telefono: ${contacts.phone}`);
   if (contacts.email) parts.push(`Email: ${contacts.email}`);
+  // TB-027f: contesto Firecrawl (webData) per orchestratori AI.
+  if (webData.title) parts.push(`Titolo sito: ${webData.title}`);
+  if (webData.description) parts.push(`Descrizione sito: ${webData.description}`);
+  if (webJson.company_description) parts.push(`Descrizione attività (AI): ${webJson.company_description}`);
+  if (Array.isArray(webData.brandingFonts) && webData.brandingFonts.length) {
+    parts.push(`Font sito: ${webData.brandingFonts.join(', ')}`);
+  }
+  if (Array.isArray(webData.links) && webData.links.length) {
+    parts.push(`Link sito: ${webData.links.slice(0, 5).join(', ')}`);
+  }
+  if (typeof webData.markdownPreview === 'string' && webData.markdownPreview) {
+    parts.push(`Contenuto sito: ${webData.markdownPreview.slice(0, 300)}`);
+  }
   return parts.join('\n');
+}
+
+// Estrae il primo blocco {...} da una risposta AI e lo parsa. Null se non valido.
+function extractJsonObjectApi(text: string): Record<string, unknown> | null {
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const p = JSON.parse(m[0]);
+    return p && typeof p === 'object' && !Array.isArray(p) ? p as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+// TB-027 ai-fill: chiamata DeepSeek server-side (stesso pattern fetch di /ai/chat).
+// Null su qualunque fallimento: il chiamante fa fallback alla tabella lookup.
+async function callDeepSeekAiFill(prompt: string): Promise<{ fields: Record<string, unknown>; costUsd: number } | null> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const resp = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: 'Sei un consulente di branding. Rispondi SOLO con un oggetto JSON valido, senza testo extra.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+      }),
+      signal: AbortSignal.timeout(25000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json() as {
+      choices?: { message?: { content?: string } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    const content = data.choices?.[0]?.message?.content;
+    const fields = content ? extractJsonObjectApi(content) : null;
+    if (!fields) return null;
+    // Mirror providerPricing.ts deepseek-chat ($0.14/$0.28 per 1M tok) — inline:
+    // src/ non importabile da api/ (gotcha §1 cross-boundary).
+    const costUsd = Math.round((((data.usage?.prompt_tokens || 0) * 0.14 + (data.usage?.completion_tokens || 0) * 0.28) / 1_000_000) * 1_000_000) / 1_000_000;
+    return { fields, costUsd };
+  } catch {
+    return null;
+  }
 }
 
 // TB-027 RAG: chunking semplice per customer knowledge.
@@ -2632,12 +2698,69 @@ async function saveCustomerKnowledge(customerId: string, chunks: string[], sourc
 // Requires env FIRECRAWL_API_KEY. SEC-002: key server-side only.
 type FirecrawlResult = {
   markdown?: string;
-  branding?: { logo?: string; colors?: Record<string, unknown>; fonts?: string[] };
+  screenshot?: string | null;
+  branding?: { logo?: string; colors?: Record<string, unknown>; fonts?: string[]; images?: string[] };
   images?: string[];
+  links?: string[];
+  json?: Record<string, unknown>;
   title?: string;
   description?: string;
   status: 'ok' | 'no_key' | 'fail' | 'no_website';
 };
+
+const FIRECRAWL_WEBDATA_SCHEMA = {
+  type: 'object',
+  required: [],
+  properties: {
+    company_name: { type: 'string' },
+    company_description: { type: 'string' },
+    emails: { type: 'array', items: { type: 'string' } },
+    phones: { type: 'array', items: { type: 'string' } },
+    addresses: { type: 'array', items: { type: 'string' } },
+    colors: { type: 'array', items: { type: 'string' } },
+    fonts: { type: 'array', items: { type: 'string' } },
+    social_links: { type: 'array', items: { type: 'string' } },
+  },
+};
+
+function extractFirecrawlScreenshot(scraped: Record<string, unknown>): string | null {
+  const s = scraped.screenshot;
+  if (typeof s === 'string') return s;
+  if (s && typeof s === 'object') {
+    const so = s as Record<string, unknown>;
+    if (typeof so.url === 'string') return so.url;
+    if (typeof so.base64 === 'string') return so.base64;
+    if (typeof so.data === 'string') return so.data;
+  }
+  return null;
+}
+
+function extractFirecrawlLinks(scraped: Record<string, unknown>, max = 200): string[] {
+  const links = scraped.links;
+  if (!Array.isArray(links)) return [];
+  return links
+    .slice(0, max)
+    .map((l): string => {
+      if (typeof l === 'string') return l;
+      const o = l as Record<string, unknown> | undefined;
+      const v = o?.url || o?.href;
+      return typeof v === 'string' ? v : String(l);
+    })
+    .filter(Boolean);
+}
+
+function extractFirecrawlJson(scraped: Record<string, unknown>): Record<string, unknown> | undefined {
+  const j = scraped.json;
+  if (j && typeof j === 'object' && !Array.isArray(j)) return j as Record<string, unknown>;
+  if (typeof j === 'string') {
+    try {
+      return JSON.parse(j) as Record<string, unknown>;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
 
 async function fetchFirecrawlPage(url?: string): Promise<FirecrawlResult> {
   if (!url) return { status: 'no_website' };
@@ -2647,21 +2770,44 @@ async function fetchFirecrawlPage(url?: string): Promise<FirecrawlResult> {
     const u = new URL(url);
     if (!['http:', 'https:'].includes(u.protocol)) return { status: 'fail' };
     if (/^(127\.|10\.|192\.168\.|169\.254\.|localhost$)/.test(u.hostname)) return { status: 'fail' };
-    const resp = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ url, formats: ['markdown', 'branding'], onlyMainContent: true, timeout: 30000 }),
+
+    const run = async (payload: Record<string, unknown>): Promise<Record<string, unknown> | null> => {
+      const resp = await fetch('https://api.firecrawl.dev/v2/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(120000),
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json() as Record<string, unknown>;
+      return (data.data || data) as Record<string, unknown>;
+    };
+
+    let scraped = await run({
+      url,
+      onlyMainContent: true,
+      parsers: ['pdf'],
+      formats: ['markdown', 'screenshot', 'branding', 'images', { type: 'json', schema: FIRECRAWL_WEBDATA_SCHEMA }, 'links'],
     });
-    if (!resp.ok) return { status: 'fail' };
-    const data = await resp.json() as Record<string, unknown>;
-    const scraped = (data.data || data) as Record<string, unknown>;
+    if (!scraped) {
+      scraped = await run({ url, onlyMainContent: true, formats: ['markdown', 'branding', 'screenshot', 'links'] });
+    }
+    if (!scraped) return { status: 'fail' };
+
+    const metadata = (scraped.metadata || {}) as Record<string, unknown>;
     const markdown = typeof scraped.markdown === 'string' ? scraped.markdown : '';
     const branding = (scraped.branding || {}) as FirecrawlResult['branding'];
-    const metadata = (scraped.metadata || {}) as Record<string, unknown>;
     const title = typeof metadata.title === 'string' ? metadata.title : '';
     const description = typeof metadata.description === 'string' ? metadata.description : '';
-    const images = Array.isArray(scraped.images) ? scraped.images.filter((i): i is string => typeof i === 'string') : [];
-    return { markdown, branding, images, title, description, status: 'ok' };
+    const images = Array.isArray(scraped.images)
+      ? scraped.images
+          .map((i) => (typeof i === 'string' ? i : (i as Record<string, unknown>)?.url || (i as Record<string, unknown>)?.src))
+          .filter((i): i is string => typeof i === 'string' && /^https?:\/\//.test(i))
+      : [];
+    const links = extractFirecrawlLinks(scraped, 200);
+    const json = extractFirecrawlJson(scraped);
+    const screenshot = extractFirecrawlScreenshot(scraped);
+    return { markdown, branding, images, links, json, screenshot, title, description, status: 'ok' };
   } catch (err) {
     console.error('[research] Firecrawl error', (err as Error)?.message);
     return { status: 'fail' };
@@ -2874,18 +3020,27 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
           title: firecrawl.title,
           description: firecrawl.description,
           markdownPreview: (firecrawl.markdown || '').slice(0, 500),
+          markdownFull: firecrawl.markdown || '',
+          screenshot: firecrawl.screenshot,
+          links: firecrawl.links,
+          json: firecrawl.json,
+          branding: firecrawl.branding,
           brandingColors: firecrawl.branding?.colors,
           brandingFonts: firecrawl.branding?.fonts,
+          brandingLogo: firecrawl.branding?.logo,
+          images: firecrawl.images,
         };
-        detectedLogoUrl = firecrawl.branding?.logo || null;
+        detectedLogoUrl = firecrawl.branding?.logo || (typeof firecrawl.json?.logo === 'string' ? firecrawl.json.logo : null) || null;
       }
     }
     if (!detectedLogoUrl) {
       detectedLogoUrl = await detectLogo(contacts.website);
     }
-    researchStatus.logo = detectedLogoUrl ? 'ok' : 'no_logo';
+    // Logo manuale (upload admin) vince SEMPRE: status 'manual' e
+    // detectedLogoUrl non viene sovrascritto.
+    researchStatus.logo = cust.logoUrl ? 'manual' : detectedLogoUrl ? 'ok' : 'no_logo';
     await db.update(customersTable).set({
-      detectedLogoUrl: detectedLogoUrl || cust.detectedLogoUrl,
+      detectedLogoUrl: cust.logoUrl ? cust.detectedLogoUrl : (detectedLogoUrl || cust.detectedLogoUrl),
       researchStatus,
       status: 'researched',
       updatedAt: new Date(),
@@ -2918,6 +3073,35 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
     if (!cust.activity) {
       aiFields.activity = 'Attività commerciale nel settore ' + sector + ' a Cagliari.';
     }
+    let costUsd = 0;
+    const missing = Object.keys(aiFields);
+    if (missing.length > 0) {
+      // AI reale (DeepSeek) sopra il fallback lookup: i valori AI vincono
+      // sui campi che ha effettivamente compilato.
+      try {
+        const chunks = await db.select().from(customerKnowledgeTable).where(eq(customerKnowledgeTable.customerId, id));
+        const firstChunk = (chunks[0]?.chunk as string) || '';
+        const prompt = `Compila il profilo brand. Rispondi SOLO con un oggetto JSON con queste chiavi: ${missing.join(', ')}.\n${buildBriefContextApi(cust)}${firstChunk ? `\nContenuto sito web:\n${firstChunk}` : ''}`;
+        const aiResult = await callDeepSeekAiFill(prompt);
+        if (!aiResult) throw new Error('DeepSeek non disponibile o output non valido');
+        for (const k of missing) {
+          const v = aiResult.fields[k];
+          if (typeof v === 'string' && v.trim()) aiFields[k] = v.trim();
+        }
+        costUsd = aiResult.costUsd;
+        await db.update(customersTable).set({
+          mood: (aiFields.mood as string) || cust.mood,
+          target: (aiFields.target as string) || cust.target,
+          preferredColors: (aiFields.preferredColors as string) || cust.preferredColors,
+          activity: (aiFields.activity as string) || cust.activity,
+          aiSuggestedFields: aiFields,
+          updatedAt: new Date(),
+        }).where(eq(customersTable.id, id));
+        return json(req, res, 200, { data: { id, aiSuggestedFields: aiFields, costUsd, fromAI: true } });
+      } catch (err) {
+        console.warn('[ai-fill] AI fallita, fallback tabella lookup:', (err as Error)?.message);
+      }
+    }
     await db.update(customersTable).set({
       mood: (aiFields.mood as string) || cust.mood,
       target: (aiFields.target as string) || cust.target,
@@ -2926,7 +3110,7 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
       aiSuggestedFields: aiFields,
       updatedAt: new Date(),
     }).where(eq(customersTable.id, id));
-    return json(req, res, 200, { data: { id, aiSuggestedFields: aiFields } });
+    return json(req, res, 200, { data: { id, aiSuggestedFields: aiFields, costUsd, fromAI: false } });
   }
 
   // POST /customers/:id/auto-build → crea draft documenti pre-compilati
@@ -2960,6 +3144,14 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
     const autoGeneratePending = autoGenerate ? true : false;
     // Brief context stringa per AI
     const briefContext = buildBriefContextApi(cust);
+    // Replace semantics: un rerun sostituisce le BOZZE esistenti degli stessi
+    // tipi per questo cliente (i documenti non-BOZZA non vengono toccati).
+    const typesToCreate = hasManualLogo ? ['businessCard', 'flyer'] : ['logo', 'businessCard', 'flyer'];
+    await db.delete(documentsTable).where(and(
+      eq(documentsTable.customerId, id),
+      eq(documentsTable.status, 'BOZZA'),
+      inArray(documentsTable.documentType, typesToCreate),
+    ));
     // Shape allineate a createEmpty*() factories (documentSchemas.ts).
     // logo draft — skip se admin ha già un logo
     if (!hasManualLogo) {
@@ -3040,7 +3232,7 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
           services: [],
           servicesLabel: 'Servizi',
           socials: [],
-          qrPayload: '',
+          qrPayload: String(contacts.website || ''),
           qrLabel: 'Scansiona per visitare il sito',
           qrSize: 'medium',
           coverImageUrl: null,
@@ -3081,7 +3273,7 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
         orientation: 'portrait',
         content: {
           headline: cust.businessName,
-          subheadline: cust.activity || '',
+          subheadline: cust.mood || '',
           body: cust.activity || '',
           cta: { label: 'Scopri di più', url: String(contacts.website || '') },
           heroImage: firstPhoto,

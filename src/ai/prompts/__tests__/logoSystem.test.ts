@@ -35,4 +35,16 @@ describe('logoSystem (v2 ready)', () => {
     const long = 'a'.repeat(600);
     expect(sanitizeLogoBrief(long).length).toBe(500);
   });
+
+  it('generate prompt appends "Contesto cliente" section when briefContext is provided (TB-027)', () => {
+    const p = buildLogoGeneratePrompt('Logo moderno', 'food', 'Attività: Bar Da Mario\nSettore: food');
+    expect(p).toContain('Logo moderno');
+    expect(p).toContain('Contesto cliente:');
+    expect(p).toContain('Bar Da Mario');
+  });
+
+  it('generate prompt is backward compatible without briefContext', () => {
+    expect(buildLogoGeneratePrompt('Logo moderno', 'food'))
+      .toBe(buildLogoGeneratePrompt('Logo moderno', 'food', undefined));
+  });
 });

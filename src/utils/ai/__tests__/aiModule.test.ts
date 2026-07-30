@@ -16,7 +16,7 @@ vi.mock('../../hooks/useAILogs', () => ({
   }),
 }));
 
-vi.mock('../resolveProviderId', () => ({
+vi.mock('../../resolveProviderId', () => ({
   resolveProviderId: () => 'deepseek-chat',
 }));
 

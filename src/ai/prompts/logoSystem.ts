@@ -109,13 +109,15 @@ VINCOLI:
 - I 3 concept DEVONO essere distinti: nessuno deve essere identico a un altro.`;
 }
 
-export function buildLogoGeneratePrompt(brief: string, sector?: string): string {
+export function buildLogoGeneratePrompt(brief: string, sector?: string, briefContext?: string): string {
   const safeBrief = sanitizeLogoBrief(brief);
   const safeSector = sector ? sector.toLowerCase() : '';
+  const safeContext = briefContext ? sanitizeLogoBrief(briefContext) : '';
+  const contextSection = safeContext ? `\nContesto cliente:\n${safeContext}\n` : '';
   return `Genera 3 concept di logo per il seguente brief. Rispondi con un JSON array di ESATTAMENTE 3 oggetti.
 
 Brief: "${safeBrief || 'Logo per attività generica'}"
-${safeSector ? `Settore: ${safeSector}` : ''}
+${safeSector ? `Settore: ${safeSector}` : ''}${contextSection}
 
 Ogni concept DEVE differire per almeno 2 campi tra nome, icona, layout, colori o decorazioni.
 Rispetta l'allowlist lucide se usi iconType=lucide.

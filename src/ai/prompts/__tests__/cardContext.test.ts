@@ -132,3 +132,34 @@ describe('buildCardAIContext', () => {
     expect(relevantFields).toContain('grid');
   });
 });
+
+describe('buildCardAIContext briefContext (TB-027)', () => {
+  it('appends the customer brief section when card.briefContext is set', () => {
+    const card: BusinessCard = {
+      ...createEmptyCard(),
+      briefContext: 'Attività: Bar Da Mario\nReferente: Mario Rossi\nSettore: food',
+    };
+    const { briefSection } = buildCardAIContext(card, 'cambia nome');
+    expect(briefSection).toContain('Contesto cliente (brief attività):');
+    expect(briefSection).toContain('Bar Da Mario');
+    expect(briefSection).toContain('Referente: Mario Rossi');
+  });
+
+  it('briefContext stays out of the JSON payload (not an editable card field)', () => {
+    const card: BusinessCard = {
+      ...createEmptyCard(),
+      briefContext: 'Attività: Bar Da Mario',
+    };
+    const { payload } = buildCardAIContext(card, 'cambia nome');
+    expect(JSON.stringify(payload)).not.toContain('Bar Da Mario');
+  });
+
+  it('without briefContext the context is identical to before', () => {
+    const card = createEmptyCard();
+    const ctx = buildCardAIContext(card, 'cambia nome');
+    expect(ctx.briefSection).toBe('');
+    const baseline = buildCardAIContext({ ...card, briefContext: undefined }, 'cambia nome');
+    expect(ctx.payload).toEqual(baseline.payload);
+    expect(ctx.relevantFields).toEqual(baseline.relevantFields);
+  });
+});

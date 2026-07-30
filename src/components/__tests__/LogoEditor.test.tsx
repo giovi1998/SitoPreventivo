@@ -451,4 +451,60 @@ describe('LogoEditor', () => {
       }
     });
   });
+
+  it('opens on Builder tab when the logo has ONLY an AI backgroundImage (regression: logoHasContent ignorava backgroundImage)', () => {
+    // Un logo con solo il background AI (pagato Gemini) è contenuto a tutti
+    // gli effetti: deve aprirsi sul Builder (non sul tab AI) ed essere
+    // eleggibile per l'auto-save.
+    render(<LogoEditor userEmail="user@test.com" initialLogo={{ ...createEmptyLogo(), builder: { ...createEmptyLogo().builder, backgroundImage: 'data:image/png;base64,BG' } }} />);
+    expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'false');
+  });
+
+  /**
+   * Regressione: l'effect di cambio documento (URL-driven, /app/logo/A →
+   * /app/logo/B) aggiornava solo `logo`, senza resettare `aiStateRef`,
+   * `aiPanelResetKey` e `tab`. Risultato: il pannello AI mostrava chat /
+   * concept / immagini del documento precedente, e il tab restava quello
+   * del doc precedente anche se il nuovo aveva (o non aveva) contenuto.
+   * Il fix replica il reset di `handleNew` nell'effect di doc-change.
+   */
+  describe('doc change via initialLogo prop (regression: stato AI leaked tra documenti)', () => {
+    const logoDoc = (id: string, builderPatch: Partial<Logo['builder']> = {}): Logo => ({
+      ...createEmptyLogo(),
+      id,
+      builder: { ...createEmptyLogo().builder, ...builderPatch },
+    });
+
+    it('resets AI panel state and re-derives tab when navigating from doc A to doc B', () => {
+      const { rerender } = render(
+        <LogoEditor userEmail="user@test.com" initialLogo={logoDoc('logoA')} />
+      );
+      // A vuoto → tab AI; l'utente compila la chat (stato AI di A)
+      expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'true');
+      fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: 'Attività di A' } });
+      // Navigazione URL-driven verso B (con contenuto → tab Builder)
+      rerender(<LogoEditor userEmail="user@test.com" initialLogo={logoDoc('logoB', { primaryText: 'BrandB' })} />);
+      expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
+      // Tornando sul tab AI la chat DEVE essere quella di B (vuota), non di A
+      fireEvent.click(screen.getByRole('tab', { name: /AI Assist/i }));
+      expect((screen.getByPlaceholderText(/Pizzeria moderna/i) as HTMLTextAreaElement).value).toBe('');
+    });
+
+    it('switches back to AI tab when the incoming doc is empty', () => {
+      const { rerender } = render(
+        <LogoEditor userEmail="user@test.com" initialLogo={logoDoc('logoA', { primaryText: 'Acme' })} />
+      );
+      expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
+      rerender(<LogoEditor userEmail="user@test.com" initialLogo={logoDoc('logoB')} />);
+      expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('re-derives tab when the doc arrives async (initialLogo undefined → doc with content)', () => {
+      const { rerender } = render(<LogoEditor userEmail="user@test.com" initialLogo={undefined} />);
+      expect(screen.getByRole('tab', { name: /AI Assist/i })).toHaveAttribute('aria-selected', 'true');
+      rerender(<LogoEditor userEmail="user@test.com" initialLogo={logoDoc('logoC', { primaryText: 'Acme' })} />);
+      expect(screen.getByRole('tab', { name: /Builder/i })).toHaveAttribute('aria-selected', 'true');
+    });
+  });
 });

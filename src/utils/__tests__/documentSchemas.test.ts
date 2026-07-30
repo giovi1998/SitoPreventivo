@@ -1023,4 +1023,44 @@ describe('documentSchemas', () => {
       expect(FLYER_BLEED_MM).toBe(3);
     });
   });
+
+  describe('briefContext + autoGeneratePending (TB-027 auto-build)', () => {
+    const BRIEF = 'Attività: Bar Da Mario\nReferente: Mario Rossi\nSettore: food';
+
+    it('businessCardSchema accepts briefContext + autoGeneratePending', () => {
+      const card = { ...createEmptyCard(), briefContext: BRIEF, autoGeneratePending: true };
+      const r = businessCardSchema.safeParse(card);
+      expect(r.success).toBe(true);
+      if (r.success) {
+        expect(r.data.briefContext).toContain('Bar Da Mario');
+        expect(r.data.autoGeneratePending).toBe(true);
+      }
+    });
+
+    it('flyerSchema accepts briefContext + autoGeneratePending', () => {
+      const flyer = { ...createEmptyFlyer(), briefContext: BRIEF, autoGeneratePending: false };
+      const r = flyerSchema.safeParse(flyer);
+      expect(r.success).toBe(true);
+      if (r.success) {
+        expect(r.data.briefContext).toContain('Referente: Mario Rossi');
+        expect(r.data.autoGeneratePending).toBe(false);
+      }
+    });
+
+    it('logoSchema accepts briefContext + autoGeneratePending', () => {
+      const logo = { ...createEmptyLogo(), briefContext: BRIEF, autoGeneratePending: true };
+      const r = logoSchema.safeParse(logo);
+      expect(r.success).toBe(true);
+      if (r.success) {
+        expect(r.data.briefContext).toContain('Settore: food');
+        expect(r.data.autoGeneratePending).toBe(true);
+      }
+    });
+
+    it('createEmpty* factories still validate against their schemas', () => {
+      expect(businessCardSchema.safeParse(createEmptyCard()).success).toBe(true);
+      expect(flyerSchema.safeParse(createEmptyFlyer()).success).toBe(true);
+      expect(logoSchema.safeParse(createEmptyLogo()).success).toBe(true);
+    });
+  });
 });

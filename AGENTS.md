@@ -52,9 +52,10 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 - **Observability**: server logs via `console.*` in `api/index.ts` (JSON in
   prod). Client logs via `src/utils/logger.ts` + `/api/logs` (Vercel logs).
   Zero servizi esterni.
-- **AI**: DeepSeek (testo, tutti gli orchestratori via proxy `/api/ai/chat`),
-  Gemini Nano Banana (immagini: logo background, card cover/icon), Ollama Pro
-  Cloud (`/api/ai/chat` con `provider: 'ollama'`). Chiavi solo server-side.
+- **AI**: default **MiniMax M3** (Ollama Pro Cloud, `ollama-minimax-m3`,
+  multimodale/vision, flat rate) per tutti gli orchestratori via proxy
+  `/api/ai/chat`; DeepSeek fallback/selezionabile; Gemini Nano Banana
+  (immagini: logo background, card cover/icon). Chiavi solo server-side.
 
 ## Key Files
 
@@ -84,6 +85,8 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/ai/PaletteOrchestrator.ts` | TB-027 B5: 3 palette AI suggerite (DeepSeek JSON, paletteConceptsSchema) |
 | `src/hooks/useAIPalette.ts` | TB-027 B5: hook palette generation |
 | `src/utils/palettePreview.ts` | TB-027 B5: SVG swatch card preview palette (zero costo AI) |
+| `src/hooks/useAutoBuildGenerate.ts` | TB-027c/g: sequenza "Genera bozze AI" logo→card→flyer (orchestratori + briefContext, providerId opzionale, cover/hero AI, compressione immagini pre-save, save per-doc, status per-doc) |
+| `src/utils/docPreviewSvg.ts` | Preview SVG inline logo/card/flyer/quote (condiviso CollectionView + CustomerDetail) |
 | `src/pages/app/CustomersPage.tsx` | TB-027 route `/app/customers` (admin guard) |
 | `src/ai/BaseOrchestrator.ts` | Abstract condivisa (sanitize, parseJson, handleStream, trackUsage) |
 | `src/ai/*Orchestrator.ts` | card / flyer / logo / social / onboarding |
@@ -244,7 +247,13 @@ TB-025 (Collection preview SVG inline logo/card/flyer/quote) ✅ completed
 per-document aiStats + Collection badge) ✅ completed 2026-07-27 —
 vedi `docs/agent-gotchas.md` §16. TB-027 (CRM + auto-research + auto-build) +
 TB-019 (intake pipeline → porta ingresso CRM) ✅ completed 2026-07-28 —
-vedi `docs/agent-gotchas.md` §17.
+vedi `docs/agent-gotchas.md` §17. TB-027c (briefContext wiring negli
+orchestratori, sequenza "Genera bozze AI" CRM, logo status load fix,
+embedding `gemini-embedding-2`) ✅ completed 2026-07-29 —
+vedi `docs/agent-gotchas.md` §18. TB-027e (dev proxy Ollama M3, research
+errori/immagini/colori, ai-fill AI reale, flyer text-only, auto-build
+dedupe, dataService SSR-safe) ✅ completed 2026-07-29 —
+vedi `docs/agent-gotchas.md` §20.
 
 ## Responsive Patterns
 
@@ -269,7 +278,7 @@ vedi `docs/agent-gotchas.md` §17.
 | `OLLAMA_API_KEY` | Vercel + .env | Ollama Pro Cloud (senza → 503 solo su quel provider) |
 | `REPLICATE_API_TOKEN` | opzionale, deprecato | Fallback logo AI |
 | `REGISTRATION_ENABLED` | Vercel | TB-027: flag signup. Default `false` (CRM admin-only). `true` riattiva whitelabel |
-| `FIRECRAWL_API_KEY` | opzionale | TB-027: scraping sito cliente per research + RAG. Senza key, status `web: no_key` |
+| `FIRECRAWL_API_KEY` | opzionale | TB-027: scraping sito cliente per research + RAG. Senza key, status `web: no_key`. Endpoint v2. Formati: markdown, screenshot, branding, images, json (oggetto con schema), links. Timeout 120s. `webData` persiste markdownFull/screenshot/links/json/branding/images |
 
 **Mai esporre `DEEPSEEK_API_KEY`/`GEMINI_API_KEY`/`OLLAMA_API_KEY`/
 `FIRECRAWL_API_KEY` al browser.** Il frontend chiama solo il proxy serverless.
@@ -353,10 +362,11 @@ Chiavi **versionate** `nome:vN`; cambio schema → `v(N+1)` + fallback lettura
 - `authToken`, `userEmail`, `username`, `userRole`, `dataRegistrazione` — sessione
 - `pq_ai_logs:v1` — ring buffer AI log in **sessionStorage**, max 100, mai base64
 - `pq_ui:v1` — preferenze UI (`uiPrefs.ts`)
-- `logoAiChat:v1` — backup best-effort chat logo AI (TTL 24h, try/catch, senza bgImages se quota)
+- `logoAiChat:v1` / `logoAiChat:v1:<docId>` — backup best-effort chat logo AI (TTL 24h, try/catch, senza bgImages se quota). Chiave per-documento; globale legacy solo fallback lettura
 - `cardIconPromptLibrary:v1`, `logoPromptLibrary:v1` — librerie prompt
 - `pq_customers:v1` — TB-027 CRM clienti (dev/local cache, PROD via API)
 - `pq_intakes:v1` — TB-019 brief intake (dev/local cache, PROD via API)
+- `pq_customer_knowledge:v1` — TB-027 research chunks dev cache (`{ [customerId]: [{chunk, source, createdAt}] }`, PROD via API)
 
 ## Git Guardrails
 

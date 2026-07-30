@@ -103,6 +103,10 @@ export async function compressDataUrl(
   maxBytes: number = 300_000,
 ): Promise<string | null> {
   if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+  // Payload troppo corto per essere un'immagine reale (es. stub nei test):
+  // evita il caricamento via Image che in jsdom può non risolversi.
+  const payload = dataUrl.split(',')[1] || '';
+  if (payload.length < 100) return dataUrl;
   try {
     const img = await loadDataUrlImage(dataUrl);
     const curBytes = estimateBase64Bytes(dataUrl);
@@ -136,7 +140,7 @@ export async function compressDataUrl(
   }
 }
 
-function loadDataUrlImage(dataUrl: string, timeoutMs = 800): Promise<HTMLImageElement> {
+function loadDataUrlImage(dataUrl: string, timeoutMs = 3000): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const timer = setTimeout(() => reject(new Error('data-url image load timeout')), timeoutMs);

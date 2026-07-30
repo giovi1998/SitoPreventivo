@@ -42,6 +42,7 @@ import { useCardAIFloating } from '../../hooks/useCardAIFloating';
 import { logger } from '../../utils/logger';
 import { useDocumentSave } from '../../hooks/useDocumentSave';
 import { getAiProviderDefault } from '../../utils/uiPrefs';
+import { providerRegistry } from '../../ai/providers/registry';
 import CardSaveAction from './CardSaveAction';
 import CardExportMenu from './CardExportMenu';
 import CardPreviewSurface from './CardPreviewSurface';
@@ -115,7 +116,7 @@ export default function CardEditorShell({ userEmail, initialCard, documentTheme,
 
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [aiText, setAiText] = useState('');
-  const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || 'deepseek-chat');
+  const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || providerRegistry.getDefaultId());
   // Phase 14: lo stato expanded della rail AI è gestito da AIConsole in
   // pq_ui:v1 (editorKind='card'), non più da useState locale.
   const [showGrid, setShowGrid] = useState(false);

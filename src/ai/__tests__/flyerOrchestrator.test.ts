@@ -142,6 +142,49 @@ describe('FlyerAIOrchestrator (phase 3)', () => {
       expect(result.applied).toBe(false);
       expect(result.changes.join(' ')).toMatch(/error:invalid_flyer/);
     });
+
+    it('falls back to flyer.briefContext when brief is empty (TB-027)', async () => {
+      const mock = setupMock();
+      mock.chatMock.mockResolvedValue({
+        content: JSON.stringify({ headline: 'H', subheadline: '', body: '', cta: { label: '' } }),
+      });
+      const orch = new FlyerAIOrchestrator();
+      const flyer = { ...createEmptyFlyer(), briefContext: 'Attività: Bar Da Mario\nReferente: Mario' };
+      const result = await orch.generateCopy(flyer, '   ', 'formale');
+      expect(result.applied).toBe(true);
+      const messages = mock.chatMock.mock.calls[0][0] as ChatMessage[];
+      const userMsg = messages.find((m) => m.role === 'user');
+      expect(userMsg?.content).toContain('Bar Da Mario');
+      expect(userMsg?.content).toContain('Referente: Mario');
+    });
+
+    it('appends briefContext as "Contesto cliente" when brief is provided (TB-027)', async () => {
+      const mock = setupMock();
+      mock.chatMock.mockResolvedValue({
+        content: JSON.stringify({ headline: 'H', subheadline: '', body: '', cta: { label: '' } }),
+      });
+      const orch = new FlyerAIOrchestrator();
+      const flyer = { ...createEmptyFlyer(), briefContext: 'Attività: Bar Da Mario' };
+      await orch.generateCopy(flyer, 'Sagra della birra 15 agosto', 'giovanile');
+      const messages = mock.chatMock.mock.calls[0][0] as ChatMessage[];
+      const userMsg = messages.find((m) => m.role === 'user');
+      expect(userMsg?.content).toContain('Sagra della birra 15 agosto');
+      expect(userMsg?.content).toContain('Contesto cliente:');
+      expect(userMsg?.content).toContain('Bar Da Mario');
+    });
+
+    it('prompt is unchanged when flyer has no briefContext', async () => {
+      const mock = setupMock();
+      mock.chatMock.mockResolvedValue({
+        content: JSON.stringify({ headline: 'H', subheadline: '', body: '', cta: { label: '' } }),
+      });
+      const orch = new FlyerAIOrchestrator();
+      await orch.generateCopy(createEmptyFlyer(), 'Sagra della birra', 'formale');
+      const messages = mock.chatMock.mock.calls[0][0] as ChatMessage[];
+      const userMsg = messages.find((m) => m.role === 'user');
+      expect(userMsg?.content).toContain('Sagra della birra');
+      expect(userMsg?.content).not.toContain('Contesto cliente:');
+    });
   });
 
   describe('refineCopy', () => {

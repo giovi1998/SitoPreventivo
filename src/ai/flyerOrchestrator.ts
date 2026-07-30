@@ -73,6 +73,19 @@ function bodyCharBudgetFor(size: FlyerSize): number {
   return 500;
 }
 
+/**
+ * TB-027 auto-build: il brief esplicito dell'utente vince sempre; se è
+ * vuoto si usa il `briefContext` del draft (contesto cliente CRM). Se
+ * entrambi sono presenti, il contesto viene accodato come sezione
+ * "Contesto cliente" così il modello distingue richiesta e background.
+ */
+function resolveFlyerBrief(flyer: Flyer, brief: string): string {
+  const briefContext = typeof flyer.briefContext === 'string' ? flyer.briefContext : '';
+  if (!brief.trim()) return briefContext;
+  if (!briefContext.trim()) return brief;
+  return `${brief}\n\nContesto cliente:\n${briefContext}`;
+}
+
 const FLYER_TOOLS = ['flyer_shorten_body', 'flyer_add_urgency'];
 
 export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
@@ -103,7 +116,9 @@ export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
         densityTarget: budget.densityTarget,
         layoutAdvice: budget.warning,
       };
-      return buildFlyerCopyPrompt(brief, tone, ctx);
+      return `${buildFlyerCopyPrompt(resolveFlyerBrief(flyer, brief), tone, ctx)}
+
+Usa TUTTE le informazioni del brief (attività, settore, servizi, colori e stile del brand, contenuti del sito) per guidare headline, subheadline, body e CTA: il copy deve riflettere l'identità e lo stile del cliente, non essere generico.`;
     }, options);
   }
 

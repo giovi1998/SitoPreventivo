@@ -32,6 +32,10 @@ describe('LogoAiPanel (spec 11/12 UI integration)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    // Alcuni test fanno spyOn + mockRestore su fetch, che può lasciare
+    // global.fetch undefined in jsdom: ri-stub a ogni test (stesso
+    // pattern di LogoEditor.test.tsx).
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ enabled: false, provider: 'none' }) }));
   });
 
   it('shows the free-tier blocked message when tier === "free"', () => {
@@ -684,6 +688,60 @@ describe('LogoAiPanel (spec 11/12 UI integration)', () => {
       } finally {
         fetchSpy.mockRestore();
       }
+    });
+  });
+
+  /**
+   * Regressione: una sola chiave globale `logoAiChat:v1` faceva sì che
+   * aprendo il documento A dopo aver lavorato sul B si ripristinasse la
+   * chat AI di B. Con la prop `docId` lo stato è persistito per-documento
+   * (`logoAiChat:v1:<docId>`); la chiave globale resta come fallback di
+   * lettura (backward compat) e per il caso senza docId.
+   */
+  describe('storage per-documento (docId)', () => {
+    const persistedChat = (activity: string) => JSON.stringify({
+      answers: { activity, mood: 'minimal', target: 'T', sector: 'tech' },
+      step: 'chat',
+      concepts: [],
+      selected: -1,
+      bgImages: [null, null, null],
+      ts: Date.now(),
+    });
+
+    it('writes to logoAiChat:v1:<docId>, NOT the global key', async () => {
+      render(
+        <LogoAiPanel logo={{ builder: {} } as never} onPatch={vi.fn()} tier="unlocked" userEmail="t@e.com" docId="docX" />
+      );
+      fireEvent.change(screen.getByPlaceholderText(/Pizzeria moderna/i), { target: { value: 'Attività X' } });
+      await new Promise((r) => setTimeout(r, 600));
+      expect(localStorage.getItem('logoAiChat:v1')).toBeNull();
+      const raw = localStorage.getItem('logoAiChat:v1:docX');
+      expect(raw).not.toBeNull();
+      expect(JSON.parse(raw!).answers.activity).toBe('Attività X');
+    });
+
+    it('restores from the per-doc key on mount', () => {
+      localStorage.setItem('logoAiChat:v1:docX', persistedChat('Ripristino X'));
+      render(
+        <LogoAiPanel logo={{ builder: {} } as never} onPatch={vi.fn()} tier="unlocked" userEmail="t@e.com" docId="docX" />
+      );
+      expect((screen.getByPlaceholderText(/Pizzeria moderna/i) as HTMLTextAreaElement).value).toBe('Ripristino X');
+    });
+
+    it('falls back to the legacy global key when the per-doc key is missing', () => {
+      localStorage.setItem('logoAiChat:v1', persistedChat('Legacy globale'));
+      render(
+        <LogoAiPanel logo={{ builder: {} } as never} onPatch={vi.fn()} tier="unlocked" userEmail="t@e.com" docId="docY" />
+      );
+      expect((screen.getByPlaceholderText(/Pizzeria moderna/i) as HTMLTextAreaElement).value).toBe('Legacy globale');
+    });
+
+    it('does NOT restore another doc chat when opening a different docId', () => {
+      localStorage.setItem('logoAiChat:v1:docA', persistedChat('Chat di A'));
+      render(
+        <LogoAiPanel logo={{ builder: {} } as never} onPatch={vi.fn()} tier="unlocked" userEmail="t@e.com" docId="docB" />
+      );
+      expect((screen.getByPlaceholderText(/Pizzeria moderna/i) as HTMLTextAreaElement).value).toBe('');
     });
   });
 });

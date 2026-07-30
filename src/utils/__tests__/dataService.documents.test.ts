@@ -1,6 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import dataService from '../dataService';
+import { compressDataUrl } from '../card/imageCompress';
 import { createGiovanniQrTemplate } from '../documentSchemas';
+
+vi.mock('../card/imageCompress', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../card/imageCompress')>();
+  return {
+    ...actual,
+    compressDataUrl: vi.fn(async (value: string) => `data:image/jpeg;base64,COMPRESSED_${value.length}`),
+  };
+});
+
+const mockCompressDataUrl = compressDataUrl as unknown as ReturnType<typeof vi.fn>;
 
 const LS_KEY = 'precisionQuote_documents:v1';
 
@@ -21,6 +32,8 @@ describe('dataService documents (local path)', () => {
     });
     fetchMock = vi.fn();
     global.fetch = fetchMock as unknown as typeof fetch;
+    mockCompressDataUrl.mockClear();
+    mockCompressDataUrl.mockImplementation(async (value: string) => `data:image/jpeg;base64,COMPRESSED_${value.length}`);
   });
 
   afterEach(() => {
@@ -114,6 +127,94 @@ describe('dataService documents (local path)', () => {
     } finally {
       setItemSpy.mockRestore();
     }
+  });
+
+  describe('compressione base64 pre-save (QuotaExceeded prevention)', () => {
+    const bigDataUrl = () => `data:image/png;base64,${'A'.repeat(500_000)}`;
+
+    it('comprime i campi immagine noti >300KB nel documento flat', async () => {
+      const card = {
+        ...createGiovanniQrTemplate(),
+        id: 'card-big',
+        documentType: 'businessCard',
+        userEmail: 'user@test.com',
+        front: { name: 'Mario', photoUrl: bigDataUrl(), logoUrl: bigDataUrl(), coverImageUrl: bigDataUrl() },
+        back: { coverImageUrl: bigDataUrl() },
+      };
+      const result = await dataService.saveDocument('user@test.com', card);
+      expect(result.success).toBe(true);
+      const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      expect(stored[0].front.photoUrl).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
+      expect(stored[0].front.logoUrl).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
+      expect(stored[0].front.coverImageUrl).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
+      expect(stored[0].back.coverImageUrl).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
+      expect(mockCompressDataUrl).toHaveBeenCalledTimes(4);
+    });
+
+    it('comprime builder.backgroundImage e content.heroImage dentro data (envelope)', async () => {
+      const doc = {
+        id: 'env-1',
+        documentType: 'logo',
+        title: 'Logo',
+        userEmail: 'user@test.com',
+        data: {
+          builder: { backgroundImage: bigDataUrl() },
+          content: { heroImage: bigDataUrl() },
+        },
+      };
+      const result = await dataService.saveDocument('user@test.com', doc);
+      expect(result.success).toBe(true);
+      const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      expect(stored[0].data.builder.backgroundImage).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
+      expect(stored[0].data.content.heroImage).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
+    });
+
+    it('non tocca immagini piccole o valori non data-URL', async () => {
+      const card = {
+        ...createGiovanniQrTemplate(),
+        id: 'card-small',
+        documentType: 'businessCard',
+        userEmail: 'user@test.com',
+        front: { name: 'Mario', photoUrl: 'data:image/png;base64,QUJD', logoUrl: '/logo.png', coverImageUrl: null },
+      };
+      await dataService.saveDocument('user@test.com', card);
+      expect(mockCompressDataUrl).not.toHaveBeenCalled();
+      const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      expect(stored[0].front.photoUrl).toBe('data:image/png;base64,QUJD');
+      expect(stored[0].front.logoUrl).toBe('/logo.png');
+    });
+
+    it('se la compressione fallisce il valore originale resta e il save va a buon fine', async () => {
+      mockCompressDataUrl.mockImplementation(async (value: string) => value);
+      const card = {
+        ...createGiovanniQrTemplate(),
+        id: 'card-fallback',
+        documentType: 'businessCard',
+        userEmail: 'user@test.com',
+        front: { photoUrl: bigDataUrl() },
+      };
+      const result = await dataService.saveDocument('user@test.com', card);
+      expect(result.success).toBe(true);
+      const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      expect(stored[0].front.photoUrl).toBe(bigDataUrl());
+    });
+
+    it('preserva customerId dal documento esistente se non passato', async () => {
+      const base = { ...createGiovanniQrTemplate(), id: 'doc-cust', documentType: 'businessCard', userEmail: 'user@test.com', customerId: 'cust_123' };
+      await dataService.saveDocument('user@test.com', base);
+      await dataService.saveDocument('user@test.com', { id: 'doc-cust', documentType: 'businessCard', title: 'Aggiornato', data: { front: { name: 'Nuovo' } } });
+      const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      expect(stored[0].customerId).toBe('cust_123');
+      expect(stored[0].title).toBe('Aggiornato');
+    });
+
+    it('sovrascrive customerId se passato esplicitamente', async () => {
+      const base = { ...createGiovanniQrTemplate(), id: 'doc-cust2', documentType: 'businessCard', userEmail: 'user@test.com', customerId: 'cust_123' };
+      await dataService.saveDocument('user@test.com', base);
+      await dataService.saveDocument('user@test.com', { id: 'doc-cust2', documentType: 'businessCard', customerId: 'cust_456', title: 'Aggiornato' });
+      const stored = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      expect(stored[0].customerId).toBe('cust_456');
+    });
   });
 
   describe('getDocument (URL Document-ID Routing)', () => {

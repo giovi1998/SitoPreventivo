@@ -51,10 +51,8 @@ export function useDocumentLoader({ view, documentType, contextField }: UseDocum
       return;
     }
     if (!userEmail) return;
-    if (ctxDoc?.id === docId) {
-      lastLoadedRef.current = docId;
-      return;
-    }
+    // Ricarica sempre da dataService al mount / cambio docId: il ctxDoc può
+    // essere una versione cache più vecchia (es. documento rigenerato dal CRM).
     if (lastLoadedRef.current === docId) return;
     if (!DOC_ID_REGEX.test(docId)) {
       addToastRef.current('error', 'ID documento non valido');
@@ -81,7 +79,7 @@ export function useDocumentLoader({ view, documentType, contextField }: UseDocum
         addToastRef.current('error', `Errore caricamento: ${err.message}`);
         navigateRef.current(`/app/${view}`, { replace: true });
       });
-  }, [docId, ctxDoc?.id, userEmail, view, documentType, contextField]);
+  }, [docId, userEmail, view, documentType, contextField]);
 
   const initialDoc = docId ? (ctxDoc?.id === docId ? ctxDoc : null) : undefined;
 

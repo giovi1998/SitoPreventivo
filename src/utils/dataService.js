@@ -1,7 +1,13 @@
 import bcrypt from 'bcryptjs';
+import { chunkMarkdown, scrapeFirecrawlLocal, extractLogoFromFirecrawl, extractWebImages, saveKnowledgeChunks, getKnowledgeChunks } from './firecrawlLocal.js';
+
+async function loadCompressDataUrl() {
+  const mod = await import('./card/imageCompress');
+  return mod.compressDataUrl;
+}
 
 const API_BASE = '/api';
-const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const IS_LOCAL = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
 // ─── HELPERS ──────────────────────────────────────────
 function lsGet(key) {
@@ -22,6 +28,47 @@ const DOC_META_KEYS = new Set([
   'id', 'documentType', 'title', 'userEmail', 'createdAt', 'updatedAt',
   'isTemplate', 'data',
 ]);
+
+// Campi immagine base64 noti: compressi automaticamente prima del save locale
+// per evitare QuotaExceededError (gotcha §2.12). Il fallback resta lsSet, che
+// mappa la quota su un errore strutturato.
+const B64_IMAGE_PATHS = [
+  ['front', 'photoUrl'],
+  ['front', 'logoUrl'],
+  ['front', 'coverImageUrl'],
+  ['back', 'coverImageUrl'],
+  ['builder', 'backgroundImage'],
+  ['content', 'heroImage'],
+];
+// ~225KB raw espressi in caratteri base64 (4/3 + prefix data URL).
+const B64_COMPRESS_MIN_CHARS = 300_000;
+
+async function compressPayloadImages(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+  let out = payload;
+  for (const [parent, field] of B64_IMAGE_PATHS) {
+    const node = out[parent];
+    const value = node && node[field];
+    if (typeof value === 'string' && value.startsWith('data:') && value.length > B64_COMPRESS_MIN_CHARS) {
+      const compressDataUrl = await loadCompressDataUrl();
+      const compressed = await compressDataUrl(value, 768, 200_000);
+      if (compressed && compressed !== value) {
+        out = { ...out, [parent]: { ...node, [field]: compressed } };
+      }
+    }
+  }
+  return out;
+}
+
+// Il documento può essere flat (editor: front/builder/content al top level)
+// o envelope ({ id, documentType, data }): comprime in entrambi i livelli.
+async function compressDocumentImages(document) {
+  let out = await compressPayloadImages(document);
+  if (out.data) {
+    out = { ...out, data: await compressPayloadImages(out.data) };
+  }
+  return out;
+}
 
 /**
  * Client editors send a FLAT document (builder/front/content at top level).
@@ -313,8 +360,15 @@ const dataService = {
     if (IS_LOCAL) {
       const all = lsGet('precisionQuote_documents:v1') || [];
       const ownerEmail = email || document.userEmail;
-      // Always stamp userEmail so Collection filter works even if caller forgot.
-      const toStore = { ...document, userEmail: ownerEmail };
+      // Preserva customerId dal documento esistente se il caller non lo passa
+      // (editor che salvano senza conoscere il customerId).
+      const existing = all.find((d) => d.id === document.id);
+      const toStore = await compressDocumentImages({
+        ...existing,
+        ...document,
+        userEmail: ownerEmail,
+        customerId: document.customerId ?? existing?.customerId,
+      });
       const isNew = !all.some(d => d.id === toStore.id);
       const owned = all.filter(d => d.userEmail === ownerEmail);
       const others = all.filter(d => d.userEmail !== ownerEmail);
@@ -858,17 +912,69 @@ const dataService = {
       const all = lsGet('pq_customers:v1') || [];
       const idx = all.findIndex((c) => c.id === id);
       if (idx < 0) return { error: 'Cliente non trovato' };
-      all[idx].status = 'researched';
-      all[idx].researchStatus = { web: 'no_key', logo: 'no_logo' };
-      all[idx].updatedAt = new Date().toISOString();
-      lsSet('pq_customers:v1', all);
-      return { data: { id, researchStatus: all[idx].researchStatus, knowledgeCount: 0, webData: {} } };
+      const cust = all[idx];
+      const apiKey = import.meta.env?.VITE_FIRECRAWL_API_KEY;
+      const website = cust.contacts?.website;
+      const persist = (researchStatus, extra = {}) => {
+        // Logo manuale (upload admin) vince SEMPRE: status 'manual', mai
+        // sovrascritto da detection Firecrawl né da path di errore.
+        if (cust.logoUrl) researchStatus.logo = 'manual';
+        all[idx] = {
+          ...cust, ...extra, researchStatus,
+          status: 'researched', updatedAt: new Date().toISOString(),
+        };
+        lsSet('pq_customers:v1', all);
+        return {
+          data: {
+            id, researchStatus,
+            knowledgeCount: extra.knowledgeCount || 0,
+            webData: extra.webData || {},
+          },
+        };
+      };
+      // Stub originale: senza key dev non si chiama Firecrawl.
+      if (!apiKey) {
+        return persist({ web: 'no_key', logo: 'no_logo' });
+      }
+      if (!website) {
+        return persist({ web: 'no_website', logo: cust.logoUrl ? 'manual' : 'no_logo' });
+      }
+      // Research reale dev-only: chiama Firecrawl dal browser (CORS consentito
+      // da api.firecrawl.dev). Fallimento → status error, mai throw.
+      const scraped = await scrapeFirecrawlLocal(website, apiKey);
+      if (scraped.status !== 'ok') {
+        return persist({ web: 'error', logo: 'no_logo' });
+      }
+      const page = scraped.scraped || {};
+      const metadata = page.metadata || {};
+      const markdown = typeof page.markdown === 'string' ? page.markdown : '';
+      const chunks = chunkMarkdown(markdown);
+      const knowledgeCount = saveKnowledgeChunks(id, chunks);
+      // Logo manuale (upload admin) ha priorità: status 'manual', mai sovrascritto.
+      const detectedLogoUrl = extractLogoFromFirecrawl(page);
+      const logoStatus = cust.logoUrl ? 'manual' : detectedLogoUrl ? 'detected' : 'no_logo';
+      return persist({ web: 'ok', logo: logoStatus }, {
+        ...(detectedLogoUrl ? { detectedLogoUrl } : {}),
+        knowledgeCount,
+        webData: {
+          title: typeof page.title === 'string' ? page.title : (typeof metadata.title === 'string' ? metadata.title : ''),
+          description: typeof page.description === 'string' ? page.description : (typeof metadata.description === 'string' ? metadata.description : ''),
+          markdownPreview: markdown.slice(0, 500),
+          markdownFull: markdown,
+          screenshot: page.screenshot ?? null,
+          links: page.links ?? [],
+          json: page.json ?? null,
+          branding: page.branding ?? null,
+          colors: page.branding?.colors ?? null,
+          images: extractWebImages(page, 12),
+        },
+      });
     }
     return api('POST', `/customers/${id}/research`, { adminEmail: 'admin@gmail.com' });
   },
 
   async getCustomerKnowledge(id) {
-    if (IS_LOCAL) return { data: [] };
+    if (IS_LOCAL) return { data: getKnowledgeChunks(id) };
     return api('GET', `/customers/${id}/knowledge?adminEmail=${encodeURIComponent('admin@gmail.com')}`);
   },
 
@@ -883,14 +989,47 @@ const dataService = {
       const idx = all.findIndex((c) => c.id === id);
       if (idx < 0) return { error: 'Cliente non trovato' };
       const c = all[idx];
+      // Fallback lookup (comportamento pre-AI): riempie i campi mancanti.
+      const sector = c.sector || 'generico';
       const ai = {};
       if (!c.mood) ai.mood = 'moderno';
-      if (!c.target) ai.target = 'Clienti locali settore ' + (c.sector || 'generico');
+      if (!c.target) ai.target = 'Clienti locali settore ' + sector;
       if (!c.preferredColors) ai.preferredColors = 'palette settore';
-      if (!c.activity) ai.activity = 'Attività settore ' + (c.sector || 'generico');
+      if (!c.activity) ai.activity = 'Attività settore ' + sector;
+      let costUsd = 0;
+      const missing = Object.keys(ai);
+      if (missing.length > 0) {
+        try {
+          // Import dinamici: evitano ciclo dataService↔providers a valutazione modulo.
+          const [{ providerRegistry }, { resolveProviderId }, { calculateCostUsd }] = await Promise.all([
+            import('../ai/providers/registry'),
+            import('./resolveProviderId'),
+            import('../ai/providerPricing'),
+          ]);
+          const providerId = resolveProviderId();
+          const provider = providerRegistry.getProvider(providerId);
+          const chunk = getKnowledgeChunks(id)[0]?.chunk || '';
+          const response = await provider.chat([
+            { role: 'system', content: 'Sei un consulente di branding. Rispondi SOLO con un oggetto JSON valido, senza testo extra.' },
+            { role: 'user', content: buildAiFillPrompt(c, missing, chunk) },
+          ], { temperature: 0.7, responseFormat: { type: 'json_object' } });
+          const parsed = response?.content ? extractJsonObject(response.content) : null;
+          if (!parsed) throw new Error('Risposta AI non parsabile');
+          // AI vince sul lookup per i campi che ha effettivamente compilato.
+          for (const k of missing) {
+            if (typeof parsed[k] === 'string' && parsed[k].trim()) ai[k] = parsed[k].trim();
+          }
+          costUsd = calculateCostUsd(providerId, response.usage);
+          all[idx] = { ...c, ...ai, aiSuggestedFields: ai, updatedAt: new Date().toISOString() };
+          lsSet('pq_customers:v1', all);
+          return { data: { id, aiSuggestedFields: ai, costUsd, fromAI: true } };
+        } catch (err) {
+          console.warn('[ai-fill] AI fallita, fallback tabella lookup:', err?.message || err);
+        }
+      }
       all[idx] = { ...c, ...ai, aiSuggestedFields: ai, updatedAt: new Date().toISOString() };
       lsSet('pq_customers:v1', all);
-      return { data: { id, aiSuggestedFields: ai } };
+      return { data: { id, aiSuggestedFields: ai, costUsd, fromAI: false } };
     }
     return api('POST', `/customers/${id}/ai-fill`, { adminEmail: 'admin@gmail.com' });
   },
@@ -900,7 +1039,7 @@ const dataService = {
       const all = lsGet('pq_customers:v1') || [];
       const cust = all.find((c) => c.id === id);
       if (!cust) return { error: 'Cliente non trovato' };
-      const docs = lsGet('precisionQuote_documents:v1') || [];
+      let docs = lsGet('precisionQuote_documents:v1') || [];
       const now = new Date().toISOString();
       const ids = [];
       const contacts = cust.contacts || {};
@@ -954,7 +1093,7 @@ const dataService = {
               phone: String(contacts.phone || ''), email: String(contacts.email || ''),
               website: String(contacts.website || ''), address: String(contacts.address || ''),
               vatNumber: '', services: [], servicesLabel: 'Servizi', socials: [],
-              qrPayload: '', qrLabel: 'Scansiona per visitare il sito',
+              qrPayload: String(contacts.website || ''), qrLabel: 'Scansiona per visitare il sito',
               qrSize: 'medium', coverImageUrl: null, useGrid: false,
             },
             style: {
@@ -977,7 +1116,7 @@ const dataService = {
             title: `Flyer ${cust.businessName}`,
             size: 'A5', orientation: 'portrait',
             content: {
-              headline: cust.businessName, subheadline: cust.activity || '', body: cust.activity || '',
+              headline: cust.businessName, subheadline: cust.mood || '', body: cust.activity || '',
               cta: { label: 'Scopri di più', url: String(contacts.website || '') },
               heroImage: firstPhoto, qrPayload: '', qrLabel: '',
             },
@@ -994,6 +1133,10 @@ const dataService = {
           },
         },
       ];
+      // Replace semantics: un rerun sostituisce le BOZZE esistenti degli
+      // stessi tipi (i documenti non-BOZZA non vengono toccati).
+      const createdTypes = drafts.filter((d) => !(d.type === 'logo' && hasManualLogo)).map((d) => d.type);
+      docs = docs.filter((d) => !(d.customerId === id && d.status === 'BOZZA' && createdTypes.includes(d.documentType)));
       for (const d of drafts) {
         // Skip logo draft se admin ha già caricato un logo manuale/detected
         if (d.type === 'logo' && hasManualLogo) continue;
@@ -1100,6 +1243,29 @@ function buildBriefContext(cust) {
   if (contacts.phone) parts.push(`Telefono: ${contacts.phone}`);
   if (contacts.email) parts.push(`Email: ${contacts.email}`);
   return parts.join('\n');
+}
+
+// TB-027 ai-fill: prompt JSON per compilare solo i campi mancanti del profilo
+// brand. Stesso significato del prompt prod (api/index.ts ai-fill).
+function buildAiFillPrompt(c, missing, chunk) {
+  const parts = [
+    `Compila il profilo brand. Rispondi SOLO con un oggetto JSON con queste chiavi: ${missing.join(', ')}.`,
+    buildBriefContext(c),
+  ];
+  if (chunk) parts.push(`Contenuto sito web:\n${chunk}`);
+  return parts.filter(Boolean).join('\n');
+}
+
+// Estrae il primo blocco {...} da una risposta AI e lo parsa. Null se non valido.
+function extractJsonObject(text) {
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const p = JSON.parse(m[0]);
+    return p && typeof p === 'object' && !Array.isArray(p) ? p : null;
+  } catch {
+    return null;
+  }
 }
 
 function cryptoRandomId() {

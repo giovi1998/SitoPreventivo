@@ -668,7 +668,7 @@ Codice signup/onboarding **conservato** dietro feature flag
        reject IP privati in `detectLogo` e `fetchFirecrawlPage`. Logo clamp 200KB.
        Chunk markdown salvati in `customer_knowledge` con
        source=`firecrawl:homepage`; embedding futuro via `POST /api/ai/embeddings`
-       (Gemini `text-embedding-004`). **TB-027b**: nessuna chiave salvata in UI;
+       (Gemini `gemini-embedding-2`). **TB-027b**: nessuna chiave salvata in UI;
        l'env `FIRECRAWL_API_KEY` è server-side only.
     - `POST /api/customers/:id/ai-fill` — AI riempie campi vuoti (mood,
       target, preferredColors, activity). Basato su settore (lookup
@@ -778,10 +778,7 @@ Codice signup/onboarding **conservato** dietro feature flag
   chiama Firecrawl reale; mock `globalThis.fetch` per test ok.
 - **ROUTE_PATHS 10 keys**: `useRouteView.test.tsx` aggiornato a 10
   (aggiunto `customers`). Verifica count ogni volta che si aggiunge view.
-- **autoGenerate deferred**: flag accettato in `AutoBuildSchema` e body
-  ma non usato (auto-build crea solo draft). AI generation resta
-  manuale nell'editor (CON-001 quality check). Se in futuro si vuole
-  full-auto, lanciare orchestratori in sequenza qui (rate limit Gemini).
+- **autoGenerate → client-side (TB-027c, vedi §18)**: flag `autoGenerate` attiva `autoGeneratePending` sui draft; generazione AI lanciata dal CRM (`useAutoBuildGenerate`), NON dall'API. Server resta draft-only (CON-001).
 - **B1 shape allineata a createEmpty***: auto-build e intakeToDocument
   DEVONO usare shape nested (`card.front.name`, `card.back.phone`,
   `logo.builder.primaryText`, `flyer.content.headline`). Scrivere campi
@@ -803,3 +800,209 @@ Codice signup/onboarding **conservato** dietro feature flag
   con regex `<img ... src|alt|class|id contains "logo" ...>`. Anti-SSRF
   su URL assoluti (reject IP privati). `AbortSignal.timeout(8000)`.
   Best-effort: fallisce silenziosamente, customer non bloccato.
+
+## 18. TB-027c — briefContext wiring + sequenza auto-generate + embedding v2 (2026-07-29)
+
+- **briefContext finalmente consumato**: auto-build/intake scrivevano
+  `data.briefContext` ma Zod lo strippava al parse (campo non in schema)
+  e nessun orchestrator lo leggeva. Ora `briefContext` +
+  `autoGeneratePending` sono in `businessCardSchema`/`flyerSchema`/
+  `logoSchema` (opzionali). Consumo:
+  - card: `buildCardAIContext` ritorna `briefSection` (additivo),
+    `cardOrchestrator` lo appende come user-content part
+    `Contesto cliente (brief attività):` dopo `Richiesta:`.
+  - flyer: `resolveFlyerBrief` — brief vuoto → `flyer.briefContext`;
+    entrambi → `brief + 
+
+Contesto cliente:
+` + briefContext.
+  - logo: `generateLogo` fallback brief → `logo.briefContext`;
+    `buildLogoGeneratePrompt(brief, sector?, briefContext?)` terzo
+    param opzionale (backward compat, senza → output byte-identico).
+- **Sequenza `useAutoBuildGenerate`**: bottone "Genera bozze AI" in
+  `CustomerDetail` → logo → card → flyer. Logo: concept selezionato →
+  builder. Card: `front.logoUrl` = data URL SVG via `builderToSvg`
+  (logo generato) o `detectedLogoUrl`; icona AI `/api/ai/card-photo`
+  in `photoUrl` se vuota (CON-IS-001, best-effort: fallimento icona
+  NON marca la card error). Flyer: `generateCopy` con tone da
+  `aiSuggestedFields.mood`. Save via `dataService.saveDocument`
+  (NON esiste updateDocument). `autoGeneratePending:false` prima di
+  ogni save. Errore di un doc non blocca gli altri. `generateOne`
+  su card usa solo `detectedLogoUrl` (il builder del logo generato
+  vive solo dentro una run `generateAll`).
+- **Preview SVG condivisa**: `src/utils/docPreviewSvg.ts` estratto da
+  CollectionView (usato anche da CustomerDetail thumbnails).
+- **Logo status load fix**: doc-change effect in LogoEditor ora resetta
+  `aiStateRef` + `aiPanelResetKey` + tab (pattern `handleNew`);
+  `logoHasContent` conta `backgroundImage`; `logoAiChat:v1` è
+  namespaced `logoAiChat:v1:<docId>` (globale = fallback lettura).
+- **Embedding `gemini-embedding-2`**: sostituisce `text-embedding-004`
+  in `POST /ai/embeddings` (zod enum, call `models/gemini-embedding-2`,
+  fallback response). Colonna `embedding jsonb` → nessuna migrazione.
+  RAG completo (populate embedding + retrieval + iniezione chunk nei
+  prompt) RIMANDATO: endpoint `GET /customers/:id/knowledge` ancora
+  mancante, `generateEmbedding` client senza caller.
+- **Draft quality (api + dataService LOCAL)**: card `back.qrPayload` =
+  website contatti; flyer `subheadline` = `cust.mood` (prima
+  duplicava `activity` in subheadline+body).
+
+## 19. TB-027d — CRM live fixes (2026-07-29): routing, dev research, vision M3, log UX
+
+- **Default provider = MiniMax M3**: `providerRegistry.defaultId` flip
+  `deepseek-chat` → `ollama-minimax-m3` (vision, flat rate). DeepSeek
+  resta fallback (`getFallbackProvider`) e selezionabile. Test con
+  default hardcodato (`resolveProviderId.test.ts`) deve asserire
+  `providerRegistry.getDefaultId()`, non stringa fissa.
+- **Route `/app/customers/:customerId` reale**: `CustomersPage` deriva
+  selezione da `useParams()` (prima stato interno → URL mai aggiornato,
+  deep-link rotto). handleSelect/handleBack → `navigate()`.
+- **Research dev reale**: branch LOCAL di `researchCustomer` usa
+  `VITE_FIRECRAWL_API_KEY` (browser, dev-only come `VITE_GEMINI_API_KEY`)
+  via `src/utils/firecrawlLocal.js` (chunkMarkdown DUPLICATO da
+  api/index.ts — boundary Vercel, annotato). Chunks →
+  `pq_customer_knowledge:v1`. Logo detection solo da risposta Firecrawl
+  (branding/metadata, URL remoto, niente fetch HTML cross-origin).
+  Status: `no_key` senza key, `no_website` senza sito, `error` su
+  fetch fallita (mai throw).
+- **Vision nella sequenza bozze**: `useAutoBuildGenerate` rasterizza
+  (builderToSvg/buildPreviewSvg → svgToPng → base64 raw) e passa
+  `imagePreviewBase64` a card (logo) e flyer (card) SE
+  `getAiVisionEnabled() && providerSupportsVision(resolveProviderId())`
+  (CON-MM-002). Rasterizzazione wrappata try/catch: mai fatale.
+  `generateOne` flyer: immagine card solo se card generata nella
+  stessa sessione (cardDataRef).
+- **CRM log UX**: Copia (clipboard + fallback execCommand) / Cancella
+  in `crm-ai-log-head`. Log resta sessionStorage per-customer.
+- **Palette provider default**: select CRM default
+  `providerRegistry.getDefaultId()` (M3), non più DeepSeek hardcoded.
+
+## 20. TB-027e — E2E live fixes (2026-07-29): dev proxy Ollama, research errori, flyer text-only
+
+- **Dev proxy Ollama / M3** (`vite.config.js`):
+  - `json()` helper fuori scope nel fallback Ollama → 502 "json is not defined".
+    Fix: hoistato in scope `configureServer`.
+  - `/api/logs` 404 in dev: aggiunto handler POST che logga su console server.
+  - Client invia `provider: 'ollama'` ma il registry ha `ollama-minimax-m3`;
+    normalizzato prima del lookup.
+  - SSR: `OllamaProProvider` chiama `fetch('/api/ai/chat')` relativo, che in
+    SSR fallisce. Fix: in dev proxy, per provider Ollama si bypassa il
+    provider e si chiama direttamente l'upstream `proxyOllamaChat`.
+  - Timeout Ollama aumentato a 5 min (card con vision + immagine base64).
+- **`dataService.js` SSR-safe**: `IS_LOCAL` guardato con `typeof window`;
+  prima il dev proxy non poteva fare SSR di `providerRegistry` perché
+  importava dataService che toccava `window`.
+- **Research**: se il cliente ha logo manuale (`logoUrl`), lo status resta
+  `manual` anche se Firecrawl non trova un logo. WebData include `colors` e
+  `images` da Firecrawl branding. Log CRM mostra status dettagliato.
+- **ai-fill**: ora AI reale in local e prod; ritorna `fromAI` per UI.
+- **Flyer in auto-generate**: text-only, niente vision per affidabilità
+  schema JSON.
+- **Auto-build dedupe**: rerun sostituisce i draft BOZZA esistenti.
+
+## 21. TB-027f — Firecrawl full webData (2026-07-29): markdown completo + screenshot + JSON + links
+
+- **Endpoint**: Firecrawl **v2** (`https://api.firecrawl.dev/v2/scrape`).
+  Formati richiesti: `markdown`, `screenshot`, `branding`, `images`,
+  `{ type: 'json', schema }`, `links`. `parsers: ['pdf']`. Se la chiamata
+  completa fallisce, retry con payload minimale `markdown/branding/screenshot/links`.
+- **Timeout**: scrape v2 completo può superare 30s. Client
+  (`firecrawlLocal.js`) e server (`fetchFirecrawlPage`) usano
+  `AbortSignal.timeout(120000)`.
+- **Persistenza `webData`**: `markdownFull` (intero, no più solo preview 500),
+  `screenshot`, `links`, `json`, `branding`, `brandingColors`,
+  `brandingFonts`, `brandingLogo`, `images`.
+- **UI CustomerDetail**: screenshot visibile, logo branding, toggle markdown
+  completo, JSON espandibile, lista links, griglia immagini (max 12),
+  swatch colori, font.
+- **Locale (`src/utils/firecrawlLocal.js`)**: `scrapeFirecrawlLocal` mirror di
+  `fetchFirecrawlPage` con fallback payload; parsing robusto screenshot /
+  links / json / images.
+- **API (`api/index.ts`)**: `fetchFirecrawlPage` ritorna `FirecrawlResult`
+  arricchito; research endpoint salva tutto in `webData` e usa
+  `branding.logo` o `json.logo` per `detectedLogoUrl`.
+- **UI layout**: sezione "Dati dal sito" su 2 colonne (main/side). Main:
+  titolo, descrizione (fallback `json.company_description`), markdown toggle,
+  JSON toggle, links, colori, font. Side: screenshot, logo branding, griglia
+  immagini. Mobile 1 colonna.
+- **Log CRM**: research logga messaggio riassuntivo (`titolo · N chunk ·
+  N colori · N immagini`) e detail con description/links/screenshot/
+  markdownChars/jsonFields.
+- **briefContext**: `buildBriefContextApi` include `webData` (titolo,
+  descrizione, `json.company_description`, branding colors/fonts, links,
+  markdownPreview) così gli orchestratori AI usano il contesto Firecrawl.
+  I colori sito sono marcati come `Colori sito (prioritari)` prima di
+  `Palette preferita cliente`.
+
+## 22. TB-027g — Genera bozze AI provider-aware + immagini (2026-07-29)
+
+- **Provider AI unificato**: select CRM "Provider AI" (era "per palette").
+  Usato per palette e per `useAutoBuildGenerate.generateAll/generateOne`
+  (`options.providerId` → `modelId` orchestratori).
+- **Card AI**: prompt libero chiede struttura/testi/stile; se
+  `front.coverImageUrl` manca, genera cover via `/api/ai/image-flash`
+  (kind `hero`, 16:9) con palette `style.accentColor/bgColor`.
+- **Flyer AI**: dopo copy, se `content.heroImage` manca, genera hero via
+  `/api/ai/image-flash` (kind `hero`).
+- **Compressione pre-save**: `useAutoBuildGenerate.compressDraftImages` e
+  `dataService.saveDocument` comprimono campi base64 noti (`photoUrl`,
+  `logoUrl`, `coverImageUrl`, `backgroundImage`, `heroImage`) se > ~300KB
+  per evitare `QuotaExceededError`. Fallback `lsSet` intatto.
+- **Log CRM**: `handleGenerateAll`/`handleGenerateOne` loggano provider,
+  costo per-doc e errore completo.
+- **customerId preservato**: `dataService.saveDocument` (IS_LOCAL) preserva
+  `customerId` dal documento esistente se il caller non lo passa. Inoltre
+  `saveDraft`/`propagateLogoToDrafts`/`handleApplyPalette` lo passano
+  esplicitamente. Senza, i documenti collegati sparivano dal cliente dopo
+  generazione/propagazione o salvataggio editor.
+- **Flyer robustness**: `generateFlyerDraft` normalizza `size/style/content`
+  mancanti con `createEmptyFlyer()` prima di `generateCopy` e usa
+  `flyerInput` come base del salvataggio — evita
+  `Cannot read properties of undefined` e `fontFamily` mancante in editor.
+- **Duplicate key colori**: `brandingColors` deduplicato con `Array.from(new Set(...))`
+  prima del render swatch — evita warning React per colori ripetuti
+  (es. primary = accent).
+- **Image-flash 413**: `generateFlashImage` prova `size: '512'` poi `'256'`
+  se il proxy risponde 413 (immagine >500KB). Prompt clampato a 800 char.
+- **Compressione pre-save più aggressiva**: soglia 300K chars (~225KB raw),
+  output max 768px / 200KB — riduce `QuotaExceededError` con cover/hero/icona.
+- **Logo AI background**: `generateLogoDraft` chiama `generateBackground`
+  (Gemini) dopo il concept; passa `imagePrompt` breve (≤300 char) invece di
+  `activity` per evitare 400 (prompt >1000). Se fallisce o non applica,
+  fallback su `/api/ai/image-flash` kind `hero`. Se entrambi falliscono o
+  `localStorageNearlyFull()`, resta l'icona SVG (non fatale). Log espliciti
+  per capire perché il background manca.
+- **Colori sito prioritari**: `buildBriefContextApi` emette
+  `Colori sito (USA QUESTI per logo/card/flyer)` prima di
+  `Palette preferita cliente (secondaria)` — l'AI deve usare i colori reali
+  del sito quando disponibili.
+- **Quota retry**: `saveDraft` ritenta con compressione 512px/100KB se il
+  primo save fallisce per `Spazio locale esaurito`/`QuotaExceededError`;
+  ultima spiaggia rimuove immagini opzionali (background/cover/hero).
+- **Editor stale cache**: `useDocumentLoader` ora ricarica sempre da
+  `dataService.getDocument` al mount / cambio `docId` invece di fidarsi di
+  `ctxDoc` in cache. Prima l'editor mostrava la versione vecchia del
+  documento (es. logo senza background AI) anche se il CRM l'aveva
+  rigenerato.
+- **Apri editor durante generazione**: in `CustomerDetail` il bottone
+  "Apri editor" è disabilitato mentre `genStatus === 'running'` — evita che
+  l'utente apra l'editor su un draft ancora non salvato (vedrebbe la
+  versione vecchia).
+- **Logo AI parsing tollerante + fallback**: `logoAIConceptsSchema` accetta
+  array di 1-3 concept; `generateLogo` wrappa un singolo oggetto in array
+  prima della validazione. Se il provider risponde con testo non JSON o
+  schema non rispettato, usa `fallbackConcept()` per non bloccare la
+  pipeline — il logo viene comunque generato e il background AI applicato.
+  `ensureThreeDistinctConcepts` normalizza a 3 varianti.
+- **imageCompress jsdom**: `compressDataUrl` salta il caricamento `Image`
+  se il payload base64 è <100 char (stub test) — evita Promise mai
+  risolte in jsdom.
+- **Test**: `useAutoBuildGenerate.test.ts` providerId/immagini/compressione/
+  customerId/flyer robustness/retry 413; `dataService.documents.test.ts`
+  compressione pre-save + customerId preserve; `customers.test.ts`
+  briefContext colori prioritari; `CustomerDetail.test.tsx` provider AI
+  generale + providerId/customerId passato.
+- **Test**: `api/__tests__/customers.test.ts` research mockato verifica
+  `webData.markdownFull`/`screenshot`/`links`/`json`/`images` e briefContext
+  con webData; `src/utils/__tests__/firecrawlLocal.test.js` copre scrape,
+  fallback, extract logo/images, knowledge chunks; `CustomerDetail.test.tsx`
+  verifica screenshot/JSON/links UI.

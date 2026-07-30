@@ -4,6 +4,7 @@ const mockDbState = {
   selectResults: [] as any[],
   inserted: [] as any[],
   updated: [] as any[],
+  deleteCalls: 0,
   nextReturning: null as any,
 };
 
@@ -22,7 +23,10 @@ function makeDb() {
 
 function makeDeleteChain() {
   const chain: any = {
-    where: vi.fn(function (this: any) { return this; }),
+    where: vi.fn(function (this: any) {
+      mockDbState.deleteCalls++;
+      return this;
+    }),
     returning: vi.fn(function (this: any) {
       return mockDbState.nextReturning || [{ id: 'cust_test' }];
     }),
@@ -83,7 +87,9 @@ beforeEach(() => {
   mockDbState.selectResults = [];
   mockDbState.inserted = [];
   mockDbState.updated = [];
+  mockDbState.deleteCalls = 0;
   mockDbState.nextReturning = null;
+  delete process.env.DEEPSEEK_API_KEY;
   vi.restoreAllMocks();
   vi.resetModules();
 });
@@ -153,6 +159,17 @@ describe('TB-027 /api/customers', () => {
     expect(res.body.data.researchStatus.web).toBe('no_website');
   });
 
+  it('POST /customers/:id/research con logoUrl manuale → logo manual, detectedLogoUrl non toccato', async () => {
+    mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', contacts: {}, googleMapsUrl: null, logoUrl: 'data:image/png;base64,manual', detectedLogoUrl: 'https://old.example/logo.png' }]);
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/research', body: { adminEmail: 'admin@gmail.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.researchStatus.logo).toBe('manual');
+    const lastUpdate = mockDbState.updated[mockDbState.updated.length - 1];
+    expect(lastUpdate.detectedLogoUrl).toBe('https://old.example/logo.png');
+  });
+
   it('POST /customers/:id/research senza FIRECRAWL_API_KEY → web no_key', async () => {
     delete process.env.FIRECRAWL_API_KEY;
     mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', contacts: { website: 'https://bar.example.com' } }]);
@@ -168,11 +185,15 @@ describe('TB-027 /api/customers', () => {
     mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', contacts: { website: 'https://bar.example.com' } }]);
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
       const u = String(url);
-      if (u.includes('api.firecrawl.dev/v1/scrape')) {
+      if (u.includes('api.firecrawl.dev/v2/scrape')) {
         return new Response(JSON.stringify({
           data: {
             markdown: 'Bar Da Mario\n\nIl miglior bar di Cagliari. Aperto tutti i giorni.',
+            screenshot: 'https://bar.example.com/screenshot.png',
             branding: { logo: 'https://bar.example.com/logo.png', colors: { primary: '#01696F' }, fonts: ['Inter'] },
+            images: ['https://bar.example.com/hero.jpg'],
+            links: ['https://bar.example.com/menu', 'https://bar.example.com/contatti'],
+            json: { company_name: 'Bar Da Mario', company_description: 'Il miglior bar di Cagliari' },
             metadata: { title: 'Bar Da Mario', description: 'Il miglior bar' },
           },
         }), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -187,18 +208,72 @@ describe('TB-027 /api/customers', () => {
     expect(res.body.data.researchStatus.web).toBe('ok');
     expect(res.body.data.knowledgeCount).toBeGreaterThanOrEqual(1);
     expect(res.body.data.webData.markdownPreview).toContain('Bar Da Mario');
+    expect(res.body.data.webData.markdownFull).toContain('Cagliari');
+    expect(res.body.data.webData.screenshot).toContain('screenshot.png');
+    expect(res.body.data.webData.links).toHaveLength(2);
+    expect(res.body.data.webData.json.company_name).toBe('Bar Da Mario');
+    expect(res.body.data.webData.images).toHaveLength(1);
     expect(globalThis.fetch).toHaveBeenCalled();
     const firecrawlCall = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => String(url).includes('api.firecrawl.dev'));
-    expect(firecrawlCall?.[0]).toBe('https://api.firecrawl.dev/v1/scrape');
+    expect(firecrawlCall?.[0]).toBe('https://api.firecrawl.dev/v2/scrape');
   });
 
-  it('POST /customers/:id/ai-fill popola campi vuoti', async () => {
-    mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', sector: 'bar', mood: null, target: null, preferredColors: null, activity: null }]);
+  it('POST /customers/:id/ai-fill senza DeepSeek key → fallback lookup, costUsd 0', async () => {
+    mockDbState.selectResults.push(
+      [{ id: 'cust_1', businessName: 'Bar', sector: 'bar', mood: null, target: null, preferredColors: null, activity: null }],
+      [], // customer_knowledge: nessun chunk
+    );
     const res = await callHandler({
       method: 'POST', url: '/api/customers/cust_1/ai-fill', body: { adminEmail: 'admin@gmail.com' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.body.data.aiSuggestedFields.mood).toBe('moderno vivace');
+    expect(res.body.data.costUsd).toBe(0);
+  });
+
+  it('POST /customers/:id/ai-fill con DeepSeek ok → valori AI + costUsd > 0', async () => {
+    process.env.DEEPSEEK_API_KEY = 'ds_test';
+    mockDbState.selectResults.push(
+      [{ id: 'cust_1', businessName: 'Bar', sector: 'bar', mood: null, target: null, preferredColors: null, activity: null }],
+      [{ chunk: 'Cocktail bar in centro a Cagliari.' }],
+    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: '{"mood":"elegante notturno","target":"giovani professionisti","preferredColors":"blu notte e oro","activity":"Cocktail bar premium"}' } }],
+      usage: { prompt_tokens: 1000, completion_tokens: 500, total_tokens: 1500 },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/ai-fill', body: { adminEmail: 'admin@gmail.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.aiSuggestedFields).toEqual({
+      mood: 'elegante notturno',
+      target: 'giovani professionisti',
+      preferredColors: 'blu notte e oro',
+      activity: 'Cocktail bar premium',
+    });
+    // (1000 * 0.14 + 500 * 0.28) / 1e6 = 0.00028 (mirror providerPricing deepseek-chat)
+    expect(res.body.data.costUsd).toBe(0.00028);
+    const dsCall = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => String(url).includes('api.deepseek.com'));
+    expect(dsCall).toBeTruthy();
+    expect(String(dsCall?.[1]?.body)).toContain('Cocktail bar in centro a Cagliari');
+    // update customer con i valori AI
+    const lastUpdate = mockDbState.updated[mockDbState.updated.length - 1];
+    expect(lastUpdate.mood).toBe('elegante notturno');
+  });
+
+  it('POST /customers/:id/ai-fill DeepSeek fallisce → fallback lookup', async () => {
+    process.env.DEEPSEEK_API_KEY = 'ds_test';
+    mockDbState.selectResults.push(
+      [{ id: 'cust_1', businessName: 'Bar', sector: 'bar', mood: null, target: null, preferredColors: null, activity: null }],
+      [],
+    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('quota', { status: 402 }));
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/ai-fill', body: { adminEmail: 'admin@gmail.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.aiSuggestedFields.mood).toBe('moderno vivace');
+    expect(res.body.data.costUsd).toBe(0);
   });
 
   it('POST /customers/:id/auto-build crea 3 draft (no social v1)', async () => {
@@ -209,6 +284,83 @@ describe('TB-027 /api/customers', () => {
     expect(res.statusCode).toBe(201);
     expect(res.body.data.createdDocuments.length).toBe(3);
     expect(mockDbState.inserted.length).toBe(3);
+  });
+
+  it('POST /customers/:id/auto-build rerun → delete BOZZE esistenti prima di inserire (no duplicati)', async () => {
+    const cust = { id: 'cust_1', businessName: 'Bar', sector: 'bar', contacts: {}, customerPhotos: [] };
+    mockDbState.selectResults.push([cust]);
+    await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
+    });
+    expect(mockDbState.deleteCalls).toBe(1);
+    expect(mockDbState.inserted.length).toBe(3);
+    mockDbState.selectResults.push([cust]);
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.data.createdDocuments.length).toBe(3);
+    // replace semantics: una delete BOZZE per giro, insert restano 3 per giro
+    expect(mockDbState.deleteCalls).toBe(2);
+    expect(mockDbState.inserted.length).toBe(6);
+  });
+
+  it('POST /customers/:id/auto-build draft completi: QR card da website, subheadline flyer da mood', async () => {
+    mockDbState.selectResults.push([{
+      id: 'cust_1', businessName: 'Bar', sector: 'bar', mood: 'moderno vivace',
+      activity: 'Cocktail bar in centro.', contacts: { website: 'https://bar.example' }, customerPhotos: [],
+    }]);
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
+    });
+    expect(res.statusCode).toBe(201);
+    const card = mockDbState.inserted.find((d: any) => d.documentType === 'businessCard');
+    expect(card?.data?.back?.qrPayload).toBe('https://bar.example');
+    const flyer = mockDbState.inserted.find((d: any) => d.documentType === 'flyer');
+    expect(flyer?.data?.content?.subheadline).toBe('moderno vivace');
+    expect(flyer?.data?.content?.body).toBe('Cocktail bar in centro.');
+  });
+
+  it('POST /customers/:id/auto-build briefContext include webData Firecrawl', async () => {
+    mockDbState.selectResults.push([{
+      id: 'cust_1', businessName: 'Pad Thai', sector: 'ristorante', contacts: {},
+      preferredColors: '#112233, #445566',
+      webData: {
+        title: 'PadThai – Osteria Thailandese',
+        description: 'Cucina thai a Cagliari',
+        json: { company_description: 'Un angolo di Thailandia nel cuore della Sardegna.' },
+        brandingColors: { primary: '#C39E53', secondary: '#CC3366' },
+        brandingFonts: ['Inter'],
+        links: ['https://padthaicagliari.it/#content'],
+        markdownPreview: 'Un angolo di Thailandia nel cuore della Sardegna.',
+      },
+    }]);
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
+    });
+    expect(res.statusCode).toBe(201);
+    const brief = mockDbState.inserted[0]?.data?.briefContext || '';
+    expect(brief).toContain('Titolo sito: PadThai');
+    expect(brief).toContain('Colori sito (USA QUESTI');
+    expect(brief).toContain('#C39E53');
+    expect(brief).toContain('Palette preferita cliente (secondaria): #112233, #445566');
+    // colori sito prima della palette cliente (priorità nel prompt)
+    expect(brief.indexOf('Colori sito (USA QUESTI')).toBeLessThan(brief.indexOf('Palette preferita cliente (secondaria):'));
+  });
+
+  it('POST /customers/:id/auto-build briefContext senza brandingColors: niente "Colori sito (USA QUESTI", solo palette cliente', async () => {
+    mockDbState.selectResults.push([{
+      id: 'cust_1', businessName: 'Bar', sector: 'bar', contacts: {},
+      preferredColors: '#112233',
+      webData: { title: 'Bar Centrale' },
+    }]);
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
+    });
+    expect(res.statusCode).toBe(201);
+    const brief = mockDbState.inserted[0]?.data?.briefContext || '';
+    expect(brief).not.toContain('Colori sito (USA QUESTI');
+    expect(brief).toContain('Palette preferita cliente (secondaria): #112233');
   });
 
   it('POST /customers/:id/auto-build skip logo se detectedLogoUrl presente', async () => {

@@ -65,6 +65,8 @@ interface Props {
   onPatch: (patch: Partial<Logo['builder']>) => void;
   tier: 'free' | 'unlocked';
   userEmail?: string;
+  /** Id del documento aperto: la chat AI viene persistita per-documento. */
+  docId?: string;
   /** Stato iniziale sollevato dal genitore (sopravvive al cambio tab). */
   initialState?: LogoAiState;
   /** Chiamato ad ogni cambio di stato per sincronizzare il genitore. */
@@ -78,6 +80,13 @@ const MOODS = ['minimal', 'bold', 'playful', 'elegant', 'tech'] as const;
 
 const LS_KEY = 'logoAiChat:v1';
 const LS_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Chiave per-documento (`logoAiChat:v1:<docId>`) quando il genitore passa
+// `docId`, altrimenti la chiave globale legacy. Senza namespacing, aprire
+// il documento A dopo aver lavorato sul B ripristinava la chat AI di B.
+function storageKeyFor(docId?: string): string {
+  return docId ? `${LS_KEY}:${docId}` : LS_KEY;
+}
 
 const SECTOR_LABELS: Record<LogoSector, string> = {
   tech: 'Tech',
@@ -263,10 +272,10 @@ interface PersistedState {
  * `LogoEditor`), quindi l'utente non le perde finché non ricarica la
  * pagina per intero.
  */
-function persistState(payload: PersistedState): void {
-  const ok = safeLocalStorageSet(LS_KEY, JSON.stringify(payload));
+function persistState(key: string, payload: PersistedState): void {
+  const ok = safeLocalStorageSet(key, JSON.stringify(payload));
   if (!ok) {
-    safeLocalStorageSet(LS_KEY, JSON.stringify({ ...payload, bgImages: payload.bgImages.map(() => null) }));
+    safeLocalStorageSet(key, JSON.stringify({ ...payload, bgImages: payload.bgImages.map(() => null) }));
   }
 }
 
@@ -276,9 +285,10 @@ function nowTime(): string {
 
 const DEFAULT_ANSWERS: ChatAnswers = { activity: '', mood: 'minimal', target: '', sector: 'tech' };
 
-export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialState, onStateChange, onAiCall }: Props) {
+export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, initialState, onStateChange, onAiCall }: Props) {
   const { generate, generateBackground, isProcessing, isGeneratingBg, logs, reset } = useAILogo(userEmail);
   const { addToast } = useToast();
+  const lsKey = storageKeyFor(docId);
   // Se il genitore (LogoEditor) fornisce `initialState`, lo stato vive
   // sollevato in un useRef lì e sopravvive allo smontaggio di questo
   // componente quando l'utente cambia tab (Builder <-> AI). Senza
@@ -311,10 +321,13 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
 
   // Load persisted state on mount — SOLO se il genitore non ha già
   // fornito uno stato più fresco via `initialState` (vedi sopra).
+  // Con `docId` legge la chiave per-documento; se assente, fallback
+  // sulla chiave globale legacy (backward compat con chat salvate
+  // prima del namespacing per-documento).
   useEffect(() => {
     if (initialState) return;
     try {
-      const raw = localStorage.getItem(LS_KEY);
+      const raw = localStorage.getItem(lsKey) ?? (docId ? localStorage.getItem(LS_KEY) : null);
       if (raw) {
         const parsed = JSON.parse(raw) as PersistedState;
         if (parsed.ts && Date.now() - parsed.ts < LS_TTL_MS) {
@@ -324,11 +337,11 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
           if (typeof parsed.selected === 'number') setSelected(parsed.selected);
           if (Array.isArray(parsed.bgImages)) setBgImages(parsed.bgImages);
         } else {
-          localStorage.removeItem(LS_KEY);
+          localStorage.removeItem(lsKey);
         }
       }
     } catch {
-      localStorage.removeItem(LS_KEY);
+      localStorage.removeItem(lsKey);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -364,14 +377,14 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      persistState(latestStateRef.current);
+      persistState(lsKey, latestStateRef.current);
     }, 500);
     return () => clearTimeout(timer);
   }, [answers, step, concepts, selected, bgImages]);
 
   useEffect(() => {
     return () => {
-      persistState(latestStateRef.current);
+      persistState(lsKey, latestStateRef.current);
     };
   }, []);
 
@@ -513,7 +526,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, initialSta
     setBgImages([null, null, null]);
     setBgErrors([null, null, null]);
     reset();
-    localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(lsKey);
   };
 
   // ─── Piano B: preset per settore + libreria "I miei prompt" ──────

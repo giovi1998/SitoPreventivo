@@ -40,7 +40,7 @@ export const logoAIOutputSchema = z.object({
 });
 export type LogoAIOutput = z.infer<typeof logoAIOutputSchema>;
 
-export const logoAIConceptsSchema = z.array(logoAIOutputSchema).length(3);
+export const logoAIConceptsSchema = z.array(logoAIOutputSchema).min(1).max(3);
 export type LogoAIConcepts = z.infer<typeof logoAIConceptsSchema>;
 
 export interface LogoProcessResult {
@@ -70,7 +70,19 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
     const systemPrompt = promptRegistry.getPrompt('logo-system');
-    const userPrompt = buildLogoGeneratePrompt(brief, options.sector);
+    // TB-027 auto-build: brief vuoto → fallback al briefContext del draft.
+    // Se l'utente ha scritto un brief, il briefContext passa come sezione
+    // "Contesto cliente" separata nel prompt.
+    const userBrief = brief.trim();
+    const briefContext = typeof logo.briefContext === 'string' && logo.briefContext.trim()
+      ? logo.briefContext.trim()
+      : undefined;
+    const effectiveBrief = userBrief || briefContext || '';
+    const userPrompt = buildLogoGeneratePrompt(
+      effectiveBrief,
+      options.sector,
+      userBrief ? briefContext : undefined,
+    );
     const provider = await import('./providers/registry').then((m) => m.providerRegistry.getProvider(options.modelId));
     const hasImagePreview = !!options.imagePreviewBase64;
     const useVision = hasImagePreview && (provider as { supportsVision?: boolean }).supportsVision;
@@ -79,6 +91,13 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       userContentParts.push(`Anteprima logo allegata (base64 JPEG): ${options.imagePreviewBase64}`);
     }
     userContentParts.push(userPrompt);
+    // TB-027 auto-build: il brief deve guidare struttura, testo e stile dei
+    // concept, non solo il nome del brand.
+    userContentParts.push(
+      'Usa il brief e il contesto cliente per definire ogni concept in tutti i suoi aspetti: ' +
+      'STRUTTURA (layout, iconType/icona), TESTO (primaryText, tagline) e STILE (colori, decorazioni, imagePrompt). ' +
+      'Colori e mood devono derivare dal brand del cliente quando disponibili.',
+    );
     const messages = this.buildMessages(systemPrompt, userContentParts.join('\n\n'));
 
     const response = await this.handleStream(
@@ -88,17 +107,28 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       { onStream: options.onStream },
     );
 
-    const parsed = this.parseJsonResponse(response.content ?? '', logoAIConceptsSchema);
+    // Provider che rispondono con un singolo concept (oggetto) invece di un
+    // array: normalizza a array prima della validazione Zod.
+    let content = response.content ?? '';
+    try {
+      const raw = JSON.parse(this.sanitizeAIResponse(content)) as unknown;
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        content = JSON.stringify([raw]);
+      }
+    } catch { /* lascia parseJsonResponse gestire l'errore */ }
+    const parsed = this.parseJsonResponse(content, logoAIConceptsSchema);
+    let conceptsInput: LogoAIOutput[];
     if (!parsed.ok) {
-      chatStoreAddMessage(this.chatStore, sessionId, {
-        role: 'assistant',
-        content: response.content ?? '',
-      });
+      // Provider ha risposto con testo non JSON o schema non rispettato:
+      // usa concept di fallback per non bloccare la pipeline auto-build.
       changes.push(`error:${parsed.error}`);
-      return { logo, response, sessionId, changes, rawResponse: response.content ?? '', applied: false, concepts: [], selected: -1 };
+      changes.push('logo:fallback_concepts');
+      conceptsInput = [fallbackConcept()];
+    } else {
+      conceptsInput = parsed.data;
     }
 
-    const concepts = ensureThreeDistinctConcepts(parsed.data).map((c) => convertAIOutputToBuilder(c));
+    const concepts = ensureThreeDistinctConcepts(conceptsInput).map((c) => convertAIOutputToBuilder(c));
     const first = concepts[0];
     const merged = first ? { ...logo, builder: first, updatedAt: new Date().toISOString() } : logo;
     this.trackUsage(response.usage, options.userEmail);
@@ -110,7 +140,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       logo: merged,
       response,
       sessionId,
-      changes: [`logo:generated:concepts=${concepts.length}`],
+      changes: [...changes, `logo:generated:concepts=${concepts.length}`],
       rawResponse: response.content ?? '',
       applied: true,
       concepts,

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import dataService from '../../utils/dataService';
 import '../../components/crm/crm.css';
 
@@ -8,8 +9,9 @@ const CustomerDetail = lazy(() => import('../../components/crm/CustomerDetail'))
 type CustomerRow = Record<string, unknown> & { id: string };
 
 export default function CustomersPage() {
+  const { customerId } = useParams();
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,8 +29,8 @@ export default function CustomersPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const handleSelect = useCallback((id: string) => setSelectedId(id), []);
-  const handleBack = useCallback(() => setSelectedId(null), []);
+  const handleSelect = useCallback((id: string) => navigate(`/app/customers/${id}`), [navigate]);
+  const handleBack = useCallback(() => navigate('/app/customers'), [navigate]);
   const handleRefresh = useCallback(() => { void load(); }, [load]);
 
   if (loading) return <div className="crm-page"><p>Caricamento clienti…</p></div>;
@@ -37,8 +39,8 @@ export default function CustomersPage() {
   return (
     <div className="crm-page">
       <Suspense fallback={<p>Caricamento…</p>}>
-        {selectedId ? (
-          <CustomerDetail customerId={selectedId} onBack={handleBack} onRefresh={handleRefresh} />
+        {customerId ? (
+          <CustomerDetail customerId={customerId} onBack={handleBack} onRefresh={handleRefresh} />
         ) : (
           <CustomerList customers={customers} onSelect={handleSelect} onRefresh={handleRefresh} />
         )}
