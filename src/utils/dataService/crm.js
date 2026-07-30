@@ -152,7 +152,9 @@ export function createCrmMethods(svc) {
           },
         });
       }
-      return api('POST', `/customers/${id}/research`, { adminEmail: 'admin@gmail.com' });
+      // Timeout esteso: il server chiama Firecrawl (fino a 120s). Col default
+      // 5s il client abortiva e il server consumava lo slot rate-limit orario.
+      return api('POST', `/customers/${id}/research`, { adminEmail: 'admin@gmail.com' }, { timeoutMs: 130000 });
     },
 
     async getCustomerKnowledge(id) {
@@ -213,7 +215,8 @@ export function createCrmMethods(svc) {
         lsSet('pq_customers:v1', all);
         return { data: { id, aiSuggestedFields: ai, costUsd, fromAI: false } };
       }
-      return api('POST', `/customers/${id}/ai-fill`, { adminEmail: 'admin@gmail.com' });
+      // Timeout esteso: il server chiama il provider AI (può superare i 5s default).
+      return api('POST', `/customers/${id}/ai-fill`, { adminEmail: 'admin@gmail.com' }, { timeoutMs: 60000 });
     },
 
     async autoBuildCustomer(id, autoGenerate = false) {

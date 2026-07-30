@@ -36,4 +36,53 @@ describe('dataService CRM (prod path, query string)', () => {
     await dataService.getIntakes('new');
     expect(fetchMock.mock.calls[0][0]).toBe('/api/intakes?status=new&adminEmail=admin%40gmail.com');
   });
+
+  // Regression: research server-side chiama Firecrawl (fino a 120s) ma il
+  // timeout default di api() è 5s → il client abortiva e il server consumava
+  // comunque lo slot rate-limit orario ("Research già lanciata" al retry).
+  it('researchCustomer usa timeout esteso (>5s default) per Firecrawl', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockImplementation((_url: string, opts: RequestInit) => new Promise((_res, reject) => {
+        opts.signal?.addEventListener('abort', () => {
+          const err = new Error('Aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      }));
+      const p = dataService.researchCustomer('cust_x');
+      let settled = false;
+      void p.then(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(126000);
+      await p;
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aiFillCustomer usa timeout esteso (>5s default) per il provider AI', async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockImplementation((_url: string, opts: RequestInit) => new Promise((_res, reject) => {
+        opts.signal?.addEventListener('abort', () => {
+          const err = new Error('Aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      }));
+      const p = dataService.aiFillCustomer('cust_x');
+      let settled = false;
+      void p.then(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(56000);
+      await p;
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

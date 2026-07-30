@@ -82,6 +82,12 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
   `/login?register=1`); `cardGenerator.test.ts` "handles all 3 size
   presets" timeout 15s → 60s (3 PDF in loop, flaky solo sotto carico di
   suite intera).
+- **Fix prod CRM**: query string malformata in `getCustomers`/
+  `getIntakes` senza filtro status (`/customers&adminEmail` → 404, ora
+  `URLSearchParams`); timeout `api()` default 5s troppo corto per
+  `research` (Firecrawl fino a 120s → abort client + slot rate-limit
+  orario consumato) → 130s, e `ai-fill` → 60s. Regression test
+  `dataService.crm.test.ts` (URL 4 casi + timeout estesi).
 - **TB-010**: `parseCardSvg` + `assertInside` aggiunti a
   `card-grid-export-roundtrip.spec.ts` → copertura 8/8 file e2e.
 
