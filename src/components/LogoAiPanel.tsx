@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Logo, LogoBuilder, LogoSector } from '../utils/documentSchemas';
 import { builderToSvg, sanitizeSvg } from '../utils/logoGenerator';
 import { useAILogo } from '../hooks/useAILogo';
@@ -23,70 +23,37 @@ import {
   loadPromptLibrary as loadSharedPromptLibrary,
   addPromptEntry,
   removePromptEntry,
-  safeLocalStorageSet,
   PROMPT_LIBRARY_KEYS,
   type PromptLibraryEntry,
 } from '../utils/promptLibrary';
+import {
+  type Step,
+  type ChatAnswers,
+  type LogoAiState,
+  type PersistedState,
+  LS_KEY,
+  LS_TTL_MS,
+  storageKeyFor,
+  persistState,
+} from '../utils/logo/logoAiPersistence';
+import ConceptCard from './logo/ConceptCard';
 import './LogoAiPanel.css';
 
-export type Step = 'chat' | 'result' | 'applied';
-
-export interface ChatAnswers {
-  activity: string;
-  mood: string;
-  target: string;
-  sector: LogoSector;
-}
-
-/**
- * Stato completo del pannello AI (chat + concept + immagini generate).
- * Va sollevato al genitore (`LogoEditor`) tramite `initialState` /
- * `onStateChange` in modo che sopravviva allo smontaggio di
- * `LogoAiPanel` quando l'utente cambia tab (Builder <-> AI). Prima di
- * questa modifica lo stato viveva SOLO qui dentro + un backup su
- * `localStorage`, ma le immagini AI (base64, centinaia di KB l'una)
- * possono superare la quota di `localStorage` (5-10MB per origin,
- * condivisa con altri documenti salvati) e `localStorage.setItem` non
- * era protetto da try/catch: un `QuotaExceededError` non catturato
- * crashava l'intera app (schermata "Qualcosa è andato storto"). Vedi
- * AGENTS.md § "Logo AI, Gemini background gotchas".
- */
-export interface LogoAiState {
-  answers: ChatAnswers;
-  step: Step;
-  concepts: LogoBuilder[];
-  selected: number;
-  bgImages: (string | null)[];
-  bgErrors: (string | null)[];
-}
+export type { Step, ChatAnswers, LogoAiState };
 
 interface Props {
   logo: Logo;
   onPatch: (patch: Partial<Logo['builder']>) => void;
   tier: 'free' | 'unlocked';
   userEmail?: string;
-  /** Id del documento aperto: la chat AI viene persistita per-documento. */
   docId?: string;
-  /** Stato iniziale sollevato dal genitore (sopravvive al cambio tab). */
   initialState?: LogoAiState;
-  /** Chiamato ad ogni cambio di stato per sincronizzare il genitore. */
   onStateChange?: (state: LogoAiState) => void;
-  /** TB-026: notifica il genitore di una chiamata AI (per aiStats). */
   onAiCall?: (kind: 'logoConcept' | 'background', costUsd: number) => void;
 }
 
 const SECTORS: LogoSector[] = ['tech', 'food', 'fashion', 'professionista'];
 const MOODS = ['minimal', 'bold', 'playful', 'elegant', 'tech'] as const;
-
-const LS_KEY = 'logoAiChat:v1';
-const LS_TTL_MS = 24 * 60 * 60 * 1000;
-
-// Chiave per-documento (`logoAiChat:v1:<docId>`) quando il genitore passa
-// `docId`, altrimenti la chiave globale legacy. Senza namespacing, aprire
-// il documento A dopo aver lavorato sul B ripristinava la chat AI di B.
-function storageKeyFor(docId?: string): string {
-  return docId ? `${LS_KEY}:${docId}` : LS_KEY;
-}
 
 const SECTOR_LABELS: Record<LogoSector, string> = {
   tech: 'Tech',
@@ -95,21 +62,13 @@ const SECTOR_LABELS: Record<LogoSector, string> = {
   professionista: 'Professionista',
 };
 
-/**
- * Piano B (prompt templates): esempi pronti per settore, per far
- * partire velocemente la generazione o mostrare all'utente cosa
- * scrivere. L'utente può poi modificare liberamente i campi.
- *
- * Più varianti per settore: il bottone "Usa esempio" diventa un menu
- * a tendina con le varianti disponibili (es. food: pizzeria napoletana,
- * ristorante cinese appena aperto, B&B biologico, gastropub, gelateria).
- */
 interface SectorVariant {
   label: string;
   activity: string;
   mood: (typeof MOODS)[number];
   target: string;
 }
+
 const SECTOR_PRESET_BRIEFS: Record<LogoSector, SectorVariant[]> = {
   tech: [
     {
@@ -252,33 +211,6 @@ interface LogoConfig {
   provider: 'gemini' | 'replicate' | 'none';
 }
 
-interface PersistedState {
-  answers: ChatAnswers;
-  step: Step;
-  concepts: LogoBuilder[];
-  selected: number;
-  bgImages: (string | null)[];
-  ts: number;
-}
-
-/**
- * Scrive lo stato su `localStorage`, mai a costo zero: le immagini AI
- * (base64, centinaia di KB l'una × fino a 3 concept) possono superare
- * la quota di `localStorage` (5-10MB/origin, condivisa con altri
- * documenti salvati). Se il payload completo fallisce, ritentiamo
- * SENZA `bgImages` così testo/risposte/concept sopravvivono comunque a
- * un refresh pagina; le immagini restano disponibili nella sessione
- * corrente tramite lo stato sollevato al genitore (`onStateChange` /
- * `LogoEditor`), quindi l'utente non le perde finché non ricarica la
- * pagina per intero.
- */
-function persistState(key: string, payload: PersistedState): void {
-  const ok = safeLocalStorageSet(key, JSON.stringify(payload));
-  if (!ok) {
-    safeLocalStorageSet(key, JSON.stringify({ ...payload, bgImages: payload.bgImages.map(() => null) }));
-  }
-}
-
 function nowTime(): string {
   return new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
@@ -289,14 +221,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
   const { generate, generateBackground, isProcessing, isGeneratingBg, logs, reset } = useAILogo(userEmail);
   const { addToast } = useToast();
   const lsKey = storageKeyFor(docId);
-  // Se il genitore (LogoEditor) fornisce `initialState`, lo stato vive
-  // sollevato in un useRef lì e sopravvive allo smontaggio di questo
-  // componente quando l'utente cambia tab (Builder <-> AI). Senza
-  // questo, ogni cambio di tab smonta/rimonta LogoAiPanel e perde le
-  // immagini AI generate ma non ancora persistite su localStorage
-  // (bug reale: "immagine sparisce cambiando tab"). Il fallback su
-  // localStorage resta solo per il caso senza genitore che solleva lo
-  // stato (retrocompatibilità test / primo mount senza sessione).
+
   const [step, setStep] = useState<Step>(initialState?.step ?? 'chat');
   const [answers, setAnswers] = useState<ChatAnswers>(initialState?.answers ?? DEFAULT_ANSWERS);
   const [concepts, setConcepts] = useState<LogoBuilder[]>(initialState?.concepts ?? []);
@@ -308,9 +233,6 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
   const [imageModel, setImageModel] = useState<string>(() => getAiImageModelDefault());
 
-  // Anteprima live del logo corrente, sempre presente anche nel tab AI
-  // così useAILogo può catturare uno screenshot per i log AI / vision
-  // indipendentemente dal tab attivo (Builder vs AI).
   const currentPreviewSvg = React.useMemo(() => {
     try {
       return sanitizeSvg(builderToSvg(logo.builder));
@@ -319,11 +241,6 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
     }
   }, [logo.builder]);
 
-  // Load persisted state on mount — SOLO se il genitore non ha già
-  // fornito uno stato più fresco via `initialState` (vedi sopra).
-  // Con `docId` legge la chiave per-documento; se assente, fallback
-  // sulla chiave globale legacy (backward compat con chat salvate
-  // prima del namespacing per-documento).
   useEffect(() => {
     if (initialState) return;
     try {
@@ -343,33 +260,13 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
     } catch {
       localStorage.removeItem(lsKey);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Specchia lo stato nel genitore (LogoEditor) ad OGNI cambiamento,
-  // senza debounce: è una semplice assegnazione di riferimento a un
-  // useRef del genitore (nessun costo, nessuna serializzazione), quindi
-  // non c'è motivo di ritardarla. Questo è il meccanismo primario che
-  // fa sopravvivere le immagini AI al cambio tab, indipendentemente da
-  // localStorage/quota.
   useEffect(() => {
     onStateChange?.({ answers, step, concepts, selected, bgImages, bgErrors });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [answers, step, concepts, selected, bgImages, bgErrors]);
+  }, [answers, step, concepts, selected, bgImages, bgErrors, onStateChange]);
 
-  // Persist state on change (debounced) su localStorage, MA con flush
-  // immediato all'unmount. Questo resta solo un backup "best effort"
-  // per sopravvivere a un refresh completo della pagina (F5): il
-  // meccanismo primario anti-perdita-immagine durante il cambio tab è
-  // lo stato sollevato al genitore sopra, non più questo localStorage.
-  //
-  // Bug fix (costoso, ogni rigenerazione consuma una chiamata Gemini a
-  // pagamento): il debounce di 500ms usava solo `clearTimeout` nella
-  // cleanup. Se l'utente cambiava tab (Builder <-> AI, che smonta
-  // LogoAiPanel) ENTRO i 500ms dall'arrivo di un'immagine AI, il timer
-  // veniva cancellato e il salvataggio non avveniva mai. `latestStateRef`
-  // tiene sempre l'ultimo stato pronto; l'effect con deps [] flusha
-  // quello stato alla vera unmount, indipendentemente dal debounce.
   const latestStateRef = useRef<PersistedState>({ answers, step, concepts, selected, bgImages, ts: 0 });
   useEffect(() => {
     latestStateRef.current = { answers, step, concepts, selected, bgImages, ts: Date.now() };
@@ -380,13 +277,13 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
       persistState(lsKey, latestStateRef.current);
     }, 500);
     return () => clearTimeout(timer);
-  }, [answers, step, concepts, selected, bgImages]);
+  }, [answers, step, concepts, selected, bgImages, lsKey]);
 
   useEffect(() => {
     return () => {
       persistState(lsKey, latestStateRef.current);
     };
-  }, []);
+  }, [lsKey]);
 
   useEffect(() => {
     fetch('/api/ai/logo-config')
@@ -394,7 +291,6 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
       .then((c: LogoConfig) => {
         setConfig(c);
         if (c.provider === 'gemini') {
-          // eslint-disable-next-line no-console
           console.log(`[Logo AI] Config attiva: ${c.provider} · ${nowTime()}`);
         }
       })
@@ -444,7 +340,6 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
       setStep('result');
       addToast('success', `${result.concepts.length} concept generati. Scegli quello che preferisci.`);
 
-      // Genera 3 immagini Gemini in parallelo (una per concept)
       if (config?.provider === 'gemini') {
         addToast('info', 'Generazione 3 immagini AI in parallelo...');
         setBgImages([null, null, null]);
@@ -472,8 +367,6 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
             } else {
               errs[idx] = r.error ?? 'unknown';
             }
-          } else {
-            // idx non disponibile qui; mark all failures generically
           }
         }
         setBgImages(imgs);
@@ -495,18 +388,10 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
     const concept = concepts[idx];
     if (!concept) return;
     setSelected(idx);
-    // Bug fix v2.4.1: il concept generato da DeepSeek contiene sempre
-    // backgroundImage=null. Se lo spreadiamo così com'è, onPatch sovrascrive
-    // il background pagato (Gemini) dell'utente con null. Rimuoviamo
-    // backgroundImage dal patch di default e lo impostiamo SOLO quando
-    // bgImages[idx] è effettivamente pronto.
     const patch: Partial<LogoBuilder> = { ...concept };
     delete (patch as Partial<LogoBuilder>).backgroundImage;
     if (bgImages[idx]) {
       patch.backgroundImage = bgImages[idx]!;
-      // Default per overlay: icona 'none' + decorazioni vuote
-      // (l'utente può cambiarli nel Builder). Per above/below l'icona
-      // è visibile perché il testo è fuori dall'area immagine.
       const curPos = logo?.builder?.textPosition;
       if (!curPos || curPos === 'overlay') {
         patch.iconType = 'none';
@@ -528,8 +413,6 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
     reset();
     localStorage.removeItem(lsKey);
   };
-
-  // ─── Piano B: preset per settore + libreria "I miei prompt" ──────
 
   const applyVariant = (variant: SectorVariant) => {
     setAnswers({ ...answers, activity: variant.activity, mood: variant.mood, target: variant.target });
@@ -587,8 +470,6 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
     setLibrary(removePromptEntry(PROMPT_LIBRARY_KEYS.logo, id));
   };
 
-  // ─── Piano B: rigenera background di un singolo concept con prompt editato ──
-
   const handleRegenerate = async (idx: number, promptText: string) => {
     const concept = concepts[idx];
     if (!concept) return;
@@ -634,7 +515,6 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
   return (
     <section className="logo-ai-panel" aria-label="AI Assist">
       <h2>AI Assist</h2>
-      {/* Phase 14 (REQ-AI-006): dicitura ad-hoc sostituita dal badge uniforme */}
       {config?.provider === 'gemini' && (
         <div className="logo-ai-provider"><AIProviderBadge /></div>
       )}
@@ -802,96 +682,5 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ini
 
       <AILogPanel logs={logs} isProcessing={isProcessing || isGeneratingBg} />
     </section>
-  );
-}
-
-function ConceptCard({
-  concept,
-  index,
-  selected,
-  applied,
-  bgImage,
-  bgError,
-  bgLoading,
-  onSelect,
-  onRegenerate,
-  regenerating,
-}: {
-  concept: LogoBuilder;
-  index: number;
-  selected: boolean;
-  applied: boolean;
-  bgImage: string | null;
-  bgError: string | null;
-  bgLoading: boolean;
-  onSelect: () => void;
-  onRegenerate: (promptText: string) => void;
-  regenerating: boolean;
-}) {
-  const [promptDraft, setPromptDraft] = useState(concept.imagePrompt || '');
-
-  const previewSvg = React.useMemo(() => {
-    try {
-      const withBg = bgImage ? { ...concept, backgroundImage: bgImage } : concept;
-      return sanitizeSvg(builderToSvg(withBg));
-    } catch {
-      return '';
-    }
-  }, [concept, bgImage]);
-
-  return (
-    <div className={`logo-ai-concept${selected ? ' is-selected' : ''}${applied ? ' is-applied' : ''}`}>
-      <button
-        type="button"
-        className="logo-ai-concept-select"
-        onClick={onSelect}
-        disabled={bgLoading}
-        aria-pressed={selected}
-        aria-busy={bgLoading}
-      >
-        <div className="logo-ai-concept-preview">
-          <div className="logo-ai-concept-preview-inner" dangerouslySetInnerHTML={{ __html: previewSvg }} />
-          {bgLoading && (
-            <div className="logo-ai-concept-loading" role="status" aria-live="polite">
-              <span className="logo-ai-concept-spinner" aria-hidden="true" />
-              <span className="logo-ai-concept-loading-text">Generazione sfondo…</span>
-            </div>
-          )}
-        </div>
-        <div className="logo-ai-concept-meta">
-          <strong>Concept {index + 1}</strong>
-          <span>{concept.primaryText}</span>
-          <span>{concept.tagline}</span>
-          <span className="logo-ai-concept-tags">
-            {concept.iconType} · {concept.layout}
-            {concept.decorativeElements?.length ? ` · ${concept.decorativeElements.join(', ')}` : ''}
-            {concept.gradientFill ? ' · gradient' : ''}
-          </span>
-          {bgImage && <span className="logo-ai-concept-ai-badge">AI bg ✓</span>}
-          {bgError && <span className="logo-ai-concept-ai-err">AI bg: {bgError}</span>}
-        </div>
-        {applied && <span className="logo-ai-concept-badge">Applicato</span>}
-        {!selected && !applied && <span className="logo-ai-concept-cta">Seleziona</span>}
-      </button>
-
-      {concept.imagePrompt && (
-        <details className="logo-ai-concept-advanced">
-          <summary>Prompt avanzato</summary>
-          <textarea
-            value={promptDraft}
-            onChange={(e) => setPromptDraft(e.target.value.slice(0, 600))}
-            rows={4}
-            aria-label={`Prompt immagine concept ${index + 1}`}
-          />
-          <button
-            type="button"
-            onClick={() => onRegenerate(promptDraft)}
-            disabled={regenerating || !promptDraft.trim()}
-          >
-            {regenerating ? 'Rigenerando…' : 'Rigenera immagine'}
-          </button>
-        </details>
-      )}
-    </div>
   );
 }
