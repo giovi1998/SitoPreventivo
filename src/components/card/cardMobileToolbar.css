@@ -100,7 +100,7 @@
 }
 
 /* Push content above sticky toolbar */
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .card-editor {
     padding-bottom: 76px;
   }

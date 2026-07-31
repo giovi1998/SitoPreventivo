@@ -231,8 +231,6 @@ export default function GlobalStyles() {
     .spinner-mini{display:inline-block;width:12px;height:12px;border:2px solid color-mix(in srgb,var(--accent) 30%,transparent);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
     @media(max-width:1180px){.btn-label{display:none}.action-group button{padding:9px 10px}}
-    @media(max-width:1024px){.save-status{display:none}}
-    @media(max-width:900px){.theme-pills{display:none}}
     .top-actions button svg{flex-shrink:0}
     .top-btn-save{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
     .top-btn-save:hover{border-color:var(--accent);color:var(--accent)}
@@ -251,7 +249,7 @@ export default function GlobalStyles() {
     .focus-toggle:hover{border-color:var(--accent);color:var(--accent)}
     .preview-toolbar{display:flex;justify-content:flex-end;padding:0 0 8px 0}
     .preview-focus .preview-toolbar{padding:0 0 12px 0}
-    .editor-col{width:380px;flex-shrink:0;position:relative;transition:width .25s ease;overflow:hidden}
+    .editor-col{width:clamp(280px,30vw,380px);flex-shrink:0;position:relative;transition:width .25s ease;overflow:hidden}
     .editor-col.collapsed{width:34px;overflow:visible}
     .panel{overflow-y:auto;padding:24px;border-right:1px solid var(--line);height:100%;min-width:0;background:var(--surface)}
     .panel-kicker{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);font-weight:var(--weight-black);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
@@ -382,7 +380,7 @@ export default function GlobalStyles() {
     .doc-comparison-table td:first-child{font-weight:var(--weight-bold);color:#101828}
     .doc-comparison-table tr{display:table-row}
     .doc-comparison-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -48px;padding:0 48px}
-    @media(max-width:768px){.doc-comparison-wrap{margin:0;padding:0}}
+    @media(max-width:767px){.doc-comparison-wrap{margin:0;padding:0}}
 
     .doc-footer{display:flex;justify-content:space-between;padding-top:24px;border-top:1px solid #d7deea;font-size:.85rem;color:#687589}
 
@@ -545,11 +543,16 @@ export default function GlobalStyles() {
     .pdf-preview-col h4{margin:0 0 8px;font-size:.82rem;font-weight:var(--weight-bold);color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 
     /* ─── RESPONSIVE ────────────────────────────────── */
-    @media(max-width:1400px){.editor-col{width:320px}}
-    @media(max-width:1200px){.editor-col{width:280px}.preview-wrap{padding:20px}}
     @media(max-width:1023px){.collection-grid{grid-template-columns:repeat(2,1fr)}}
-    @media(max-width:900px){.app-shell{grid-template-columns:1fr}.sidebar{display:none}.preview-wrap{min-height:60vh;overflow-x:hidden}.top-actions{flex-wrap:wrap;gap:6px}.top-actions button span{display:none}}
-    @media(max-width:768px){
+    /* Shell switch unificato (breakpoint canonici 1023/767, REQ-001/002):
+       ≤1023 sidebar e topbar desktop nascoste, mobile-topbar visibile.
+       CON-005: i tweak shell-mobile dell'ex blocco @768 valgono ora a ≤1023. */
+    @media(max-width:1023px){
+      .app-shell{grid-template-columns:1fr}
+      .sidebar{display:none}
+      .topbar{display:none}
+      .preview-wrap{min-height:60vh;overflow-x:hidden}
+      .top-actions{flex-wrap:wrap;gap:6px}.top-actions button span{display:none}
       .mobile-topbar{display:flex}
       .editor-grid{flex-direction:column;overflow:visible}
       .editor-col{display:none}
@@ -582,8 +585,6 @@ export default function GlobalStyles() {
       .collection-tabs{width:100%;overflow-x:auto}
       .card-actions{flex-wrap:wrap}
       .card-actions button{min-width:calc(50% - 4px)}
-    }
-    @media(max-width:680px){
       .swatches{grid-template-columns:repeat(5,1fr)}
       .doc-cost-table,.doc-summary-table{font-size:.78rem}
       .doc-comparison-table{font-size:.75rem}

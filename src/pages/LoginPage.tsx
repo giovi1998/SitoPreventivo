@@ -77,7 +77,7 @@ export default function LoginPage() {
             </svg>
           </div>
           <h1 className="auth-brand-name">Quickbrand</h1>
-          <p className="auth-brand-tagline">Preventivi professionali in minuti, non in ore.</p>
+          <p className="auth-brand-tagline">Il tuo brand kit con l'AI, pronto per la stampa.</p>
 
           <div className="auth-features">
             <div className="auth-feature">
@@ -310,12 +310,13 @@ export default function LoginPage() {
         .auth-toggle button:hover{color:#B81818}
         .auth-back{display:inline-flex;align-items:center;gap:6px;color:#94a3b8;text-decoration:none;font-size:.85rem;font-weight:500;transition:color .15s}
         .auth-back:hover{color:#475569}
-        @media(max-width:900px){
+        @media(max-width:1023px){
           .auth-page{grid-template-columns:1fr}
           .auth-brand-panel{display:none}
           .auth-mobile-logo{display:flex}
           .auth-form-panel{padding:24px}
         }
+        @media(prefers-reduced-motion:reduce){.auth-dot{animation:none}}
       `}</style>
     </div>
   );

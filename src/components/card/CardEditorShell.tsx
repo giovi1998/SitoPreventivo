@@ -27,7 +27,7 @@ import { useCardBackContent } from '../../hooks/useCardBackContent';
 import { useCardAutoSave, cardHasContent, defaultCardTitle } from '../../hooks/useCardAutoSave';
 
 import { findCardQuickAction } from '../../ai/prompts/cardQuickActions';
-import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useIsMobileWorkspace } from '../../hooks/useMediaQuery';
 import { useCardPreviewZoom } from '../../hooks/useCardPreviewZoom';
 import { useCardAIFloating } from '../../hooks/useCardAIFloating';
 import { useDocumentSave } from '../../hooks/useDocumentSave';
@@ -84,7 +84,7 @@ export default function CardEditorShell({ userEmail, initialCard, tier, onReset,
     setShowTemplateBanner(false);
   }, [initialCard]);
 
-  const isMobile = useMediaQuery('(max-width: 900px)');
+  const isMobile = useIsMobileWorkspace();
   const aiFloating = useCardAIFloating();
   const previewZoom = useCardPreviewZoom(1);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);

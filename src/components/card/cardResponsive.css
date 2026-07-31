@@ -2,7 +2,7 @@
 /* Phase 2.2 refactor: estratto da CardEditor.css (split per dimensione). */
 
 /* ─── Responsive: mobile <900px shows tabs, 3-col not rendered ─── */
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .card-editor-form label {
     text-transform: none;
     font-size: 0.85rem;
@@ -167,7 +167,7 @@
 /* v2.4 redesign: pannello AI responsive.
    Su mobile le sezioni mantengono la gerarchia ma con padding ridotto
    e le cover affiancate in una colonna. */
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .card-ai-panel {
     gap: 10px;
   }
@@ -208,6 +208,7 @@
   }
 }
 
+/* ≤480 small-phone exception (canonical 767/1023) */
 @media (max-width: 480px) {
   .card-ai-cover-grid {
     grid-template-columns: 1fr;

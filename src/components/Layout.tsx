@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { ViewName } from '../hooks/useRouteView';
+import { useIsMobileWorkspace } from '../hooks/useMediaQuery';
 import { getSidebarCollapsed, setSidebarCollapsed } from '../utils/uiPrefs';
 
 interface LayoutProps {
@@ -16,6 +17,8 @@ interface LayoutProps {
 
 export default function Layout({ children, view, setView, onLogout, onSave, onResetQuote, user, theme, setTheme }: LayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // REQ-006: shell switch su breakpoint canonico 1023 — sidebar vs mobile-topbar in conditional render
+  const isMobileWorkspace = useIsMobileWorkspace();
   // Phase 13b (REQ-DS-006): stato collapsed persistito in pq_ui:v1
   const [collapsed, setCollapsedState] = useState(getSidebarCollapsed);
   const setCollapsed = (v: boolean) => {
@@ -35,6 +38,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
 
   return (
     <main className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
+      {!isMobileWorkspace && (
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-logo">
@@ -187,8 +191,9 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
           )}
         </div>
       </aside>
+      )}
 
-      {user && (
+      {user && isMobileWorkspace && (
         <header className="mobile-topbar">
           <button className="mobile-hamburger" onClick={() => setDrawerOpen(true)} aria-label="Apri menu">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
@@ -210,7 +215,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
         </header>
       )}
 
-      {drawerOpen && (
+      {drawerOpen && isMobileWorkspace && (
         <div className="drawer-overlay" onClick={() => setDrawerOpen(false)}>
           <aside className="mobile-drawer" onClick={e => e.stopPropagation()}>
             <div className="drawer-header">

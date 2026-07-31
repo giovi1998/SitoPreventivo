@@ -27,15 +27,7 @@
   top: 16px;
 }
 
-@media (max-width: 1279px) {
-  .flyer-editor-shell .editor-grid {
-    grid-template-columns: 1fr 360px auto;
-    gap: 12px;
-    padding: 12px;
-  }
-}
-
-@media (max-width: 899px) {
+@media (max-width: 1023px) {
   .flyer-editor-shell .editor-grid {
     display: flex;
     flex-direction: column;

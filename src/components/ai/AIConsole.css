@@ -312,7 +312,7 @@
 }
 
 /* Mobile: full-width drawer anchored to the bottom */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .ai-console {
     position: fixed;
     left: 0;

@@ -61,7 +61,7 @@
   align-items: start;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .qr-editor-grid {
     grid-template-columns: 1fr;
   }
@@ -293,7 +293,7 @@ details.qr-fieldset[open] > summary {
   align-items: start;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1023px) {
   .flyer-editor-3col {
     grid-template-columns: 1fr 1fr;
   }
@@ -302,7 +302,7 @@ details.qr-fieldset[open] > summary {
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .flyer-editor-3col {
     grid-template-columns: 1fr;
   }

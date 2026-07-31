@@ -98,7 +98,7 @@
   align-items: start;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .social-editor-grid {
     grid-template-columns: 1fr;
   }
@@ -121,7 +121,7 @@
   background: var(--surface);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .social-editor-grid--with-rail {
     grid-template-columns: 1fr;
   }
@@ -317,7 +317,7 @@
   font-size: 0.9rem;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .social-editor {
     padding: 16px;
   }

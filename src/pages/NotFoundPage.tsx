@@ -82,7 +82,7 @@ export default function NotFoundPage() {
         [data-theme="dark"] .notfound-footer p{color:#8892a8}
         .notfound-footer strong{color:#07111f}
         [data-theme="dark"] .notfound-footer strong{color:#e8eaf0}
-        @media(max-width:600px){
+        @media(max-width:767px){
           .digit-4a,.digit-4b{font-size:5rem}
           .notfound-circle{width:80px;height:80px}
           .notfound-title{font-size:1.35rem}

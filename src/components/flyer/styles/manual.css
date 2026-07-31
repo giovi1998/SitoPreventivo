@@ -130,7 +130,7 @@
   line-height: 1.4;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .flyer-editor .editor-actions-row {
     flex-direction: column;
     gap: 8px;

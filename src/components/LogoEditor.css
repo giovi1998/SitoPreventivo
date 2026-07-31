@@ -116,7 +116,7 @@
   align-items: start;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .builder-panel {
     grid-template-columns: 1fr;
   }
@@ -513,7 +513,7 @@
 
 .builder-nudge-grid {
   display: grid;
-  grid-template-columns: repeat(3, 40px);
+  grid-template-columns: repeat(3, minmax(0, 40px));
   grid-template-rows: repeat(3, 40px);
   gap: 4px;
   justify-content: start;

@@ -572,3 +572,23 @@
   font-size: 0.75rem;
   cursor: pointer;
 }
+
+/* Mobile ≤767 (breakpoint canonico): concept a 1 colonna, menu variants
+ * full-width (override min-width:18rem che overflowa su small-phone) */
+@media (max-width: 767px) {
+  .logo-ai-panel {
+    padding: 1rem;
+    max-width: none;
+  }
+
+  .logo-ai-concepts {
+    grid-template-columns: 1fr;
+  }
+
+  .logo-ai-variants-menu {
+    min-width: 0;
+    width: 100%;
+    left: 0;
+    right: 0;
+  }
+}

@@ -675,17 +675,17 @@ const adminStyles = `
 [data-theme="dark"] .pw-msg.ok{color:#22c55e}
 .pw-msg.err{color:#dc2626}
 [data-theme="dark"] .pw-msg.err{color:#f87171}
-@media(max-width:768px){
+@media(max-width:767px){
   .admin-dashboard{padding:16px}
   .admin-head{flex-direction:column;align-items:flex-start;gap:8px}
   .admin-stats{grid-template-columns:1fr 1fr !important;gap:10px}
   .admin-stat{padding:16px 12px;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center}
   .admin-stat b{font-size:1.4rem;line-height:1.2;margin-bottom:4px}
   .admin-stat span{font-size:.7rem;line-height:1.3}
-  .admin-table{font-size:.72rem;table-layout:fixed;white-space:normal}
-  .admin-table th,.admin-table td{padding:6px 8px;word-break:break-word;overflow:hidden;max-width:140px}
-  .admin-table th:nth-child(7),.admin-table th:nth-child(8),.admin-table td:nth-child(7),.admin-table td:nth-child(8){display:none}
-  .admin-table-wrap{overflow-x:hidden}
+  /* GUD-005: niente hiding colonne 7/8 né table-layout:fixed — scroll orizzontale */
+  .admin-table{font-size:.72rem;white-space:normal;min-width:720px}
+  .admin-table th,.admin-table td{padding:6px 8px;word-break:break-word}
+  .admin-table-wrap{overflow-x:auto}
   .admin-pw-edit{min-width:160px}
   .admin-pw-edit input{font-size:.7rem}
   .admin-limit-edit input{width:60px}
@@ -693,14 +693,14 @@ const adminStyles = `
   .admin-apikey-info{padding:12px 14px;font-size:.8rem;overflow-wrap:break-word;word-break:break-word}
   .btn-check-status{padding:6px 12px;font-size:.78rem}
 }
+/* ≤480 small-phone exception (canonical 767/1023) */
 @media(max-width:480px){
   .admin-stats{grid-template-columns:1fr 1fr !important;gap:8px}
   .admin-stat{padding:14px 10px;min-height:72px}
   .admin-stat b{font-size:1.2rem}
   .admin-stat span{font-size:.65rem}
-  .admin-table{font-size:.65rem;table-layout:fixed;white-space:normal}
-  .admin-table th,.admin-table td{padding:4px 4px;word-break:break-word;overflow:hidden;max-width:120px}
-  .admin-table th:nth-child(7),.admin-table th:nth-child(8),.admin-table td:nth-child(7),.admin-table td:nth-child(8){display:none}
+  .admin-table{font-size:.65rem;white-space:normal}
+  .admin-table th,.admin-table td{padding:4px 4px;word-break:break-word}
   .admin-pw-edit{min-width:0;width:100%}
   .admin-pw-edit input{font-size:.65rem}
   .admin-limit-edit{flex-wrap:wrap}

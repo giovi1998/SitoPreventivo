@@ -101,4 +101,4 @@
 [data-theme="dark"] .role-badge.admin{background:rgba(255,59,59,.15);color:#FF3B3B}
 .role-badge.user{background:#f0f1f5;color:#666c7c}
 [data-theme="dark"] .role-badge.user{background:rgba(255,255,255,.06);color:#8892a8}
-@media(max-width:640px){.settings-page{padding:16px}}
+@media(max-width:767px){.settings-page{padding:16px}}

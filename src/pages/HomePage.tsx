@@ -117,7 +117,7 @@ export default function HomePage({ user }: HomePageProps) {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="4" x2="8" y2="10"/></svg>
             </div>
             <h3>Biglietti da visita AI</h3>
-            <p>Descrivi la tua attività: l'AI compone fronte e retro con foto, logo, QR e contatti. Grid editor con collision detection — non puoi sbagliare layout. Export PDF 10-up pronto tipografia, PNG o SVG.</p>
+            <p>Descrivi la tua attività: l'AI compone fronte e retro con foto, logo, QR e contatti. Grid editor con collision detection: non puoi sbagliare layout. Export PDF 10-up pronto tipografia, PNG o SVG.</p>
           </article>
           <article className="hp-create-item hp-bento-wide">
             <div className="hp-create-icon" data-color="red">
@@ -426,8 +426,8 @@ export default function HomePage({ user }: HomePageProps) {
         /* ─── Interest: bento strumenti (gapless, dense) ── */
         .hp-bento{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-flow:dense;gap:20px}
         .hp-bento-wide{grid-column:span 2}
-        @media(max-width:900px){.hp-bento{grid-template-columns:repeat(2,1fr)}.hp-bento-wide{grid-column:span 2}}
-        @media(max-width:600px){.hp-bento{grid-template-columns:1fr}.hp-bento-wide{grid-column:span 1}}
+        @media(max-width:1023px){.hp-bento{grid-template-columns:repeat(2,1fr)}.hp-bento-wide{grid-column:span 2}}
+        @media(max-width:767px){.hp-bento{grid-template-columns:1fr}.hp-bento-wide{grid-column:span 1}}
         .hp-create-item{background:var(--qb-paper);border:1px solid var(--qb-border);border-radius:14px;padding:24px;transition:transform .3s ease-out,box-shadow .3s ease-out,border-color .3s ease-out;overflow:hidden}
         .hp-create-item:hover{transform:translateY(-3px) scale(1.01);box-shadow:0 8px 24px rgba(0,0,0,.06);border-color:var(--qb-ink)}
         [data-theme="dark"] .hp-create-item:hover{box-shadow:0 8px 24px rgba(0,0,0,.4)}
@@ -531,7 +531,7 @@ export default function HomePage({ user }: HomePageProps) {
         .hp-footer-small{font-size:.76rem;color:var(--qb-muted);opacity:.7;margin-top:4px !important}
 
         /* ─── Mobile ──────────────────────────────────── */
-        @media(max-width:640px){
+        @media(max-width:767px){
           .hp-hero{padding:48px 20px 40px}
           .hp-section{padding:48px 20px}
           .hp-demo-section,.hp-steps-section,.hp-pricing-section,.hp-why-section{padding-left:20px;padding-right:20px}
