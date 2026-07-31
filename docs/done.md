@@ -3,6 +3,32 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-07-31
+
+- **Audit responsiveness + migrazione breakpoint canonici** (spec:
+  `docs/spec/spec-design-breakpoint-migration.md`): tutti i breakpoint
+  storici (900/899/880/1100/1180*/1200/1279/1400/768/760/680/640/600)
+  migrati ai canonici `max-width:767px` / `max-width:1023px`
+  (*mantenuti: `@1180` topbar btn-label, `@480` eccezione small-phone
+  documentata). Fix: dead zone nav 769–900px (shell switch unificato a
+  1023: sidebar hide + mobile-topbar show + `.topbar{display:none}`,
+  niente doppia header); `Layout.tsx` sidebar/drawer in conditional
+  render via `useIsMobileWorkspace()`; `CardEditorShell` hook 900 →
+  `useIsMobileWorkspace()`; `.editor-col` → `clamp(280px,30vw,380px)`
+  (gradini 1400/1200 eliminati); flyer dead zone 768–899 (blocco mobile
+  bar a 1023) + `FlyerPreview` auto-fit ResizeObserver (pattern
+  `CardPreviewSurface`); `LogoAiPanel.css` primo blocco `@767`
+  (concept 1col, variants menu full-width); AdminDashboard nth-child
+  hiding eliminato → scroll orizzontale; `crm.css` palette grid
+  `minmax(min(340px,100%),1fr)`. Micro-fix taste: em-dash in copy
+  HomePage, tagline LoginPage aggiornata (brand kit, non solo
+  preventivi), gate `prefers-reduced-motion` per `auth-dot`.
+  Test: 4 unit aggiornati/nuovi (Layout.mobile-shell, useMediaQuery
+  costanti, FlyerPreview auto-fit, CardEditor.responsive 1023) + nuovo
+  `e2e/breakpoints.spec.ts` (7 test AC-001..007). Gate:
+  typecheck + vitest + e2e regressioni (layout-mobile, card parity,
+  topbar) verdi. Gotcha §6 aggiornato.
+
 ## 2026-07-30
 
 - **Refactor strutturale batch 1**: split `logoGenerator.ts` →

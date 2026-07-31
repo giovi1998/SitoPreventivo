@@ -301,6 +301,13 @@ task completati spuntati in to-be-done.
 
 - Conditional render, NOT CSS hide (3-col desktop non nel DOM su mobile).
 - `useMediaQuery` + `BP_SHELL`/`BP_WORKSPACE`: codice nuovo DEVE usarli.
+- **Breakpoint canonici (migrazione 2026-07-31, spec
+  `docs/spec/spec-design-breakpoint-migration.md`)**: solo
+  `max-width:767px` / `max-width:1023px` nei CSS; eccezioni documentate
+  `@1180` (topbar) e `@480` (small-phone). Mai reintrodurre 900/1100/1400
+  ecc. Dettagli: `docs/agent-gotchas.md` §24.
+- Shell switch a 1023: sidebar/topbar nascoste, mobile-topbar + drawer
+  (`Layout.tsx` conditional render via `useIsMobileWorkspace()`).
 - Card mobile: tab system (Anteprima/Modifica/AI), FAB AI, bottom sheet,
   `MobileGridEditor` (frecce, non drag-and-drop), zoom 50-150%.
 - iOS auto-zoom prevention: `font-size: 16px` su input mobile.

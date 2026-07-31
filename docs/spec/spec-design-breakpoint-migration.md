@@ -164,11 +164,20 @@ export function useIsMobileWorkspace(): boolean;  // true ≤1023
 | `pages/LoginPage.tsx:313` | `@900` auth→1col | → `1023` |
 | `pages/HomePage.tsx:429` | `@900` bento 4→2 | → `1023` |
 | `pages/HomePage.tsx:430` | `@600` bento 2→1 | → `767` |
-| `crm/crm.css:60` | `@900` webdata→1col | → `1023` |
-| `crm/crm.css:151,167` | `@768` | → `767` |
-| `crm/crm.css:94` | `minmax(340px,1fr)` palette | `minmax(min(340px,100%),1fr)` |
+| `crm/crm.css:60` | `@900` webdata→1col | ✅ → `1023` |
+| `crm/crm.css:151,167` | `@768` | ✅ → `767` |
+| `crm/crm.css:94` | `minmax(340px,1fr)` palette | ✅ `minmax(min(340px,100%),1fr)` |
+| `crm/crm.css:80` | `.crm-doc-row` no wrap (doc info + 2 bottoni) | `@767`: `flex-wrap:wrap` + `.crm-doc-info{flex:1 1 100%;min-width:0}` |
 | `flyer/FlyerPreview.tsx:12-41` | scala fissa 380 | auto-fit ResizeObserver |
 | `LogoAiPanel.css` | — | + `@media(max-width:767px)` block (vedi §9) |
+
+**Fix aggiuntivi (bug responsive, fuori migrazione breakpoint):**
+
+| File:line | Problema | Fix |
+|---|---|---|
+| `GlobalStyles.tsx:214` | grid-item `.workspace` `min-width:auto` → contenuti larghi (URL lunghi) allargano il track grid → `overflow-x:hidden` clippa tutto senza scrollbar | ✅ `.workspace{min-width:0}` |
+| `crm/crm.css:26-27` | `.crm-field` flex: valore URL senza spazi min-content ≈ larghezza URL → brief/sezioni tagliati a 320-375px | ✅ `.crm-field{min-width:0}` + `.crm-field-value{min-width:0;overflow-wrap:anywhere;word-break:break-word}` |
+| `crm/crm.css:81` | `.crm-doc-info` `flex:1` senza `min-width:0` (titoli doc lunghi) | ✅ `.crm-doc-info{min-width:0;overflow-wrap:anywhere}` |
 
 ## 5. Acceptance Criteria
 

@@ -307,8 +307,9 @@ threshold 0.35→0.30 per lo shrink da padding+gap.
   layout engine condiviso): (1) wrapping testo diverso CSS vs export (ora
   via `textMeasure` canvas: ridotto ma residuo, metriche reali solo in
   browser); (2) font metrics baseline/line-height
-  approssimati in export; (3) font preview ridotti su mobile ≤900px
-  (preview-only, `cardBase.css:152-164`).
+  approssimati in export; (3) font preview ridotti su mobile ≤1023px
+  (preview-only, `cardBase.css` — soglia migrata a quella canonica
+  workspace nel pass 2026-07-31, vedi §24).
 
 ## 7. Volantino rendering gotchas (`src/utils/flyer/`)
 
@@ -1064,3 +1065,41 @@ invece richiede `doc.builder` esplicito → preview vuota/icona fallback.
 - **Test**: `dataService.documents.test.ts` describe "storage canonico flat"
   (regression doppio formato, QR intatto, shim getCustomer) + "getDocuments
   hydration"; `dataService.autoBuildLocal.test.ts` attese flat.
+
+## 24. Breakpoint canonici responsive (2026-07-31)
+
+Spec: `docs/spec/spec-design-breakpoint-migration.md`. Migrazione
+completata: nei CSS di layout esistono **solo** `@media(max-width:767px)`
+(MQ_SHELL) e `@media(max-width:1023px)` (MQ_WORKSPACE), più due eccezioni
+documentate: `@1180` (topbar `btn-label`, range desktop 1024–1180) e
+`@480` (small-phone, cover-grid card + admin stats, commento
+`/* ≤480 small-phone exception (canonical 767/1023) */`).
+
+Regole:
+
+- **Shell switch a 1023**: a ≤1023 `.sidebar` e `.topbar` nascoste,
+  `.mobile-topbar` visibile. `Layout.tsx` fa conditional render di
+  sidebar/mobile-topbar/drawer via `useIsMobileWorkspace()`; la `.topbar`
+  resta CSS-hidden (`display:none` nel blocco `@1023` di GlobalStyles) —
+  differenza intenzionale, e2e `breakpoints.spec.ts` asserisce
+  `.sidebar` assente dal DOM ma `.topbar` solo hidden.
+- **Mai reintrodurre breakpoint storici** (900/899/880/1100/1200/1279/
+  1400/768/760/680/640/600 come `max-width`). Hook JS: solo
+  `useIsMobileShell()` / `useIsMobileWorkspace()`, mai
+  `useMediaQuery('(max-width: Npx)')` ad hoc. Regression test:
+  `Layout.collapsed-styling.test.tsx`.
+- **`.editor-mobile-*` CSS-gated** (preventivo/flyer): pannelli piccoli,
+  `display:none` di default, visibili nel blocco `@1023`. NON convertirli
+  a conditional render JS senza motivo (CON-004 spec).
+- **`.editor-col` fluido**: `width:clamp(280px,30vw,380px)` — niente
+  gradini a breakpoint.
+- **Preview auto-fit**: card (`CardPreviewSurface`) e flyer
+  (`FlyerPreview`) misurano il container via ResizeObserver con guard
+  `typeof ResizeObserver === 'undefined'` → default costante (jsdom).
+- **Card parity mobile/desktop**: il tab system card
+  (`useIsMobileWorkspace` in `CardEditorShell`) e i CSS card
+  (`cardResponsive.css` ecc.) usano la stessa soglia 1023 — tenerle
+  allineate o `card-mobile-desktop-parity.spec.ts` rompe.
+- E2E di riferimento: `e2e/breakpoints.spec.ts` (AC-001..007: nav a
+  800px, singola header a 375px, tab card/flyer a 800px, no overflow
+  logo a 375px).
