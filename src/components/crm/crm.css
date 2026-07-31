@@ -23,9 +23,9 @@
 .crm-card-meta { color: #6b7280; font-size: 13px; margin-top: 4px; display: flex; gap: 6px; }
 .crm-card-date { color: #9ca3af; font-size: 12px; margin-top: 4px; }
 .crm-section { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 16px; }
-.crm-field { display: flex; gap: 10px; padding: 4px 0; font-size: 14px; }
+.crm-field { display: flex; gap: 10px; padding: 4px 0; font-size: 14px; min-width: 0; }
 .crm-field-label { color: #6b7280; min-width: 130px; flex-shrink: 0; }
-.crm-field-value { color: #111; }
+.crm-field-value { color: #111; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 .crm-actions-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .crm-actions-row button { padding: 10px 16px; border-radius: 8px; border: 1px solid #d1d5db; cursor: pointer; background: #fff; font-size: 14px; transition: background .15s, border-color .15s; }
 .crm-actions-row button:hover:not(:disabled) { background: #f9fafb; border-color: #9ca3af; }
@@ -57,7 +57,7 @@
 .crm-json-toggle { margin-top: 10px; }
 .crm-json-toggle summary { cursor: pointer; font-size: 13px; color: #2563eb; }
 .crm-json-full { max-height: 240px; overflow: auto; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .crm-webdata-grid { grid-template-columns: 1fr; }
 }
 .crm-detail-status { color: #6b7280; }
@@ -78,7 +78,7 @@
 .crm-badge-ai { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #8b5cf6; color: #fff; margin-left: 6px; }
 .crm-note { color: #9ca3af; font-size: 12px; margin: 4px 0 8px; }
 .crm-doc-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
-.crm-doc-info { display: flex; flex-direction: column; gap: 2px; font-size: 14px; flex: 1; }
+.crm-doc-info { display: flex; flex-direction: column; gap: 2px; font-size: 14px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .crm-doc-cost { color: #6b7280; font-size: 12px; }
 .crm-doc-open { padding: 6px 12px; font-size: 13px; }
 .crm-doc-regen { padding: 6px 12px; font-size: 13px; }
@@ -91,7 +91,7 @@
 .crm-doc-gen-pending { color: #6b7280; }
 
 /* TB-027 B5: palette preview */
-.crm-palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.crm-palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 12px; }
 .crm-palette-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
 .crm-palette-preview { width: 100%; height: auto; border-radius: 8px; }
 .crm-palette-actions { display: flex; justify-content: flex-end; }
@@ -148,10 +148,12 @@
 .crm-card-delete { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: #ef4444; font-size: 12px; cursor: pointer; padding: 4px 8px; border-radius: 6px; opacity: .6; transition: opacity .15s, background .15s; }
 .crm-card-delete:hover { opacity: 1; background: #fef2f2; }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .crm-card-delete { opacity: 1; }
   .crm-ai-log-body { max-height: 160px; }
   .crm-actions-row { position: sticky; bottom: 0; background: #fff; padding: 12px; box-shadow: 0 -2px 8px rgba(0,0,0,.08); display: grid; grid-template-columns: 1fr 1fr; gap: 8px; z-index: 10; }
+  .crm-doc-row { flex-wrap: wrap; }
+  .crm-doc-info { flex: 1 1 100%; min-width: 0; }
 }
 
 /* IntakeList (TB-019) */
@@ -164,7 +166,7 @@
 .intake-card button { padding: 6px 14px; border-radius: 6px; border: 1px solid #d1d5db; cursor: pointer; background: #fff; font-size: 13px; }
 .intake-card button:disabled { opacity: .5; cursor: not-allowed; }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .crm-page { padding: 16px; }
   .crm-cards { grid-template-columns: 1fr; }
   .crm-create-form input { min-width: 100%; }

@@ -211,7 +211,7 @@ export default function GlobalStyles() {
     .side-utility{display:grid;gap:6px}
 
     /* ─── WORKSPACE / TOPBAR ────────────────────────── */
-    .workspace{display:flex;flex-direction:column;min-height:100vh}
+    .workspace{display:flex;flex-direction:column;min-height:100vh;min-width:0}
     .topbar{height:68px;border-bottom:1px solid var(--line);background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 28px;position:sticky;top:0;z-index:5;overflow:hidden}
     [data-theme="dark"] .topbar{background:rgba(15,17,23,.85);border-bottom-color:var(--line)}
     .topbar p{margin:0;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:var(--weight-extrabold)}
