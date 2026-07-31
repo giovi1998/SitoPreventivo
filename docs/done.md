@@ -5,8 +5,8 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-07-31
 
-- **Audit responsiveness + migrazione breakpoint canonici** (spec:
-  `docs/spec/spec-design-breakpoint-migration.md`): tutti i breakpoint
+- **Audit responsiveness + migrazione breakpoint canonici** (spec completata
+  e rimossa 2026-07-31): tutti i breakpoint
   storici (900/899/880/1100/1180*/1200/1279/1400/768/760/680/640/600)
   migrati ai canonici `max-width:767px` / `max-width:1023px`
   (*mantenuti: `@1180` topbar btn-label, `@480` eccezione small-phone

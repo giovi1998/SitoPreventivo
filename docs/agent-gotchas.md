@@ -1068,7 +1068,7 @@ invece richiede `doc.builder` esplicito → preview vuota/icona fallback.
 
 ## 24. Breakpoint canonici responsive (2026-07-31)
 
-Spec: `docs/spec/spec-design-breakpoint-migration.md`. Migrazione
+Spec completata e rimossa (2026-07-31). Migrazione
 completata: nei CSS di layout esistono **solo** `@media(max-width:767px)`
 (MQ_SHELL) e `@media(max-width:1023px)` (MQ_WORKSPACE), più due eccezioni
 documentate: `@1180` (topbar `btn-label`, range desktop 1024–1180) e

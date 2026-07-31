@@ -292,6 +292,15 @@ architettura e convenzioni.
 data di completamento (stessa sessione, stesso commit). Mai lasciare
 task completati spuntati in to-be-done.
 
+**Regola spec (OBBLIGATORIA)**: ogni spec in `docs/spec/` segue questo ciclo:
+1. **Implementazione = UN unico commit dedicato** (niente altre feature/fix
+   nello stesso commit; il messaggio cita la spec).
+2. **Ultimo step = cancellare il file spec** da `docs/spec/` e aggiungere la
+   nota di completamento in `docs/done.md` (stesso commit della cancellazione).
+3. Mai lasciare spec "attive" a implementazione completata. Il pre-push
+   (`scripts/spec-sync-check.mjs`, reminder non bloccante) segnala le spec
+   ancora presenti in `docs/spec/` quando pushi codice.
+
 **Struttura docs (2026-07-30)**: documenti in `docs/` (inclusi
 `AI_ARCHITECTURE.md`, `to-be-done.md`, `done.md`), spec attivi in
 `docs/spec/`. Root solo: `AGENTS.md`, `README.md`, `DESIGN.md`,
@@ -301,8 +310,7 @@ task completati spuntati in to-be-done.
 
 - Conditional render, NOT CSS hide (3-col desktop non nel DOM su mobile).
 - `useMediaQuery` + `BP_SHELL`/`BP_WORKSPACE`: codice nuovo DEVE usarli.
-- **Breakpoint canonici (migrazione 2026-07-31, spec
-  `docs/spec/spec-design-breakpoint-migration.md`)**: solo
+- **Breakpoint canonici (migrazione completata 2026-07-31)**: solo
   `max-width:767px` / `max-width:1023px` nei CSS; eccezioni documentate
   `@1180` (topbar) e `@480` (small-phone). Mai reintrodurre 900/1100/1400
   ecc. Dettagli: `docs/agent-gotchas.md` §24.
@@ -437,7 +445,7 @@ Hook installati via `husky` 9 (`.husky/`), attivi dopo `npm install`
 | Hook | Quando | Cosa fa | Durata |
 |------|--------|---------|--------|
 | `pre-commit` | `git commit` | `scripts/check-api-imports.mjs` (serverless import safety, gotcha §1) + `lint-staged` (vitest related su file staged + check api/ su `api/**/*.ts`) | <30s |
-| `pre-push` | `git push` | `npm run typecheck` + `npm run test` + `npm run build` (full gate, intercetta ERR_MODULE_NOT_FOUND pre-Vercel) | ~1-3min |
+| `pre-push` | `git push` | `npm run typecheck` + `npm run test` + `npm run build` (full gate, intercetta ERR_MODULE_NOT_FOUND pre-Vercel) + `scripts/spec-sync-check.mjs` (reminder non bloccante: ultimo step spec = cancellarla + nota done.md) | ~1-3min |
 | `post-commit` | dopo `git commit` | `scripts/docs-sync-check.mjs HEAD~1..HEAD` — reminder non bloccante se `src/`/`api/`/`db/` cambiati ma `docs/` (incl. `docs/spec/`)/`README.md`/`AGENTS.md` no | <1s |
 
 E2E gate (manuale, non in pre-push perché lento ~5-10min):
@@ -455,6 +463,7 @@ Comandi manuali:
 npm run check:api-imports   # solo check import api/
 npm run docs:sync-check     # solo reminder docs (HEAD~1..HEAD)
 node scripts/docs-sync-check.mjs <range>   # range custom (es. main..HEAD)
+node scripts/spec-sync-check.mjs <range>   # reminder spec (default @{u}..HEAD)
 ```
 
 Bypass locale (emergenza, NON in CI): `git commit --no-verify` /

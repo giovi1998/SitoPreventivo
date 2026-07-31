@@ -8,4 +8,6 @@ npm run typecheck || { echo "[pre-push] FAIL typecheck"; exit 1; }
 npm run test || { echo "[pre-push] FAIL test"; exit 1; }
 npm run build || { echo "[pre-push] FAIL build"; exit 1; }
 
+node scripts/spec-sync-check.mjs
+
 echo "[pre-push] OK"

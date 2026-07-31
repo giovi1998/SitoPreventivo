@@ -131,7 +131,7 @@ describe('Layout and Topbar CSS regression', () => {
     expect(file).toMatch(/\.topbar\{[^}]*overflow:hidden/);
   });
 
-  // Breakpoint migration (REQ-001/002, spec-design-breakpoint-migration §6):
+  // Breakpoint migration (REQ-001/002 §6):
   // shell switch unificato a 1023, mai doppia header.
   it('GlobalStyles.tsx has NO @900 block hiding the sidebar', () => {
     const file = fs.readFileSync(

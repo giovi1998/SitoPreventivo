@@ -3,7 +3,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import Layout from '../Layout';
 import { MQ_WORKSPACE } from '../../hooks/useMediaQuery';
 
-// Breakpoint migration (REQ-006, spec-design-breakpoint-migration):
+// Breakpoint migration (REQ-006):
 // sidebar vs mobile-topbar/drawer in conditional render su MQ_WORKSPACE (1023).
 const baseLayoutProps = {
   children: <div>content</div>,

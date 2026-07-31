@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 /**
  * E2E per la migrazione breakpoint canonici 767/1023
- * (docs/spec/spec-design-breakpoint-migration.md, §5 Acceptance Criteria).
+ * (spec completata, §5 Acceptance Criteria).
  *
  * Note sui selettori:
  * - `.sidebar` e `.mobile-topbar` sono conditional-render in Layout.tsx
