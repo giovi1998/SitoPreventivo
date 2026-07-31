@@ -130,4 +130,34 @@ describe('Layout and Topbar CSS regression', () => {
     );
     expect(file).toMatch(/\.topbar\{[^}]*overflow:hidden/);
   });
+
+  // Breakpoint migration (REQ-001/002, spec-design-breakpoint-migration §6):
+  // shell switch unificato a 1023, mai doppia header.
+  it('GlobalStyles.tsx has NO @900 block hiding the sidebar', () => {
+    const file = fs.readFileSync(
+      path.resolve(__dirname, '..', 'GlobalStyles.tsx'),
+      'utf-8'
+    );
+    expect(file).not.toMatch(/@media\(max-width:900px\)\{[^}]*\.sidebar\{display:none\}/);
+    expect(file).not.toMatch(/@media\(max-width:900px\)/);
+  });
+
+  it('GlobalStyles.tsx hides .topbar inside the unified @1023 shell block', () => {
+    const file = fs.readFileSync(
+      path.resolve(__dirname, '..', 'GlobalStyles.tsx'),
+      'utf-8'
+    );
+    expect(file).toMatch(
+      /@media\(max-width:1023px\)\{\s*\.app-shell\{grid-template-columns:1fr\}\s*\.sidebar\{display:none\}\s*\.topbar\{display:none\}/
+    );
+  });
+
+  it('GlobalStyles.tsx editor-col uses fluid clamp (no fixed 380/320/280 steps)', () => {
+    const file = fs.readFileSync(
+      path.resolve(__dirname, '..', 'GlobalStyles.tsx'),
+      'utf-8'
+    );
+    expect(file).toMatch(/\.editor-col\{width:clamp\(280px,30vw,380px\)/);
+    expect(file).not.toMatch(/@media\(max-width:(1400|1200|768|680|1024)px\)/);
+  });
 });

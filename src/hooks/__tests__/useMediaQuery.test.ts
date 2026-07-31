@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useMediaQuery } from '../useMediaQuery';
+import { useMediaQuery, MQ_SHELL, MQ_WORKSPACE } from '../useMediaQuery';
 
 type Listener = (e: MediaQueryListEvent) => void;
 
@@ -44,6 +44,11 @@ describe('useMediaQuery', () => {
   afterEach(() => {
     window.matchMedia = originalMatchMedia;
     vi.restoreAllMocks();
+  });
+
+  it('exports canonical breakpoint media query constants', () => {
+    expect(MQ_SHELL).toBe('(max-width: 767px)');
+    expect(MQ_WORKSPACE).toBe('(max-width: 1023px)');
   });
 
   it('returns true when the query matches', () => {

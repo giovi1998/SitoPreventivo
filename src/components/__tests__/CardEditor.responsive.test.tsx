@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 import { renderEditor, mockSave } from './cardEditorTestSetup';
 import { createEmptyCard } from '../../utils/documentSchemas';
 
-describe('Responsive (mobile <900px) + AI always-accessible', () => {
+describe('Responsive (mobile <1024px) + AI always-accessible', () => {
   let originalMatchMedia: typeof window.matchMedia;
   let originalResizeObserver: typeof globalThis.ResizeObserver | undefined;
   let roCallbacks: Array<(entries: unknown[]) => void>;
@@ -52,7 +52,7 @@ describe('Responsive (mobile <900px) + AI always-accessible', () => {
 
   function setMobile() {
     window.matchMedia = vi.fn().mockImplementation((q: string) => ({
-      matches: q.includes('max-width: 900px'),
+      matches: q.includes('max-width: 1023px'),
       media: q,
       onchange: null,
       addEventListener: vi.fn(),
