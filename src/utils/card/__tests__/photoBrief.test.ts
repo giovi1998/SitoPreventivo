@@ -33,4 +33,15 @@ describe('buildCardPhotoBrief', () => {
     expect(brief.prompt.toLowerCase()).toMatch(/free of any text/);
     expect(brief.prompt.toLowerCase()).toMatch(/logos/);
   });
+
+  it('does not crash when style is undefined (AI partial card, CON bug auto-build)', () => {
+    const card = createEmptyCard();
+    card.front.title = 'Barista';
+    card.front.company = 'Caffè Roma';
+    const partial = { ...card, style: undefined } as unknown as typeof card;
+    const brief = buildCardPhotoBrief(partial);
+    expect(brief.prompt).toMatch(/Barista/i);
+    expect(brief.prompt).toMatch(/Caffè Roma/i);
+    expect(brief.context).toMatch(/Palette/);
+  });
 });

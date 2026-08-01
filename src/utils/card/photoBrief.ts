@@ -6,6 +6,7 @@
  */
 
 import type { BusinessCard } from '../documentSchemas';
+import { createEmptyCard } from '../documentSchemas';
 
 export interface CardPhotoBrief {
   prompt: string;
@@ -19,7 +20,7 @@ export function buildCardPhotoBrief(card: BusinessCard): CardPhotoBrief {
   const profession = (card.front.title || card.front.company || 'professionista').trim();
   const brand = (card.front.company || card.front.name || 'brand').trim();
   const services = (card.back.services || []).filter(Boolean).slice(0, 6);
-  const { accentColor, bgColor, textColor } = card.style;
+  const { accentColor, bgColor, textColor } = card.style ?? createEmptyCard().style;
 
   const servicesPart =
     services.length > 0

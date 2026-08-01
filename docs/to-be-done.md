@@ -50,6 +50,14 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   logo→card→flyer da CRM (`/app/customers/:id` → Genera bozze AI) fallisce
   o produce errori in produzione, mentre in locale probabilmente va. Non è
   ancora mai stato validato live E2E (vedi **TB-027h follow-up** più sotto).
+  **Fix parziale fatto 2026-08-01**: l'icona card falliva con
+  `TypeError: Cannot destructure property 'accentColor' of '...style' as it is
+  undefined` — `buildCardPhotoBrief` destrutturava `card.style` ma riceveva
+  `result.card` (output AI parziale senza `style`). Corretto: `photoBrief.ts`
+  usa `card.style ?? createEmptyCard().style` (fallback difensivo) e
+  `useAutoBuildGenerate` passa il card `merged` (eredita `style` da base).
+  Regression test aggiunti (photoBrief + hook). Resta da validare in prod
+  il resto del flusso.
   Cosa controllare nell'ordine:
   1. **Log Vercel**: errori 500/503, `FUNCTION_INVOCATION_FAILED`, quota
      (MiniMax M3/DeepSeek/Gemini), JSON parse, vision (screenshot preview

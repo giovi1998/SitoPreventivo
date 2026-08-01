@@ -369,7 +369,9 @@ async function generateCardDraft(
   if (!(merged.front as Record<string, unknown>)?.photoUrl) {
     try {
       // CON-IS-001: l'icona AI va in photoUrl, logoUrl mai toccato.
-      const icon = await generateCardIcon(result.card);
+      // Usa merged (non result.card): se l'AI risponde parziale senza `style`,
+      // merged eredita `style` da base → buildCardPhotoBrief non crasha.
+      const icon = await generateCardIcon(merged as unknown as BusinessCard);
       if (icon) {
         merged.front = { ...(merged.front as Record<string, unknown>), photoUrl: icon.dataUrl };
         aiStats = incrementAiStats(aiStats, 'photo', icon.costUsd);

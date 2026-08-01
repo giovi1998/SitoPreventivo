@@ -178,6 +178,22 @@ describe('useAutoBuildGenerate', () => {
     expect(cardSave[1].data.front.photoUrl).toBe('data:image/png;base64,QUJD');
   });
 
+  it('card AI senza style → icona generata col card merged, non crasha (regression auto-build prod)', async () => {
+    mocks.processPrompt.mockResolvedValue({
+      card: { front: { name: 'Mario AI' }, back: {} },
+      response: { content: '{}', usage },
+      changes: ['Fronte: nome'],
+      costUsd: 0.002,
+    });
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    await act(async () => {
+      await result.current.generateAll(makeDocs(), customer);
+    });
+    expect(mockFetch).toHaveBeenCalledWith('/api/ai/card-photo', expect.objectContaining({ method: 'POST' }));
+    const cardSave = mockSave.mock.calls.find((c) => c[1].id === 'card_1')!;
+    expect(cardSave[1].data.front.photoUrl).toBe('data:image/png;base64,QUJD');
+  });
+
   it('errore flyer → card già salvata, logo done, flyer error, nessun throw', async () => {
     mocks.generateCopy.mockRejectedValue(new Error('AI down'));
     const { result } = renderHook(() => useAutoBuildGenerate());
