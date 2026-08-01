@@ -3426,10 +3426,22 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
       sourceRef,
       webAnswers: d.webAnswers || null,
     }).returning();
-    // TB-027: intake crea anche record customers (source='intake', intakeId FK)
-    const custId = 'cust_' + crypto.randomUUID();
-    await (await getDb()).insert(customersTable).values({
-      id: custId,
+    // TB-027: intake crea/aggiorna il customer — dedup per email (fallback:
+    // stesso businessName) → UPDATE invece di duplicato se esiste già.
+    const db = await getDb();
+    const custContacts = (d.contacts || {}) as { email?: string };
+    let matched = null;
+    if (typeof custContacts.email === 'string' && custContacts.email.trim()) {
+      const [byEmail] = await db.select().from(customersTable)
+        .where(sql`lower(${customersTable.contacts}->>'email') = ${custContacts.email.trim().toLowerCase()}`);
+      if (byEmail) matched = byEmail;
+    }
+    if (!matched) {
+      const [byName] = await db.select().from(customersTable)
+        .where(sql`lower(${customersTable.businessName}) = ${d.businessName.trim().toLowerCase()}`);
+      if (byName) matched = byName;
+    }
+    const custFields = {
       businessName: d.businessName,
       ownerName: d.ownerName || null,
       sector: d.sector || null,
@@ -3439,11 +3451,26 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
       preferredColors: d.preferredColors || null,
       contacts: d.contacts || null,
       package: d.package || 'apertura',
-      source: 'intake',
-      intakeId: id,
-      status: 'new',
       webAnswers: d.webAnswers || null,
-    });
+      intakeId: id,
+      source: 'intake',
+    };
+    let custId: string;
+    if (matched) {
+      custId = matched.id;
+      await db.update(customersTable).set({
+        ...custFields,
+        status: 'new',
+        updatedAt: sql`now()`,
+      }).where(eq(customersTable.id, custId));
+    } else {
+      custId = 'cust_' + crypto.randomUUID();
+      await db.insert(customersTable).values({
+        id: custId,
+        ...custFields,
+        status: 'new',
+      });
+    }
     // SEC-002: no PII in log
     console.log('[intake] created', { id, sourceRef, customer: custId, businessName: d.businessName });
     // TB-019+ auto-research: se il cliente ha un sito valido, parte subito

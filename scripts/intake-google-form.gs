@@ -223,3 +223,38 @@ function testWebhook() {
   Logger.log('[test-webhook] %s', response.getResponseCode());
   Logger.log('[test-webhook] body: %s', response.getContentText().slice(0, 300));
 }
+
+/**
+ * Re-invia manualmente una riga del foglio risposte al webhook.
+ * Serve per recuperare risposte fallite (400/429) DOPO un fix lato server:
+ * - senza argomento → re-invia l'ULTIMA riga (la più recente);
+ * - con argomento N → re-invia la riga N (N≥2, la 1 è l'header).
+ * 201 = creato/aggiornato. 409 = sourceRef già ricevuto (era già ok).
+ * 400/429/500 = errore lato server, body loggato.
+ * NOTA: NON lanciare onFormSubmit a mano — è un trigger che richiede
+ * l'evento `e`; per i test manuali usa questa funzione.
+ */
+function resendRowToWebhook(row) {
+  const files = DriveApp.getFilesByName('Quickbrand — Brief attività (risposte)');
+  if (!files.hasNext()) { Logger.log('Sheet risposte non trovato. Esegui reconnectFormSheet().'); return; }
+  const sheet = SpreadsheetApp.openById(files.next().getId()).getSheets()[0];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) { Logger.log('Nessuna risposta da inviare.'); return; }
+  const target = row != null && row !== '' ? Number(row) : lastRow;
+  if (target < 2 || target > lastRow) {
+    Logger.log('Riga fuori range (2..' + lastRow + ').');
+    return;
+  }
+  const values = sheet.getRange(target, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const payload = buildIntakePayload(values, target);
+  const response = UrlFetchApp.fetch(WEBHOOK_URL, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+  Logger.log('[intake] resend riga ' + target + ' -> ' + response.getResponseCode());
+  if (response.getResponseCode() >= 400) {
+    Logger.log('[intake] body: ' + response.getContentText().slice(0, 300));
+  }
+}

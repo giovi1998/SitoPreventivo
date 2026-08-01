@@ -124,6 +124,22 @@ describe('TB-019 /api/intake', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('POST /intake con email customer esistente → UPDATE (no duplicato)', async () => {
+    mockDbState.selectResults.push([]); // sourceRef idempotency → nessun intake esistente
+    mockDbState.selectResults.push([{ id: 'cust_esistente', businessName: 'Al cuore della culla' }]); // dedup by email
+    const res = await callHandler({
+      method: 'POST', url: '/api/intake',
+      body: { businessName: 'Al cuore della culla', sourceRef: 'row_dedup', contacts: { email: 'mrtntuveri@gmail.com' } },
+    });
+    expect(res.statusCode).toBe(201);
+    const update = mockDbState.updated.find((s: any) => s.intakeId);
+    expect(update).toBeDefined();
+    expect(update.businessName).toBe('Al cuore della culla');
+    expect(update.source).toBe('intake');
+    // niente INSERT customer duplicato: inserted contiene solo l'intake
+    expect(mockDbState.inserted).toHaveLength(1);
+  });
+
   it('POST /intake con mood lungo (>100 char, testo libero form) → 201 (regression: era max(100))', async () => {
     mockDbState.selectResults.push([]);
     const longMood = 'Che richiami la primavera, dia la sensazione di serenità, con colori chiari/pastello, immagini stilizzate (mamma che tiene in braccio un bimbo o una culla)';
