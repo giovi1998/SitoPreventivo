@@ -1085,6 +1085,16 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     if (!existing || existing.userEmail !== userEmail || (type && existing.documentType !== type)) {
       return json(req, res, 404, { error: 'Documento non trovato' });
     }
+    // [doc-debug] TEMP: diagnostica documenti vuoti in prod
+    console.warn('[doc-debug] server GET /documents/:id', {
+      id: documentId,
+      type: existing.documentType,
+      title: existing.title,
+      hasData: existing.data != null,
+      dataIsObject: typeof existing.data === 'object',
+      dataKeys: existing.data && typeof existing.data === 'object' ? Object.keys(existing.data).slice(0, 30) : null,
+      dataBytes: JSON.stringify(existing.data)?.length,
+    });
     return json(req, res, 200, existing);
   }
 

@@ -4,7 +4,6 @@ import dataService from '../../utils/dataService';
 import { formatAiStatsCompact } from '../../utils/aiStats';
 import { useAIPalette } from '../../hooks/useAIPalette';
 import { useAutoBuildGenerate } from '../../hooks/useAutoBuildGenerate';
-import { useIsMobileWorkspace } from '../../hooks/useMediaQuery';
 import { buildPreviewSvg } from '../../utils/docPreviewSvg';
 import { palettePreviewDataUrl } from '../../utils/palettePreview';
 import { AI_IMAGE_MODELS, setAiImageModelDefault } from '../../utils/uiPrefs';
@@ -98,7 +97,6 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const [imageGenModel, setImageGenModel] = useState<string>('gemini-3.1-flash-image');
   const palette = useAIPalette();
   const autoGen = useAutoBuildGenerate();
-  const isMobileWorkspace = useIsMobileWorkspace();
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const providers = providerRegistry.listProviders();
@@ -744,7 +742,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
                 : '';
               return (
                 <li key={d.id} className="crm-doc-row">
-                  {previewSvg && !isMobileWorkspace && (
+                  {previewSvg && (
                     <div className="crm-doc-thumb" data-testid={`crm-doc-preview-${d.id}`} dangerouslySetInnerHTML={{ __html: previewSvg }} />
                   )}
                   <div className="crm-doc-info">

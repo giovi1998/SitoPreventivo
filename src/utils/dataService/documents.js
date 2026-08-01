@@ -65,8 +65,23 @@ export function createDocumentsMethods(svc) {
       const qs = new URLSearchParams({ email });
       if (documentType) qs.set('type', documentType);
       const result = await api('GET', `/documents/${encodeURIComponent(docId)}?${qs.toString()}`);
-      if (result.error) return null;
-      return hydrateDocument(result.data || result);
+      if (result.error) {
+        // [doc-debug] TEMP
+        console.warn('[doc-debug] getDocument: API errore', { docId, documentType, error: result.error, status: result.status });
+        return null;
+      }
+      const raw = result.data || result;
+      const hydrated = hydrateDocument(raw);
+      // [doc-debug] TEMP
+      console.info('[doc-debug] getDocument', {
+        docId,
+        documentType,
+        rawKeys: raw && typeof raw === 'object' ? Object.keys(raw).slice(0, 30) : null,
+        rawHasData: raw?.data != null,
+        rawDataKeys: raw?.data && typeof raw.data === 'object' ? Object.keys(raw.data).slice(0, 30) : null,
+        hydratedKeys: hydrated && typeof hydrated === 'object' ? Object.keys(hydrated).slice(0, 30) : null,
+      });
+      return hydrated;
     },
 
     async saveDocument(email, document) {
