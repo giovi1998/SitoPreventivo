@@ -123,7 +123,11 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
     (API di istanza, l'unica valida in questo runtime). Guida aggiornata:
     progetto Apps Script da nominare **`Quickbrandformv1`**, e **non**
     rieseguire `createIntakeForm()` se il form esiste (crea duplicati) →
-    usare `makeQuickbrandFormPublic()`.
+    usare `makeQuickbrandFormPublic()`. E2E live 2026-08-01: form inviato →
+    webhook raggiunto ma 400 — causa: `mood` ("Stile/atmosfera") testo
+    libero nel form ma `varchar(100)` + `max(100)` schema → portato a
+    `text()`/`max(1000)` con migrazione + `errors` nel body 400 (diagnosi).
+    Da rifare: 1 risposta di test → 201 + cliente in CRM.
 - [ ] **TB-027h follow-up**: verifica end-to-end flusso CRM auto-build in
   PROD (envelope jsonb → `hydrateDocument`, mai provato live). Record
   legacy doppia-shape in localStorage: si sanano al primo save; se serve,

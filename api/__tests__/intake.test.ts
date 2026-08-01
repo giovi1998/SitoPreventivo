@@ -124,6 +124,18 @@ describe('TB-019 /api/intake', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('POST /intake con mood lungo (>100 char, testo libero form) → 201 (regression: era max(100))', async () => {
+    mockDbState.selectResults.push([]);
+    const longMood = 'Che richiami la primavera, dia la sensazione di serenità, con colori chiari/pastello, immagini stilizzate (mamma che tiene in braccio un bimbo o una culla)';
+    const res = await callHandler({
+      method: 'POST', url: '/api/intake',
+      body: { businessName: 'Al cuore della culla', sourceRef: 'row_mood', mood: longMood },
+    });
+    expect(res.statusCode).toBe(201);
+    const [intake] = mockDbState.inserted;
+    expect(intake.mood).toBe(longMood);
+  });
+
   it('POST /intake con webAnswers → salvati su intake e customer', async () => {
     mockDbState.selectResults.push([]);
     const res = await callHandler({

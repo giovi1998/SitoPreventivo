@@ -82,7 +82,7 @@ const customersTable = pgTable('customers', {
   ownerName: varchar('owner_name', { length: 255 }),
   sector: varchar({ length: 100 }),
   activity: text(),
-  mood: varchar({ length: 100 }),
+  mood: text(),
   target: text(),
   preferredColors: text(),
   contacts: jsonb(),
@@ -114,7 +114,7 @@ const intakesTable = pgTable('intakes', {
   ownerName: varchar('owner_name', { length: 255 }),
   sector: varchar({ length: 100 }),
   activity: text(),
-  mood: varchar({ length: 100 }),
+  mood: text(),
   target: text(),
   preferredColors: text(),
   contacts: jsonb(),
@@ -2571,7 +2571,7 @@ const CreateCustomerSchema = z.object({
   ownerName: z.string().max(255).optional(),
   sector: z.string().max(100).optional(),
   activity: z.string().optional(),
-  mood: z.string().max(100).optional(),
+  mood: z.string().max(1000).optional(),
   target: z.string().optional(),
   preferredColors: z.string().optional(),
   contacts: z.record(z.string(), z.unknown()).optional(),
@@ -2587,7 +2587,7 @@ const UpdateCustomerSchema = z.object({
   ownerName: z.string().max(255).optional(),
   sector: z.string().max(100).optional(),
   activity: z.string().optional(),
-  mood: z.string().max(100).optional(),
+  mood: z.string().max(1000).optional(),
   target: z.string().optional(),
   preferredColors: z.string().optional(),
   contacts: z.record(z.string(), z.unknown()).optional(),
@@ -3379,7 +3379,7 @@ const IntakeSchema = z.object({
   ownerName: z.string().max(255).optional(),
   sector: z.string().max(100).optional(),
   activity: z.string().optional(),
-  mood: z.string().max(100).optional(),
+  mood: z.string().max(1000).optional(),
   target: z.string().optional(),
   preferredColors: z.string().optional(),
   contacts: z.record(z.string(), z.unknown()).optional(),
@@ -3401,8 +3401,9 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
     }
     const v = validate(IntakeSchema, body);
     if (v.error) {
-      console.warn('[intake] REJECTED schema', { errors: v.errors.map((e: any) => e.message).slice(0, 5) });
-      return json(req, res, 400, { error: 'Brief non valido' });
+      const schemaErrors = v.errors.map((e: any) => ({ path: e.path?.join('.') || '?', message: e.message })).slice(0, 5);
+      console.warn('[intake] REJECTED schema', { errors: schemaErrors, sourceRef: (body as any)?.sourceRef });
+      return json(req, res, 400, { error: 'Brief non valido', errors: schemaErrors });
     }
     const d = v.data;
     const sourceRef = d.sourceRef || 'auto_' + crypto.randomUUID();
