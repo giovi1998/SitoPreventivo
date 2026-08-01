@@ -1,5 +1,7 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, createLogger } from 'vite';
 import react from '@vitejs/plugin-react';
+
+const defaultLogger = createLogger();
 
 export default defineConfig(({ mode }) => {
   // Vite only exposes `.env` vars to `import.meta.env` (client bundle)
@@ -14,6 +16,22 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    customLogger: {
+      ...defaultLogger,
+      // Gotcha §23: crm.js usa import dinamici (.ts extensionless) a call
+      // time per non rompere il require() CJS dei test. Quei moduli sono già
+      // nel main chunk (import statico da AppShell/hook), quindi il dynamic
+      // import non può spostarli in un chunk dedicato. Vite emette questo
+      // warning informativo via logger.warn (non Rollup onwarn): silenziato
+      // selettivamente perché è atteso, non un errore.
+      warn(msg, options) {
+        const text = typeof msg === 'string' ? msg : msg?.message || '';
+        if (text.includes('dynamic import will not move module into another chunk')) {
+          return;
+        }
+        defaultLogger.warn(msg, options);
+      },
+    },
     plugins: [
       react(),
       {
@@ -447,6 +465,27 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: {
       include: ['pdfmake'],
+    },
+    build: {
+      chunkSizeWarningLimit: 2500,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return;
+            if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react-vendor';
+            if (id.includes('/react-router')) return 'router-vendor';
+            if (id.includes('/lucide-react/')) return 'lucide';
+            if (id.includes('/zod/')) return 'zod';
+            if (id.includes('/pdfmake/')) return 'pdfmake';
+            if (id.includes('/jspdf/') || id.includes('/svg2pdf.js/')) return 'pdf-libs';
+            if (id.includes('/docx/')) return 'docx';
+            if (id.includes('/tesseract.js/')) return 'tesseract';
+            if (id.includes('/html2canvas/')) return 'html2canvas';
+            if (id.includes('/@dnd-kit/')) return 'dnd-kit';
+            if (id.includes('/qrcode/')) return 'qrcode';
+          },
+        },
+      },
     },
   };
 });

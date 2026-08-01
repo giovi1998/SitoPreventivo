@@ -5,6 +5,7 @@ import { buildLogoGeneratePrompt, sanitizeLogoBrief } from './prompts/logoSystem
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { isValidLucideIcon } from '../utils/logoGenerator';
 import type { AIStreamChunk, AIResponse } from './types';
+import { providerRegistry } from './providers/registry';
 
 /**
  * Logo AI v2 orchestrator. Wraps BaseOrchestrator and produces a
@@ -83,7 +84,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       options.sector,
       userBrief ? briefContext : undefined,
     );
-    const provider = await import('./providers/registry').then((m) => m.providerRegistry.getProvider(options.modelId));
+    const provider = providerRegistry.getProvider(options.modelId);
     const hasImagePreview = !!options.imagePreviewBase64;
     const useVision = hasImagePreview && (provider as { supportsVision?: boolean }).supportsVision;
     const userContentParts: string[] = [];

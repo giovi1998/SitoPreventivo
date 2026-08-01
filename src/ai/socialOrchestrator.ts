@@ -8,6 +8,7 @@ import {
   type SocialPlatform,
 } from './prompts/socialSystem';
 import { BaseOrchestrator } from './BaseOrchestrator';
+import { providerRegistry } from './providers/registry';
 
 /**
  * Social AI cross-module orchestrator. Reads data from a Card or
@@ -52,7 +53,7 @@ export class SocialAIOrchestrator extends BaseOrchestrator {
     const systemPrompt = promptRegistry.getPrompt('social-system');
     const userPrompt = buildSocialGenerateAllPrompt(source, tone);
 
-    const provider = (await import('./providers/registry')).providerRegistry.getProvider(options.modelId);
+    const provider = providerRegistry.getProvider(options.modelId);
     const hasImagePreview = !!options.imagePreviewBase64;
     const useVision = hasImagePreview && (provider as { supportsVision?: boolean }).supportsVision;
     const userContentParts: string[] = [];

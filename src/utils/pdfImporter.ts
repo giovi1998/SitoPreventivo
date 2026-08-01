@@ -73,7 +73,7 @@ export async function parsePDF(
   file: File,
   onOcrProgress?: (page: number, progress: number) => void
 ): Promise<PdfParseResult> {
-  setupPdfWorker();
+  await setupPdfWorker();
 
   const pdfjsLib = await import('pdfjs-dist');
   const arrayBuffer = await file.arrayBuffer();

@@ -1,6 +1,7 @@
 import { GlobalWorkerOptions } from 'pdfjs-dist';
 
-export function setupPdfWorker() {
+export async function setupPdfWorker() {
+  const { GlobalWorkerOptions } = await import('pdfjs-dist');
   try {
     const workerUrl = new URL(
       'pdfjs-dist/build/pdf.worker.min.mjs',

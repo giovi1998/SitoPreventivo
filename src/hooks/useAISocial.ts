@@ -11,6 +11,7 @@ import dataService from '../utils/dataService';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiVisionEnabled } from '../utils/uiPrefs';
+import { captureElementAsBase64 } from '../utils/ai/captureElement';
 
 export interface UseAISocialReturn {
   generate: (
@@ -116,7 +117,6 @@ async function captureSocialPreview(source: SocialSource): Promise<string | unde
     const selector = source.type === 'card' ? '[data-card-preview]' : '[data-flyer-preview]';
     const previewEl = document.querySelector<HTMLElement>(selector);
     if (!previewEl) return undefined;
-    const { captureElementAsBase64 } = await import('../utils/ai/captureElement');
     return (await captureElementAsBase64(previewEl, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' })) ?? undefined;
   } catch {
     return undefined;

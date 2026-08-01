@@ -3,6 +3,7 @@ import type { AIStreamChunk, AIResponse } from './types';
 import { promptRegistry } from './prompts/registry';
 import { buildOnboardingSuggestPrompt } from './prompts/onboardingSystem';
 import { BaseOrchestrator } from './BaseOrchestrator';
+import { providerRegistry } from './providers/registry';
 
 /**
  * Onboarding AI suggester. Generates 3 company/profession options +
@@ -41,7 +42,7 @@ export class OnboardingAIOrchestrator extends BaseOrchestrator {
     const userPrompt = buildOnboardingSuggestPrompt(name, sector);
     const messages = this.buildMessages(systemPrompt, userPrompt);
 
-    const provider = (await import('./providers/registry')).providerRegistry.getProvider(options.modelId);
+    const provider = providerRegistry.getProvider(options.modelId);
     const response = await this.handleStream(
       provider,
       messages,

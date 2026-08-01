@@ -7,6 +7,7 @@ import { BaseOrchestrator } from './BaseOrchestrator';
 import { promptRegistry } from './prompts/registry';
 import { buildPaletteSystemPrompt, buildPaletteUserPrompt, type PaletteBrief } from './prompts/paletteSystem';
 import type { AIResponse, AIStreamChunk } from './types';
+import { providerRegistry } from './providers/registry';
 
 export const paletteConceptSchema = z.object({
   name: z.string().min(1).max(30),
@@ -47,7 +48,7 @@ export class PaletteAIOrchestrator extends BaseOrchestrator {
     const systemPrompt = promptRegistry.getPrompt('palette-system');
     const userPrompt = buildPaletteUserPrompt(brief);
     const providerId = options.modelId || 'deepseek-v4-flash';
-    const provider = await import('./providers/registry').then((m) => m.providerRegistry.getProvider(providerId));
+    const provider = providerRegistry.getProvider(providerId);
     const messages = this.buildMessages(systemPrompt, userPrompt);
     const { response, providerId: finalProviderId } = await this.executeWithFallback(
       providerId, messages,
