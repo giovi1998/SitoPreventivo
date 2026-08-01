@@ -4,6 +4,91 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ## 🔴 Da fare (prodotto)
 
+### 🎯 Sprint prossima settimana (priorità utente 2026-08-01)
+
+- [ ] **1. Qualità visiva card / logo / flyer (design review)**: l'utente NON
+  è soddisfatto dell'estetica — es. la card "non piace", scritte troppo
+  piccole. Obiettivo: revisione tipografica + proporzioni su TUTTI e 3 i
+  generatori. Checklist per ciascuno:
+  - **Card** (`src/components/CardEditor.tsx` + `src/utils/card/`): gerarchia
+    tipografica fronte/retro (nome > ruolo > company > contatti), dimensione
+    minima leggibile (≥8-9px a 640px logici di anteprima), padding/gap grid,
+    coerenza preview ↔ export (mismatch wrapping/font metrics residui
+    documentati in `docs/agent-gotchas.md` §6), presenza di `--card-font-scale`
+    legacy (default 1) e se il font è davvero leggibile su card piccola in
+    Collection/CRM.
+  - **Logo** (`src/utils/logo/svgBuilder.ts` + `fitText()`): testo/tagline
+    troncato o troppo piccolo sul viewBox, scala icona vs testo, contrasto su
+    `backgroundImage` (textBackdrop/offset), leggibilità in anteprima e in
+    export PNG/PDF/JPG.
+  - **Flyer** (`src/utils/flyer/`): `font-size` unitless mm (viewBox in mm),
+    `GLYPH_HEIGHT_FACTOR=1.15`, budget copy al font minimo = hard limit (§7),
+    spaziature sezione, gerarchia heading/body/CTA, leggibilità anteprima vs
+    PDF/PNG export.
+  - Criterio di uscita: ogni fix verificato con **screenshot prima/dopo**
+    (browser reale, non jsdom) e, dove tocca rendering/export, test di
+    regressione aggiornati. NON cambiare layout engine prima di aver capito
+    dove vive il problema (preview vs export vs entrambi).
+
+- [ ] **2. Immagini AI con background pixelato (verifica Playwright)**: le
+  immagini generate (logo background, card cover/icon) arrivano a **512px**
+  (`image_size: '512'`, clamp server 500KB) e scalate su aree grandi →
+  risultano pixelate. Da investigare e sistemare:
+  - Dove la qualità decade: generazione (chiedere `1024` dove il modello lo
+    supporta e il costo lo permette), storage (base64 compresso / JPEG vs
+    PNG), scaling d'uso (SVG viewBox upscale, cover image in card/flyer),
+    export (PNG 512/1024/2048, PDF, JPG, favicon).
+  - **Test Playwright** (`.spec.ts` nuovo in `e2e/`): generare immagini AI
+    (o caricare fixture), verificare la **risoluzione effettiva** dell'asset
+    renderizzato in preview ed export (screenshot + pixel density), non solo
+    il src. Includere caso "immagine 512 su area 1024+ → deve essere
+    upscalata con filtro adeguato o rigenerata a 1024".
+  - Guardia anti-regressione: soglia minima px/cm dell'asset nel render.
+  - Nota: aggiungere test AI richiede mock provider (mai chiavi reali in CI).
+
+- [ ] **3. "Genera bozze AI" in PROD non funziona (debug)**: la sequenza
+  logo→card→flyer da CRM (`/app/customers/:id` → Genera bozze AI) fallisce
+  o produce errori in produzione, mentre in locale probabilmente va. Non è
+  ancora mai stato validato live E2E (vedi **TB-027h follow-up** più sotto).
+  Cosa controllare nell'ordine:
+  1. **Log Vercel**: errori 500/503, `FUNCTION_INVOCATION_FAILED`, quota
+     (MiniMax M3/DeepSeek/Gemini), JSON parse, vision (screenshot preview
+     solo se `getAiVisionEnabled()` + provider vision — CON-MM-002).
+  2. **Env vars Vercel**: `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`,
+     `OLLAMA_API_KEY`, `FIRECRAWL_API_KEY` settate in dashboard (mancanti →
+     503/500 in prod). `VITE_*` NON basta in prod (server-side only).
+  3. **Envelope jsonb → `hydrateDocument`**: record salvati in prod con
+     shape envelope vs FLAT; possibile mismatch su lettura (gotchas §23).
+  4. **bundle/lazy import**: orchestratori in `manualChunks`, `await
+     import()` solo per moduli on-demand (gotcha §25) — errore
+     `ERR_MODULE_NOT_FOUND` → pre-push build green non basta.
+  5. Riprodurre con 1 cliente reale (non fixture), leggere `/api/logs`,
+     correggere, aggiungere regression test dove possibile.
+  Output atteso: E2E PROD funzionante + nota in `docs/done.md`.
+
+- [ ] **4. Generazione SITO bozza + build Netlify (TB-012 step 2 pilota)**:
+  prima landing page reale per un cliente, generata dagli asset esistenti
+  invece che da zero. Porta d'ingresso dati già pronta: **`webAnswers`**
+  (headline/offer/cta/tone/wantsPage) dal form intake, + asset del draft
+  (logo/card/flyer) già nel CRM. Cosa include:
+  - **Template HTML/CSS statico** (singolo file o mini-folder): hero
+    headline+CTA, sezione offerta, contatti, footer; stile derivato da
+    palette/logo del draft (o da `preferredColors`); zero dipendenze runtime
+    (JS puro, nessun framework).
+  - **Mapper brief → sito**: `webAnswers` + flyer text + card data → sezioni
+    pagina; fallback sensato quando un campo è vuoto.
+  - **Bozza locale**: pulsante "Genera sito bozza" che produce cartella/ZIP
+    (simile export flyer/card), preview HTML nel browser.
+  - **Build + deploy Netlify**: skill `netlify-deploy` — `netlify deploy`
+    (draft/preview) per condivisione link col cliente; struttura dist per
+    `netlify build` (o `ntl build`) funzionante con la cartella generata.
+  - **Fuori scope**: builder self-service, publish su dominio cliente,
+    multi-pagina — solo bozza + preview Netlify.
+  - Nota: valutare se anticipare vs backlog (priorità utente 2026-07-30:
+    sito clienti = obiettivo confermato).
+
+### Backlog tecnico corrente
+
 - [ ] **Card flusso completo in clienti**: auto-build → Genera bozze AI →
   preview/editor senza errori quota/JSON/vision. Verificare E2E con
   Playwright su cliente reale.
