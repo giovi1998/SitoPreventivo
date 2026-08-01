@@ -70,7 +70,13 @@ export function createDocumentsMethods(svc) {
         console.warn('[doc-debug] getDocument: API errore', { docId, documentType, error: result.error, status: result.status });
         return null;
       }
-      const raw = result.data || result;
+      // BUG 2026-08-01: `result.data || result` selezionava l'envelope jsonb
+      // quando presente, perdendo id/documentType → hydrateDocument ritornava
+      // { id: undefined, ... } → editor vuoto (useDocumentLoader: initialDoc null).
+      // Usa la RIGA completa se sembra una riga (id o documentType); altrimenti
+      // prova il wrapper { data } di endpoint che avvolgono la risposta.
+      const isRow = result && typeof result === 'object' && (result.id != null || result.documentType != null);
+      const raw = isRow ? result : (result?.data || result);
       const hydrated = hydrateDocument(raw);
       // [doc-debug] TEMP
       console.info('[doc-debug] getDocument', {
