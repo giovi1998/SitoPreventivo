@@ -7,11 +7,11 @@ describe('AIProviderRegistry', () => {
     const r = new AIProviderRegistry();
     // Default: MiniMax M3 (vision); DeepSeek resta fallback.
     expect(r.getDefaultId()).toBe('ollama-minimax-m3');
-    expect(r.getFallbackProvider()).toMatchObject({ id: 'deepseek-chat' });
+    expect(r.getFallbackProvider()).toMatchObject({ id: 'deepseek-v4-flash' });
   });
   it('returns provider by id', () => {
     const r = new AIProviderRegistry();
-    const p = r.getProvider('deepseek-chat');
+    const p = r.getProvider('deepseek-v4-flash');
     expect(p).toBeInstanceOf(DeepSeekProvider);
   });
   it('throws on unknown provider', () => {

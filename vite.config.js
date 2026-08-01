@@ -366,7 +366,7 @@ export default defineConfig(({ mode }) => {
               // ─── /api/ai/chat and /api/ai/chat/stream proxy ───────
               if (url === '/api/ai/chat' || url === '/api/ai/chat/stream') {
                 const isStream = url === '/api/ai/chat/stream';
-                let providerId = body.provider || 'deepseek-chat';
+                let providerId = body.provider || 'deepseek-v4-flash';
                 // Il client (OllamaProProvider) può inviare provider='ollama';
                 // il registry registra 'ollama-minimax-m3'. Normalizziamo.
                 if (providerId === 'ollama') providerId = 'ollama-minimax-m3';

@@ -22,7 +22,7 @@ export class DeepSeekProvider extends BaseAIProvider {
   readonly supportsStreaming = true;
   readonly supportsTools = true;
 
-  constructor(model = 'deepseek-chat') {
+  constructor(model = 'deepseek-v4-flash') {
     super();
     this.model = model;
   }

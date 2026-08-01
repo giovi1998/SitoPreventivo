@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { resolveProviderId } from '../resolveProviderId';
 
-const getAiProviderDefault = vi.fn().mockReturnValue('deepseek-chat');
+const getAiProviderDefault = vi.fn().mockReturnValue('deepseek-v4-flash');
 
 vi.mock('../uiPrefs', async () => {
   const actual = await vi.importActual<typeof import('../uiPrefs')>('../uiPrefs');
@@ -13,7 +13,7 @@ vi.mock('../uiPrefs', async () => {
 
 describe('resolveProviderId', () => {
   beforeEach(() => {
-    getAiProviderDefault.mockReturnValue('deepseek-chat');
+    getAiProviderDefault.mockReturnValue('deepseek-v4-flash');
   });
 
   it('uses explicit modelId when provided', () => {
@@ -21,7 +21,7 @@ describe('resolveProviderId', () => {
   });
 
   it('falls back to default provider from prefs', () => {
-    expect(resolveProviderId()).toBe('deepseek-chat');
+    expect(resolveProviderId()).toBe('deepseek-v4-flash');
   });
 
   it('falls back to registry default when pref is invalid', async () => {

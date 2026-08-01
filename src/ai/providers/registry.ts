@@ -9,7 +9,7 @@ export class AIProviderRegistry {
   private defaultId: string = 'ollama-minimax-m3';
 
   constructor() {
-    this.register('deepseek-chat', new DeepSeekProvider('deepseek-chat'));
+    this.register('deepseek-v4-flash', new DeepSeekProvider('deepseek-v4-flash'));
     this.register('deepseek-v4-pro', new DeepSeekProvider('deepseek-v4-pro'));
     // TB-023: Ollama Pro Cloud ($20/mo flat, multimodale, zero retention)
     this.register('ollama-minimax-m3', new OllamaProProvider('minimax-m3:cloud'));
@@ -58,8 +58,8 @@ export class AIProviderRegistry {
   getFallbackProvider(currentId?: string): { id: string; provider: AIProvider } | null {
     const primaryId = currentId || this.defaultId;
     if (primaryId.startsWith('ollama')) {
-      const fallback = this.providers.get('deepseek-chat');
-      if (fallback) return { id: 'deepseek-chat', provider: fallback };
+      const fallback = this.providers.get('deepseek-v4-flash');
+      if (fallback) return { id: 'deepseek-v4-flash', provider: fallback };
     }
     const fallbackOllama = this.providers.get('ollama-minimax-m3');
     if (fallbackOllama && primaryId !== 'ollama-minimax-m3') {

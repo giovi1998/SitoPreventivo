@@ -725,7 +725,7 @@ Codice signup/onboarding **conservato** dietro feature flag
       espandibile: click su riga mostra payload/response JSON.
     - Status logo: `manual` se `logoUrl` caricato, `detected` se
       `detectedLogoUrl` trovato online, `no_logo` altrimenti.
-    - Selettore provider text per palette AI (`deepseek-chat`, `ollama-*`).
+    - Selettore provider text per palette AI (`deepseek-v4-flash`, `ollama-*`).
     - Selettore modello image-gen (`gemini-3.1-flash-image`,
       `gemini-2.0-flash-preview-image-generation`) salvato in user settings
       e sincronizzato con pannelli AI logo/card/flyer.
@@ -801,7 +801,7 @@ Codice signup/onboarding **conservato** dietro feature flag
   PROD legge `/api/config`). `LoginPage` nasconde tab "Registrati" se
   false. `HomePage` link "Registrati" condizionali su `authHref`.
 - **B5 PaletteOrchestrator provider.id**: `AIProvider` non ha `id`.
-  Usa `options.modelId || 'deepseek-chat'` come `providerId` string per
+  Usa `options.modelId || 'deepseek-v4-flash'` come `providerId` string per
   `executeWithFallback`. `trackUsage` accetta `providerId` string.
 - **B5 paletteConceptsSchema length(3)**: zod `.length(3)` valida
   array esattamente 3. `.min(1)` su `name` per rifiutare stringa vuota.
@@ -858,7 +858,7 @@ Contesto cliente:
 ## 19. TB-027d — CRM live fixes (2026-07-29): routing, dev research, vision M3, log UX
 
 - **Default provider = MiniMax M3**: `providerRegistry.defaultId` flip
-  `deepseek-chat` → `ollama-minimax-m3` (vision, flat rate). DeepSeek
+  `deepseek-v4-flash` → `ollama-minimax-m3` (vision, flat rate). DeepSeek
   resta fallback (`getFallbackProvider`) e selezionabile. Test con
   default hardcodato (`resolveProviderId.test.ts`) deve asserire
   `providerRegistry.getDefaultId()`, non stringa fissa.

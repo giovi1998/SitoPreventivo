@@ -3,11 +3,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import CardAIControls from '../CardAIControls';
 
 const baseProps = {
-  aiModel: 'deepseek-chat',
+  aiModel: 'deepseek-v4-flash',
   onModelChange: vi.fn(),
   aiText: '',
   onTextChange: vi.fn(),
-  availableModels: [{ id: 'deepseek-chat', name: 'DeepSeek Chat', model: 'deepseek-chat' }],
+  availableModels: [{ id: 'deepseek-v4-flash', name: 'DeepSeek Chat', model: 'deepseek-v4-flash' }],
   isProcessing: false,
   onRun: vi.fn(),
   onReset: vi.fn(),

@@ -3,7 +3,7 @@ import { calculateCostUsd, OLLAMA_PRO_FLAT_MONTHLY } from '../providerPricing';
 
 describe('providerPricing calculateCostUsd (spec TB-023 §6.1)', () => {
   it('AC-TC-001: DeepSeek pay-per-token (600 input + 400 output → 0.000196)', () => {
-    const cost = calculateCostUsd('deepseek-chat', { promptTokens: 600, completionTokens: 400 });
+    const cost = calculateCostUsd('deepseek-v4-flash', { promptTokens: 600, completionTokens: 400 });
     // (600/1M)*0.14 + (400/1M)*0.28 = 0.000084 + 0.000112 = 0.000196
     expect(cost).toBe(0.000196);
   });
@@ -29,7 +29,7 @@ describe('providerPricing calculateCostUsd (spec TB-023 §6.1)', () => {
   });
 
   it('usage undefined → 0 per provider a consumo (text); per-image ignora usage', () => {
-    expect(calculateCostUsd('deepseek-chat', undefined)).toBe(0);
+    expect(calculateCostUsd('deepseek-v4-flash', undefined)).toBe(0);
     // TB-026: per-image non richiede usage, conta solo imageCount
     expect(calculateCostUsd('gemini-nano-banana', undefined, 2)).toBe(0.08);
     expect(calculateCostUsd('gemini-nano-banana', undefined, 0)).toBe(0);

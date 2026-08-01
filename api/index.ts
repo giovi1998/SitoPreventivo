@@ -1451,7 +1451,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
-          model: model || 'deepseek-chat',
+          model: model || 'deepseek-v4-flash',
           messages,
           response_format: response_format || { type: 'json_object' },
           temperature: temperature ?? 0.7,
@@ -1483,7 +1483,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
       tag: 'ai_chat',
       requestId,
       email: userEmail,
-      model: model || 'deepseek-chat',
+      model: model || 'deepseek-v4-flash',
       durationMs: Date.now() - startedAt,
       outcome: 'ok',
       tokens: usage?.total_tokens,
@@ -1572,7 +1572,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
-          model: model || 'deepseek-chat',
+          model: model || 'deepseek-v4-flash',
           messages: [
             { role: 'system', content: systemMsg },
             { role: 'user', content: userMsg },
@@ -1615,7 +1615,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       return jsonWithRequestId(req, res, 502, { error: 'AI non ha restituito JSON valido', raw: content.slice(0, 500) }, requestId);
     }
     const usage = (data as { usage?: { total_tokens?: number } }).usage;
-    logAI({ tag: 'ai_copy_flyer', requestId, model: model || 'deepseek-chat', durationMs: Date.now() - startedAt, outcome: 'ok', tokens: usage?.total_tokens });
+    logAI({ tag: 'ai_copy_flyer', requestId, model: model || 'deepseek-v4-flash', durationMs: Date.now() - startedAt, outcome: 'ok', tokens: usage?.total_tokens });
     return json(req, res, 200, { data: parsed, raw: content, requestId });
   }
 
@@ -1839,7 +1839,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     }
     const { model, messages, tools, temperature, max_tokens } = v.data;
     const upBody = {
-      model: model || 'deepseek-chat',
+      model: model || 'deepseek-v4-flash',
       messages,
       stream: true,
       ...(tools ? { tools } : {}),
@@ -2644,7 +2644,7 @@ async function callDeepSeekAiFill(prompt: string): Promise<{ fields: Record<stri
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         messages: [
           { role: 'system', content: 'Sei un consulente di branding. Rispondi SOLO con un oggetto JSON valido, senza testo extra.' },
           { role: 'user', content: prompt },
@@ -2662,7 +2662,7 @@ async function callDeepSeekAiFill(prompt: string): Promise<{ fields: Record<stri
     const content = data.choices?.[0]?.message?.content;
     const fields = content ? extractJsonObjectApi(content) : null;
     if (!fields) return null;
-    // Mirror providerPricing.ts deepseek-chat ($0.14/$0.28 per 1M tok) — inline:
+    // Mirror providerPricing.ts deepseek-v4-flash ($0.14/$0.28 per 1M tok) — inline:
     // src/ non importabile da api/ (gotcha §1 cross-boundary).
     const costUsd = Math.round((((data.usage?.prompt_tokens || 0) * 0.14 + (data.usage?.completion_tokens || 0) * 0.28) / 1_000_000) * 1_000_000) / 1_000_000;
     return { fields, costUsd };

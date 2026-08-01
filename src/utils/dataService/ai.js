@@ -69,7 +69,7 @@ export function createAiMethods(svc) {
             method: 'POST',
             headers,
             body: JSON.stringify({
-              model: model || 'deepseek-chat',
+              model: model || 'deepseek-v4-flash',
               messages,
               ...(response_format ? { response_format } : {}),
               temperature: temperature ?? 0.7,

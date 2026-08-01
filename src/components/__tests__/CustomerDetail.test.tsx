@@ -175,7 +175,7 @@ describe('TB-027 CustomerDetail', () => {
     const select = screen.getByTestId('crm-ai-provider') as HTMLSelectElement;
     expect(select.value).toBe('ollama-minimax-m3');
     const ids = Array.from(select.options).map((o) => o.value);
-    expect(ids).toContain('deepseek-chat');
+    expect(ids).toContain('deepseek-v4-flash');
   });
 
   it('log vuoto → pulsanti Copia/Cancella assenti', async () => {

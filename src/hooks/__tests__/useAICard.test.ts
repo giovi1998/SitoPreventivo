@@ -117,11 +117,11 @@ describe('useAICard', () => {
     expect(dataService.trackTokens).toHaveBeenCalledWith('user@test.com', 15, expect.any(Number));
   });
 
-  it('CON-MM-002: con provider text-only (deepseek-chat) non cattura lo screenshot anche con vision ON', async () => {
+  it('CON-MM-002: con provider text-only (deepseek-v4-flash) non cattura lo screenshot anche con vision ON', async () => {
     setAiVisionEnabled(true);
     const { result } = renderHook(() => useAICard('user@test.com'));
     await act(async () => {
-      await result.current.processCardPrompt(createEmptyCard(), 'test', { modelId: 'deepseek-chat' });
+      await result.current.processCardPrompt(createEmptyCard(), 'test', { modelId: 'deepseek-v4-flash' });
     });
     expect(mockRenderSide).not.toHaveBeenCalled();
     const inst = cardOrchestratorInstances.find((i) => i.processPrompt.mock.calls.length > 0)!;

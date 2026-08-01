@@ -51,7 +51,7 @@
 
 | Provider | Modello | Tipo | Chiave env |
 |----------|---------|------|------------|
-| DeepSeek | `deepseek-chat` | Text (chat) | `DEEPSEEK_API_KEY` |
+| DeepSeek | `deepseek-v4-flash` | Text (chat) | `DEEPSEEK_API_KEY` |
 | Ollama Pro | `minimax-m3:cloud` | Text + Vision | `OLLAMA_API_KEY` |
 | Ollama Pro | `deepseek-v4-pro:cloud` | Text | `OLLAMA_API_KEY` |
 | Ollama Pro | `qwen-3.5` | Text | `OLLAMA_API_KEY` |
@@ -73,7 +73,7 @@ I provider immagine (Gemini) sono **sempre server-side**, sia in dev che in prod
 
 1. Parametro esplicito `modelId` (se presente)
 2. Default utente: `aiProviderDefault` da `pq_ui:v1`
-3. Fallback: `deepseek-chat` (registry default)
+3. Fallback: `deepseek-v4-flash` (registry default)
 
 ---
 

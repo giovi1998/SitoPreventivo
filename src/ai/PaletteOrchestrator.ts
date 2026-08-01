@@ -46,7 +46,7 @@ export class PaletteAIOrchestrator extends BaseOrchestrator {
     const sessionId = this.ensureSession();
     const systemPrompt = promptRegistry.getPrompt('palette-system');
     const userPrompt = buildPaletteUserPrompt(brief);
-    const providerId = options.modelId || 'deepseek-chat';
+    const providerId = options.modelId || 'deepseek-v4-flash';
     const provider = await import('./providers/registry').then((m) => m.providerRegistry.getProvider(providerId));
     const messages = this.buildMessages(systemPrompt, userPrompt);
     const { response, providerId: finalProviderId } = await this.executeWithFallback(

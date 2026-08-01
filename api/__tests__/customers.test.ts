@@ -258,7 +258,7 @@ describe('TB-027 /api/customers', () => {
       preferredColors: 'blu notte e oro',
       activity: 'Cocktail bar premium',
     });
-    // (1000 * 0.14 + 500 * 0.28) / 1e6 = 0.00028 (mirror providerPricing deepseek-chat)
+    // (1000 * 0.14 + 500 * 0.28) / 1e6 = 0.00028 (mirror providerPricing deepseek-v4-flash)
     expect(res.body.data.costUsd).toBe(0.00028);
     const dsCall = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => String(url).includes('api.deepseek.com'));
     expect(dsCall).toBeTruthy();

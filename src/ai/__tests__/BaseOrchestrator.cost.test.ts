@@ -26,10 +26,10 @@ describe('BaseOrchestrator trackUsage cost tracking (spec TB-023 §6.1)', () => 
     vi.clearAllMocks();
   });
 
-  it('passes the computed costUsd to dataService.trackTokens (deepseek-chat)', () => {
+  it('passes the computed costUsd to dataService.trackTokens (deepseek-v4-flash)', () => {
     const o = new TestOrchestrator();
     const usage = { promptTokens: 600, completionTokens: 400, totalTokens: 1000 };
-    const cost = o.testTrackUsage(usage, 'user@test.com', 'deepseek-chat');
+    const cost = o.testTrackUsage(usage, 'user@test.com', 'deepseek-v4-flash');
     expect(cost).toBe(0.000196);
     expect(mockTrackTokens).toHaveBeenCalledWith('user@test.com', 1000, 0.000196);
   });
@@ -51,15 +51,15 @@ describe('BaseOrchestrator trackUsage cost tracking (spec TB-023 §6.1)', () => 
 
   it('admin is never charged: trackTokens not called', () => {
     const o = new TestOrchestrator();
-    const cost = o.testTrackUsage({ promptTokens: 600, completionTokens: 400, totalTokens: 1000 }, 'admin@gmail.com', 'deepseek-chat');
+    const cost = o.testTrackUsage({ promptTokens: 600, completionTokens: 400, totalTokens: 1000 }, 'admin@gmail.com', 'deepseek-v4-flash');
     expect(cost).toBe(0);
     expect(mockTrackTokens).not.toHaveBeenCalled();
   });
 
   it('missing userEmail or usage: no tracking, cost 0', () => {
     const o = new TestOrchestrator();
-    expect(o.testTrackUsage({ promptTokens: 1, completionTokens: 1, totalTokens: 2 }, undefined, 'deepseek-chat')).toBe(0);
-    expect(o.testTrackUsage(undefined, 'user@test.com', 'deepseek-chat')).toBe(0);
+    expect(o.testTrackUsage({ promptTokens: 1, completionTokens: 1, totalTokens: 2 }, undefined, 'deepseek-v4-flash')).toBe(0);
+    expect(o.testTrackUsage(undefined, 'user@test.com', 'deepseek-v4-flash')).toBe(0);
     expect(mockTrackTokens).not.toHaveBeenCalled();
   });
 
@@ -68,7 +68,7 @@ describe('BaseOrchestrator trackUsage cost tracking (spec TB-023 §6.1)', () => 
       throw new Error('network down');
     });
     const o = new TestOrchestrator();
-    const cost = o.testTrackUsage({ promptTokens: 600, completionTokens: 400, totalTokens: 1000 }, 'user@test.com', 'deepseek-chat');
+    const cost = o.testTrackUsage({ promptTokens: 600, completionTokens: 400, totalTokens: 1000 }, 'user@test.com', 'deepseek-v4-flash');
     expect(cost).toBe(0.000196);
   });
 });

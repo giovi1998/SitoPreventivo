@@ -20,7 +20,7 @@ export interface ProviderPricing {
 }
 
 export const PRICING: Record<string, ProviderPricing> = {
-  'deepseek-chat': { input: 0.14, output: 0.28, unit: 'per_1m_tokens' },
+  'deepseek-v4-flash': { input: 0.14, output: 0.28, unit: 'per_1m_tokens' },
   'deepseek-v4-pro': { input: 0.55, output: 2.19, unit: 'per_1m_tokens' },
   // Ollama Pro è $20/mo flat — costUsd per chiamata è 0 nel tracking
   // (il costo fisso mensile è visibility separata in admin dashboard)

@@ -40,7 +40,7 @@ describe('AI endpoint Zod schemas (spec 7)', () => {
 
     it('accepts a full body with all optional fields', () => {
       const result = aiChatSchema.safeParse({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         messages: [
           { role: 'system', content: 'sys' },
           { role: 'user', content: 'msg' },

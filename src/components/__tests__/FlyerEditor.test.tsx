@@ -29,7 +29,7 @@ function setupAIMock(opts: { generateResult?: any; refineResult?: any; reset?: a
   const reset = opts.reset ?? vi.fn();
   generate.mockResolvedValue(opts.generateResult ?? { flyer: { ...createEmptyFlyer(), content: { ...createEmptyFlyer().content, headline: 'Sagra del paese' } }, changes: ['copy_generated'], applied: true, rawResponse: '{}' });
   refine.mockResolvedValue(opts.refineResult ?? { flyer: { ...createEmptyFlyer(), content: { ...createEmptyFlyer().content, body: 'Semplificato' } }, changes: ['Semplificato'], applied: true, rawResponse: '{}' });
-  useAIFlyerMock.mockReturnValue({ generate, refine, reset, logs: [], isProcessing: !!opts.isProcessing, availableModels: opts.models ?? [{ id: 'deepseek-chat', name: 'DeepSeek Chat' }] });
+  useAIFlyerMock.mockReturnValue({ generate, refine, reset, logs: [], isProcessing: !!opts.isProcessing, availableModels: opts.models ?? [{ id: 'deepseek-v4-flash', name: 'DeepSeek Chat' }] });
   return { generate, refine, reset };
 }
 

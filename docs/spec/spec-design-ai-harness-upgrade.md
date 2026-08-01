@@ -136,7 +136,7 @@ flyer e (in futuro) logo con più libertà creativa.
 - **REQ-TC-001**: Creare `src/ai/providerPricing.ts` con tabella costi:
   ```ts
   export const PRICING = {
-    'deepseek-chat':       { input: 0.14,  output: 0.28,  unit: 'per_1m_tokens' },
+    'deepseek-v4-flash':       { input: 0.14,  output: 0.28,  unit: 'per_1m_tokens' },
     'deepseek-v4-pro':     { input: 0.55,  output: 2.19,  unit: 'per_1m_tokens' },
     'ollama-minimax-m3':   { input: 0,     output: 0,     unit: 'flat_20_month' },
     'ollama-deepseek-v4-pro': { input: 0,  output: 0,     unit: 'flat_20_month' },

@@ -17,7 +17,7 @@ vi.mock('../../hooks/useAILogs', () => ({
 }));
 
 vi.mock('../../resolveProviderId', () => ({
-  resolveProviderId: () => 'deepseek-chat',
+  resolveProviderId: () => 'deepseek-v4-flash',
 }));
 
 vi.mock('../ai/captureElement', () => ({
@@ -40,9 +40,9 @@ vi.mock('../../uiPrefs', async () => {
 vi.mock('../../ai/providers/registry', () => ({
   providerRegistry: {
     listProviders: () => [
-      { id: 'deepseek-chat', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true, supportsVision: false },
+      { id: 'deepseek-v4-flash', name: 'DeepSeek', model: 'deepseek-v4-flash', supportsStreaming: true, supportsTools: true, supportsVision: false },
     ],
-    getDefaultId: () => 'deepseek-chat',
+    getDefaultId: () => 'deepseek-v4-flash',
     getProviderCount: () => 1,
   },
 }));
@@ -62,7 +62,7 @@ describe('useAIHarness', () => {
 
   it('returns default state and toggles', () => {
     const { result } = renderHook(() => useAIHarness());
-    expect(result.current.providerId).toBe('deepseek-chat');
+    expect(result.current.providerId).toBe('deepseek-v4-flash');
     expect(result.current.visionEnabled).toBe(false);
     expect(result.current.autoFallbackEnabled).toBe(true);
     expect(result.current.totalCostUsd).toBe(0);

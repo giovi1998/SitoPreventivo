@@ -15,7 +15,7 @@ vi.mock('./src/hooks/useAI', () => ({
     resetChat: vi.fn(),
     aiLogs: [],
     isProcessing: false,
-    availableModels: [{ id: 'deepseek-chat', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true }],
+    availableModels: [{ id: 'deepseek-v4-flash', name: 'DeepSeek', model: 'deepseek-v4-flash', supportsStreaming: true, supportsTools: true }],
   }),
 }));
 

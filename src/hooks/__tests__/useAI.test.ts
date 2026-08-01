@@ -24,7 +24,7 @@ vi.mock('../../ai/quoteOrchestrator', () => ({
         changes: ['Titolo progetto: "X"'],
         rawResponse: '{"project":{"title":"X"}}',
       }),
-      getProviderList: vi.fn().mockReturnValue([{ id: 'deepseek-chat', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true }]),
+      getProviderList: vi.fn().mockReturnValue([{ id: 'deepseek-v4-flash', name: 'DeepSeek', model: 'deepseek-v4-flash', supportsStreaming: true, supportsTools: true }]),
       resetSession: vi.fn(),
       getCurrentSessionId: vi.fn().mockReturnValue('sess-1'),
     };
@@ -156,7 +156,7 @@ describe('useAI', () => {
             changes: ['error:invalid_quote:10'],
             rawResponse: '{}',
           }),
-          getProviderList: vi.fn().mockReturnValue([{ id: 'deepseek-chat', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true }]),
+          getProviderList: vi.fn().mockReturnValue([{ id: 'deepseek-v4-flash', name: 'DeepSeek', model: 'deepseek-v4-flash', supportsStreaming: true, supportsTools: true }]),
           resetSession: vi.fn(),
           getCurrentSessionId: vi.fn().mockReturnValue('s1'),
         };
@@ -187,7 +187,7 @@ describe('useAI', () => {
             changes: ['error:unknown_new_kind:42'],
             rawResponse: '{}',
           }),
-          getProviderList: vi.fn().mockReturnValue([{ id: 'deepseek-chat', name: 'DeepSeek', model: 'deepseek-chat', supportsStreaming: true, supportsTools: true }]),
+          getProviderList: vi.fn().mockReturnValue([{ id: 'deepseek-v4-flash', name: 'DeepSeek', model: 'deepseek-v4-flash', supportsStreaming: true, supportsTools: true }]),
           resetSession: vi.fn(),
           getCurrentSessionId: vi.fn().mockReturnValue('s1'),
         };
@@ -211,12 +211,12 @@ describe('useAI', () => {
       document.querySelectorAll('[data-quote-preview]').forEach((el) => el.remove());
     });
 
-    it('provider text-only (deepseek-chat): nessuna cattura, imagePreviewBase64 undefined', async () => {
+    it('provider text-only (deepseek-v4-flash): nessuna cattura, imagePreviewBase64 undefined', async () => {
       setAiVisionEnabled(true);
       const quote = { quoteId: 'q', project: { title: 'Test' }, options: [] } as any;
       const { result } = renderHook(() => useAI('user@test.com'));
       await act(async () => {
-        await result.current.processPrompt(quote, 'ciao', { modelId: 'deepseek-chat' });
+        await result.current.processPrompt(quote, 'ciao', { modelId: 'deepseek-v4-flash' });
       });
       expect(mockCapture).not.toHaveBeenCalled();
       const inst = orchestratorInstances.find((i) => i.processPrompt.mock.calls.length > 0)!;

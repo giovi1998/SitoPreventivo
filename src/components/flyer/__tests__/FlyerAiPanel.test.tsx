@@ -9,7 +9,7 @@ function baseProps(overrides: Record<string, any> = {}) {
   return {
     aiPrompt: '',
     setAiPrompt: vi.fn(),
-    aiModel: 'deepseek-chat',
+    aiModel: 'deepseek-v4-flash',
     setAiModel: vi.fn(),
     aiTone: 'formale' as const,
     setAiTone: vi.fn(),

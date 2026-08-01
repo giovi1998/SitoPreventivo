@@ -45,7 +45,7 @@ registry.register('claude-3-sonnet', new AnthropicProvider({ model: 'claude-3-so
 
 | Provider | ID | Modello | Costo | Token/min | Supporto tool |
 |----------|-----|---------|-------|-----------|---------------|
-| DeepSeek (attuale) | `deepseek-chat` | deepseek-chat | €0.14/M | 500K | ✅ |
+| DeepSeek (attuale) | `deepseek-v4-flash` | deepseek-v4-flash | €0.14/M | 500K | ✅ |
 | OpenAI | `gpt-4o-mini` | gpt-4o-mini | €0.15/M | 500K | ✅ |
 | OpenAI | `gpt-4o` | gpt-4o | €2.50/M | 10K | ✅ |
 | Anthropic | `claude-3-haiku` | claude-3-haiku | €0.25/M | 200K | ✅ |
@@ -91,7 +91,7 @@ L'AIOrchestrator può essere esteso con logica di fallback:
 
 ```ts
 async processWithFallback(quote, prompt) {
-  const providers = ['gpt-4o-mini', 'deepseek-chat', 'claude-3-haiku'];
+  const providers = ['gpt-4o-mini', 'deepseek-v4-flash', 'claude-3-haiku'];
   for (const id of providers) {
     try {
       return await this.processPrompt(quote, prompt, { modelId: id });

@@ -315,20 +315,20 @@ describe('useAutoBuildGenerate', () => {
     it('generateAll passa providerId come modelId a tutti gli orchestratori', async () => {
       const { result } = renderHook(() => useAutoBuildGenerate());
       await act(async () => {
-        await result.current.generateAll(makeDocs(), customer, { providerId: 'deepseek-chat' });
+        await result.current.generateAll(makeDocs(), customer, { providerId: 'deepseek-v4-flash' });
       });
-      expect(mocks.generateLogo.mock.calls[0][2]).toEqual({ modelId: 'deepseek-chat' });
-      expect(mocks.processPrompt.mock.calls[0][2].modelId).toBe('deepseek-chat');
-      expect(mocks.generateCopy.mock.calls[0][3]).toEqual({ modelId: 'deepseek-chat' });
+      expect(mocks.generateLogo.mock.calls[0][2]).toEqual({ modelId: 'deepseek-v4-flash' });
+      expect(mocks.processPrompt.mock.calls[0][2].modelId).toBe('deepseek-v4-flash');
+      expect(mocks.generateCopy.mock.calls[0][3]).toEqual({ modelId: 'deepseek-v4-flash' });
     });
 
     it('generateOne passa providerId come modelId', async () => {
       const doc: AutoBuildDoc = { id: 'logo_1', documentType: 'logo', title: 'Logo', data: { briefContext: 'bar', builder: {} } };
       const { result } = renderHook(() => useAutoBuildGenerate());
       await act(async () => {
-        await result.current.generateOne(doc, customer, { providerId: 'deepseek-chat' });
+        await result.current.generateOne(doc, customer, { providerId: 'deepseek-v4-flash' });
       });
-      expect(mocks.generateLogo.mock.calls[0][2]).toEqual({ modelId: 'deepseek-chat' });
+      expect(mocks.generateLogo.mock.calls[0][2]).toEqual({ modelId: 'deepseek-v4-flash' });
     });
 
     it('senza options gli orchestratori ricevono modelId undefined (default registry)', async () => {
