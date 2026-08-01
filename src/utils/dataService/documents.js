@@ -246,7 +246,9 @@ export function createDocumentsMethods(svc) {
         return { success: true };
       }
       const result = await api('DELETE', `/documents/${documentId}`, { email });
-      if (result.error) return { success: false, error: result.error };
+      // Idempotente: 404 = documento già assente in DB (doc "fantasma" di un
+      // salvataggio fallito in UI) → tratta come successo per pulire l'UI.
+      if (result.error && result.error !== 'Documento non trovato') return { success: false, error: result.error };
       return { success: true };
     },
 

@@ -37,4 +37,14 @@ describe('dataService.getDocument (PROD path — regression editor vuoto)', () =
     expect(doc?.documentType).toBe('flyer');
     expect((doc as unknown as { content?: { headline?: string } })?.content?.headline).toBe('Pad Thai');
   });
+
+  it('deleteDocument tratta 404 come successo (idempotente — doc fantasma in UI)', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: 'Documento non trovato' }),
+    })) as unknown as typeof fetch;
+    const res = await dataService.deleteDocument('card_ghost', 'admin@gmail.com');
+    expect(res.success).toBe(true);
+  });
 });

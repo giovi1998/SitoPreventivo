@@ -3395,9 +3395,15 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
   if (path === '/intake' && method === 'POST') {
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'intake', 5, 60 * 60 * 1000);
-    if (rl.blocked) return json(req, res, 429, { error: 'Troppi brief, riprova tra un\'ora' });
+    if (rl.blocked) {
+      console.warn('[intake] RATE-LIMITED (5/h per IP)');
+      return json(req, res, 429, { error: 'Troppi brief, riprova tra un\'ora' });
+    }
     const v = validate(IntakeSchema, body);
-    if (v.error) return json(req, res, 400, { error: 'Brief non valido' });
+    if (v.error) {
+      console.warn('[intake] REJECTED schema', { errors: v.errors.map((e: any) => e.message).slice(0, 5) });
+      return json(req, res, 400, { error: 'Brief non valido' });
+    }
     const d = v.data;
     const sourceRef = d.sourceRef || 'auto_' + crypto.randomUUID();
     // idempotency: se sourceRef esiste già → 409

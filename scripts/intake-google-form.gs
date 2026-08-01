@@ -134,6 +134,27 @@ function makeQuickbrandFormPublic() {
   makeFormPublic(files.next().getId());
 }
 
+/**
+ * Ricollega il form ESISTENTE a un nuovo Sheet risposte + ricrea il trigger
+ * onFormSubmit. Da usare se il Sheet "Quickbrand — Brief attività (risposte)"
+ * è stato cancellato/rotto (senza trigger il webhook non parte più).
+ * NON crea un form duplicato. Esegui dopo aver incollato la versione nuova.
+ */
+function reconnectFormSheet() {
+  const files = DriveApp.getFilesByName('Quickbrand — Brief attività');
+  if (!files.hasNext()) {
+    Logger.log('Nessun form trovato con nome "Quickbrand — Brief attività". Esegui createIntakeForm().');
+    return;
+  }
+  const form = FormApp.openById(files.next().getId());
+  const sheet = SpreadsheetApp.create('Quickbrand — Brief attività (risposte)');
+  form.setDestination(FormApp.DestinationType.SPREADSHEET, sheet.getId());
+  ScriptApp.newTrigger('onFormSubmit').forSpreadsheet(sheet.getId()).onFormSubmit().create();
+  makeFormPublic(form.getId());
+  Logger.log('Ricollegato! Form: ' + form.getPublishedUrl());
+  Logger.log('Risposte: ' + sheet.getUrl());
+}
+
 function onFormSubmit(e) {
   const payload = buildIntakePayload(e.values, e.range.getRow());
   const response = UrlFetchApp.fetch(WEBHOOK_URL, {
