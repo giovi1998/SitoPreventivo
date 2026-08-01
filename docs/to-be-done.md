@@ -16,9 +16,14 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 - [ ] **Miglioria caricamento immagine logo in clienti**: preview persistente
   anche dopo navigazione, compressione ottimale, opzione "usa questo logo
   ovunque" (card/flyer/logo).
-- [ ] **Google Form intake operativo**: creare il Google Form + Apps
-  Script webhook → `/api/intake` (guida pronta: `intake-google-form-setup.md`).
-  Senza questo la pipeline intake → CRM non ha porta di ingresso reale.
+- [ ] **Google Form intake operativo**: codice pronto e testato
+  (`scripts/intake-google-form.gs` + spec
+  `spec/spec-google-form-intake-operativo.md`: form 4 sezioni + branching
+  sito, webAnswers landing, auto-research in POST `/api/intake`). **Resta la
+  verifica E2E reale**: eseguire `createIntakeForm()` su script.new (bootstrap
+  form+Sheet+trigger), inviare 1 risposta di test, confermare 201 +
+  `webAnswers` + research in CRM. Senza questo la pipeline intake → CRM non
+  ha porta di ingresso reale.
 - [ ] **TB-027h follow-up**: verifica end-to-end flusso CRM auto-build in
   PROD (envelope jsonb → `hydrateDocument`, mai provato live). Record
   legacy doppia-shape in localStorage: si sanano al primo save; se serve,
@@ -43,6 +48,9 @@ Ordine: validazione → portfolio → monetizzazione.
   `nome.quickbrand.it` via Vercel API, ~80h) solo dopo 5+ siti/mese.
   **Priorità utente 2026-07-30**: il sito per clienti è un obiettivo
   confermato — valutare di anticipare rispetto al backlog.
+  **Dato d'ingresso pronto**: `webAnswers` dal form intake (headline/offer/cta/
+  tone/wantsPage) è salvato su customers e visibile in CRM → usarlo come
+  brief base per la generazione.
 - [ ] **TB-013** QR menu ristoranti (~15h).
 - [ ] **TB-014** Google Business Profile helper (~10h).
 - [ ] **TB-015** Multi-lingua EN/DE export (~20h).

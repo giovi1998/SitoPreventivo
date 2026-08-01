@@ -6,78 +6,67 @@ L'endpoint `/api/intake` è **provider-agnostic**: accetta lo stesso JSON da Goo
 
 ## Opzione A — Google Form + Apps Script (gratis, illimitato sotto 20k righe/mese)
 
-### 1. Crea il Google Form
+### 1. Crea il form in automatico (bootstrap)
 
-Crea un form con questi campi (ordine importante per il mapping riga Sheet):
+In un nuovo progetto Apps Script (`https://script.new`), incolla il contenuto di
+[`scripts/intake-google-form.gs`](../scripts/intake-google-form.gs) (fonte unica,
+versionata nel repo — non duplicare codice inline qui). `WEBHOOK_URL` è già
+settato a `https://quickbrand.vercel.app/api/intake`.
 
-| # | Campo Form | Tipo | Obbligatorio | Note |
-|---|-----------|------|-------------|------|
-| 1 | Timestamp | automatico | — | Google lo aggiunge |
-| 2 | Nome attività | testo breve | sì | → `businessName` |
-| 3 | Referente | testo breve | no | → `ownerName` |
-| 4 | Settore | testo breve | no | → `sector` (es. ristorante, bar, b&b) |
-| 5 | Descrizione attività | testo lungo | no | → `activity` |
-| 6 | Mood | testo breve | no | → `mood` (es. moderno, caldo, minimal) |
-| 7 | Target | testo lungo | no | → `target` |
-| 8 | Colori preferiti | testo breve | no | → `preferredColors` |
-| 9 | Email | email | sì | → `contacts.email` |
-| 10 | Telefono | testo breve | no | → `contacts.phone` |
-| 11 | Indirizzo | testo breve | no | → `contacts.address` |
-| 12 | Sito web | testo breve | no | → `contacts.website` |
-| 13 | Pacchetto | dropdown (apertura/presenza/custom) | no | → `package` (default `apertura`) |
+Seleziona la funzione `createIntakeForm` nel dropdown e premi Run. Autorizza
+una tantum (scope FormApp + SpreadsheetApp + ScriptApp). Lo script crea da
+solo: Google Form (4 sezioni + branching sito web), Google Sheet collegato
+alle risposte, trigger `onFormSubmit` su "Invio modulo". Dal log copia
+l'URL del form (`Form: ...`).
 
-### 2. Collega a un Google Sheet
+Per diagnosi: esegui `testWebhook()` (invia un brief di prova a
+`/api/intake`, stampa status + body).
 
-In Google Form → Risposte → “Collega a Sheets” → nuovo Sheet.
+### 2. Verifica i campi del form (riferimento mapping)
 
-### 3. Aggiungi Apps Script
+Campi creati dal bootstrap (ordine importante per il mapping riga Sheet —
+colonna A = Timestamp automatico; da qui **indice colonna** = n° colonna):
 
-In Google Sheet → Estensioni → Apps Script. Incolla:
+| # | Campo Form | Tipo | Obbligatorio | Colonna | Campo JSON |
+|---|-----------|------|-------------|---------|------------|
+| 1 | Nome attività | testo breve | sì | B (idx 1) | `businessName` |
+| 2 | Referente | testo breve | no | C (idx 2) | `ownerName` |
+| 3 | Settore | testo breve (helper) | no | D (idx 3) | `sector` |
+| 4 | Descrizione attività | testo lungo (helper) | no | E (idx 4) | `activity` |
+| 5 | Stile/atmosfera (ex Mood) | testo breve (helper) | no | F (idx 5) | `mood` |
+| 6 | Target | testo lungo (helper) | no | G (idx 6) | `target` |
+| 7 | Colori preferiti | testo breve (helper) | no | H (idx 7) | `preferredColors` |
+| 8 | Email | email | sì | I (idx 8) | `contacts.email` |
+| 9 | Telefono | testo breve | no | J (idx 9) | `contacts.phone` |
+| 10 | Indirizzo | testo breve | no | K (idx 10) | `contacts.address` |
+| 11 | Sito web presente? | dropdown Sì/No (**branching**) | no | L (idx 11) | *(non inviato)* |
+| 12 | URL sito web | testo breve (solo se Sì) | no | M (idx 12) | `contacts.website` |
+| 13 | Vuole pagina web? | dropdown Sì/No | no | N (idx 13) | `webAnswers.wantsPage` |
+| 14 | Testo principale (headline) | testo lungo | no | O (idx 14) | `webAnswers.headline` |
+| 15 | Cosa offre (offer) | testo lungo | no | P (idx 15) | `webAnswers.offer` |
+| 16 | Invito all'azione (CTA) | testo breve | no | Q (idx 16) | `webAnswers.cta` |
+| 17 | Tono/voce (tone) | testo breve (helper) | no | R (idx 17) | `webAnswers.tone` |
+| 18 | Pacchetto | dropdown (apertura/presenza/custom) | no | S (idx 18) | `package` |
 
-```javascript
-function onFormSubmit(e) {
-  const WEBHOOK_URL = 'https://TUO-DOMINIO.vercel.app/api/intake';
-  const row = e.range.getRow();
-  const v = e.values;
-  UrlFetchApp.fetch(WEBHOOK_URL, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({
-      businessName: v[1],          // col B = Nome attività
-      ownerName: v[2] || undefined, // col C = Referente
-      sector: v[3] || undefined,    // col D = Settore
-      activity: v[4] || undefined,  // col E = Descrizione
-      mood: v[5] || undefined,      // col F = Mood
-      target: v[6] || undefined,    // col G = Target
-      preferredColors: v[7] || undefined, // col H = Colori
-      contacts: {
-        email: v[8] || undefined,    // col I = Email
-        phone: v[9] || undefined,    // col J = Telefono
-        address: v[10] || undefined, // col K = Indirizzo
-        website: v[11] || undefined, // col L = Sito
-      },
-      package: v[12] || 'apertura',  // col M = Pacchetto
-      sourceRef: 'sheet_row_' + row, // idempotency: riga Sheet univoca
-    }),
-    muteHttpExceptions: true,
-  });
-}
-```
+**Branching**: la sezione "Sito web" è condizionale — chi risponde "No" alla
+domanda 11 salta l'URL (col 12 vuota) e va dritto alla sezione landing
+(col 13-17). Le colonne landing restano vuote per chi non le vede.
 
-Sostituisci `TUO-DOMINIO` con il tuo dominio Vercel.
+**webAnswers**: le risposte 13-17 sono salvate su `intakes` + `customers`
+come oggetto `webAnswers` (vedi endpoint sotto). Serviranno per la futura
+generazione landing page (non ancora implementata).
 
-### 4. Imposta il trigger
+**Auto-research**: se `contacts.website` è un URL http(s), il POST
+`/api/intake` lancia lo scraping Firecrawl in best-effort (webData
+disponibile subito in CRM). Senza `FIRECRAWL_API_KEY` → `researchStatus.web='no_key'`.
+Il research NON riparte se il webhook ritenta con 409 (v. idempotency sotto):
+in caso di research fallito usa il bottone "Research" in CRM.
 
-In Apps Script → Triggers (icona orologio) → “Aggiungi trigger”:
-- Funzione: `onFormSubmit`
-- Evento: “Dal foglio di lavoro” → “Invio modulo”
-- Salva. Google chiederà autorizzazione una tantum (scope UrlFetchApp).
-
-### 5. Idempotency
+### 4. Idempotency
 
 `sourceRef = 'sheet_row_' + row` (numero riga Sheet) è univoco. Se il webhook fallisce e Apps Script ritenta (3 retry nativi), `/api/intake` risponde 409 al secondo tentativo con lo stesso `sourceRef` — non duplica il record.
 
-### 6. Test
+### 5. Test
 
 Invia una risposta dal form. Verifica:
 - Google Sheet ha una nuova riga.
@@ -147,12 +136,22 @@ Tally passa sempre un `event_id` nativo → usalo come `sourceRef` per idempoten
     "email": "mario@example.com",
     "phone": "+39 333 1234567",
     "address": "Via Roma 1, Cagliari",
-    "website": ""
+    "website": "https://ristorantedamario.it"
+  },
+  "webAnswers": {
+    "wantsPage": "sì",
+    "headline": "Cucina sarda dal 1985",
+    "offer": "Menù degustazione e catering",
+    "cta": "Prenota un tavolo",
+    "tone": "familiare"
   },
   "package": "apertura",
   "sourceRef": "sheet_row_42"
 }
 ```
+
+`webAnswers` è opzionale (`z.record(z.string(), z.unknown())`): accetta
+qualsiasi coppia chiave→valore, per compatibilità con Tally/Typeform.
 
 Risposte:
 - `201 { data: { id, status: "new" } }` — creato
@@ -160,7 +159,12 @@ Risposte:
 - `409 { error: "Brief già ricevuto" }` — sourceRef duplicato (idempotency)
 - `429 { error: "Troppi brief, riprova tra un'ora" }` — rate limit
 
-Ogni intake crea **2 record**: `intakes` (brief) + `customers` (cliente, `source='intake'`, `intakeId` FK). L'admin vede il cliente in CRM → “Lancia research” → “AI fill” → “Auto-build draft” → apre draft nell'editor → genera AI → review → consegna.
+Ogni intake crea **2 record**: `intakes` (brief, incl. `webAnswers`) +
+`customers` (cliente, `source='intake'`, `intakeId` FK, `webAnswers`).
+L'admin vede il cliente in CRM → research automatica (se c'è sito web) o
+“Lancia research” manuale → “AI fill” → “Auto-build draft” → apre draft
+nell'editor → genera AI → review → consegna. Nel dettaglio cliente, la
+sezione "Risposte form pagina web" mostra i 5 campi landing (se presenti).
 
 ## Privacy (GDPR)
 

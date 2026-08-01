@@ -98,6 +98,7 @@ const customersTable = pgTable('customers', {
   researchStatus: jsonb('research_status'),
   webData: jsonb('web_data'),
   aiSuggestedFields: jsonb('ai_suggested_fields'),
+  webAnswers: jsonb('web_answers'),
   notes: text(),
   assignedTo: varchar('assigned_to', { length: 255 }),
   googleMapsUrl: text('google_maps_url'),
@@ -119,6 +120,7 @@ const intakesTable = pgTable('intakes', {
   contacts: jsonb(),
   package: varchar({ length: 50 }).default('apertura'),
   sourceRef: varchar('source_ref', { length: 100 }),
+  webAnswers: jsonb('web_answers'),
   notes: text(),
   assignedTo: varchar('assigned_to', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow(),
@@ -2824,6 +2826,65 @@ async function fetchFirecrawlPage(url?: string): Promise<FirecrawlResult> {
   }
 }
 
+// TB-027+ TB-019 auto: pipeline research condivisa (endpoint admin + intake auto).
+// Best-effort: mai lanciare eccezioni — ritorna researchStatus per il caller.
+async function runCustomerResearch(cust: any): Promise<{
+  researchStatus: Record<string, string>;
+  knowledgeCount: number;
+  webData: Record<string, unknown>;
+}> {
+  const contacts = (cust.contacts || {}) as { address?: string; website?: string };
+  const website = contacts.website || cust.googleMapsUrl;
+  const researchStatus: Record<string, string> = {};
+  let knowledgeCount = 0;
+  let webData: Record<string, unknown> = {};
+  let detectedLogoUrl: string | null = null;
+  if (!website) {
+    researchStatus.web = 'no_website';
+  } else {
+    const firecrawl = await fetchFirecrawlPage(website);
+    researchStatus.web = firecrawl.status;
+    if (firecrawl.status === 'ok') {
+      const chunks = chunkMarkdown(firecrawl.markdown || '');
+      knowledgeCount = await saveCustomerKnowledge(cust.id, chunks, 'firecrawl:homepage', {
+        title: firecrawl.title,
+        description: firecrawl.description,
+        url: website,
+      });
+      webData = {
+        title: firecrawl.title,
+        description: firecrawl.description,
+        markdownPreview: (firecrawl.markdown || '').slice(0, 500),
+        markdownFull: firecrawl.markdown || '',
+        screenshot: firecrawl.screenshot,
+        links: firecrawl.links,
+        json: firecrawl.json,
+        branding: firecrawl.branding,
+        brandingColors: firecrawl.branding?.colors,
+        brandingFonts: firecrawl.branding?.fonts,
+        brandingLogo: firecrawl.branding?.logo,
+        images: firecrawl.images,
+      };
+      detectedLogoUrl = firecrawl.branding?.logo || (typeof firecrawl.json?.logo === 'string' ? firecrawl.json.logo : null) || null;
+    }
+  }
+  if (!detectedLogoUrl) {
+    detectedLogoUrl = await detectLogo(contacts.website);
+  }
+  // Logo manuale (upload admin) vince SEMPRE: status 'manual' e
+  // detectedLogoUrl non viene sovrascritto.
+  researchStatus.logo = cust.logoUrl ? 'manual' : detectedLogoUrl ? 'ok' : 'no_logo';
+  const db = await getDb();
+  await db.update(customersTable).set({
+    detectedLogoUrl: cust.logoUrl ? cust.detectedLogoUrl : (detectedLogoUrl || cust.detectedLogoUrl),
+    researchStatus,
+    webData,
+    status: 'researched',
+    updatedAt: new Date(),
+  }).where(eq(customersTable.id, cust.id));
+  return { researchStatus, knowledgeCount, webData };
+}
+
 // TB-027 logo detection: fetch homepage, estrai favicon/img candidate.
 // SEC-003: no SSRF verso IP interni. Best-effort: favicon prima, poi <img> con
 // src contenente "logo"/classe "logo" (spec REQ-AR-004).
@@ -3008,55 +3069,8 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
     const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, id));
     if (!cust) return json(req, res, 404, { error: 'Cliente non trovato' });
     await db.update(customersTable).set({ status: 'researching', updatedAt: new Date() }).where(eq(customersTable.id, id));
-    const contacts = (cust.contacts || {}) as { address?: string; website?: string };
-    const website = contacts.website || cust.googleMapsUrl;
-    const researchStatus: Record<string, string> = {};
-    let knowledgeCount = 0;
-    let webData: Record<string, unknown> = {};
-    let detectedLogoUrl: string | null = null;
-    if (!website) {
-      researchStatus.web = 'no_website';
-    } else {
-      const firecrawl = await fetchFirecrawlPage(website);
-      researchStatus.web = firecrawl.status;
-      if (firecrawl.status === 'ok') {
-        const chunks = chunkMarkdown(firecrawl.markdown || '');
-        knowledgeCount = await saveCustomerKnowledge(id, chunks, 'firecrawl:homepage', {
-          title: firecrawl.title,
-          description: firecrawl.description,
-          url: website,
-        });
-        webData = {
-          title: firecrawl.title,
-          description: firecrawl.description,
-          markdownPreview: (firecrawl.markdown || '').slice(0, 500),
-          markdownFull: firecrawl.markdown || '',
-          screenshot: firecrawl.screenshot,
-          links: firecrawl.links,
-          json: firecrawl.json,
-          branding: firecrawl.branding,
-          brandingColors: firecrawl.branding?.colors,
-          brandingFonts: firecrawl.branding?.fonts,
-          brandingLogo: firecrawl.branding?.logo,
-          images: firecrawl.images,
-        };
-        detectedLogoUrl = firecrawl.branding?.logo || (typeof firecrawl.json?.logo === 'string' ? firecrawl.json.logo : null) || null;
-      }
-    }
-    if (!detectedLogoUrl) {
-      detectedLogoUrl = await detectLogo(contacts.website);
-    }
-    // Logo manuale (upload admin) vince SEMPRE: status 'manual' e
-    // detectedLogoUrl non viene sovrascritto.
-    researchStatus.logo = cust.logoUrl ? 'manual' : detectedLogoUrl ? 'ok' : 'no_logo';
-    await db.update(customersTable).set({
-      detectedLogoUrl: cust.logoUrl ? cust.detectedLogoUrl : (detectedLogoUrl || cust.detectedLogoUrl),
-      researchStatus,
-      webData,
-      status: 'researched',
-      updatedAt: new Date(),
-    }).where(eq(customersTable.id, id));
-    return json(req, res, 200, { data: { id, researchStatus, knowledgeCount, webData } });
+    const r = await runCustomerResearch(cust);
+    return json(req, res, 200, { data: { id, researchStatus: r.researchStatus, knowledgeCount: r.knowledgeCount, webData: r.webData } });
   }
 
   // POST /customers/:id/ai-fill → AI riempie campi vuoti
@@ -3331,6 +3345,7 @@ const IntakeSchema = z.object({
   target: z.string().optional(),
   preferredColors: z.string().optional(),
   contacts: z.record(z.string(), z.unknown()).optional(),
+  webAnswers: z.record(z.string(), z.unknown()).optional(),
   package: z.string().max(50).optional(),
   sourceRef: z.string().max(100).optional(),
 });
@@ -3364,6 +3379,7 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
       contacts: d.contacts || null,
       package: d.package || 'apertura',
       sourceRef,
+      webAnswers: d.webAnswers || null,
     }).returning();
     // TB-027: intake crea anche record customers (source='intake', intakeId FK)
     const custId = 'cust_' + crypto.randomUUID();
@@ -3381,10 +3397,29 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
       source: 'intake',
       intakeId: id,
       status: 'new',
+      webAnswers: d.webAnswers || null,
     });
     // SEC-002: no PII in log
     console.log('[intake] created', { id, sourceRef, customer: custId, businessName: d.businessName });
-    return json(req, res, 201, { data: { id: created.id, status: created.status } });
+    // TB-019+ auto-research: se il cliente ha un sito valido, parte subito
+    // (best-effort, non fa fallire il 201; FIRECRAWL_API_KEY opzionale).
+    let researchStatus: Record<string, string> | null = null;
+    const cts = (d.contacts || {}) as { website?: string };
+    if (typeof cts.website === 'string' && /^https?:\/\//.test(cts.website.trim())) {
+      try {
+        const r = await runCustomerResearch({
+          id: custId,
+          contacts: d.contacts,
+          logoUrl: null,
+          detectedLogoUrl: null,
+        });
+        researchStatus = r.researchStatus;
+        console.log('[intake] auto-research', { customer: custId, web: r.researchStatus.web, logo: r.researchStatus.logo });
+      } catch (err) {
+        console.warn('[intake] auto-research fallita (best-effort):', (err as Error)?.message);
+      }
+    }
+    return json(req, res, 201, { data: { id: created.id, status: created.status, researchStatus } });
   }
 
   // GET /intakes?status=&adminEmail= (admin)

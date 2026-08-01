@@ -67,10 +67,12 @@ beforeEach(() => {
   process.env.DATABASE_URL = 'postgres://test';
   process.env.ADMIN_PASSWORD = 'test-admin-pass';
   process.env.GEMINI_API_KEY = 'test';
+  delete process.env.FIRECRAWL_API_KEY;
   mockDbState.selectResults = [];
   mockDbState.inserted = [];
   mockDbState.updated = [];
   mockDbState.nextReturning = null;
+  vi.unstubAllGlobals();
   vi.resetModules();
 });
 
@@ -120,6 +122,61 @@ describe('TB-019 /api/intake', () => {
       method: 'POST', url: '/api/intake', body: {},
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('POST /intake con webAnswers → salvati su intake e customer', async () => {
+    mockDbState.selectResults.push([]);
+    const res = await callHandler({
+      method: 'POST', url: '/api/intake',
+      body: {
+        businessName: 'Bar Da Mario', sourceRef: 'row_web',
+        webAnswers: { wantsPage: 'Sì', headline: 'Slogan', cta: 'Prenota' },
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const [intake, customer] = mockDbState.inserted;
+    expect(intake.webAnswers).toEqual({ wantsPage: 'Sì', headline: 'Slogan', cta: 'Prenota' });
+    expect(customer.webAnswers).toEqual({ wantsPage: 'Sì', headline: 'Slogan', cta: 'Prenota' });
+  });
+
+  it('POST /intake con website → auto-research parte (update customer)', async () => {
+    process.env.FIRECRAWL_API_KEY = 'test-fc';
+    mockDbState.selectResults.push([]);
+    mockDbState.updated.push({}); // placeholder reset
+    mockDbState.updated.length = 0;
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: {
+          markdown: '# Bar Da Mario\nOttimo bar a Cagliari.',
+          metadata: { title: 'Bar Da Mario', description: 'Ottimo bar' },
+          links: [], images: [], branding: {},
+        },
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await callHandler({
+      method: 'POST', url: '/api/intake',
+      body: { businessName: 'Bar Da Mario', sourceRef: 'row_site', contacts: { website: 'https://barmario.it' } },
+    });
+    expect(res.statusCode).toBe(201);
+    const custUpdate = mockDbState.updated.find((s: any) => s.researchStatus);
+    expect(custUpdate).toBeDefined();
+    expect(custUpdate.researchStatus.web).toBe('ok');
+  });
+
+  it('POST /intake con website ma senza FIRECRAWL_API_KEY → 201, no crash', async () => {
+    mockDbState.selectResults.push([]);
+    // no-key → niente Firecrawl; detectLogo farebbe fetch reale → stub network down
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+    const res = await callHandler({
+      method: 'POST', url: '/api/intake',
+      body: { businessName: 'Bar', sourceRef: 'row_nokey', contacts: { website: 'https://barmario.it' } },
+    });
+    expect(res.statusCode).toBe(201);
+    // research best-effort: no_key senza key, nessuna eccezione
+    const custUpdate = mockDbState.updated.find((s: any) => s.researchStatus);
+    expect(custUpdate?.researchStatus?.web).toBe('no_key');
   });
 
   it('GET /intakes non-admin → 403', async () => {

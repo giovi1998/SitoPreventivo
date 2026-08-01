@@ -64,6 +64,8 @@ export const customers = pgTable("customers", {
   researchStatus: jsonb("research_status"),
   webData: jsonb("web_data"),
   aiSuggestedFields: jsonb("ai_suggested_fields"),
+  // TB-019+ landing: risposte form per futura landing page (webAnswers JSONB).
+  webAnswers: jsonb("web_answers"),
   notes: text(),
   assignedTo: varchar("assigned_to", { length: 255 }),
   googleMapsUrl: text("google_maps_url"),
@@ -85,6 +87,7 @@ export const intakes = pgTable("intakes", {
   contacts: jsonb(),
   package: varchar({ length: 50 }).default("apertura"),
   sourceRef: varchar("source_ref", { length: 100 }),
+  webAnswers: jsonb("web_answers"),
   notes: text(),
   assignedTo: varchar("assigned_to", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow(),

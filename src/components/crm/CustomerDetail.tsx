@@ -29,6 +29,7 @@ type Customer = Record<string, unknown> & {
   status?: string;
   notes?: string | null;
   webData?: Record<string, unknown> | null;
+  webAnswers?: Record<string, unknown> | null;
   customerPhotos?: string[] | null;
   logoUrl?: string | null;
   googleMapsUrl?: string | null;
@@ -491,6 +492,18 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     webData.title || webData.description || webData.markdownPreview || markdownFull || siteColors.length || siteImages.length || siteScreenshot || siteLinks.length || siteJson,
   );
 
+  // TB-019+ landing: risposte form per futura landing page (webAnswers).
+  const webAnswers = (customer.webAnswers || {}) as Record<string, string | undefined>;
+  const webAnswerEntries = Object.entries(webAnswers).filter(([, v]) => typeof v === 'string' && v.trim());
+  const hasWebAnswers = webAnswerEntries.length > 0;
+  const webAnswerLabels: Record<string, string> = {
+    wantsPage: 'Vuole pagina web',
+    headline: 'Testo principale',
+    offer: 'Cosa offre',
+    cta: 'CTA',
+    tone: 'Tono',
+  };
+
   const renderField = (field: string, label: string, value: unknown, textarea = false) => {
     const v = asStr(value);
     const isEditing = editing === field;
@@ -635,6 +648,16 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
 
       {hasWebData && (
         <CustomerWebDataPanel webData={webData} />
+      )}
+
+      {hasWebAnswers && (
+        <section className="crm-section" data-testid="crm-web-answers-section">
+          <h3>Risposte form pagina web</h3>
+          <p className="crm-note">Brief landing page dal form intake (generazione non ancora attiva).</p>
+          {webAnswerEntries.map(([k, v]) => (
+            <Field key={k} label={webAnswerLabels[k] || k} value={v} />
+          ))}
+        </section>
       )}
 
       {hasAiFields && (
