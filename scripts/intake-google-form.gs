@@ -87,10 +87,14 @@ function createIntakeForm() {
   form.addListItem().setTitle('Pacchetto')
     .setChoiceValues(['apertura', 'presenza', 'custom']);
 
-  // Branching: Sì → sezione URL, No → salta a sezione landing
+  // Branching: Sì → sezione URL, No → salta a sezione landing.
+  // ATTENZIONE: usare `item.createChoice(...)` (istanza), NON FormApp.createChoice:
+  // in questo runtime `FormApp.createChoice` non esiste ("is not a function",
+  // errore già visto 2 volte — gotcha). item.createChoice(value, pageItem) è
+  // l'API corretta per il go-to-section.
   siteChoice.setChoices([
-    FormApp.createChoice('Sì', pageUrl),
-    FormApp.createChoice('No', pageLanding),
+    siteChoice.createChoice('Sì', pageUrl),
+    siteChoice.createChoice('No', pageLanding),
   ]);
 
   const sheet = SpreadsheetApp.create('Quickbrand — Brief attività (risposte)');

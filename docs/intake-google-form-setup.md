@@ -19,6 +19,17 @@ solo: Google Form (4 sezioni + branching sito web), Google Sheet collegato
 alle risposte, trigger `onFormSubmit` su "Invio modulo". Dal log copia
 l'URL del form (`Form: ...`).
 
+> **Nome progetto**: prima di incollare il codice, rinomina il progetto Apps
+> Script in **`Quickbrandformv1`** (icona ⚙️ Project settings → Name). È il
+> nome canonico: salva così anche su Google Drive e in ogni copia/backup.
+>
+> **Attenzione — non duplicare**: se il form esiste già (per es. l'hai creato
+> in una sessione precedente), **NON** rieseguire `createIntakeForm()`: ne
+> creerebbe un secondo identico. Il comando è idempotente solo per nome —
+> usa `makeQuickbrandFormPublic()` per rendere pubblico il form esistente e
+> `getFormInfo()` per recuperarne ID/URL. Per aggiornare il codice, incolla la
+> versione nuova e riesegui solo `makeQuickbrandFormPublic()`.
+
 Per diagnosi: esegui `testWebhook()` (invia un brief di prova a
 `/api/intake`, stampa status + body).
 
