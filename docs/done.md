@@ -3,6 +3,28 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-01
+
+- **Google Form intake operativo** (TB-019, spec `spec-google-form-intake-operativo.md`
+  completata e rimossa 2026-08-01, script `scripts/intake-google-form.gs`
+  mantenuto e versionato): form 4 sezioni + branching sito (via
+  `item.createChoice`, NON `FormApp.createChoice` — non esiste in runtime),
+  Sheet risposte collegato, trigger `onFormSubmit` → `POST /api/intake`
+  (webhook provider-agnostico). Bootstrap testato live: form creato,
+  risposta inviata, webhook raggiunto. Fix in questa sessione:
+  `makeFormPublic()` (Access ANYONE_WITH_LINK — i form `FormApp.create`
+  non sono pubblici di default, "Non condiviso"); `item.createChoice` per il
+  go-to-section; `reconnectFormSheet()` (ri-collega form esistente a nuovo
+  Sheet + trigger dopo cancellazione foglio); `resendRowToWebhook(N)` per
+  re-inviare righe fallite dal foglio (onFormSubmit è un trigger, non si
+  lancia a mano); **dedup customer** nel webhook: stesso email (fallback
+  businessName) → UPDATE del customer esistente invece di duplicato;
+  `mood` ("Stile/atmosfera") era `varchar(100)`/`max(100)` e rifiutava i
+  testi liberi del form → `text()`/`max(1000)` + migrazione + `errors` nel
+  body 400. Guida: `docs/intake-google-form-setup.md` (progetto Apps Script
+  da nominare **Quickbrandformv1**). Nota API: clienti esterni non vengono
+  importati — l'intake è l'unica porta d'ingresso automatica.
+
 ## 2026-07-31
 
 - **Audit responsiveness + migrazione breakpoint canonici** (spec completata
