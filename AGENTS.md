@@ -256,6 +256,19 @@ calibrate in `geometry.ts`; `GLYPH_HEIGHT_FACTOR=1.15`;
 `vite.config.js`; cover "entrambi i lati" serializzata (mai parallela,
 502); limiti `context` proxy = server (2000).
 
+**Build zero-warning + npm 12 (§25)**: `npm run build` deve restare
+pulito. Regole: moduli già statico-importati nel main → import statico,
+MAI `await import()` inutile (registry/providerPricing/resolveProviderId/
+captureElement); moduli grossi on-demand (pdfjs, tesseract) → tutto lazy
+(`setupPdfWorker` è async, `pdfImporter` fa `await`). Eccezione
+documentata: `crm.js` (§23 CJS) → 3 import dinamici silenziati via
+`customLogger.warn` in `vite.config.js` (non toccare il filtro). Nuovi
+vendor grossi → aggiungere a `manualChunks` (main è 712kB, limit 2500).
+npm 12 blocca install-scripts → `allowScripts` name-only in package.json
+(mai pin `@versione`); nuove dipendenze con install-script → aggiungere e
+committare. Mai cancellare `package-lock.json` (drizzle `^1.0.0-beta.22`
+risolverebbe rc breaking).
+
 ## Phase Status (sintesi — tabella completa in `docs/agent-gotchas.md` §10)
 
 Fasi 0-10 (Phase 7 polish done; Volantino/Phase 3 done), 12-15 completate.

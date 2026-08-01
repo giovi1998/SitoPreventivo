@@ -1103,3 +1103,89 @@ Regole:
 - E2E di riferimento: `e2e/breakpoints.spec.ts` (AC-001..007: nav a
   800px, singola header a 375px, tab card/flyer a 800px, no overflow
   logo a 375px).
+
+## 25. Build zero-warning + bundle vendor split (2026-08-01)
+
+Obiettivo: `npm run build` senza warning. Due classi di warning
+eliminate + una prevenzione npm 12.
+
+### 25.1 Dynamic+static import mismatch ("will not move module into another chunk")
+
+Causa: un modulo **staticamente** importato nel main chunk (da
+AppShell/hook/orchestrator) veniva anche **dinamicamente** importato
+altrove. Il `import()` non poteva splittarlo (già nel main) → Vite
+avvisava. Fix: uniformare l'import.
+
+- **Orchestrators** (`logo/social/onboarding/Palette`): `await
+  import('./providers/registry')` → `import { providerRegistry }`
+  statico. Registry è già nel main (BaseOrchestrator, AppShell, ecc.).
+- **`useAISocial.ts`**: `await import('../utils/ai/captureElement')` →
+  statico (aiModule lo importa già staticamente).
+- **`pdfjs-dist`**: `pdfWorkerSetup.ts` lo importava staticamente,
+  `pdfImporter.ts` dinamicamente → reso **tutto lazy**: `setupPdfWorker`
+  è ora `async` e fa `await import('pdfjs-dist')` internamente
+  (`parsePDF` fa `await setupPdfWorker()`). pdfjs esce dal main chunk →
+  chunk dedicato ~472kB caricato solo all'import PDF.
+
+**Regola**: prima di scrivere un `await import('./...')` per moduli
+già importati staticamente (registry, providerPricing, resolveProviderId,
+captureElement, pdfjs), valutare se lo split è reale. Se il modulo è già
+nel main → import statico; se è grosso e usato solo on-demand (pdfjs,
+tesseract) → tutto lazy (nessun import statico residuo).
+
+### 25.2 Eccezione documentata: crm.js import dinamici (§23 CJS)
+
+`src/utils/dataService/crm.js` importa `registry` / `resolveProviderId` /
+`providerPricing` **dinamicamente dentro la funzione** per vincolo §23
+(require() CJS dei test). Quei moduli sono nel main chunk → il warning
+resterebbe. Silenziato in `vite.config.js` via `customLogger.warn` con
+filtro selettivo sulla stringa `dynamic import will not move module into
+another chunk` (commento nel codice spiega il motivo). **NON rimuovere** il
+filtro senza prima risolvere il vincolo CJS — riappariranno 3 warning.
+
+Nota: il filtro va in `customLogger`, NON in `build.rollupOptions.onwarn`
+(quel warning non passa da Rollup onwarn, arriva via logger di Vite).
+
+### 25.3 manualChunks vendor
+
+Main chunk era 4.2MB → warning "chunks larger than 500kB". Fix in
+`vite.config.js` → `build.rollupOptions.output.manualChunks`:
+
+- `react-vendor` (react, react-dom, scheduler), `router-vendor`,
+  `lucide`, `zod`, `pdfmake`, `pdf-libs` (jspdf, svg2pdf.js), `docx`,
+  `tesseract`, `html2canvas`, `dnd-kit`, `qrcode`.
+- Risultato: main **712kB** (gzip 209kB), vendor cacheable separati,
+  `chunkSizeWarningLimit: 2500`.
+
+Regola: nuovi moduli grossi vendored (node_modules) → aggiungere al
+`manualChunks` se superano quota e non sono già lazy.
+
+### 25.4 npm 12 `allowScripts` (install-scripts bloccati)
+
+npm ≥12 blocca di default gli install-scripts delle dipendenze →
+esbuild senza postinstall = binario mancante = build rotta in fresh
+install/CI. `package.json` ha `allowScripts` **name-only** (no `@version`)
+per: `@google/genai`, `core-js`, `esbuild`, `protobufjs`, `tesseract.js`.
+
+Regole:
+
+- **Mai pin con `@versione`** (`"esbuild@0.25.12": true`): smette di
+  matcherare al bump → warning torna + binario esbuild mancante.
+  `npm approve-scripts` di default scrive pinned: usare
+  `npm approve-scripts --no-allow-scripts-pin <pkg>` o editare a mano.
+- Nuova dipendenza con install-script → aggiungerla a `allowScripts`
+  (name-only) **e committare**, altrimenti fresh install la silenzia
+  senza errori visibili (solo lista in fondo all'install).
+- Verifica: rimuovere `node_modules` + `package-lock.json`, `npm install`
+  pulito, poi `npm run build` — binario esbuild presente
+  (`node_modules/esbuild/bin/esbuild.exe`) e zero warning.
+
+### 25.5 Trappola: `npm install` pulito aggiorna le dipendenze
+
+`^1.0.0-beta.22` su `drizzle-orm`/`drizzle-kit` risolve anche le **rc**
+(es. rc.4) che hanno API breaking (`drizzle(url, { schema })` →
+TS2345). Il `package-lock.json` pinnato a beta.22 tiene ferma la
+versione. **Mai cancellare il lockfile** in install puliti; se serve
+ripristino: `git checkout -- package-lock.json && npm install`. npm 12
+riscrive comunque il lockfile (pruning optional/peer deps: pg,
+@opentelemetry, ecc.) — innocuo, versioni core invariate.
