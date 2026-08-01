@@ -22,6 +22,12 @@ l'URL del form (`Form: ...`).
 Per diagnosi: esegui `testWebhook()` (invia un brief di prova a
 `/api/intake`, stampa status + body).
 
+**Form pubblico**: i form creati via `FormApp.create()` non sono pubblici di
+default — chi apre il link vede "Non condiviso" e serve login. Dopo il
+bootstrap esegui `makeQuickbrandFormPublic()` (o è già chiamato dentro
+`createIntakeForm()`) per rendere il form compilabile da chiunque con il
+link, senza login.
+
 ### 2. Verifica i campi del form (riferimento mapping)
 
 Campi creati dal bootstrap (ordine importante per il mapping riga Sheet —

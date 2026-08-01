@@ -97,9 +97,37 @@ function createIntakeForm() {
   form.setDestination(FormApp.DestinationType.SPREADSHEET, sheet.getId());
   ScriptApp.newTrigger('onFormSubmit').forSpreadsheet(sheet.getId()).onFormSubmit().create();
 
+  // I form creati via FormApp.create NON sono pubblici di default: senza
+  // condivisione chi apre il link vede "Non condiviso" e serve login con
+  // account autorizzato. Rendiamoli "chiunque con il link" (nessun login).
+  makeFormPublic(form.getId());
+
   Logger.log('Form: ' + form.getPublishedUrl());
   Logger.log('Risposte: ' + sheet.getUrl());
   Logger.log('Test: invia 1 risposta e verifica il record in CRM.');
+}
+
+/**
+ * Rende un form pubblico: chiunque abbia il link può rispondere senza login.
+ * Usata da createIntakeForm() e da makeQuickbrandFormPublic() (fix form esistenti).
+ */
+function makeFormPublic(formId) {
+  const file = DriveApp.getFileById(formId);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  Logger.log('Form reso pubblico (chiunque con il link).');
+}
+
+/**
+ * Fix per il form già creato: cerca 'Quickbrand — Brief attività' e lo rende
+ * pubblico. Esegui UNA volta dal dropdown, poi verifica col link pubblicato.
+ */
+function makeQuickbrandFormPublic() {
+  const files = DriveApp.getFilesByName('Quickbrand — Brief attività');
+  if (!files.hasNext()) {
+    Logger.log('Nessun form trovato con nome "Quickbrand — Brief attività".');
+    return;
+  }
+  makeFormPublic(files.next().getId());
 }
 
 function onFormSubmit(e) {
