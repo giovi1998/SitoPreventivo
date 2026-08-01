@@ -1133,6 +1133,14 @@ captureElement, pdfjs), valutare se lo split è reale. Se il modulo è già
 nel main → import statico; se è grosso e usato solo on-demand (pdfjs,
 tesseract) → tutto lazy (nessun import statico residuo).
 
+**Nota (2026-08-01)**: il warning di `drizzle-kit migrate` in build
+Vercel — `'@neondatabase/serverless' can only connect ... through a
+websocket` — è **informativo e hardcoded**: finché
+`@neondatabase/serverless` è dipendenza del progetto, drizzle-kit lo
+sceglie (auto-detect, config postgres non ha override driver) e stampa
+quel messaggio. Migration OK. Non è un warning di build Vite → non
+viola §25. Non inseguirlo.
+
 ### 25.2 Eccezione documentata: crm.js import dinamici (§23 CJS)
 
 `src/utils/dataService/crm.js` importa `registry` / `resolveProviderId` /
