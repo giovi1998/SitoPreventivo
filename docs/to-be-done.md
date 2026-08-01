@@ -117,10 +117,24 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   form+Sheet+trigger), inviare 1 risposta di test, confermare 201 +
   `webAnswers` + research in CRM. Senza questo la pipeline intake → CRM non
   ha porta di ingresso reale.
+  - Stato 2026-08-01: fix form pubblico `makeFormPublic()` (Access
+    ANYONE_WITH_LINK) — form non più "Non condiviso"; fix branch
+    `FormApp.createChoice is not a function` → `item.createChoice(...)`
+    (API di istanza, l'unica valida in questo runtime). Guida aggiornata:
+    progetto Apps Script da nominare **`Quickbrandformv1`**, e **non**
+    rieseguire `createIntakeForm()` se il form esiste (crea duplicati) →
+    usare `makeQuickbrandFormPublic()`.
 - [ ] **TB-027h follow-up**: verifica end-to-end flusso CRM auto-build in
   PROD (envelope jsonb → `hydrateDocument`, mai provato live). Record
   legacy doppia-shape in localStorage: si sanano al primo save; se serve,
   migrazione one-shot da console (snippet in gotchas §23).
+  - Stato 2026-08-01: fix `GET /documents/:id` live (id/documentType persi
+    con riga envelope → editor clienti vuoto, risolto). Aperti 2 problemi
+    prod in diagnosi: (a) `DELETE /documents/:id` → 404 su doc appena
+    generati (POST mai arrivato in DB? log `[doc-debug]` aggiunti a
+    POST/DELETE/GET lista per capire); (b) record legacy con `data:null`
+    mostrano warning "nessun contenuto" in Collection (vuoti, non crash).
+    `[doc-debug]` server+client tenuti finché editor confermato.
 - [ ] **TB-009 residuo**: conferma una tantum costi reali Gemini in
   dashboard Google AI Studio / GCP billing al primo volume produttivo
   (i `perImage` in `providerPricing.ts` sono stime conservative). No codice.

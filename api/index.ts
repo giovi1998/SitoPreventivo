@@ -1073,6 +1073,12 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
       .where(eq(documentsTable.userEmail, userEmail))
       .orderBy(sql`updated_at DESC`);
     const filtered = type ? all.filter((d: any) => d.documentType === type) : all;
+    // [doc-debug] TEMP: lista compact per capire doc non salvati / data null
+    console.warn('[doc-debug] server GET /documents', {
+      email: userEmail,
+      total: all.length,
+      ids: all.map((d: any) => ({ id: d.id, type: d.documentType, bytes: JSON.stringify(d.data)?.length ?? 0 })),
+    });
     return json(req, res, 200, filtered);
   }
 
@@ -1100,7 +1106,17 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
 
   if (path === '/documents' && method === 'POST') {
     const v = validate(DocumentBodySchema, body);
-    if (v.error) return json(req, res, 400, { errors: v.errors });
+    if (v.error) {
+      // [doc-debug] TEMP: cattura POST rifiutati da schema (doc non salvati in DB)
+      console.warn('[doc-debug] server POST /documents REJECTED', {
+        id: (body as any)?.document?.id,
+        type: (body as any)?.document?.documentType,
+        email: (body as any)?.email,
+        errors: v.errors.map((e: any) => e.message).slice(0, 5),
+        dataBytes: JSON.stringify((body as any)?.document)?.length,
+      });
+      return json(req, res, 400, { errors: v.errors });
+    }
     const { email, document } = v.data;
 
     // Extract payload for jsonb `data` column.
@@ -1120,6 +1136,14 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     };
 
     const dataToStore = extractDocumentData(document);
+    // [doc-debug] TEMP: diagnostica salvataggio in prod
+    console.warn('[doc-debug] server POST /documents', {
+      id: document.id,
+      type: document.documentType,
+      email,
+      dataKeys: dataToStore && typeof dataToStore === 'object' ? Object.keys(dataToStore as any).slice(0, 30) : null,
+      dataBytes: JSON.stringify(dataToStore)?.length,
+    });
     const existing = await (await getDb()).select().from(documentsTable).where(eq(documentsTable.id, document.id));
     if (existing.length > 0) {
       if (existing[0].userEmail !== email) {
@@ -1165,7 +1189,11 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     if (!email) return json(req, res, 400, { error: 'Email richiesta' });
 
     const [existing] = await (await getDb()).select().from(documentsTable).where(eq(documentsTable.id, documentId));
-    if (!existing) return json(req, res, 404, { error: 'Documento non trovato' });
+    if (!existing) {
+      // [doc-debug] TEMP: capire perché doc appena creati danno 404
+      console.warn('[doc-debug] server DELETE /documents/:id NOT FOUND', { id: documentId, email });
+      return json(req, res, 404, { error: 'Documento non trovato' });
+    }
     if (existing.userEmail !== email) {
       return json(req, res, 403, { error: 'Non autorizzato' });
     }
