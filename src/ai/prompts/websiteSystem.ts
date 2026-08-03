@@ -39,6 +39,7 @@ export function buildWebsiteGeneratePrompt(
     features: string;
     contacts: string;
     social: string;
+    mapsUrl: string;
     notes: string;
   },
   style: string,
@@ -67,6 +68,7 @@ export function buildWebsiteGeneratePrompt(
   parts.push('\n## Contatti e social');
   if (brief.contacts) parts.push(`- Contatti: ${brief.contacts}`);
   if (brief.social) parts.push(`- Social: ${brief.social}`);
+  if (brief.mapsUrl) parts.push(`- Google Maps: ${brief.mapsUrl}`);
 
   if (brief.notes) {
     parts.push('\n## Note extra');

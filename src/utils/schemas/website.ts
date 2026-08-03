@@ -18,6 +18,7 @@ export const websiteBriefSchema = z.object({
   features: z.string().max(300).default(''),
   contacts: z.string().max(300).default(''),
   social: z.string().max(300).default(''),
+  mapsUrl: z.string().max(500).default(''),
   notes: z.string().max(500).default(''),
 });
 export type WebsiteBrief = z.infer<typeof websiteBriefSchema>;
@@ -42,6 +43,7 @@ export const websiteSchema = z.object({
     features: '',
     contacts: '',
     social: '',
+    mapsUrl: '',
     notes: '',
   }),
   briefContext: z.string().optional(),
@@ -75,6 +77,7 @@ const BRIEF_DEFAULTS: WebsiteBrief = {
   features: '',
   contacts: '',
   social: '',
+  mapsUrl: '',
   notes: '',
 };
 

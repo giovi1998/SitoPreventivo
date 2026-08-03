@@ -458,6 +458,10 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                 <label>Social link</label>
                 <input type="text" value={website.brief.social} onChange={(e) => updateBrief('social', e.target.value)} placeholder="Instagram: @..., Facebook: /..." maxLength={300} />
               </div>
+              <div className="brief-field">
+                <label>Google Maps (URL)</label>
+                <input type="text" value={website.brief.mapsUrl} onChange={(e) => updateBrief('mapsUrl', e.target.value)} placeholder="https://maps.app.goo.gl/... o https://maps.google.com/?q=..." maxLength={500} />
+              </div>
               <div className="brief-field brief-field-full">
                 <label>Note extra</label>
                 <textarea value={website.brief.notes} onChange={(e) => updateBrief('notes', e.target.value)} placeholder="Es. Il cliente vuole design simile a www.esempio.com" maxLength={500} rows={3} />

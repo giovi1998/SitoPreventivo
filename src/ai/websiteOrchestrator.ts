@@ -56,6 +56,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       features: string;
       contacts: string;
       social: string;
+      mapsUrl: string;
       notes: string;
     },
     options: {

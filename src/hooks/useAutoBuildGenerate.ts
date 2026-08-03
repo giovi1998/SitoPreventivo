@@ -461,6 +461,7 @@ async function generateWebsiteDraft(
       features: String(briefData.features || ''),
       contacts: String(briefData.contacts || ''),
       social: String(briefData.social || ''),
+      mapsUrl: String(briefData.mapsUrl || ''),
       notes: String(briefData.notes || ''),
     },
     {

@@ -337,6 +337,7 @@ export function createCrmMethods(svc) {
                 features: '',
                 contacts: [contacts.address, contacts.phone, contacts.email].filter(Boolean).join(', '),
                 social: '',
+                mapsUrl: '',
                 notes: '',
               },
               briefContext: buildBriefContext(cust),
