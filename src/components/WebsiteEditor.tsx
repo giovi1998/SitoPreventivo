@@ -14,6 +14,7 @@ import { getAiProviderDefault, setAiProviderDefault } from '../utils/uiPrefs';
 import { compressDataUrl } from '../utils/card/imageCompress';
 import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
+import AIConsole from './ai/AIConsole';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import './WebsiteEditor.css';
@@ -226,6 +227,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         style: website.style,
         briefContext: website.briefContext,
         modelId: aiModel || undefined,
+        logoBase64: website.logoUrl || undefined,
         scrapedReference: scrapedRef || undefined,
       });
       const merged = {
@@ -246,8 +248,9 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     }
   }, [website, generate, addToast]);
 
-  const handleRefine = useCallback(async () => {
-    if (!refinePrompt.trim()) {
+  const handleRefine = useCallback(async (text?: string) => {
+    const prompt = text ?? refinePrompt;
+    if (!prompt.trim()) {
       addToast('info', 'Scrivi cosa vuoi modificare');
       return;
     }
@@ -255,7 +258,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     try {
       const result = await refine(
         { html: website.html, css: website.css, js: website.js, pages: website.pages },
-        refinePrompt,
+        prompt,
         { modelId: aiModel || undefined },
       );
       setWebsite((prev) => ({
@@ -546,23 +549,31 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                 </label>
               </div>
 
-              <div className="brief-ai-provider">
-                <AIProviderBadge lastCostUsd={lastCostUsd} onProviderChange={handleProviderChange} />
-              </div>
+              <AIConsole
+                title="AI Assist"
+                isProcessing={isProcessing}
+                logs={logs}
+                tier={tier}
+                onSubmitPrompt={(text) => handleRefine(text)}
+                editorKind="website"
+                lastCostUsd={lastCostUsd}
+                providerId={aiModel}
+                onProviderChange={handleProviderChange}
+              >
+                <button className="btn-generate" onClick={handleGenerate} disabled={isProcessing}>
+                  {isProcessing ? 'Generando…' : 'Genera sito con AI'}
+                </button>
 
-              <button className="btn-generate" onClick={handleGenerate} disabled={isProcessing}>
-                {isProcessing ? 'Generando…' : 'Genera sito con AI'}
-              </button>
-
-              {websiteHasContent(website) && (
-                <div className="refine-section">
-                  <label>Raffina con AI</label>
-                  <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder="Es. Rendi i colori più scuri, cambia il font in Inter..." rows={3} />
-                  <button className="btn-refine" onClick={() => handleRefine()} disabled={isRefining || !refinePrompt.trim()}>
-                    {isRefining ? 'Raffinando…' : 'Raffina'}
-                  </button>
-                </div>
-              )}
+                {websiteHasContent(website) && (
+                  <div className="refine-section">
+                    <label>Raffina con AI</label>
+                    <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder="Es. Rendi i colori più scuri, cambia il font in Inter..." rows={3} />
+                    <button className="btn-refine" onClick={() => handleRefine()} disabled={isRefining || !refinePrompt.trim()}>
+                      {isRefining ? 'Raffinando…' : 'Raffina'}
+                    </button>
+                  </div>
+                )}
+              </AIConsole>
             </div>
           </div>
         )}

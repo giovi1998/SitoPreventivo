@@ -4,7 +4,7 @@ import { buildFlyerSystemPrompt, buildFlyerCopyPrompt } from './flyerSystem';
 import { buildLogoSystemPrompt } from './logoSystem';
 import { buildSocialSystemPrompt } from './socialSystem';
 import { buildOnboardingSystemPrompt } from './onboardingSystem';
-import { buildWebsiteSystemPrompt } from './websiteSystem';
+import { buildWebsiteSystemPrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteJsPrompt, buildWebsiteVerifyPrompt } from './websiteSystem';
 
 export type PromptContext = Record<string, unknown>;
 export type PromptBuilder = (ctx?: PromptContext) => string;
@@ -107,3 +107,7 @@ promptRegistry.register('logo-system', () => buildLogoSystemPrompt(), 'Logo syst
 promptRegistry.register('social-system', () => buildSocialSystemPrompt(), 'Social system prompt');
 promptRegistry.register('onboarding-system', () => buildOnboardingSystemPrompt(), 'Onboarding system prompt');
 promptRegistry.register('website-system', () => buildWebsiteSystemPrompt(), 'Website system prompt');
+promptRegistry.register('website-html', () => buildWebsiteHtmlPrompt({} as any, 'modern'), 'Website HTML agent prompt');
+promptRegistry.register('website-css', () => buildWebsiteCssPrompt('', 'modern', {}), 'Website CSS agent prompt');
+promptRegistry.register('website-js', () => buildWebsiteJsPrompt(''), 'Website JS agent prompt');
+promptRegistry.register('website-verify', () => buildWebsiteVerifyPrompt('', '', ''), 'Website verify agent prompt');

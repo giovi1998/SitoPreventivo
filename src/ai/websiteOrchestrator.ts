@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { promptRegistry } from './prompts/registry';
-import { buildWebsiteGeneratePrompt } from './prompts/websiteSystem';
+import { buildWebsiteGeneratePrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteJsPrompt, buildWebsiteVerifyPrompt } from './prompts/websiteSystem';
 import { providerRegistry } from './providers/registry';
-import type { AIStreamChunk, AIResponse } from './types';
+import type { AIStreamChunk, AIResponse, ChatMessage } from './types';
 
 export const websiteAIOutputSchema = z.object({
   html: z.string().min(1, 'HTML richiesto'),
@@ -65,49 +65,122 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       modelId?: string;
       onStream?: (chunk: AIStreamChunk) => void;
       userEmail?: string;
+      logoBase64?: string;
       scrapedReference?: string;
     } = {},
   ): Promise<WebsiteProcessResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
-    const systemPrompt = promptRegistry.getPrompt('website-system');
-    const userPrompt = buildWebsiteGeneratePrompt(brief, options.style || 'modern', options.briefContext);
     const provider = providerRegistry.getProvider(options.modelId);
-    const userContentParts: string[] = [];
-    userContentParts.push(userPrompt);
-    userContentParts.push('IMPORTANTE: NON generare tag <img> per il logo del brand. NON generare <span class="brand-mark"> o simili. Il logo viene gestito separatamente e iniettato dopo la generazione. Concentrati solo su layout, contenuti e stile CSS.');
+    const style = options.style || 'modern';
+    const hasVision = options.logoBase64 && (provider as { supportsVision?: boolean }).supportsVision;
+
+    // ─── Step 1: HTML ───────────────────────────────────────────
+    const htmlPrompt = buildWebsiteHtmlPrompt(brief, style, options.briefContext);
     if (options.scrapedReference) {
-      userContentParts.push(`\n## Riferimento stilistico da sito web esistente\n\nL'utente vuole uno stile simile a questo sito. Analizzane layout, colori, tipografia e struttura generale come ispirazione:\n\n${options.scrapedReference}`);
+      changes.push(`scraped:${options.scrapedReference.length}chars`);
     }
-    const messages = this.buildMessages(systemPrompt, userContentParts.join('\n\n'));
-
-    const response = await this.handleStream(
-      provider,
-      messages,
-      { temperature: 0.7, responseFormat: { type: 'json_object' } },
-      { onStream: options.onStream },
+    const htmlMessages = this.buildMessages(
+      promptRegistry.getPrompt('website-html'),
+      htmlPrompt,
     );
+    if (hasVision && options.logoBase64) {
+      const last = htmlMessages[htmlMessages.length - 1];
+      if (last) last.images = [options.logoBase64];
+    }
+    const htmlResponse = await this.handleStream(provider, htmlMessages, {
+      temperature: 0.7,
+      responseFormat: { type: 'json_object' },
+      maxTokens: 4096,
+    }, { onStream: options.onStream });
+    const htmlParsed = this.parseJsonResponse(htmlResponse.content ?? '', z.object({
+      html: z.string().min(1),
+      pages: z.array(z.string()).min(1).default(['index']),
+    }));
+    if (!htmlParsed.ok) {
+      changes.push(`error:html:${htmlParsed.error}`);
+      return this.fallbackResult(brief.businessName, htmlResponse, sessionId, changes);
+    }
+    const { html, pages } = htmlParsed.data;
+    changes.push(`html:generated:pages=${pages.length}`);
 
-    const content = response.content ?? '';
-    const parsed = this.parseJsonResponse(content, websiteAIOutputSchema);
-    let output: WebsiteAIOutput;
-    if (!parsed.ok) {
-      changes.push(`error:${parsed.error}`);
-      output = fallbackWebsiteOutput(brief.businessName);
-    } else {
-      output = parsed.data;
+    // ─── Step 2: CSS ────────────────────────────────────────────
+    const cssPrompt = buildWebsiteCssPrompt(html, style, brief);
+    const cssMessages = this.buildMessages(
+      promptRegistry.getPrompt('website-css'),
+      cssPrompt,
+    );
+    const cssResponse = await this.handleStream(provider, cssMessages, {
+      temperature: 0.7,
+      responseFormat: { type: 'json_object' },
+      maxTokens: 4096,
+    }, { onStream: options.onStream });
+    const cssParsed = this.parseJsonResponse(cssResponse.content ?? '', z.object({
+      css: z.string().default(''),
+    }));
+    const css = cssParsed.ok ? cssParsed.data.css : '';
+    changes.push(`css:${css.length}chars`);
+
+    // ─── Step 3: JS ─────────────────────────────────────────────
+    const jsPrompt = buildWebsiteJsPrompt(html);
+    const jsMessages = this.buildMessages(
+      promptRegistry.getPrompt('website-js'),
+      jsPrompt,
+    );
+    const jsResponse = await this.handleStream(provider, jsMessages, {
+      temperature: 0.7,
+      responseFormat: { type: 'json_object' },
+      maxTokens: 2048,
+    }, { onStream: options.onStream });
+    const jsParsed = this.parseJsonResponse(jsResponse.content ?? '', z.object({
+      js: z.string().default(''),
+    }));
+    const js = jsParsed.ok ? jsParsed.data.js : '';
+    changes.push(`js:${js.length}chars`);
+
+    // ─── Step 4: Verify ────────────────────────────────────────
+    const verifyPrompt = buildWebsiteVerifyPrompt(html, css, js);
+    const verifyMessages = this.buildMessages(
+      promptRegistry.getPrompt('website-verify'),
+      verifyPrompt,
+    );
+    const verifyResponse = await this.handleStream(provider, verifyMessages, {
+      temperature: 0.3,
+      responseFormat: { type: 'json_object' },
+      maxTokens: 2048,
+    }, { onStream: options.onStream });
+    const verifyParsed = this.parseJsonResponse(verifyResponse.content ?? '', z.object({
+      issues: z.array(z.string()).default([]),
+      fixes: z.object({
+        html: z.string().optional(),
+        css: z.string().optional(),
+        js: z.string().optional(),
+      }).optional(),
+    }));
+    if (verifyParsed.ok) {
+      const { issues, fixes } = verifyParsed.data;
+      if (issues.length > 0) {
+        changes.push(`verify:${issues.length}issues`);
+        if (fixes?.html) changes.push('verify:html:fixed');
+        if (fixes?.css) changes.push('verify:css:fixed');
+        if (fixes?.js) changes.push('verify:js:fixed');
+      } else {
+        changes.push('verify:ok');
+      }
     }
 
-    const costUsd = this.trackUsage(response.usage, options.userEmail, options.modelId) || 0.0001;
-    changes.push(`website:generated:pages=${output.pages.length}`);
+    const totalCost = (this.trackUsage(htmlResponse.usage, options.userEmail, options.modelId) || 0.0001)
+      + (this.trackUsage(cssResponse.usage, options.userEmail, options.modelId) || 0)
+      + (this.trackUsage(jsResponse.usage, options.userEmail, options.modelId) || 0)
+      + (this.trackUsage(verifyResponse.usage, options.userEmail, options.modelId) || 0);
 
     return {
-      site: { html: output.html, css: output.css, js: output.js, pages: output.pages },
-      response,
+      site: { html, css, js, pages },
+      response: htmlResponse,
       sessionId,
       changes,
       heroImages: [],
-      aiCall: { kind: 'websiteCode', costUsd },
+      aiCall: { kind: 'websiteCode', costUsd: totalCost },
     };
   }
 
@@ -155,7 +228,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const response = await this.handleStream(
       provider,
       messages,
-      { temperature: 0.7, responseFormat: { type: 'json_object' } },
+      { temperature: 0.7, responseFormat: { type: 'json_object' }, maxTokens: 4096 },
       { onStream: options.onStream },
     );
 
@@ -178,6 +251,23 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     changes.push('website:refined');
 
     return { site: merged, changes, response };
+  }
+
+  private fallbackResult(
+    businessName: string,
+    response: AIResponse,
+    sessionId: string,
+    changes: string[],
+  ): WebsiteProcessResult {
+    const fb = fallbackWebsiteOutput(businessName);
+    return {
+      site: { html: fb.html, css: fb.css, js: fb.js, pages: fb.pages },
+      response,
+      sessionId,
+      changes,
+      heroImages: [],
+      aiCall: { kind: 'websiteCode', costUsd: 0.0001 },
+    };
   }
 }
 

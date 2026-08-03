@@ -6,6 +6,7 @@ export interface ChatMessage {
   toolCallId?: string;
   name?: string;
   toolCalls?: AIToolCall[];
+  images?: string[];
 }
 
 export interface AIToolCall {

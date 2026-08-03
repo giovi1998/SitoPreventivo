@@ -5,17 +5,17 @@ describe('TB-027 A1: autoBuildCustomer LOCAL shape flat (storage canonico, regre
     localStorage.clear();
   });
 
-  it('crea 3 draft (no social v1) con shape flat + briefContext', async () => {
+  it('crea 4 draft (no social v1) con shape flat + briefContext', async () => {
     localStorage.setItem('pq_customers:v1', JSON.stringify([{
       id: 'cust_1', businessName: 'Bar Da Mario', ownerName: 'Mario', sector: 'bar',
       activity: 'Cucina sarda', contacts: { email: 'm@e.it', phone: '333' }, customerPhotos: [],
     }]));
     const ds = (await import('../dataService')).default;
     const res = await ds.autoBuildCustomer('cust_1', false);
-    expect(res.data.createdDocuments).toHaveLength(3);
+    expect(res.data.createdDocuments).toHaveLength(4);
     const docs = JSON.parse(localStorage.getItem('precisionQuote_documents:v1') || '[]');
-    expect(docs).toHaveLength(3);
-    expect(docs.map((d: any) => d.documentType)).toEqual(['logo', 'businessCard', 'flyer']);
+    expect(docs).toHaveLength(4);
+    expect(docs.map((d: any) => d.documentType)).toEqual(['logo', 'businessCard', 'flyer', 'website']);
     // Shape flat: dominio al top level, nessuna chiave `data` envelope.
     for (const d of docs) {
       expect(d.data).toBeUndefined();
@@ -33,6 +33,9 @@ describe('TB-027 A1: autoBuildCustomer LOCAL shape flat (storage canonico, regre
     const flyer = docs.find((d: any) => d.documentType === 'flyer');
     expect(flyer.content.headline).toBe('Bar Da Mario');
     expect(flyer.briefContext).toContain('Bar Da Mario');
+    const website = docs.find((d: any) => d.documentType === 'website');
+    expect(website.brief.businessName).toBe('Bar Da Mario');
+    expect(website.briefContext).toContain('Bar Da Mario');
   });
 
   it('skip logo draft se detectedLogoUrl presente (admin ha già logo)', async () => {
@@ -42,9 +45,9 @@ describe('TB-027 A1: autoBuildCustomer LOCAL shape flat (storage canonico, regre
     }]));
     const ds = (await import('../dataService')).default;
     const res = await ds.autoBuildCustomer('cust_1', false);
-    expect(res.data.createdDocuments).toHaveLength(2);
+    expect(res.data.createdDocuments).toHaveLength(3);
     const docs = JSON.parse(localStorage.getItem('precisionQuote_documents:v1') || '[]');
-    expect(docs.map((d: any) => d.documentType)).toEqual(['businessCard', 'flyer']);
+    expect(docs.map((d: any) => d.documentType)).toEqual(['businessCard', 'flyer', 'website']);
     expect(docs.find((d: any) => d.documentType === 'logo')).toBeUndefined();
   });
 
@@ -87,13 +90,13 @@ describe('TB-027 A1: autoBuildCustomer LOCAL shape flat (storage canonico, regre
     }]));
     const ds = (await import('../dataService')).default;
     const first = await ds.autoBuildCustomer('cust_1', false);
-    expect(first.data.createdDocuments).toHaveLength(3);
+    expect(first.data.createdDocuments).toHaveLength(4);
     const second = await ds.autoBuildCustomer('cust_1', false);
-    expect(second.data.createdDocuments).toHaveLength(3);
+    expect(second.data.createdDocuments).toHaveLength(4);
     const docs = JSON.parse(localStorage.getItem('precisionQuote_documents:v1') || '[]');
-    // 3 bozze nuove + 1 confermato = 4, non 7
-    expect(docs).toHaveLength(4);
-    expect(docs.filter((d: any) => d.status === 'BOZZA')).toHaveLength(3);
+    // 4 bozze nuove + 1 confermato = 5, non 9
+    expect(docs).toHaveLength(5);
+    expect(docs.filter((d: any) => d.status === 'BOZZA')).toHaveLength(4);
     expect(docs.find((d: any) => d.id === 'flyer_confirmed')).toBeTruthy();
     // le bozze del primo giro sono state eliminate
     for (const oldId of first.data.createdDocuments) {

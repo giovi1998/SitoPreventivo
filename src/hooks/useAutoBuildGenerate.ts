@@ -12,6 +12,7 @@ import { calculateCostUsd } from '../ai/providerPricing';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { incrementAiStats, type AiStats } from '../utils/aiStats';
 import { logger } from '../utils/logger';
+import { injectLogoIntoHtml } from '../utils/website/logoInjection';
 import type { BusinessCard, Flyer, FlyerTone, Logo, LogoBuilder } from '../utils/documentSchemas';
 import { createEmptyFlyer } from '../utils/documentSchemas';
 
@@ -444,10 +445,11 @@ async function generateFlyerDraft(
 async function generateWebsiteDraft(
   doc: AutoBuildDoc,
   brief: string,
-  _customer: AutoBuildCustomer,
+  customer: AutoBuildCustomer,
   options?: AutoBuildGenerateOptions,
 ): Promise<void> {
   const briefData = (doc.data?.brief ?? {}) as Record<string, unknown>;
+  const logoBase64 = (doc.data?.logoUrl as string | undefined) || customer.logoUrl || undefined;
   const result = await new WebsiteOrchestrator().generateSite(
     {
       businessName: String(briefData.businessName || ''),
@@ -470,17 +472,19 @@ async function generateWebsiteDraft(
       style: String(doc.data?.style || 'modern'),
       briefContext: briefOf(doc),
       modelId: options?.providerId,
+      logoBase64,
     },
   );
   const aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'websiteCode', textCost(result.response?.usage));
   await saveDraft(doc, {
     ...(doc.data as Record<string, unknown>),
-    html: result.site.html,
+    html: injectLogoIntoHtml(result.site.html, logoBase64 || null),
     css: result.site.css,
     js: result.site.js,
     pages: result.site.pages,
     source: 'ai',
     aiStats,
+    logoUrl: logoBase64 || (doc.data?.logoUrl as string | undefined) || null,
   });
 }
 
