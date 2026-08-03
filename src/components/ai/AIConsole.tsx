@@ -62,6 +62,8 @@ export interface AIConsoleProps {
   autoFallbackEnabled?: boolean;
   /** TB-023: toggle auto-fallback callback */
   onAutoFallbackToggle?: () => void;
+  /** Clear AI logs callback */
+  onClearLogs?: () => void;
 }
 
 export default function AIConsole({
@@ -85,6 +87,7 @@ export default function AIConsole({
   onVisionToggle,
   onAutoFallbackToggle,
   autoFallbackEnabled,
+  onClearLogs,
 }: AIConsoleProps): React.ReactElement {
   const [expanded, setExpanded] = useState<boolean>(() => {
     if (editorKind) {
@@ -235,7 +238,7 @@ export default function AIConsole({
               <span className="ai-console__log-count">{logs.length}</span>
               <span className={`ai-console__log-chevron ${logOpen ? 'ai-console__log-chevron--open' : ''}`}>▾</span>
             </button>
-            {logOpen && <AILogPanel logs={logs} isProcessing={isProcessing} totalCostUsd={totalCostUsd} />}
+            {logOpen && <AILogPanel logs={logs} isProcessing={isProcessing} totalCostUsd={totalCostUsd} onClearLogs={onClearLogs} />}
           </div>
         </div>
       )}

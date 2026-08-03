@@ -65,7 +65,32 @@
 .website-rail {
   border-left: 1px solid var(--border);
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--bg-secondary, #f8f9fa);
+  height: 100%;
+}
+
+.website-rail .ai-console {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.website-rail .ai-console--expanded .ai-console__panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.website-rail .ai-console__children {
+  flex-shrink: 0;
+}
+
+.website-rail .ai-console__log {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 100px;
 }
 
 /* ─── BRIEF PANEL ─── */

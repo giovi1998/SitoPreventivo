@@ -14,6 +14,8 @@ interface AILogPanelProps {
   theme?: 'dark' | 'themed';
   /** TB-023: costo USD totale cumulato (mostrato nell'header). */
   totalCostUsd?: number;
+  /** Callback per cancellare i log */
+  onClearLogs?: () => void;
 }
 
 const TYPE_ICONS: Record<AILogEntry['type'], string> = {
@@ -32,7 +34,7 @@ const TYPE_LABELS: Record<AILogEntry['type'], string> = {
   stream: 'Stream',
 };
 
-export default function AILogPanel({ logs, isProcessing, theme = 'dark', totalCostUsd }: AILogPanelProps): React.ReactElement {
+export default function AILogPanel({ logs, isProcessing, theme = 'dark', totalCostUsd, onClearLogs }: AILogPanelProps): React.ReactElement {
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [fullscreenOpen, setFullscreenOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -77,6 +79,18 @@ export default function AILogPanel({ logs, isProcessing, theme = 'dark', totalCo
             )}
           </span>
           <div className="ai-log-actions">
+            {onClearLogs && (
+              <button
+                type="button"
+                className="ai-log-btn"
+                onClick={onClearLogs}
+                disabled={logs.length === 0}
+                title="Cancella log"
+                aria-label="Cancella log"
+              >
+                ✕
+              </button>
+            )}
             <button
               type="button"
               className="ai-log-btn"

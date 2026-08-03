@@ -75,7 +75,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const style = options.style || 'modern';
     const hasVision = options.logoBase64 && (provider as { supportsVision?: boolean }).supportsVision;
 
-    // ─── Step 1: HTML (streaming) ──────────────────────────────
+    // ─── Step 1: HTML ───────────────────────────────────────────
     const htmlPrompt = buildWebsiteHtmlPrompt(brief, style, options.briefContext);
     if (options.scrapedReference) {
       changes.push(`scraped:${options.scrapedReference.length}chars`);
@@ -104,51 +104,51 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const { html, pages } = htmlParsed.data;
     changes.push(`html:generated:pages=${pages.length}`);
 
-    // ─── Step 2: CSS (non-stream) ───────────────────────────────
+    // ─── Step 2: CSS ────────────────────────────────────────────
     const cssPrompt = buildWebsiteCssPrompt(html, style, brief);
     const cssMessages = this.buildMessages(
       promptRegistry.getPrompt('website-css'),
       cssPrompt,
     );
-    const cssResponse = await provider.chat(cssMessages, {
+    const cssResponse = await this.handleStream(provider, cssMessages, {
       temperature: 0.7,
       responseFormat: { type: 'json_object' },
       maxTokens: 4096,
-    });
+    }, { onStream: options.onStream });
     const cssParsed = this.parseJsonResponse(cssResponse.content ?? '', z.object({
       css: z.string().default(''),
     }));
     const css = cssParsed.ok ? cssParsed.data.css : '';
     changes.push(`css:${css.length}chars`);
 
-    // ─── Step 3: JS (non-stream) ────────────────────────────────
+    // ─── Step 3: JS ─────────────────────────────────────────────
     const jsPrompt = buildWebsiteJsPrompt(html);
     const jsMessages = this.buildMessages(
       promptRegistry.getPrompt('website-js'),
       jsPrompt,
     );
-    const jsResponse = await provider.chat(jsMessages, {
+    const jsResponse = await this.handleStream(provider, jsMessages, {
       temperature: 0.7,
       responseFormat: { type: 'json_object' },
       maxTokens: 2048,
-    });
+    }, { onStream: options.onStream });
     const jsParsed = this.parseJsonResponse(jsResponse.content ?? '', z.object({
       js: z.string().default(''),
     }));
     const js = jsParsed.ok ? jsParsed.data.js : '';
     changes.push(`js:${js.length}chars`);
 
-    // ─── Step 4: Verify (non-stream) ────────────────────────────
+    // ─── Step 4: Verify ────────────────────────────────────────
     const verifyPrompt = buildWebsiteVerifyPrompt(html, css, js);
     const verifyMessages = this.buildMessages(
       promptRegistry.getPrompt('website-verify'),
       verifyPrompt,
     );
-    const verifyResponse = await provider.chat(verifyMessages, {
+    const verifyResponse = await this.handleStream(provider, verifyMessages, {
       temperature: 0.3,
       responseFormat: { type: 'json_object' },
       maxTokens: 2048,
-    });
+    }, { onStream: options.onStream });
     const verifyParsed = this.parseJsonResponse(verifyResponse.content ?? '', z.object({
       issues: z.array(z.string()).default([]),
       fixes: z.object({

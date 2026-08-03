@@ -80,7 +80,6 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const [exporting, setExporting] = useState(false);
   const [viewport, setViewport] = useState('100%');
   const [refinePrompt, setRefinePrompt] = useState('');
-  const [isRefining, setIsRefining] = useState(false);
   const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || '');
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isProcessingRef = useRef(false);
@@ -171,7 +170,6 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const updateStyle = useCallback(async (style: WebsiteStyle) => {
     setWebsite((prev) => ({ ...prev, style, updatedAt: new Date().toISOString() }));
     if (!websiteHasContent(website)) return;
-    setIsRefining(true);
     try {
       const result = await refine(
         { html: website.html, css: website.css, js: website.js, pages: website.pages },
@@ -189,8 +187,6 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       addToast('success', `Stile ${style} applicato`);
     } catch (err) {
       addToast('error', (err as Error)?.message || 'Errore cambio stile');
-    } finally {
-      setIsRefining(false);
     }
   }, [website, refine, addToast]);
 
@@ -254,7 +250,6 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       addToast('info', 'Scrivi cosa vuoi modificare');
       return;
     }
-    setIsRefining(true);
     try {
       const result = await refine(
         { html: website.html, css: website.css, js: website.js, pages: website.pages },
@@ -273,8 +268,6 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       addToast('success', 'Sito raffinato');
     } catch (err) {
       addToast('error', (err as Error)?.message || 'Errore raffinamento');
-    } finally {
-      setIsRefining(false);
     }
   }, [refinePrompt, website, refine, addToast]);
 
@@ -610,6 +603,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
             lastCostUsd={lastCostUsd}
             providerId={aiModel}
             onProviderChange={handleProviderChange}
+            onClearLogs={resetAI}
           >
             <button className="btn-generate" onClick={handleGenerate} disabled={isProcessing}>
               {isProcessing ? 'Generando…' : 'Genera sito con AI'}
@@ -619,8 +613,8 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
               <div className="refine-section">
                 <label>Raffina con AI</label>
                 <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder="Es. Rendi i colori più scuri, cambia il font in Inter..." rows={3} />
-                <button className="btn-refine" onClick={() => handleRefine()} disabled={isRefining || !refinePrompt.trim()}>
-                  {isRefining ? 'Raffinando…' : 'Raffina'}
+                <button className="btn-refine" onClick={() => handleRefine()} disabled={isProcessing || !refinePrompt.trim()}>
+                  {isProcessing ? 'Elaborazione in corso…' : 'Raffina'}
                 </button>
               </div>
             )}
