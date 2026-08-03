@@ -60,6 +60,24 @@ ${html}
 </html>`;
 }
 
+function injectLogoIntoHtml(html: string, logoUrl: string | null): string {
+  if (!logoUrl) return html;
+  const logoImg = `<img src="${logoUrl}" alt="Logo" class="site-logo" style="height:40px;width:auto;display:inline-block;vertical-align:middle;" />`;
+  const navMatch = html.match(/<nav[^>]*>/i);
+  if (navMatch) {
+    return html.replace(navMatch[0], navMatch[0] + logoImg);
+  }
+  const headerMatch = html.match(/<header[^>]*>/i);
+  if (headerMatch) {
+    return html.replace(headerMatch[0], headerMatch[0] + logoImg);
+  }
+  const bodyMatch = html.match(/<body[^>]*>/i);
+  if (bodyMatch) {
+    return html.replace(bodyMatch[0], bodyMatch[0] + '\n' + logoImg);
+  }
+  return html;
+}
+
 export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unlocked', onReset, onSaved }: WebsiteEditorProps) {
   const { save: saveDocumentGuarded } = useDocumentSave();
   const [website, setWebsite] = useState<Website>(() => mergeWebsiteWithDefaults(initialWebsite));
@@ -154,7 +172,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       });
       const merged = {
         ...website,
-        html: result.site.html,
+        html: injectLogoIntoHtml(result.site.html, website.logoUrl),
         css: result.site.css,
         js: result.site.js,
         pages: result.site.pages,
