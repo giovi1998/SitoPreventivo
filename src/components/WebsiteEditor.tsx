@@ -72,6 +72,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const [isRefining, setIsRefining] = useState(false);
   const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || '');
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isProcessingRef = useRef(false);
   const loadedIdRef = useRef<string | undefined>(initialWebsite?.id);
   const loadedUpdatedAtRef = useRef<string | undefined>(initialWebsite?.updatedAt);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -87,6 +88,8 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     lastCostUsd,
   } = useAIWebsite(userEmail);
 
+  useEffect(() => { isProcessingRef.current = isProcessing; }, [isProcessing]);
+
   useEffect(() => {
     if (!initialWebsite?.id) return;
     const isNewDoc = initialWebsite.id !== loadedIdRef.current;
@@ -100,6 +103,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   useEffect(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
+      if (isProcessingRef.current) return;
       if (!websiteHasContent(website)) return;
       const toSave: Website = { ...website, userEmail, updatedAt: new Date().toISOString() };
       dataService.saveDocument(userEmail, toSave).then((result) => {
