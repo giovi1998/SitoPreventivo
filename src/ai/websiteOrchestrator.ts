@@ -64,6 +64,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       modelId?: string;
       onStream?: (chunk: AIStreamChunk) => void;
       userEmail?: string;
+      logoBase64?: string;
     } = {},
   ): Promise<WebsiteProcessResult> {
     const changes: string[] = [];
@@ -71,7 +72,16 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const systemPrompt = promptRegistry.getPrompt('website-system');
     const userPrompt = buildWebsiteGeneratePrompt(brief, options.style || 'modern', options.briefContext);
     const provider = providerRegistry.getProvider(options.modelId);
-    const messages = this.buildMessages(systemPrompt, userPrompt);
+    const hasVision = options.logoBase64 && (provider as { supportsVision?: boolean }).supportsVision;
+    const userContentParts: string[] = [];
+    if (hasVision && options.logoBase64) {
+      userContentParts.push(`Logo/immagine del brand (base64 JPEG): ${options.logoBase64}`);
+    }
+    userContentParts.push(userPrompt);
+    if (hasVision) {
+      userContentParts.push('Analizza il logo/immagine per estrarne i colori dominanti, lo stile visivo e il mood. Usa questi elementi per generare un sito coerente col brand.');
+    }
+    const messages = this.buildMessages(systemPrompt, userContentParts.join('\n\n'));
 
     const response = await this.handleStream(
       provider,

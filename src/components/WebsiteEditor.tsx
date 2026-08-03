@@ -146,6 +146,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         style: website.style,
         briefContext: website.briefContext,
         modelId: aiModel || undefined,
+        logoBase64: website.logoUrl || undefined,
       });
       const merged = {
         ...website,
