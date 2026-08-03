@@ -125,7 +125,12 @@ export function buildWebsiteHtmlPrompt(
   if (brief.cta) parts.push(`CTA: ${brief.cta}`);
   if (brief.features) parts.push(`Feature: ${brief.features}`);
   if (brief.contacts) parts.push(`Contatti: ${brief.contacts}`);
-  if (brief.mapsUrl) parts.push(`Maps: ${brief.mapsUrl}`);
+  if (brief.mapsUrl) {
+    const embedUrl = brief.mapsUrl
+      .replace(/^https:\/\/maps\.app\.goo\.gl\//, 'https://maps.google.com/maps?q=')
+      .replace(/^https:\/\/www\.google\.com\/maps\//, 'https://www.google.com/maps/embed/v1/place?key=&q=');
+    parts.push(`Maps: ${embedUrl}`);
+  }
   if (brief.notes) parts.push(`Note: ${brief.notes}`);
   if (briefContext) parts.push(`Contesto: ${briefContext}`);
 
@@ -134,6 +139,11 @@ export function buildWebsiteHtmlPrompt(
   parts.push('Usa classi semantiche (es. class="hero", class="nav", class="footer", class="section-inner").');
   parts.push('Non generare tag <img> per il logo del brand. Non generare <span class="brand-mark">.');
   parts.push('Il logo viene gestito separatamente.');
+  parts.push('\n⚠️ STRUTTURA NAV OBBLIGATORIA:');
+  parts.push('- <header class="nav"> o <nav class="nav">');
+  parts.push('- <button class="menu-toggle">☰</button> DENTRO il nav (per hamburger mobile)');
+  parts.push('- <ul class="nav-links"> con i link');
+  parts.push('- Il bottone menu-toggle deve essere SEMPRE presente, anche se il sito è semplice.');
   if (brief.sections) {
     parts.push(`\n⚠️ DEVI generare TUTTE le sezioni richieste: ${brief.sections}.`);
     parts.push('Ogni sezione deve essere un <section> con id corrispondente (es. <section id="chi-siamo">).');
@@ -175,6 +185,7 @@ OBBLIGATORIO:
 - Transizioni fluide (transition: 0.3s)
 - Focus states per accessibilità (:focus-visible)
 - Stili per .hero, .hero h1, .hero p, .btn, .section-inner, .footer, .nav, .nav-links
+- Brand wrapper (logo + nome): display:flex, align-items:center, gap:12px. MAI column.
 - Padding/margin coerenti (usa variabili --space-*)
 - Font-size fluidi con clamp() dove appropriato
 - Box-sizing: border-box su tutti gli elementi
@@ -195,13 +206,11 @@ ${html.slice(0, 5000)}
 
 ⚠️ DEVI GENERARE JAVASCRIPT FUNZIONANTE. NON RESTITUIRE MAI { "js": "" }.
 
-Se l'HTML non ha un <header> o un <button>, CREALI tu via JS:
-- document.querySelector('.nav') o document.querySelector('nav') per il menu
-- Crea un bottone hamburger con JS se non esiste nell'HTML
+Il JS deve funzionare con QUALSIASI struttura HTML. Usa querySelector generici.
 
-Funzioni da includere OBBLIGATORIAMENTE (tutte, anche se l'HTML è semplice):
+Funzioni da includere OBBLIGATORIAMENTE (tutte):
 1. **Smooth scroll** per link anchor: document.querySelectorAll('a[href^="#"]').forEach...
-2. **Hamburger menu**: se non c'è un bottone, creane uno con JS e appendilo al nav. Toggle classe .nav-open sul nav.
+2. **Hamburger menu**: cerca .menu-toggle o <button> dentro <header>/<nav>. Se non c'è bottone, creane uno con JS e appendilo al nav. Toggle classe .nav-open o .menu-open sul nav.
 3. **Header scroll**: window.addEventListener('scroll', ...) aggiunge classe .scrolled a nav/header dopo 50px.
 4. **Anno corrente**: document.querySelector('.current-year') e setta textContent.
 5. **Intersection Observer**: new IntersectionObserver(...) per fade-in sulle section.
@@ -219,18 +228,36 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
     if (target) target.scrollIntoView({ behavior: 'smooth' });
   });
 });
+// Hamburger menu
+const toggle = document.querySelector('.menu-toggle') || document.querySelector('header button') || document.querySelector('nav button');
+const nav = document.querySelector('.nav') || document.querySelector('nav') || document.querySelector('header');
+if (toggle && nav) {
+  toggle.addEventListener('click', () => nav.classList.toggle('nav-open'));
+  document.addEventListener('click', e => {
+    if (!nav.contains(e.target)) nav.classList.remove('nav-open');
+  });
+}
 // Header scroll effect
 window.addEventListener('scroll', () => {
-  const nav = document.querySelector('.nav') || document.querySelector('header');
-  if (nav) nav.classList.toggle('scrolled', window.scrollY > 50);
+  const header = document.querySelector('.nav') || document.querySelector('header');
+  if (header) header.classList.toggle('scrolled', window.scrollY > 50);
 });
 // Anno corrente
 const yearEl = document.querySelector('.current-year');
 if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+// Intersection Observer per fade-in
+document.querySelectorAll('section').forEach(s => {
+  s.style.opacity = '0';
+  s.style.transition = 'opacity 0.6s ease';
+});
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.style.opacity = '1'; });
+}, { threshold: 0.1 });
+document.querySelectorAll('section').forEach(s => observer.observe(s));
 \`\`\`
 
 Rispondi SOLO con JSON: { "js": "..." }
-IL CAMPO "js" DEVE CONTENERE ALMENO 20 RIGHE DI JAVASCRIPT. NON PUÒ ESSERE VUOTO.`;
+IL CAMPO "js" DEVE CONTENERE ALMENO 30 RIGHE DI JAVASCRIPT. NON PUÒ ESSERE VUOTO.`;
 }
 
 export function buildWebsiteVerifyPrompt(

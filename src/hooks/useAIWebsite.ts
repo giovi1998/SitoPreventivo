@@ -101,7 +101,6 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
       const resolvedModelId = resolveProviderId(options?.modelId);
 
       info(`Generazione sito: "${brief.businessName}" — "${promptPreview}"`, undefined, { requestId });
-      info('Prompt HTML inviato', `Stile: ${options?.style || 'modern'}, Pagine: ${brief.pages || 'index'}, Settore: ${brief.sector || '-'}`, { requestId });
       const streamId = startStream('Generazione sito in corso…', {
         requestId,
         sessionId: getOrchestrator().getCurrentSessionId() ?? undefined,
@@ -121,6 +120,12 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
             } else if (chunk.type === 'error' && chunk.error) {
               throw new Error(chunk.error);
             }
+          },
+          onStep: (step, detail) => {
+            if (step === 'html') info('Prompt HTML inviato', detail, { requestId });
+            else if (step === 'css') info('Prompt CSS inviato', detail, { requestId });
+            else if (step === 'js') info('Prompt JS inviato', '', { requestId });
+            else if (step === 'verify') info('Prompt Verify inviato', '', { requestId });
           },
           userEmail,
         });

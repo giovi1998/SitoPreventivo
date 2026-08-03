@@ -68,6 +68,7 @@
   overflow-x: hidden;
   background: var(--bg-secondary, #f8f9fa);
   height: 100%;
+  padding-bottom: 72px;
 }
 
 .website-rail .ai-console {
