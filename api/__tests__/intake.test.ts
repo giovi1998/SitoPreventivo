@@ -107,14 +107,44 @@ describe('TB-019 /api/intake', () => {
     expect(mockDbState.inserted.length).toBe(2);
   });
 
-  it('POST /intake con sourceRef duplicato → 409', async () => {
-    mockDbState.selectResults.push([{ id: 'intake_old', sourceRef: 'row_1' }]);
+  it('POST /intake con sourceRef duplicato → 200 upsert (non più 409)', async () => {
+    mockDbState.selectResults.push([{ id: 'intake_old', status: 'new', sourceRef: 'row_1' }]);
+    // customer dedup: nessun match → crea nuovo customer
+    mockDbState.selectResults.push([]);
+    mockDbState.selectResults.push([]);
     const res = await callHandler({
       method: 'POST', url: '/api/intake',
-      body: { businessName: 'Bar', sourceRef: 'row_1' },
+      body: { businessName: 'Bar Modificato', sector: 'ristorante', sourceRef: 'row_1' },
     });
-    expect(res.statusCode).toBe(409);
-    expect(res.body.error).toBe('Brief già ricevuto');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.updated).toBe(true);
+    expect(res.body.data.id).toBe('intake_old');
+    // intake aggiornato (non nuovo insert)
+    const intakeUpdate = mockDbState.updated.find((s: any) => s.businessName === 'Bar Modificato');
+    expect(intakeUpdate).toBeDefined();
+    expect(intakeUpdate.sector).toBe('ristorante');
+    // nessun nuovo intake insertato
+    expect(mockDbState.inserted.filter((i: any) => i.id?.startsWith('intake_'))).toHaveLength(0);
+  });
+
+  it('POST /intake upsert: modifica campi → customer aggiornato', async () => {
+    mockDbState.selectResults.push([{ id: 'intake_old', status: 'new', sourceRef: 'row_ups' }]);
+    // customer dedup: match by email
+    mockDbState.selectResults.push([{ id: 'cust_esistente', businessName: 'Bar Originale' }]);
+    const res = await callHandler({
+      method: 'POST', url: '/api/intake',
+      body: {
+        businessName: 'Bar Nuovo Nome', sourceRef: 'row_ups',
+        contacts: { email: 'bar@test.it' },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.updated).toBe(true);
+    // customer aggiornato: trova l'update con intakeId (non l'update intake)
+    const custUpdate = mockDbState.updated.find((s: any) => s.intakeId);
+    expect(custUpdate).toBeDefined();
+    expect(custUpdate.businessName).toBe('Bar Nuovo Nome');
+    expect(custUpdate.intakeId).toBe('intake_old');
   });
 
   it('POST /intake body invalido → 400', async () => {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useContext, useRef, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useContext, useRef, useCallback } from 'react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import Icon from './Icon';
@@ -9,9 +9,8 @@ import type { DocumentType } from '../utils/documentSchemas';
 import { buildPreviewSvg } from '../utils/docPreviewSvg';
 import { formatAiStatsCompact, type AiStats, aiStatsTotalCalls, documentAiStatsTitle } from '../utils/aiStats';
 import { useToast } from '../hooks/useToast';
+import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 
-// TB-019: brief intake in Collection (admin only)
-const IntakeList = lazy(() => import('./crm/IntakeList'));
 
 type TabId = 'all' | 'quote' | 'qrCode' | 'businessCard' | 'flyer' | 'logo' | 'generatedImage';
 
@@ -266,6 +265,8 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
     setRefreshKey((k) => k + 1);
   }, [ctx?.documentsVersion]);
 
+  useRefetchOnFocus(() => { ctx?.refreshDocuments?.(); });
+
   const counts = useMemo(() => {
     const c: Record<TabId, number> = { all: documents.length, quote: 0, qrCode: 0, businessCard: 0, flyer: 0, logo: 0, generatedImage: 0 };
     for (const d of documents) {
@@ -460,12 +461,6 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
             : 'Tutti i tuoi documenti: QR, bigliettini e loghi.'}
         </span>
       </div>
-
-      {isAdmin && (
-        <Suspense fallback={null}>
-          <IntakeList />
-        </Suspense>
-      )}
 
       <div role="tablist" aria-label="Tipo documento" className="collection-tabs">
         {/* Phase 7: preventivi are admin-only. The "Preventivi" tab is

@@ -3,8 +3,9 @@
  *
  * In un nuovo progetto Apps Script (https://script.new), incolla questo file.
  * 1) Esegui createIntakeForm() una volta (autorizza) → crea form + Sheet + trigger.
- * 2) Ogni risposta al form scatena onFormSubmit → POST /api/intake.
- * 3) In caso di problemi usa testWebhook() per isolare la catena.
+ * 2) Ogni risposta al form scatena onFormSubmit → POST /api/intake (upsert).
+ * 3) Per correggere una riga già inviata: esegui aggiornaRiga(N) dal dropdown.
+ * 4) In caso di problemi usa testWebhook() per isolare la catena.
  */
 
 const WEBHOOK_URL = 'https://quickbrand.vercel.app/api/intake';
@@ -155,8 +156,12 @@ function reconnectFormSheet() {
   Logger.log('Risposte: ' + sheet.getUrl());
 }
 
-function onFormSubmit(e) {
-  const payload = buildIntakePayload(e.values, e.range.getRow());
+/**
+ * Invia un payload a /api/intake e logga il risultato.
+ * L'endpoint upserta: se sourceRef esiste → UPDATE, altrimenti INSERT.
+ * 200/201 = ok. 400/429/500 = errore.
+ */
+function sendToWebhook(payload) {
   const response = UrlFetchApp.fetch(WEBHOOK_URL, {
     method: 'post',
     contentType: 'application/json',
@@ -169,6 +174,12 @@ function onFormSubmit(e) {
   if (code >= 400) {
     Logger.log('[intake] body: %s', response.getContentText().slice(0, 300));
   }
+  return response;
+}
+
+function onFormSubmit(e) {
+  const payload = buildIntakePayload(e.values, e.range.getRow());
+  sendToWebhook(payload);
 }
 
 function buildIntakePayload(values, row) {
@@ -201,7 +212,7 @@ function buildIntakePayload(values, row) {
 
 /**
  * Diagnostica: invia un payload valido a /api/intake e logga code + body.
- * 201 = catena webhook→DB ok. 400/429/500 = errore lato server.
+ * 200/201 = catena webhook→DB ok. 400/429/500 = errore lato server.
  * Utile se onFormSubmit non produce record in CRM.
  */
 function testWebhook() {
@@ -214,30 +225,23 @@ function testWebhook() {
     package: 'apertura',
     sourceRef: 'test_' + new Date().getTime(),
   };
-  const response = UrlFetchApp.fetch(WEBHOOK_URL, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-  });
-  Logger.log('[test-webhook] %s', response.getResponseCode());
-  Logger.log('[test-webhook] body: %s', response.getContentText().slice(0, 300));
+  sendToWebhook(payload);
 }
 
 /**
  * Re-invia manualmente una riga del foglio risposte al webhook.
- * Serve per recuperare risposte fallite (400/429) DOPO un fix lato server:
+ * L'endpoint upserta: se sourceRef esiste → UPDATE (non più 409).
+ * Serve per recuperare risposte fallite (400/429) DOPO un fix lato server,
+ * o per aggiornare un brief dopo una correzione manuale nel foglio.
  * - senza argomento → re-invia l'ULTIMA riga (la più recente);
  * - con argomento N → re-invia la riga N (N≥2, la 1 è l'header).
- * 201 = creato/aggiornato. 409 = sourceRef già ricevuto (era già ok).
- * 400/429/500 = errore lato server, body loggato.
+ * 200/201 = ok. 400/429/500 = errore lato server, body loggato.
  * NOTA: NON lanciare onFormSubmit a mano — è un trigger che richiede
  * l'evento `e`; per i test manuali usa questa funzione.
  */
 function resendRowToWebhook(row) {
-  const files = DriveApp.getFilesByName('Quickbrand — Brief attività (risposte)');
-  if (!files.hasNext()) { Logger.log('Sheet risposte non trovato. Esegui reconnectFormSheet().'); return; }
-  const sheet = SpreadsheetApp.openById(files.next().getId()).getSheets()[0];
+  const sheet = getIntakeSheet();
+  if (!sheet) return;
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) { Logger.log('Nessuna risposta da inviare.'); return; }
   const target = row != null && row !== '' ? Number(row) : lastRow;
@@ -247,14 +251,24 @@ function resendRowToWebhook(row) {
   }
   const values = sheet.getRange(target, 1, 1, sheet.getLastColumn()).getValues()[0];
   const payload = buildIntakePayload(values, target);
-  const response = UrlFetchApp.fetch(WEBHOOK_URL, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-  });
-  Logger.log('[intake] resend riga ' + target + ' -> ' + response.getResponseCode());
-  if (response.getResponseCode() >= 400) {
-    Logger.log('[intake] body: ' + response.getContentText().slice(0, 300));
-  }
+  sendToWebhook(payload);
+}
+
+/**
+ * Aggiorna una riga del foglio risposte sul server (upsert by sourceRef).
+ * Usala dopo aver corretto manualmente una riga nel foglio:
+ * esegui `aggiornaRiga(N)` dal dropdown, dove N è il numero riga.
+ * L'endpoint /api/intake aggiorna il record esistente (stesso sourceRef).
+ */
+function aggiornaRiga(row) {
+  resendRowToWebhook(row);
+}
+
+/**
+ * Restituisce il foglio risposte attivo, o null se non trovato.
+ */
+function getIntakeSheet() {
+  const files = DriveApp.getFilesByName('Quickbrand — Brief attività (risposte)');
+  if (!files.hasNext()) { Logger.log('Sheet risposte non trovato. Esegui reconnectFormSheet().'); return null; }
+  return SpreadsheetApp.openById(files.next().getId()).getSheets()[0];
 }

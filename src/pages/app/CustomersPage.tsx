@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import dataService from '../../utils/dataService';
+import { useRefetchOnFocus } from '../../hooks/useRefetchOnFocus';
 import '../../components/crm/crm.css';
 
 const CustomerList = lazy(() => import('../../components/crm/CustomerList'));
@@ -28,6 +29,7 @@ export default function CustomersPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useRefetchOnFocus(load);
 
   const handleSelect = useCallback((id: string) => navigate(`/app/customers/${id}`), [navigate]);
   const handleBack = useCallback(() => navigate('/app/customers'), [navigate]);

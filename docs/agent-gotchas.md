@@ -760,10 +760,11 @@ Codice signup/onboarding **conservato** dietro feature flag
    `intakeToSocial`/`intakeToAllDocuments`. Riusa `createEmpty*`
    factories, sovrascrive campi brief. Nessuna generazione AI qui
    (CON-001). Tipo `IntakeBrief` + `IntakeDocumentDraft`.
-5. **IntakeList in CollectionView**: `crm/IntakeList.tsx` montato in
-   `CollectionView.tsx` sopra la griglia (admin-only, lazy). Mostra brief
-   `status='new'`. Click "Apri" → `intakeToAllDocuments` + salva 4 draft
-   via `dataService.saveDocument` + PATCH intake status `in_progress`.
+5. **IntakeList in CollectionView**: (RIMOSSO 2026-08-01) `crm/IntakeList.tsx`
+   era montato in `CollectionView.tsx` sopra la griglia (admin-only, lazy).
+   Mostrava brief `status='new'`. Click "Apri" → `intakeToAllDocuments` +
+   salva 4 draft via `dataService.saveDocument` + PATCH intake status
+   `in_progress`. Sostituito da upsert API + CRM workflow.
 6. **Test**: `api/__tests__/intake.test.ts` (7: POST valido, idempotency
    409, validation 400, GET admin/non-admin, PATCH valido/invalido).
    `src/utils/__tests__/intakeToDocument.test.ts` (6: mappa logo/card/

@@ -81,14 +81,13 @@ in caso di research fallito usa il bottone "Research" in CRM.
 
 ### 4. Idempotency
 
-`sourceRef = 'sheet_row_' + row` (numero riga Sheet) è univoco. Se il webhook fallisce e Apps Script ritenta (3 retry nativi), `/api/intake` risponde 409 al secondo tentativo con lo stesso `sourceRef` — non duplica il record.
+`sourceRef = 'sheet_row_' + row` (numero riga Sheet) è univoco. Se il webhook fallisce e Apps Script ritenta (3 retry nativi), `/api/intake` upserta: stesso `sourceRef` → UPDATE il record (non duplica).
 
 ### 5. Test
 
 Invia una risposta dal form. Verifica:
 - Google Sheet ha una nuova riga.
 - In Quickbrand CRM (`/app/customers`) appare un nuovo cliente con `source='intake'`.
-- In Collection (`/app/collection`) appare il brief in “Brief da lavorare” (admin).
 
 ### Note
 
@@ -171,9 +170,9 @@ Tally passa sempre un `event_id` nativo → usalo come `sourceRef` per idempoten
 qualsiasi coppia chiave→valore, per compatibilità con Tally/Typeform.
 
 Risposte:
-- `201 { data: { id, status: "new" } }` — creato
+- `200 { data: { id, status, updated: true } }` — upsert (sourceRef già noto, aggiornato)
+- `201 { data: { id, status: "new", updated: false } }` — creato
 - `400 { error: "Brief non valido" }` — validation fail
-- `409 { error: "Brief già ricevuto" }` — sourceRef duplicato (idempotency)
 - `429 { error: "Troppi brief, riprova tra un'ora" }` — rate limit
 
 Ogni intake crea **2 record**: `intakes` (brief, incl. `webAnswers`) +

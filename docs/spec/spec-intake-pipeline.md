@@ -75,7 +75,7 @@ form pubblico senza account.
 - **REQ-003**: Il sistema deve salvare il brief in tabella `intakes`
   con status default `new`.
 - **REQ-004**: Il sistema deve garantire idempotenza tramite `sourceRef`
-  unique: retry webhook non duplica (409 Conflict se sourceRef esiste).
+  unique: retry webhook non duplica (UPDATE il record esistente invece di 409).
 - **REQ-005**: L'admin deve poter listare i brief con `GET /api/intakes?status=new`
   filtrati per status.
 - **REQ-006**: L'admin deve poter aprire un brief e vedere i dettagli con
@@ -83,19 +83,18 @@ form pubblico senza account.
 - **REQ-007**: L'admin deve poter aggiornare status/notes/assignedTo con
   `PATCH /api/intakes/:id`.
 - **REQ-008**: Il frontend deve mostrare un badge count di brief `new`
-  nella sidebar, accanto a "Collection".
-- **REQ-009**: Il frontend deve mostrare una sezione "Brief da lavorare"
-  in CollectionView, sopra la griglia documenti, con lista brief (nome,
-  settore, pacchetto, tempo relativo, bottone "Apri").
-- **REQ-010**: Click "Apri" deve creare documenti draft (logo, card,
-  flyer, social) con `data` pre-compilato dai campi brief e aprire
-  l'editor sul primo modulo (default logo).
+  nella sidebar, accanto a "Collection". (Rimosso 2026-08-01: il banner
+  "Brief da lavorare" non è più mostrato in Collection; i brief sono
+  visibili solo via CRM.)
+- **REQ-009**: (Rimosso 2026-08-01: la sezione "Brief da lavorare" in
+  CollectionView è stata eliminata. L'admin lavora i brief dal CRM.)
+- **REQ-010**: (Rimosso 2026-08-01: il click "Apri" non esiste più.
+  I brief arrivano via webhook e l'admin li gestisce dal CRM.)
 - **REQ-011**: La pre-compilazione deve popolare i campi AI-ready:
   logo (primaryText=businessName, activity, mood, target), card
   (name=ownerName, company=businessName, contacts), flyer (title, body,
   sector), social (derivato post-brand).
-- **REQ-012**: Click "Apri" deve aggiornare status intake a `in_progress`
-  e `assignedTo` all'email admin corrente.
+- **REQ-012**: (Rimosso 2026-08-01: non c'è più click "Apri".)
 - **REQ-013**: Il sistema deve supportare 3 form provider intercambiabili:
   Google Form (con Apps Script), Tally.so (webhook nativo), Typeform
   (webhook nativo). Il endpoint `/api/intake` accetta lo stesso JSON
@@ -182,14 +181,14 @@ Request body:
   "sourceRef": "sheet_row_42"
 }
 
-Response 201:
-{ "data": { "id": "intake_abc123", "status": "new" } }
+Response 201 (nuovo):
+{ "data": { "id": "intake_abc123", "status": "new", "updated": false } }
+
+Response 200 (upsert, sourceRef già noto):
+{ "data": { "id": "intake_abc123", "status": "new", "updated": true } }
 
 Response 400 (validation):
 { "error": "Settore non valido" }
-
-Response 409 (idempotency):
-{ "error": "Brief già ricevuto" }
 
 Response 429 (rate limit):
 { "error": "Troppi brief, riprova tra un'ora" }
@@ -278,35 +277,11 @@ CREATE TABLE intakes (
 
 ### Apps Script snippet (Google Sheet)
 
-```javascript
-function onFormSubmit(e) {
-  const WEBHOOK_URL = 'https://TUO-DOMINIO.vercel.app/api/intake';
-  const row = e.range.getRow();
-  const v = e.values;
-  UrlFetchApp.fetch(WEBHOOK_URL, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({
-      businessName: v[1],
-      ownerName: v[2] || undefined,
-      sector: v[3],
-      activity: v[4] || undefined,
-      mood: v[5] || undefined,
-      target: v[6] || undefined,
-      preferredColors: v[7] || undefined,
-      contacts: {
-        email: v[8] || undefined,
-        phone: v[9] || undefined,
-        address: v[10] || undefined,
-        website: v[11] || undefined,
-      },
-      package: v[12] || 'apertura',
-      sourceRef: 'sheet_row_' + row,
-    }),
-    muteHttpExceptions: true,
-  });
-}
-```
+Il file sorgente versionato è `scripts/intake-google-form.gs`. Include
+`sendToWebhook(payload)` (helper condiviso), `onFormSubmit(e)` (trigger),
+`resendRowToWebhook(row)` (re-invio manuale), `aggiornaRiga(row)` (upsert
+per correzioni foglio). L'endpoint `/api/intake` upserta: stesso sourceRef
+→ UPDATE, non 409.
 
 ## 5. Acceptance Criteria
 
@@ -314,7 +289,8 @@ function onFormSubmit(e) {
   Apps Script manda POST a `/api/intake`, Then il server risponde 201
   e il brief è salvato in `intakes` con status `new`.
 - **AC-002**: Given lo stesso sourceRef inviato 2 volte, When il
-  secondo POST arriva, Then il server risponde 409 e non duplica il record.
+  secondo POST arriva, Then il server risponde 200 e UPDATE il record
+  (non duplica, non 409).
 - **AC-003**: Given un body con sector non valido (es. "fabbrica"),
   When POST /api/intake, Then 400 con messaggio "Settore non valido".
 - **AC-004**: Given 6 POST /api/intake dalla stessa IP entro 1 ora,
@@ -322,13 +298,10 @@ function onFormSubmit(e) {
 - **AC-005**: Given admin autenticato, When GET /api/intakes?status=new,
   Then 200 con lista di brief con status new.
 - **AC-006**: Given non-admin, When GET /api/intakes, Then 403.
-- **AC-007**: Given admin con 3 brief new, When apre Collection, Then
-  vede badge "3" accanto a "Collection" nella sidebar.
-- **AC-008**: Given admin click "Apri" su un brief, When l'editor si
-  apre, Then i documenti draft (logo, card, flyer, social) hanno i
-  campi popolati dai dati brief (primaryText=businessName, ecc.).
-- **AC-009**: Given admin click "Apri", When l'azione completa, Then
-  status intake passa a `in_progress` e assignedTo = admin.email.
+- **AC-007**: (Rimosso 2026-08-01: il banner "Brief da lavorare" non
+  esiste più in Collection.)
+- **AC-008**: (Rimosso 2026-08-01: non c'è più click "Apri".)
+- **AC-009**: (Rimosso 2026-08-01: non c'è più click "Apri".)
 - **AC-010**: Given un brief con contacts.email valorizzato, When il
   server logga l'evento, Then il log NON contiene l'email (filtrato).
 - **AC-011**: Given admin PATCH /api/intakes/:id con status `done`,

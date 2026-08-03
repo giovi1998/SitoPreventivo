@@ -3,6 +3,20 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-03
+
+- **TB-027i — rimosso avviso "Brief da lavorare" da Collection**: IntakeList
+  rimosso da CollectionView, file `IntakeList.tsx` cancellato, CSS intake
+  rimosso da `crm.css`. I brief sono visibili solo via CRM.
+- **TB-027i — API intake upsert by sourceRef**: `POST /api/intake` ora
+  UPDATE il record esistente se sourceRef già noto (invece di 409). Risposta
+  200 con `updated: true`. Script `intake-google-form.gs`: helper
+  `sendToWebhook(payload)` condiviso, funzione `aggiornaRiga(row)` per
+  correzioni foglio. Test aggiornati (idempotency 200, upsert campi).
+- **TB-027i — auto-refetch su focus tab**: hook `useRefetchOnFocus` creato
+  (visibilitychange → visible). Usato in CustomersPage (refetch lista) e
+  CollectionView (refreshDocuments). Zero polling.
+
 ## 2026-08-01
 
 - **Google Form intake operativo** (TB-019, spec `spec-google-form-intake-operativo.md`
