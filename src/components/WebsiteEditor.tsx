@@ -473,7 +473,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
               </div>
 
               <div className="brief-logo-section">
-                <label>Logo / Immagine</label>
+                <label>Logo</label>
                 {website.logoUrl ? (
                   <div className="brief-logo-preview">
                     <img src={website.logoUrl} alt="Logo" />
