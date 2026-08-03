@@ -176,17 +176,22 @@ export function buildWebsiteJsPrompt(html: string): string {
 
 Ecco la struttura HTML del sito:
 \`\`\`html
-${html.slice(0, 3000)}
+${html.slice(0, 5000)}
 \`\`\`
 
-Genera SEMPRE JavaScript vanilla ES6+ per queste interazioni:
+Genera SEMPRE JavaScript vanilla ES6+. Anche se l'HTML è semplice, DEVI produrre codice JS funzionante.
+
+Obbligatorio:
 1. **Smooth scroll** per TUTTI i link anchor (a[href^="#"]). Se non ci sono link anchor, aggiungi comunque la funzione.
 2. **Menu hamburger mobile**: se l'HTML ha un <button> o <div> con classe menu-toggle o hamburger, rendilo cliccabile per mostrare/nascondere il <nav>. Se non c'è, cerca il primo <button> dentro <header> e usalo come toggle.
-3. **Form validation**: se presente un <form>, validazione base (campi obbligatori, email format).
-4. **Header scroll effect**: aggiungi classe .scrolled al <header> quando scroll > 50px (per effetto ombra/trasparenza).
-5. **Anno corrente**: imposta l'anno corrente in qualsiasi elemento con classe .current-year.
+3. **Header scroll effect**: aggiungi classe .scrolled al <header> quando scroll > 50px (per effetto ombra/trasparenza).
+4. **Anno corrente**: imposta l'anno corrente in qualsiasi elemento con classe .current-year.
 
-Rispondi SOLO con JSON: { "js": "..." }`;
+Opzionale:
+5. **Form validation**: se presente un <form>, validazione base (campi obbligatori, email format).
+
+Rispondi SOLO con JSON: { "js": "..." }
+Il campo "js" NON DEVE essere vuoto. Scrivi almeno 10 righe di JavaScript funzionante.`;
 }
 
 export function buildWebsiteVerifyPrompt(

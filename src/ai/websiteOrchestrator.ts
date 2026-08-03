@@ -117,7 +117,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     );
     const [cssResponse, jsResponse] = await Promise.all([
       this.handleStream(provider, cssMessages, { temperature: 0.7, responseFormat: { type: 'json_object' }, maxTokens: 4096 }),
-      this.handleStream(provider, jsMessages, { temperature: 0.7, responseFormat: { type: 'json_object' }, maxTokens: 2048 }),
+      this.handleStream(provider, jsMessages, { temperature: 0.7, responseFormat: { type: 'json_object' }, maxTokens: 4096 }),
     ]);
     const cssParsed = this.parseJsonResponse(cssResponse.content ?? '', z.object({
       css: z.string().default(''),
