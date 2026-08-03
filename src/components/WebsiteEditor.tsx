@@ -11,6 +11,7 @@ import { withAiCall } from '../utils/aiStats';
 import { DocumentAiStats } from './DocumentAiStats';
 import AIProviderBadge from './ai/AIProviderBadge';
 import { getAiProviderDefault, setAiProviderDefault } from '../utils/uiPrefs';
+import { compressDataUrl } from '../utils/card/imageCompress';
 import { logger } from '../utils/logger';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -279,6 +280,23 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     setAiModel(providerId);
   }, []);
 
+  const handleLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUri = String(reader.result || '');
+      compressDataUrl(dataUri).then((compressed) => {
+        setWebsite((prev) => ({ ...prev, logoUrl: compressed || dataUri, updatedAt: new Date().toISOString() }));
+      });
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const removeLogo = useCallback(() => {
+    setWebsite((prev) => ({ ...prev, logoUrl: null, updatedAt: new Date().toISOString() }));
+  }, []);
+
   const fullDocument = useMemo(
     () => buildFullDocument(website.html, website.css, website.js),
     [website.html, website.css, website.js],
@@ -376,6 +394,22 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                     <button key={opt.value} className={`style-pill${website.style === opt.value ? ' active' : ''}`} onClick={() => updateStyle(opt.value)}>{opt.label}</button>
                   ))}
                 </div>
+              </div>
+
+              <div className="brief-logo-section">
+                <label>Logo / Immagine</label>
+                {website.logoUrl ? (
+                  <div className="brief-logo-preview">
+                    <img src={website.logoUrl} alt="Logo" />
+                    <button className="brief-logo-remove" onClick={removeLogo} title="Rimuovi logo">✕</button>
+                  </div>
+                ) : (
+                  <label className="brief-logo-upload">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    <span>Carica logo</span>
+                    <input type="file" accept="image/*" onChange={handleLogoUpload} hidden />
+                  </label>
+                )}
               </div>
 
               <div className="brief-ai-provider">
