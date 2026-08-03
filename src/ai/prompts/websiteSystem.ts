@@ -141,10 +141,19 @@ export function buildWebsiteHtmlPrompt(
   parts.push('Non generare tag <img> per il logo del brand. Non generare <span class="brand-mark">.');
   parts.push('Il logo viene gestito separatamente.');
   parts.push('\n⚠️ STRUTTURA NAV OBBLIGATORIA:');
-  parts.push('- <header class="nav"> o <nav class="nav">');
+  parts.push('- <header class="nav"> o <nav class="nav"> con <div class="nav-inner">');
+  parts.push('- <div class="brand"> con il nome attività (il logo viene iniettato dopo)');
   parts.push('- <button class="menu-toggle">☰</button> DENTRO il nav (per hamburger mobile)');
   parts.push('- <ul class="nav-links"> con i link');
   parts.push('- Il bottone menu-toggle deve essere SEMPRE presente, anche se il sito è semplice.');
+  parts.push('\n⚠️ QUALITÀ HTML:');
+  parts.push('- Usa <section> con id per ogni sezione (es. <section id="chi-siamo">)');
+  parts.push('- Aggiungi <meta name="description"> nel <head> con descrizione SEO');
+  parts.push('- Aggiungi <link rel="canonical"> se pertinente');
+  parts.push('- Usa tag semantici: <header>, <nav>, <main>, <section>, <footer>');
+  parts.push('- Ogni sezione deve avere <div class="section-inner"> per contenuto centrato');
+  parts.push('- Aggiungi classe .current-year nel footer per l\'anno automatico via JS');
+  parts.push('- I link social devono avere target="_blank" rel="noopener"');
   if (brief.sections) {
     parts.push(`\n⚠️ DEVI generare TUTTE le sezioni richieste: ${brief.sections}.`);
     parts.push('Ogni sezione deve essere un <section> con id corrispondente (es. <section id="chi-siamo">).');
@@ -164,7 +173,7 @@ export function buildWebsiteCssPrompt(
   style: string,
   brief: { preferredColors?: string; font?: string },
 ): string {
-  return `# Generazione CSS responsive per sito web
+  return `# Generazione CSS responsive premium per sito web
 
 Ecco la struttura HTML completa del sito:
 \`\`\`html
@@ -178,19 +187,38 @@ ${brief.font ? `Font preferito: ${brief.font}` : ''}
 Genera CSS COMPLETO per OGNI classe/id usata nell'HTML sopra. NON omettere classi.
 
 OBBLIGATORIO:
-- Variabili CSS custom :root { --primary, --secondary, --accent, --bg, --text, --font }
+- Variabili CSS custom :root { --primary, --secondary, --accent, --bg, --text, --font, --muted, --border, --radius, --shadow }
 - Layout con CSS Grid o Flexbox (MAI float)
 - Media query @media (max-width: 768px) per mobile (almeno 5 regole responsive)
 - Media query @media (max-width: 480px) per small phone
 - Hamburger menu: nascosto su desktop (display:none), visibile su mobile
-- Transizioni fluide (transition: 0.3s)
-- Focus states per accessibilità (:focus-visible)
-- Stili per .hero, .hero h1, .hero p, .btn, .section-inner, .footer, .nav, .nav-links
+- Transizioni fluide (transition: 0.3s ease)
+- Focus states per accessibilità (:focus-visible con outline)
+- Stili per .hero, .hero h1, .hero p, .btn, .section-inner, .footer, .nav, .nav-links, .menu-toggle
 - Brand wrapper (logo + nome): display:flex, align-items:center, gap:12px. MAI column.
 - Padding/margin coerenti (usa variabili --space-*)
 - Font-size fluidi con clamp() dove appropriato
 - Box-sizing: border-box su tutti gli elementi
 - Scroll-behavior: smooth sull'html
+- .nav.scrolled: box-shadow e background più opaco quando scroll > 50px
+- .nav-open .nav-links: display flex su mobile (menu aperto)
+- .btn: padding 12px 24px, border-radius 8px, font-weight 600, transition
+- .btn:hover: translateY(-1px), box-shadow aumentato
+- .section-inner: max-width 1100px, margin 0 auto, padding 2rem 1rem
+- .hero: padding 4rem 1rem, text-align center, background gradient o colore solido
+- .hero h1: font-size 2.5rem, margin-bottom 0.5rem, line-height 1.1
+- .hero p: font-size 1.1rem, color var(--muted), max-width 600px, margin 0 auto 1.5rem
+- .footer: padding 2rem 1rem, text-align center, border-top, color var(--muted)
+- .current-year: display inline (per JS anno corrente)
+
+QUALITÀ PREMIUM:
+- Palette limitata: max 1 colore accent, saturazione < 80%
+- Ombre: tinted al colore di sfondo (non pure black)
+- Spaziatura coerente: usa multipli di 4px/8px
+- Tipografia: font-size scalati (16px body, 14px small, 20px+ headings)
+- Contrasto WCAG AA: testo su sfondo almeno 4.5:1
+- Transizioni solo su transform e opacity (performance)
+- Mobile-first: layout a 1 colonna sotto 768px
 
 Il CSS deve essere COMPLETO, RESPONSIVE e PRONTO ALL'USO.
 Rispondi SOLO con JSON: { "css": "..." }
@@ -198,7 +226,7 @@ IL CAMPO "css" NON DEVE MAI ESSERE VUOTO.`;
 }
 
 export function buildWebsiteJsPrompt(html: string): string {
-  return `# Generazione JavaScript per sito web
+  return `# Generazione JavaScript premium per sito web
 
 Ecco la struttura HTML completa del sito:
 \`\`\`html
@@ -207,11 +235,11 @@ ${html.slice(0, 5000)}
 
 ⚠️ DEVI GENERARE JAVASCRIPT FUNZIONANTE. NON RESTITUIRE MAI { "js": "" }.
 
-Il JS deve funzionare con QUALSIASI struttura HTML. Usa querySelector generici.
+Il JS deve funzionare con QUALSIASI struttura HTML. Usa querySelector generici con fallback.
 
 Funzioni da includere OBBLIGATORIAMENTE (tutte):
 1. **Smooth scroll** per link anchor: document.querySelectorAll('a[href^="#"]').forEach...
-2. **Hamburger menu**: cerca .menu-toggle o <button> dentro <header>/<nav>. Se non c'è bottone, creane uno con JS e appendilo al nav. Toggle classe .nav-open o .menu-open sul nav.
+2. **Hamburger menu**: cerca .menu-toggle o <button> dentro <header>/<nav>. Se non c'è bottone, creane uno con JS e appendilo al nav. Toggle classe .nav-open sul nav.
 3. **Header scroll**: window.addEventListener('scroll', ...) aggiunge classe .scrolled a nav/header dopo 50px.
 4. **Anno corrente**: document.querySelector('.current-year') e setta textContent.
 5. **Intersection Observer**: new IntersectionObserver(...) per fade-in sulle section.
@@ -256,6 +284,15 @@ const observer = new IntersectionObserver(entries => {
 }, { threshold: 0.1 });
 document.querySelectorAll('section').forEach(s => observer.observe(s));
 \`\`\`
+
+QUALITÀ JS:
+- Usa 'use strict' all'inizio
+- Wrapper in IIFE o DOMContentLoaded per non inquinare global scope
+- Variabili con const/let (mai var)
+- Event listener con { passive: true } per scroll
+- Performance: evita querySelectorAll ripetuti, cache i selettori
+- Accessibility: aria-expanded sul toggle menu, role="navigation" sul nav
+- Fallback: se un elemento non esiste, non crashare (optional chaining o if guard)
 
 Rispondi SOLO con JSON: { "js": "..." }
 IL CAMPO "js" DEVE CONTENERE ALMENO 30 RIGHE DI JAVASCRIPT. NON PUÒ ESSERE VUOTO.`;
