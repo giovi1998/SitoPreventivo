@@ -104,12 +104,12 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const { html, pages } = htmlParsed.data;
     changes.push(`html:generated:pages=${pages.length}`);
 
-    // ─── Step 2: CSS (streaming) ─────────────────────────────────
+    // ─── Step 2: CSS (streaming, sessione fresca) ────────────────
     const cssPrompt = buildWebsiteCssPrompt(html, style, brief);
-    const cssMessages = this.buildMessages(
-      promptRegistry.getPrompt('website-css'),
-      cssPrompt,
-    );
+    const cssMessages: ChatMessage[] = [
+      { role: 'system', content: promptRegistry.getPrompt('website-css') },
+      { role: 'user', content: cssPrompt },
+    ];
     const cssResponse = await this.handleStream(provider, cssMessages, {
       temperature: 0.7,
       responseFormat: { type: 'json_object' },
@@ -121,12 +121,12 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const css = cssParsed.ok ? cssParsed.data.css : '';
     changes.push(`css:${css.length}chars`);
 
-    // ─── Step 3: JS (streaming) ─────────────────────────────────
+    // ─── Step 3: JS (streaming, sessione fresca) ─────────────────
     const jsPrompt = buildWebsiteJsPrompt(html);
-    const jsMessages = this.buildMessages(
-      promptRegistry.getPrompt('website-js'),
-      jsPrompt,
-    );
+    const jsMessages: ChatMessage[] = [
+      { role: 'system', content: promptRegistry.getPrompt('website-js') },
+      { role: 'user', content: jsPrompt },
+    ];
     const jsResponse = await this.handleStream(provider, jsMessages, {
       temperature: 0.7,
       responseFormat: { type: 'json_object' },
@@ -138,12 +138,12 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const js = jsParsed.ok ? jsParsed.data.js : '';
     changes.push(`js:${js.length}chars`);
 
-    // ─── Step 4: Verify (streaming) ─────────────────────────────
+    // ─── Step 4: Verify (streaming, sessione fresca) ─────────────
     const verifyPrompt = buildWebsiteVerifyPrompt(html, css, js);
-    const verifyMessages = this.buildMessages(
-      promptRegistry.getPrompt('website-verify'),
-      verifyPrompt,
-    );
+    const verifyMessages: ChatMessage[] = [
+      { role: 'system', content: promptRegistry.getPrompt('website-verify') },
+      { role: 'user', content: verifyPrompt },
+    ];
     const verifyResponse = await this.handleStream(provider, verifyMessages, {
       temperature: 0.3,
       responseFormat: { type: 'json_object' },

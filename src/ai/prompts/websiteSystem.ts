@@ -193,21 +193,44 @@ Ecco la struttura HTML completa del sito:
 ${html.slice(0, 5000)}
 \`\`\`
 
-GENERA SEMPRE ALMENO 8 FUNZIONI JAVASCRIPT. ANCHE SE IL SITO È SEMPLICE, DEVI PRODURRE CODICE JS FUNZIONANTE.
+⚠️ DEVI GENERARE JAVASCRIPT FUNZIONANTE. NON RESTITUIRE MAI { "js": "" }.
 
-Funzioni da includere OBBLIGATORIAMENTE (in questo ordine):
-1. **Smooth scroll** per TUTTI i link anchor (a[href^="#"]). Se non ci sono, aggiungi comunque la funzione.
-2. **Menu hamburger mobile**: se l'HTML ha un <button> o <div> con classe menu-toggle o hamburger, rendilo cliccabile per mostrare/nascondere il <nav>. Se non c'è, cerca il primo <button> dentro <header> e usalo come toggle.
-3. **Header scroll effect**: aggiungi classe .scrolled al <header> quando scroll > 50px.
-4. **Anno corrente**: imposta l'anno in elementi con classe .current-year.
-5. **Intersection Observer**: anima le sezioni quando entrano nel viewport (fade-in).
-6. **Click fuori dal menu**: chiudi il menu mobile quando si clicca fuori.
-7. **Lazy load immagini**: se presenti <img>, caricale quando entrano nel viewport.
-8. **Form submission**: se presente un <form>, previeni default e logga i dati.
+Se l'HTML non ha un <header> o un <button>, CREALI tu via JS:
+- document.querySelector('.nav') o document.querySelector('nav') per il menu
+- Crea un bottone hamburger con JS se non esiste nell'HTML
 
-FORMATO: usa funzioni dichiarate con function keyword o const arrow. NO classi.
+Funzioni da includere OBBLIGATORIAMENTE (tutte, anche se l'HTML è semplice):
+1. **Smooth scroll** per link anchor: document.querySelectorAll('a[href^="#"]').forEach...
+2. **Hamburger menu**: se non c'è un bottone, creane uno con JS e appendilo al nav. Toggle classe .nav-open sul nav.
+3. **Header scroll**: window.addEventListener('scroll', ...) aggiunge classe .scrolled a nav/header dopo 50px.
+4. **Anno corrente**: document.querySelector('.current-year') e setta textContent.
+5. **Intersection Observer**: new IntersectionObserver(...) per fade-in sulle section.
+6. **Click fuori**: document.addEventListener('click', ...) chiude menu se click fuori dal nav.
+7. **Lazy load**: se ci sono <img>, carica con IntersectionObserver.
+8. **Form**: se c'è <form>, preventDefault + console.log.
+
+ESEMPIO di output minimo (DEVI produrre almeno questo):
+\`\`\`js
+// Smooth scroll
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth' });
+  });
+});
+// Header scroll effect
+window.addEventListener('scroll', () => {
+  const nav = document.querySelector('.nav') || document.querySelector('header');
+  if (nav) nav.classList.toggle('scrolled', window.scrollY > 50);
+});
+// Anno corrente
+const yearEl = document.querySelector('.current-year');
+if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+\`\`\`
+
 Rispondi SOLO con JSON: { "js": "..." }
-IL CAMPO "js" NON PUÒ ESSERE VUOTO. DEVE CONTENERE ALMENO 20 RIGHE DI CODICE.`;
+IL CAMPO "js" DEVE CONTENERE ALMENO 20 RIGHE DI JAVASCRIPT. NON PUÒ ESSERE VUOTO.`;
 }
 
 export function buildWebsiteVerifyPrompt(
