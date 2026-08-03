@@ -103,6 +103,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/QREditor.tsx` | Generatore QR (7 tipi, stili, logo overlay) |
 | `src/components/LogoEditor.tsx` + `LogoAiPanel.tsx` | Logo builder + AI namelix-like 3-step |
 | `src/components/flyer/` | Flyer: `FlyerEditorShell` + pannelli AI/manuale/preview/export |
+| `src/components/WebsiteEditor.tsx` + `WebsiteEditor.css` | Website Builder: brief form 14 campi, preview iframe con viewport toggle, code editor, upload logo, AIProviderBadge, export ZIP |
 | `src/components/ai/AIConsole.tsx` | Rail AI unificata (collapse in `pq_ui:v1`, quickActions, `AILogPanel` + `AIProviderBadge`) |
 | `src/components/ActionBar.tsx` | Cluster azioni Salva/Esporta/Nuovo (logo, QR) |
 | `src/components/CollectionView.tsx` | Collection griglia documenti: tab, filtri, ricerca, preview SVG inline (logo/card/flyer/quote), export ZIP |

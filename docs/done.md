@@ -5,7 +5,13 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-03
 
-- **Website Builder (TB-028) — implementazione completa**: nuovo tipo documento `website` con editor dedicato, AI orchestrator, preview iframe con viewport toggle (375/768/100%), code editor (CodeMirror 6 installato), export ZIP multi-pagina, integrazione CRM auto-build + Collection + CustomerDetail. 6 file creati, 18 modificati. Spec `docs/spec/spec-design-website-builder.md` v1.1.
+- **Website Builder (TB-028) — implementazione completa**: nuovo tipo documento `website` con editor dedicato, AI orchestrator, preview iframe con viewport toggle (375/768/100%), code editor (CodeMirror 6 installato), export ZIP multi-pagina, integrazione CRM auto-build + Collection + CustomerDetail. 6 file creati, 18 modificati. Spec `docs/spec/spec-design-website-builder.md` v1.2.
+  - Upload logo/immagine brand (sidebar, compressDataUrl, `logoUrl` nello schema)
+  - Vision AI sul logo: estrazione SOLO palette colori e stile font (non layout/contenuti)
+  - Logo iniettato nell'HTML generato dopo `<nav>`/`<header>`/`<body>`
+  - AIProviderBadge nella sidebar per selezione provider AI
+  - Auto-save saltato durante generazione AI (`isProcessingRef` guard)
+  - Raffina: modifica sito esistente con merge parziale (non rigenera da zero)
 - **TB-027i — rimosso avviso "Brief da lavorare" da Collection**: IntakeList
   rimosso da CollectionView, file `IntakeList.tsx` cancellato, CSS intake
   rimosso da `crm.css`. I brief sono visibili solo via CRM.

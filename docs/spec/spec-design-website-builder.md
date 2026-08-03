@@ -1,6 +1,6 @@
 ---
 title: Website Builder — AI-Powered HTML Site Generation
-version: 1.1
+version: 1.2
 date_created: 2026-08-03
 last_updated: 2026-08-03
 owner: Founder
@@ -26,7 +26,10 @@ Specifica il modulo **Website Builder** che permette all'admin di generare siti 
 - Integrazione CRM: auto-build genera bozza sito, CustomerDetail mostra preview
 - Integrazione Collection: tab `website`, preview SVG, AI stats, export
 - Generazione immagini: Gemini (via endpoint `/api/ai/logo-background` esistente) per hero/background, SVG inline per icone/decorazioni
-- Brief strutturato: 14 campi che guidano l'AI (non solo textarea libero)
+- Upload logo/immagine brand: sidebar con preview, compressione automatica, persistenza in `logoUrl`
+- Vision AI sul logo: estrazione SOLO palette colori e stile font (non layout/contenuti)
+- Logo iniettato nell'HTML generato dopo `<nav>`/`<header>`/`<body>`
+- AIProviderBadge nella sidebar per selezione provider AI
 - Admin-only (stessa guardia dell'editor preventivi)
 
 **Out of scope**:
@@ -90,14 +93,14 @@ Specifica il modulo **Website Builder** che permette all'admin di generare siti 
 
 ### Functional Requirements — AI Generation
 
-- **REQ-005**: Click "Genera" → costruisce prompt strutturato dai 14 campi → chiama `WebsiteOrchestrator.generateSite(brief, options)` → AI produce JSON con `{ html, css, js, pages[] }`
-- **REQ-006**: Il prompt costruito deve includere TUTTI i 14 campi in formato leggibile, non solo un text blob
-- **REQ-007**: La preview iframe deve aggiornarsi automaticamente dopo la generazione AI
-- **REQ-008**: L'admin deve poter modificare HTML, CSS e JS manualmente in 3 tab CodeMirror separati
-- **REQ-009**: Le modifiche manuali al codice devono aggiornare la preview in tempo reale (debounce 500ms)
-- **REQ-010**: Click "Raffina" → textarea per istruzione → `WebsiteOrchestrator.refineSite(site, instruction)` → AI modifica il codice esistente (non rigenera da zero)
-- **REQ-011**: Salva → persiste documento `website` con codice corrente
-- **REQ-012**: Export ZIP → JSZip con file `.html` separati per ogni pagina, più cartella `assets/` per immagini
+- **REQ-005**: Click "Genera" → costruisce prompt strutturato dai 14 campi → chiama `WebsiteOrchestrator.generateSite(brief, options)` → AI produce JSON con `{ html, css, js, pages[] }`. **Genera da zero**: non usa codice esistente.
+- **REQ-006**: Click "Raffina" → textarea per istruzione → `WebsiteOrchestrator.refineSite(site, instruction)` → AI modifica il codice **esistente** (merge parziale: se l'istruzione dice "cambia solo i colori", HTML/JS restano identici). Non rigenera da zero.
+- **REQ-007**: La preview iframe deve aggiornarsi automaticamente dopo la generazione o raffinamento AI
+- **REQ-008**: L'admin deve poter caricare un logo/immagine brand (sidebar, upload file → compressDataUrl → `logoUrl` nello schema)
+- **REQ-009**: Se `logoUrl` è presente e il provider AI supporta vision (MiniMax M3), l'immagine viene passata all'AI per estrarre SOLO palette colori e stile font — NON per decidere layout, contenuti o struttura (quelli vengono dal brief)
+- **REQ-010**: Dopo la generazione AI, il logo viene iniettato nell'HTML generato (dopo `<nav>`, `<header>`, o `<body>` come fallback) tramite `injectLogoIntoHtml()`
+- **REQ-011**: L'auto-save (30s) viene saltato mentre l'AI sta generando (`isProcessingRef` guard) per non sovrascrivere il risultato fresco
+- **REQ-012**: L'admin deve poter selezionare il provider AI tramite `AIProviderBadge` nella sidebar del brief
 - **REQ-013**: L'AI deve generare immagini hero/background via Gemini (prompt → base64) quando richiesto dal brief
 - **REQ-014**: L'AI deve generare icone e decorazioni come SVG inline (zero costo API immagini)
 - **REQ-015**: L'AI deve decidere autonomamente se il sito è single-page (sezioni scroll) o multi-pagina (file separati) in base alla complessità del brief
