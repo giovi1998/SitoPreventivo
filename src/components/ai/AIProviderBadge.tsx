@@ -35,9 +35,10 @@ export function providerShortName(id: string): string {
 export function providerModelShort(model: string): string {
   return model
     .replace('minimax-m3:cloud', 'MiniMax M3')
+    .replace('deepseek-v4-flash:cloud', 'V4 Flash')
     .replace('deepseek-v4-pro:cloud', 'V4 Pro')
     .replace('qwen-3.5', 'Qwen 3.5')
-    .replace('deepseek-v4-flash', 'Chat')
+    .replace('deepseek-v4-flash', 'V4 Flash')
     .replace('gemini-2.0-flash-preview-image-generation', 'Flash Image')
     .replace('gemini-3.1-flash-image', 'Nano Banana');
 }
