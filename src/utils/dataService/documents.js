@@ -123,7 +123,10 @@ export function createDocumentsMethods(svc) {
       // so API never stores null for logo/card/flyer content.
       const apiDoc = toApiDocument({ ...document, userEmail: email || document.userEmail });
       const result = await api('POST', '/documents', { email, document: apiDoc });
-      if (result.error) return { success: false, error: result.error };
+      if (result.error) {
+        console.warn('[doc-save] POST /documents fallito', { id: apiDoc.id, type: apiDoc.documentType, email, error: result.error, status: result.status });
+        return { success: false, error: result.error };
+      }
       const row = result.data || result;
       return { success: true, data: hydrateDocument(row) };
     },
@@ -229,9 +232,11 @@ export function createDocumentsMethods(svc) {
         return { success: true };
       }
       const result = await api('DELETE', `/documents/${documentId}`, { email });
-      // Idempotente: 404 = documento già assente in DB (doc "fantasma" di un
-      // salvataggio fallito in UI) → tratta come successo per pulire l'UI.
-      if (result.error && result.error !== 'Documento non trovato') return { success: false, error: result.error };
+      if (result.error && result.error === 'Documento non trovato') {
+        console.warn('[doc-save] DELETE 404 — documento fantasma', { id: documentId, email, action: 'trattato come successo (idempotente)' });
+        return { success: true };
+      }
+      if (result.error) return { success: false, error: result.error };
       return { success: true };
     },
 

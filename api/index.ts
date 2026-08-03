@@ -1133,6 +1133,7 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
       data: dataToStore as never,
       isTemplate: false,
     }).returning();
+    console.log('[doc] POST creato', { id: document.id, type: document.documentType, email, dataBytes: JSON.stringify(dataToStore)?.length });
     // Phase 5: increment user document count (admin excluded, no-op)
     if (email !== ADMIN_EMAIL) {
       const [settings] = await (await getDb()).select().from(userSettingsTable).where(eq(userSettingsTable.userEmail, email));
@@ -1158,6 +1159,7 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
 
     const [existing] = await (await getDb()).select().from(documentsTable).where(eq(documentsTable.id, documentId));
     if (!existing) {
+      console.log('[doc] DELETE 404', { id: documentId, email, bodyEmail: body.email, queryEmail: searchParams.get('email') });
       return json(req, res, 404, { error: 'Documento non trovato' });
     }
     if (existing.userEmail !== email) {
