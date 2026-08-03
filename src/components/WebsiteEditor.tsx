@@ -432,195 +432,200 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       </div>
 
       <div className="website-content">
-        {tab === 'brief' && (
-          <div className="website-brief-panel">
-            <div className="brief-form">
-              <div className="brief-field">
-                <label>Nome attività *</label>
-                <input type="text" value={website.brief.businessName} onChange={(e) => updateBrief('businessName', e.target.value)} placeholder="Es. Panetteria Artigianale" maxLength={100} />
-              </div>
-              <div className="brief-field">
-                <label>Settore</label>
-                <input type="text" value={website.brief.sector} onChange={(e) => updateBrief('sector', e.target.value)} placeholder="Es. tech, food, fashion..." maxLength={50} />
-              </div>
-              <div className="brief-field brief-field-full">
-                <label>Descrizione *</label>
-                <textarea value={website.brief.description} onChange={(e) => updateBrief('description', e.target.value)} placeholder="Descrivi l'attività, cosa offre, cosa vende..." maxLength={1000} rows={4} />
-              </div>
-              <div className="brief-field">
-                <label>Tono comunicativo</label>
-                <input type="text" value={website.brief.tone} onChange={(e) => updateBrief('tone', e.target.value)} placeholder="Es. professionale, amichevole, lussuoso..." maxLength={50} />
-              </div>
-              <div className="brief-field">
-                <label>Target audience</label>
-                <input type="text" value={website.brief.target} onChange={(e) => updateBrief('target', e.target.value)} placeholder="Es. Giovani professionisti 25-40 anni" maxLength={200} />
-              </div>
-              <div className="brief-field">
-                <label>Pagine richieste</label>
-                <input type="text" value={website.brief.pages} onChange={(e) => updateBrief('pages', e.target.value)} placeholder="index, about, contact..." maxLength={300} />
-              </div>
-              <div className="brief-field">
-                <label>Colori preferiti</label>
-                <input type="text" value={website.brief.preferredColors} onChange={(e) => updateBrief('preferredColors', e.target.value)} placeholder="Es. Blu scuro e oro, #01696F" maxLength={200} />
-              </div>
-              <div className="brief-field">
-                <label>Font preferito</label>
-                <input type="text" value={website.brief.font} onChange={(e) => updateBrief('font', e.target.value)} placeholder="Es. Inter, Georgia, Playfair Display..." maxLength={50} />
-              </div>
-              <div className="brief-field">
-                <label>Call-to-action principale</label>
-                <input type="text" value={website.brief.cta} onChange={(e) => updateBrief('cta', e.target.value)} placeholder="Es. Richiedi un preventivo gratuito" maxLength={100} />
-              </div>
-              <div className="brief-field">
-                <label>Sezioni desiderate</label>
-                <input type="text" value={website.brief.sections} onChange={(e) => updateBrief('sections', e.target.value)} placeholder="hero, chi_siamo, servizi, contatti..." maxLength={300} />
-              </div>
-              <div className="brief-field">
-                <label>Feature speciali</label>
-                <input type="text" value={website.brief.features} onChange={(e) => updateBrief('features', e.target.value)} placeholder="Es. Galleria foto, form contatto..." maxLength={300} />
-              </div>
-              <div className="brief-field">
-                <label>Contatti</label>
-                <input type="text" value={website.brief.contacts} onChange={(e) => updateBrief('contacts', e.target.value)} placeholder="Via Roma 1, 00100 Roma, info@..." maxLength={300} />
-              </div>
-              <div className="brief-field brief-field-full">
-                <label>Social link</label>
-                {website.brief.socials?.map((s, i) => (
-                  <div key={i} className="social-row">
-                    <input type="text" value={s.platform} onChange={(e) => updateSocial(i, 'platform', e.target.value)} placeholder="Piattaforma (es. Instagram)" maxLength={50} />
-                    <input type="text" value={s.url} onChange={(e) => updateSocial(i, 'url', e.target.value)} placeholder="URL o @username" maxLength={300} />
-                    <button type="button" className="social-remove" onClick={() => removeSocial(i)} title="Rimuovi">✕</button>
-                  </div>
-                ))}
-                <button type="button" className="social-add" onClick={addSocial}>+ Aggiungi social</button>
-              </div>
-              <div className="brief-field">
-                <label>Google Maps (URL)</label>
-                <input type="text" value={website.brief.mapsUrl} onChange={(e) => updateBrief('mapsUrl', e.target.value)} placeholder="https://maps.app.goo.gl/... o https://maps.google.com/?q=..." maxLength={500} />
-              </div>
-              <div className="brief-field brief-field-full">
-                <label>Note extra</label>
-                <textarea value={website.brief.notes} onChange={(e) => updateBrief('notes', e.target.value)} placeholder="Es. Il cliente vuole design simile a www.esempio.com" maxLength={500} rows={3} />
-              </div>
-            </div>
-
-            <div className="brief-sidebar">
-              <div className="brief-style-select">
-                <label>Stile visivo</label>
-                <div className="style-pills">
-                  {STYLE_OPTIONS.map((opt) => (
-                    <button key={opt.value} className={`style-pill${website.style === opt.value ? ' active' : ''}`} onClick={() => updateStyle(opt.value)}>{opt.label}</button>
+        <div className="website-main">
+          {tab === 'brief' && (
+            <div className="website-brief-panel">
+              <div className="brief-form">
+                <div className="brief-field">
+                  <label>Nome attività *</label>
+                  <input type="text" value={website.brief.businessName} onChange={(e) => updateBrief('businessName', e.target.value)} placeholder="Es. Panetteria Artigianale" maxLength={100} />
+                </div>
+                <div className="brief-field">
+                  <label>Settore</label>
+                  <input type="text" value={website.brief.sector} onChange={(e) => updateBrief('sector', e.target.value)} placeholder="Es. tech, food, fashion..." maxLength={50} />
+                </div>
+                <div className="brief-field brief-field-full">
+                  <label>Descrizione *</label>
+                  <textarea value={website.brief.description} onChange={(e) => updateBrief('description', e.target.value)} placeholder="Descrivi l'attività, cosa offre, cosa vende..." maxLength={1000} rows={4} />
+                </div>
+                <div className="brief-field">
+                  <label>Tono comunicativo</label>
+                  <input type="text" value={website.brief.tone} onChange={(e) => updateBrief('tone', e.target.value)} placeholder="Es. professionale, amichevole, lussuoso..." maxLength={50} />
+                </div>
+                <div className="brief-field">
+                  <label>Target audience</label>
+                  <input type="text" value={website.brief.target} onChange={(e) => updateBrief('target', e.target.value)} placeholder="Es. Giovani professionisti 25-40 anni" maxLength={200} />
+                </div>
+                <div className="brief-field">
+                  <label>Pagine richieste</label>
+                  <input type="text" value={website.brief.pages} onChange={(e) => updateBrief('pages', e.target.value)} placeholder="index, about, contact..." maxLength={300} />
+                </div>
+                <div className="brief-field">
+                  <label>Colori preferiti</label>
+                  <input type="text" value={website.brief.preferredColors} onChange={(e) => updateBrief('preferredColors', e.target.value)} placeholder="Es. Blu scuro e oro, #01696F" maxLength={200} />
+                </div>
+                <div className="brief-field">
+                  <label>Font preferito</label>
+                  <input type="text" value={website.brief.font} onChange={(e) => updateBrief('font', e.target.value)} placeholder="Es. Inter, Georgia, Playfair Display..." maxLength={50} />
+                </div>
+                <div className="brief-field">
+                  <label>Call-to-action principale</label>
+                  <input type="text" value={website.brief.cta} onChange={(e) => updateBrief('cta', e.target.value)} placeholder="Es. Richiedi un preventivo gratuito" maxLength={100} />
+                </div>
+                <div className="brief-field">
+                  <label>Sezioni desiderate</label>
+                  <input type="text" value={website.brief.sections} onChange={(e) => updateBrief('sections', e.target.value)} placeholder="hero, chi_siamo, servizi, contatti..." maxLength={300} />
+                </div>
+                <div className="brief-field">
+                  <label>Feature speciali</label>
+                  <input type="text" value={website.brief.features} onChange={(e) => updateBrief('features', e.target.value)} placeholder="Es. Galleria foto, form contatto..." maxLength={300} />
+                </div>
+                <div className="brief-field">
+                  <label>Contatti</label>
+                  <input type="text" value={website.brief.contacts} onChange={(e) => updateBrief('contacts', e.target.value)} placeholder="Via Roma 1, 00100 Roma, info@..." maxLength={300} />
+                </div>
+                <div className="brief-field brief-field-full">
+                  <label>Social link</label>
+                  {website.brief.socials?.map((s, i) => (
+                    <div key={i} className="social-row">
+                      <input type="text" value={s.platform} onChange={(e) => updateSocial(i, 'platform', e.target.value)} placeholder="Piattaforma (es. Instagram)" maxLength={50} />
+                      <input type="text" value={s.url} onChange={(e) => updateSocial(i, 'url', e.target.value)} placeholder="URL o @username" maxLength={300} />
+                      <button type="button" className="social-remove" onClick={() => removeSocial(i)} title="Rimuovi">✕</button>
+                    </div>
                   ))}
+                  <button type="button" className="social-add" onClick={addSocial}>+ Aggiungi social</button>
+                </div>
+                <div className="brief-field">
+                  <label>Google Maps (URL)</label>
+                  <input type="text" value={website.brief.mapsUrl} onChange={(e) => updateBrief('mapsUrl', e.target.value)} placeholder="https://maps.app.goo.gl/... o https://maps.google.com/?q=..." maxLength={500} />
+                </div>
+                <div className="brief-field brief-field-full">
+                  <label>Note extra</label>
+                  <textarea value={website.brief.notes} onChange={(e) => updateBrief('notes', e.target.value)} placeholder="Es. Il cliente vuole design simile a www.esempio.com" maxLength={500} rows={3} />
                 </div>
               </div>
 
-              <div className="brief-logo-section">
-                <label>Logo</label>
-                {website.logoUrl ? (
-                  <div className="brief-logo-preview">
-                    <img src={website.logoUrl} alt="Logo" />
-                    <button className="brief-logo-remove" onClick={removeLogo} title="Rimuovi logo">✕</button>
-                  </div>
-                ) : (
-                  <label className="brief-logo-upload">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                    <span>Carica logo</span>
-                    <input type="file" accept="image/*" onChange={handleLogoUpload} hidden />
-                  </label>
-                )}
-              </div>
-
-              <div className="brief-images-section">
-                <label>Immagini per sezioni</label>
-                {website.images.length > 0 && (
-                  <div className="brief-image-list">
-                    {website.images.map((img, i) => (
-                      <div key={i} className="brief-image-item">
-                        <img src={img} alt={`Immagine ${i + 1}`} />
-                        <button className="brief-logo-remove" onClick={() => removeImage(i)} title="Rimuovi">✕</button>
-                      </div>
+              <div className="brief-sidebar">
+                <div className="brief-style-select">
+                  <label>Stile visivo</label>
+                  <div className="style-pills">
+                    {STYLE_OPTIONS.map((opt) => (
+                      <button key={opt.value} className={`style-pill${website.style === opt.value ? ' active' : ''}`} onClick={() => updateStyle(opt.value)}>{opt.label}</button>
                     ))}
                   </div>
-                )}
-                <label className="brief-logo-upload">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  <span>Aggiungi immagini</span>
-                  <input type="file" accept="image/*" multiple onChange={handleImageUpload} hidden />
-                </label>
+                </div>
+
+                <div className="brief-logo-section">
+                  <label>Logo</label>
+                  {website.logoUrl ? (
+                    <div className="brief-logo-preview">
+                      <img src={website.logoUrl} alt="Logo" />
+                      <button className="brief-logo-remove" onClick={removeLogo} title="Rimuovi logo">✕</button>
+                    </div>
+                  ) : (
+                    <label className="brief-logo-upload">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      <span>Carica logo</span>
+                      <input type="file" accept="image/*" onChange={handleLogoUpload} hidden />
+                    </label>
+                  )}
+                </div>
+
+                <div className="brief-images-section">
+                  <label>Immagini per sezioni</label>
+                  {website.images.length > 0 && (
+                    <div className="brief-image-list">
+                      {website.images.map((img, i) => (
+                        <div key={i} className="brief-image-item">
+                          <img src={img} alt={`Immagine ${i + 1}`} />
+                          <button className="brief-logo-remove" onClick={() => removeImage(i)} title="Rimuovi">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <label className="brief-logo-upload">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    <span>Aggiungi immagini</span>
+                    <input type="file" accept="image/*" multiple onChange={handleImageUpload} hidden />
+                  </label>
+                </div>
               </div>
+            </div>
+          )}
 
-              <AIConsole
-                title="AI Assist"
-                isProcessing={isProcessing}
-                logs={logs}
-                tier={tier}
-                onSubmitPrompt={(text) => handleRefine(text)}
-                editorKind="website"
-                lastCostUsd={lastCostUsd}
-                providerId={aiModel}
-                onProviderChange={handleProviderChange}
-              >
-                <button className="btn-generate" onClick={handleGenerate} disabled={isProcessing}>
-                  {isProcessing ? 'Generando…' : 'Genera sito con AI'}
-                </button>
+          {tab === 'preview' && (
+            <div className="website-preview-panel">
+              <div className="viewport-controls">
+                {VIEWPORT_OPTIONS.map((opt) => (
+                  <button key={opt.value} className={`viewport-btn${viewport === opt.value ? ' active' : ''}`} onClick={() => setViewport(opt.value)}>
+                    {opt.icon} {opt.label}
+                  </button>
+                ))}
+                <button className="btn-open-tab" onClick={handleOpenInNewTab} title="Apri in nuova tab">↗ Nuova tab</button>
+              </div>
+              <div className="preview-wrapper" style={{ width: viewport }}>
+                <iframe
+                  sandbox="allow-scripts"
+                  srcDoc={fullDocument}
+                  title="Anteprima sito"
+                  className="preview-iframe"
+                />
+              </div>
+            </div>
+          )}
 
-                {websiteHasContent(website) && (
-                  <div className="refine-section">
-                    <label>Raffina con AI</label>
-                    <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder="Es. Rendi i colori più scuri, cambia il font in Inter..." rows={3} />
-                    <button className="btn-refine" onClick={() => handleRefine()} disabled={isRefining || !refinePrompt.trim()}>
-                      {isRefining ? 'Raffinando…' : 'Raffina'}
-                    </button>
-                  </div>
+          {tab === 'code' && (
+            <div className="website-code-panel">
+              <div className="code-tabs" role="tablist">
+                {(['html', 'css', 'js'] as CodeTab[]).map((ct) => (
+                  <button key={ct} role="tab" aria-selected={codeTab === ct} className={`code-tab${codeTab === ct ? ' active' : ''}`} onClick={() => setCodeTab(ct)}>
+                    {ct.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <div className="code-editor-container">
+                {codeTab === 'html' && (
+                  <textarea className="code-textarea" value={website.html} onChange={(e) => updateCode('html', e.target.value)} spellCheck={false} />
                 )}
-              </AIConsole>
+                {codeTab === 'css' && (
+                  <textarea className="code-textarea" value={website.css} onChange={(e) => updateCode('css', e.target.value)} spellCheck={false} />
+                )}
+                {codeTab === 'js' && (
+                  <textarea className="code-textarea" value={website.js} onChange={(e) => updateCode('js', e.target.value)} spellCheck={false} />
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {tab === 'preview' && (
-          <div className="website-preview-panel">
-            <div className="viewport-controls">
-              {VIEWPORT_OPTIONS.map((opt) => (
-                <button key={opt.value} className={`viewport-btn${viewport === opt.value ? ' active' : ''}`} onClick={() => setViewport(opt.value)}>
-                  {opt.icon} {opt.label}
-                </button>
-              ))}
-              <button className="btn-open-tab" onClick={handleOpenInNewTab} title="Apri in nuova tab">↗ Nuova tab</button>
-            </div>
-            <div className="preview-wrapper" style={{ width: viewport }}>
-              <iframe
-                sandbox="allow-scripts"
-                srcDoc={fullDocument}
-                title="Anteprima sito"
-                className="preview-iframe"
-              />
-            </div>
-          </div>
-        )}
+        <div className="website-rail">
+          <AIConsole
+            title="AI Assist"
+            isProcessing={isProcessing}
+            logs={logs}
+            tier={tier}
+            onSubmitPrompt={(text) => handleRefine(text)}
+            editorKind="website"
+            defaultExpanded={true}
+            lastCostUsd={lastCostUsd}
+            providerId={aiModel}
+            onProviderChange={handleProviderChange}
+          >
+            <button className="btn-generate" onClick={handleGenerate} disabled={isProcessing}>
+              {isProcessing ? 'Generando…' : 'Genera sito con AI'}
+            </button>
 
-        {tab === 'code' && (
-          <div className="website-code-panel">
-            <div className="code-tabs" role="tablist">
-              {(['html', 'css', 'js'] as CodeTab[]).map((ct) => (
-                <button key={ct} role="tab" aria-selected={codeTab === ct} className={`code-tab${codeTab === ct ? ' active' : ''}`} onClick={() => setCodeTab(ct)}>
-                  {ct.toUpperCase()}
+            {websiteHasContent(website) && (
+              <div className="refine-section">
+                <label>Raffina con AI</label>
+                <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder="Es. Rendi i colori più scuri, cambia il font in Inter..." rows={3} />
+                <button className="btn-refine" onClick={() => handleRefine()} disabled={isRefining || !refinePrompt.trim()}>
+                  {isRefining ? 'Raffinando…' : 'Raffina'}
                 </button>
-              ))}
-            </div>
-            <div className="code-editor-container">
-              {codeTab === 'html' && (
-                <textarea className="code-textarea" value={website.html} onChange={(e) => updateCode('html', e.target.value)} spellCheck={false} />
-              )}
-              {codeTab === 'css' && (
-                <textarea className="code-textarea" value={website.css} onChange={(e) => updateCode('css', e.target.value)} spellCheck={false} />
-              )}
-              {codeTab === 'js' && (
-                <textarea className="code-textarea" value={website.js} onChange={(e) => updateCode('js', e.target.value)} spellCheck={false} />
-              )}
-            </div>
-          </div>
-        )}
+              </div>
+            )}
+          </AIConsole>
+        </div>
       </div>
 
       <SaveDialog

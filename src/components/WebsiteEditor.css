@@ -51,8 +51,21 @@
 
 .website-content {
   flex: 1;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 0;
+}
+
+.website-main {
   overflow: auto;
   padding: 16px;
+}
+
+.website-rail {
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  background: var(--bg-secondary, #f8f9fa);
 }
 
 /* ─── BRIEF PANEL ─── */

@@ -96,6 +96,15 @@ export default function AIConsole({
   const [prompt, setPrompt] = useState(suggestedPrompt ?? '');
   const [logOpen, setLogOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prevLogsLength = useRef(0);
+
+  // Auto-apri log panel quando arrivano nuovi log
+  useEffect(() => {
+    if (logs.length > prevLogsLength.current && logs.length > 0) {
+      setLogOpen(true);
+    }
+    prevLogsLength.current = logs.length;
+  }, [logs.length]);
 
   // AI-first entry (REQ-AI-003): prompt suggerito + focus quando espansa.
   useEffect(() => {
