@@ -5,7 +5,7 @@ import { z } from 'zod';
 // changes). The facade re-exports only the symbols that were public
 // before the split; `hexColorSchema` stays module-internal.
 
-export const documentTypeSchema = z.enum(['quote', 'qrCode', 'businessCard', 'flyer', 'logo', 'generatedImage']);
+export const documentTypeSchema = z.enum(['quote', 'qrCode', 'businessCard', 'flyer', 'logo', 'generatedImage', 'website']);
 export type DocumentType = z.infer<typeof documentTypeSchema>;
 
 export const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Colore non valido (formato #RRGGBB)');

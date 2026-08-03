@@ -55,6 +55,7 @@ const DOC_EDITOR_VIEW: Record<string, string> = {
   logo: 'logo',
   businessCard: 'card',
   flyer: 'flyer',
+  website: 'website',
 };
 
 function asStr(v: unknown): string {

@@ -9,7 +9,7 @@
  * - `aiAutoFallback`: se true, fallback automatico DeepSeek se Ollama 429
  */
 
-export type EditorKind = 'editor' | 'card' | 'flyer' | 'logo' | 'social';
+export type EditorKind = 'editor' | 'card' | 'flyer' | 'logo' | 'social' | 'website';
 
 export interface UiPrefs {
   version: 1;

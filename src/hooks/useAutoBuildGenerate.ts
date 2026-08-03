@@ -3,6 +3,7 @@ import dataService from '../utils/dataService';
 import { LogoAIOrchestrator } from '../ai/logoOrchestrator';
 import { CardAIOrchestrator } from '../ai/cardOrchestrator';
 import { FlyerAIOrchestrator } from '../ai/flyerOrchestrator';
+import { WebsiteOrchestrator } from '../ai/websiteOrchestrator';
 import { builderToSvg, svgToPng } from '../utils/logoGenerator';
 import { buildCardPhotoBrief } from '../utils/card/photoBrief';
 import { compressDataUrl } from '../utils/card/imageCompress';
@@ -47,12 +48,13 @@ export interface AutoBuildGenerateOptions {
   providerId?: string;
 }
 
-const GENERATABLE_ORDER = ['logo', 'businessCard', 'flyer'] as const;
+const GENERATABLE_ORDER = ['logo', 'businessCard', 'flyer', 'website'] as const;
 
 const STEP_LABEL: Record<string, string> = {
   logo: 'logo',
   businessCard: 'card',
   flyer: 'flyer',
+  website: 'sito web',
 };
 
 interface TokenUsage {
@@ -438,6 +440,47 @@ async function generateFlyerDraft(
   await saveDraft(doc, { ...data, aiStats });
 }
 
+async function generateWebsiteDraft(
+  doc: AutoBuildDoc,
+  brief: string,
+  options?: AutoBuildGenerateOptions,
+): Promise<void> {
+  const briefData = (doc.data?.brief ?? {}) as Record<string, unknown>;
+  const result = await new WebsiteOrchestrator().generateSite(
+    {
+      businessName: String(briefData.businessName || ''),
+      sector: String(briefData.sector || ''),
+      description: brief || String(briefData.description || ''),
+      tone: String(briefData.tone || ''),
+      target: String(briefData.target || ''),
+      pages: String(briefData.pages || 'index'),
+      preferredColors: String(briefData.preferredColors || ''),
+      font: String(briefData.font || ''),
+      cta: String(briefData.cta || ''),
+      sections: String(briefData.sections || 'hero, chi_siamo, contatti'),
+      features: String(briefData.features || ''),
+      contacts: String(briefData.contacts || ''),
+      social: String(briefData.social || ''),
+      notes: String(briefData.notes || ''),
+    },
+    {
+      style: String(doc.data?.style || 'modern'),
+      briefContext: briefOf(doc),
+      modelId: options?.providerId,
+    },
+  );
+  const aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'websiteCode', textCost(result.response?.usage));
+  await saveDraft(doc, {
+    ...(doc.data as Record<string, unknown>),
+    html: result.site.html,
+    css: result.site.css,
+    js: result.site.js,
+    pages: result.site.pages,
+    source: 'ai',
+    aiStats,
+  });
+}
+
 export function useAutoBuildGenerate() {
   const [state, setState] = useState<AutoBuildGenerateState>({ statuses: {}, errors: {}, currentStep: null, running: false });
   const logoBuilderRef = useRef<LogoBuilder | null>(null);
@@ -468,6 +511,8 @@ export function useAutoBuildGenerate() {
         cardDataRef.current = await generateCardDraft(doc, brief, customer, logoBuilderRef.current, visionBuilder, options);
       } else if (doc.documentType === 'flyer') {
         await generateFlyerDraft(doc, brief, moodToTone(customer.aiSuggestedFields?.mood), cardDataRef.current, options);
+      } else if (doc.documentType === 'website') {
+        await generateWebsiteDraft(doc, brief, options);
       }
     },
     [],

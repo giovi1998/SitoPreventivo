@@ -90,6 +90,7 @@ export default function AppShell() {
   const [cardDocument, setCardDocument] = useState<any>(null);
   const [logoDocument, setLogoDocument] = useState<any>(null);
   const [flyerDocument, setFlyerDocument] = useState<any>(null);
+  const [websiteDocument, setWebsiteDocument] = useState<any>(null);
   const [documentTheme, setDocumentTheme] = useState<DocumentTemplateId>(() =>
     (localStorage.getItem('documentTheme') as DocumentTemplateId) || 'corporate'
   );
@@ -252,7 +253,7 @@ export default function AppShell() {
         // guard in main.tsx, but admin skips onboarding anyway.
         // Phase 3: added 'flyer' to the allowlist.
         const preferred = settings.preferredDocumentType as string | undefined;
-    if (preferred && ['editor', 'qr', 'card', 'flyer', 'logo'].includes(preferred)) {
+    if (preferred && ['editor', 'qr', 'card', 'flyer', 'logo', 'website'].includes(preferred)) {
       setView(preferred as any);
     }
       } catch (err) {
@@ -549,6 +550,10 @@ export default function AppShell() {
         setFlyerDocument(doc);
         setView('flyer', docId);
         break;
+      case 'website':
+        setWebsiteDocument(doc);
+        setView('website', docId);
+        break;
       default:
         addToast('error', `Tipo documento non supportato: ${doc.documentType}`);
     }
@@ -646,6 +651,7 @@ export default function AppShell() {
     cardDocument, setCardDocument,
     logoDocument, setLogoDocument,
     flyerDocument, setFlyerDocument,
+    websiteDocument, setWebsiteDocument,
     openDocument,
     refreshDocuments,
     documentsVersion,
@@ -653,7 +659,7 @@ export default function AppShell() {
   }), [
     quote, quotes, user?.email, aiText, aiModel,
     tier, documentCount, documentTheme,
-    qrDocument, cardDocument, logoDocument, flyerDocument,
+    qrDocument, cardDocument, logoDocument, flyerDocument, websiteDocument,
     documentsVersion,
     isDirty, lastSaveTime, pdfLoading, docxLoading,
     isProcessing, availableModels, aiLogs,
@@ -665,7 +671,7 @@ export default function AppShell() {
     exportPDF, exportDOCX, saveCurrentQuote, saveAsTemplate,
     setDocumentTheme, setAiText, setAiModel,
     refreshTier, checkDocumentLimit, refreshDocuments,
-    previewRef, setQrDocument, setCardDocument, setLogoDocument, setFlyerDocument,
+    previewRef, setQrDocument, setCardDocument, setLogoDocument, setFlyerDocument, setWebsiteDocument,
     openDocument,
   ]) as any;
 

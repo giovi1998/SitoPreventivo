@@ -7,9 +7,9 @@ import { useToast } from './useToast';
 const DOC_ID_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
 
 export interface UseDocumentLoaderOptions {
-  view: 'editor' | 'qr' | 'card' | 'logo' | 'flyer';
-  documentType: 'quote' | 'qrCode' | 'businessCard' | 'logo' | 'flyer';
-  contextField: 'editingQuote' | 'qrDocument' | 'cardDocument' | 'logoDocument' | 'flyerDocument';
+  view: 'editor' | 'qr' | 'card' | 'logo' | 'flyer' | 'website';
+  documentType: 'quote' | 'qrCode' | 'businessCard' | 'logo' | 'flyer' | 'website';
+  contextField: 'editingQuote' | 'qrDocument' | 'cardDocument' | 'logoDocument' | 'flyerDocument' | 'websiteDocument';
 }
 
 export function useDocumentLoader({ view, documentType, contextField }: UseDocumentLoaderOptions) {

@@ -9,6 +9,7 @@ export const ROUTE_PATHS = {
   card: '/app/card',
   logo: '/app/logo',
   flyer: '/app/flyer',
+  website: '/app/website',
   social: '/app/social',
   settings: '/app/settings',
   admin: '/app/admin',

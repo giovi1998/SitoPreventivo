@@ -12,7 +12,7 @@ import { useToast } from '../hooks/useToast';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
 
 
-type TabId = 'all' | 'quote' | 'qrCode' | 'businessCard' | 'flyer' | 'logo' | 'generatedImage';
+type TabId = 'all' | 'quote' | 'qrCode' | 'businessCard' | 'flyer' | 'logo' | 'website' | 'generatedImage';
 
 interface TabDef {
   id: TabId;
@@ -27,6 +27,7 @@ const TABS: TabDef[] = [
   { id: 'businessCard', label: 'Bigliettini', type: 'businessCard' },
   { id: 'flyer', label: 'Volantini', type: 'flyer' },
   { id: 'logo', label: 'Loghi', type: 'logo' },
+  { id: 'website', label: 'Siti Web', type: 'website' },
   { id: 'generatedImage', label: 'Immagini Generate', type: 'generatedImage' },
 ];
 
@@ -36,6 +37,7 @@ const TYPE_ICONS: Record<DocumentType, string> = {
   businessCard: 'id-card',
   flyer: 'file-text',
   logo: 'sparkle',
+  website: 'globe',
   generatedImage: 'image',
 };
 
@@ -45,6 +47,7 @@ const TYPE_LABELS: Record<DocumentType, string> = {
   businessCard: 'Bigliettino',
   flyer: 'Volantino',
   logo: 'Logo',
+  website: 'Sito Web',
   generatedImage: 'Immagine AI',
 };
 
@@ -268,7 +271,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   useRefetchOnFocus(() => { ctx?.refreshDocuments?.(); });
 
   const counts = useMemo(() => {
-    const c: Record<TabId, number> = { all: documents.length, quote: 0, qrCode: 0, businessCard: 0, flyer: 0, logo: 0, generatedImage: 0 };
+    const c: Record<TabId, number> = { all: documents.length, quote: 0, qrCode: 0, businessCard: 0, flyer: 0, logo: 0, website: 0, generatedImage: 0 };
     for (const d of documents) {
       if (d && d.documentType && c[d.documentType as DocumentType] !== undefined) {
         c[d.documentType as DocumentType] += 1;
@@ -812,6 +815,7 @@ function EmptyState({ tabId, totalCount, onOpen, ctx, isAdmin }: { tabId: TabId;
         businessCard: { title: 'Nessun bigliettino ancora', cta: 'Crea un bigliettino', docType: 'businessCard' },
         flyer: { title: 'Nessun volantino ancora', cta: 'Crea un volantino', docType: 'flyer' },
         logo: { title: 'Nessun logo ancora', cta: 'Crea un logo', docType: 'logo' },
+        website: { title: 'Nessun sito web ancora', cta: 'Crea un sito web', docType: 'website' },
         generatedImage: { title: 'Nessuna immagine AI ancora', cta: 'Genera un\'immagine', docType: null },
       }
     : {
@@ -821,6 +825,7 @@ function EmptyState({ tabId, totalCount, onOpen, ctx, isAdmin }: { tabId: TabId;
         businessCard: { title: 'Nessun bigliettino ancora', cta: 'Crea un bigliettino', docType: 'businessCard' },
         flyer: { title: 'Nessun volantino ancora', cta: 'Crea un volantino', docType: 'flyer' },
         logo: { title: 'Nessun logo ancora', cta: 'Crea un logo', docType: 'logo' },
+        website: { title: 'Nessun sito web ancora', cta: 'Crea un sito web', docType: 'website' },
         generatedImage: { title: 'Nessuna immagine AI ancora', cta: 'Genera un\'immagine', docType: null },
       };
   const msg = emptyMessages[tabId];

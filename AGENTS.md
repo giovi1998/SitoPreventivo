@@ -95,8 +95,8 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/pages/app/CustomersPage.tsx` | TB-027 route `/app/customers` (admin guard) |
 | `src/ai/BaseOrchestrator.ts` | Abstract condivisa (sanitize, parseJson, handleStream, trackUsage) |
 | `src/ai/quoteOrchestrator.ts` | Orchestratore quote (ex `ai/index.ts`): `AIOrchestrator`, `needsTools`, tool registry quote |
-| `src/ai/*Orchestrator.ts` | card / flyer / logo / social / onboarding |
-| `src/ai/prompts/registry.ts` | promptRegistry: lookup centralizzato 7 prompt |
+| `src/ai/*Orchestrator.ts` | card / flyer / logo / social / onboarding / website |
+| `src/ai/prompts/registry.ts` | promptRegistry: lookup centralizzato 8 prompt (incl. website-system) |
 | `src/ai/providers/gemini.ts` | `GeminiImageProvider` (Nano Banana, SDK `@google/genai`) |
 | `src/ai/cardMerge.ts` | Merge risposta AI → card (grid, style, photo-preserve) |
 | `src/components/CardEditor.tsx` + `card/` | Editor card: shell, form/ (barrel), ai/ (rail), grid controls |
@@ -106,7 +106,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/ai/AIConsole.tsx` | Rail AI unificata (collapse in `pq_ui:v1`, quickActions, `AILogPanel` + `AIProviderBadge`) |
 | `src/components/ActionBar.tsx` | Cluster azioni Salva/Esporta/Nuovo (logo, QR) |
 | `src/components/CollectionView.tsx` | Collection griglia documenti: tab, filtri, ricerca, preview SVG inline (logo/card/flyer/quote), export ZIP |
-| `src/hooks/useAI*.ts` | Hook AI: useAI, useAICard, useAIFlyer, useAILogo, useAISocial, useAIOnboarding |
+| `src/hooks/useAI*.ts` | Hook AI: useAI, useAICard, useAIFlyer, useAILogo, useAISocial, useAIOnboarding, useAIWebsite |
 | `src/hooks/useCard{PromptLibrary,AiImages}.ts` | Hook estratti da CardEditorShell: prompt library (photo/icon/cover) e generazione immagini AI (cover/photo/icona, CON-IS-001) |
 | `src/hooks/useCard{GridEditor,BackContent,AutoSave}.ts` | Hook estratti da CardEditorShell batch 2: grid state+handlers, services/socials/decorations retro, save/auto-save 30s (+ `cardHasContent`, `defaultCardTitle`). Shell 658 righe |
 | `src/components/card/form/CardFormSections.tsx` | `formContent` estratto dalla shell: compone le sezioni `form/` via barrel |
@@ -131,6 +131,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `/app/collection` | `CollectionPage` → `CollectionView` | login |
 | `/app/customers`, `/app/customers/:customerId` | `CustomersPage` → `CustomerList`/`CustomerDetail` | `AdminRoute` |
 | `/app/qr`, `/app/card`, `/app/logo`, `/app/flyer`, `/app/social` | Editor (lazy) | login |
+| `/app/website`, `/app/website/:docId` | `WebsitePage` → `WebsiteEditor` | `AdminEditorRoute` |
 | `.../:docId` | Stessi editor, caricano documento per ID | login |
 | `/app/settings` | `SettingsRoute` → `SettingsPage` | login |
 | `/app/admin` | `AdminPage` → `AdminDashboard` (lazy) | `AdminRoute` |

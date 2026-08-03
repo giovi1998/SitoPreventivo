@@ -12,6 +12,7 @@ export const AI_CALL_KINDS = [
   'socialCopy',
   'quoteCopy',
   'visionReview',
+  'websiteCode',
 ] as const;
 export type AiCallKind = (typeof AI_CALL_KINDS)[number];
 
@@ -46,6 +47,7 @@ export const AI_CALL_LABELS: Record<AiCallKind, { singular: string; plural: stri
   socialCopy: { singular: 'testo social', plural: 'testi social' },
   quoteCopy: { singular: 'testo preventivo', plural: 'testi preventivo' },
   visionReview: { singular: 'analisi visiva', plural: 'analisi visive' },
+  websiteCode: { singular: 'generazione sito', plural: 'generazioni sito' },
 };
 
 export function incrementAiStats(

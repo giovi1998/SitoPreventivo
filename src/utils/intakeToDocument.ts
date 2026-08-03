@@ -17,7 +17,7 @@ export interface IntakeBrief {
 }
 
 export interface IntakeDocumentDraft {
-  documentType: 'logo' | 'businessCard' | 'flyer' | 'generatedImage';
+  documentType: 'logo' | 'businessCard' | 'flyer' | 'generatedImage' | 'website';
   title: string;
   data: Record<string, unknown>;
 }

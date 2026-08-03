@@ -317,6 +317,37 @@ export function createCrmMethods(svc) {
               createdAt: now, updatedAt: now,
             },
           },
+          {
+            type: 'website',
+            title: `Sito ${cust.businessName}`,
+            data: {
+              documentType: 'website',
+              title: `Sito ${cust.businessName}`,
+              brief: {
+                businessName: cust.businessName || '',
+                sector: String(cust.sector || ''),
+                description: String(cust.activity || ''),
+                tone: String(cust.mood || ''),
+                target: String(cust.target || ''),
+                pages: 'index',
+                preferredColors: String(cust.preferredColors || ''),
+                font: '',
+                cta: '',
+                sections: 'hero, chi_siamo, contatti',
+                features: '',
+                contacts: [contacts.address, contacts.phone, contacts.email].filter(Boolean).join(', '),
+                social: '',
+                notes: '',
+              },
+              briefContext: buildBriefContext(cust),
+              html: '', css: '', js: '',
+              framework: 'vanilla', style: 'modern', pages: ['index'],
+              source: 'ai',
+              aiStats: { totalCostUsd: '0', calls: {} },
+              autoGeneratePending,
+              createdAt: now, updatedAt: now,
+            },
+          },
         ];
         // Replace semantics: un rerun sostituisce le BOZZE esistenti degli
         // stessi tipi (i documenti non-BOZZA non vengono toccati).

@@ -5,5 +5,6 @@ export { default as QrPage } from './QrPage';
 export { default as CardPage } from './CardPage';
 export { default as LogoPage } from './LogoPage';
 export { default as FlyerPage } from './FlyerPage';
+export { default as WebsitePage } from './WebsitePage';
 export { default as SettingsRoute } from './SettingsRoute';
 export { default as AdminPage } from './AdminPage';

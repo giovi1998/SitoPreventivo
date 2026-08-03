@@ -173,8 +173,6 @@ Ordine: validazione → portfolio → monetizzazione.
 - **Marketplace template community**: niente domanda, complessità alta.
 - **Chatbot clienti**: scope creep, nessun cliente l'ha chiesto.
 - **App mobile nativa**: la webapp mobile è sufficiente.
-- **Website builder generico self-service**: guerra persa vs
-  Durable/10Web/Framer AI (BP §B).
 - **Equity a collaboratori esterni**: app e brand restano proprietà
   esclusiva; solo rev-share o fee a progetto (BP §F).
 

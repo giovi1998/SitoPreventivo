@@ -97,7 +97,7 @@ L'admin `admin@gmail.com` viene autenticato direttamente dalla variabile d'ambie
 | `dataRegistrazione` | Data registrazione |
 | `deepseekKey` | API Key DeepSeek |
 | `precisionQuote_quotes` | Preventivi legacy (pre-fase 6, deprecata) |
-| `precisionQuote_documents:v1` | **Phase 6**: documenti unificati (quote, qrCode, businessCard, logo) |
+| `precisionQuote_documents:v1` | **Phase 6**: documenti unificati (quote, qrCode, businessCard, logo, flyer, website) |
 | `pq_migration_v1_done_<email>` | **Phase 6**: flag migrazione legacy → documents:v1 |
 | `unlock_codes` | **Phase 5**: codici sblocco tier (solo dev) |
 | `userSettings_<email>` | Impostazioni utente (displayName, companyName, profession, defaultColor, defaultVat, documentTheme, **tier**, **unlockCode**, **documentCount** da fase 5, **preferredDocumentType** da fase 7) |

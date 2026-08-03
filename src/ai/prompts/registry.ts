@@ -4,6 +4,7 @@ import { buildFlyerSystemPrompt, buildFlyerCopyPrompt } from './flyerSystem';
 import { buildLogoSystemPrompt } from './logoSystem';
 import { buildSocialSystemPrompt } from './socialSystem';
 import { buildOnboardingSystemPrompt } from './onboardingSystem';
+import { buildWebsiteSystemPrompt } from './websiteSystem';
 
 export type PromptContext = Record<string, unknown>;
 export type PromptBuilder = (ctx?: PromptContext) => string;
@@ -105,3 +106,4 @@ promptRegistry.setDefaultId('quote-system');
 promptRegistry.register('logo-system', () => buildLogoSystemPrompt(), 'Logo system prompt (v2 ready)');
 promptRegistry.register('social-system', () => buildSocialSystemPrompt(), 'Social system prompt');
 promptRegistry.register('onboarding-system', () => buildOnboardingSystemPrompt(), 'Onboarding system prompt');
+promptRegistry.register('website-system', () => buildWebsiteSystemPrompt(), 'Website system prompt');

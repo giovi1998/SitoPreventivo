@@ -58,6 +58,7 @@ export default function Topbar({
     qr: { kicker: 'Generatore QR Code', title: 'QR Code' },
     flyer: { kicker: 'Volantino / Locandina', title: 'Volantini' },
     logo: { kicker: 'Logo Builder', title: 'Logo' },
+    website: { kicker: 'Generatore Siti Web', title: 'Sito Web' },
     social: { kicker: 'Social AI', title: 'Generatore post social' },
   };
   const current = titles[view] || titles.editor;

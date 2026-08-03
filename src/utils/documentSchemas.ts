@@ -15,6 +15,7 @@ export * from './schemas/card';
 export * from './schemas/logo';
 export * from './schemas/flyer';
 export * from './schemas/social';
+export * from './schemas/website';
 
 export {
   documentTypeSchema,
