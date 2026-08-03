@@ -67,14 +67,6 @@ export function useDocumentLoader({ view, documentType, contextField }: UseDocum
     dataService.getDocument(userEmail, docId, documentType)
       .then((doc) => {
         setLoading(false);
-        // [doc-debug] TEMP
-        console.info('[doc-debug] loader: doc ricevuto', {
-          docId,
-          documentType,
-          gotDoc: !!doc,
-          docKeys: doc && typeof doc === 'object' ? Object.keys(doc).slice(0, 30) : null,
-          loading,
-        });
         if (!doc) {
           addToastRef.current('error', 'Documento non trovato');
           navigateRef.current(`/app/${view}`, { replace: true });

@@ -1073,12 +1073,6 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
       .where(eq(documentsTable.userEmail, userEmail))
       .orderBy(sql`updated_at DESC`);
     const filtered = type ? all.filter((d: any) => d.documentType === type) : all;
-    // [doc-debug] TEMP: lista compact per capire doc non salvati / data null
-    console.warn('[doc-debug] server GET /documents', {
-      email: userEmail,
-      total: all.length,
-      ids: all.map((d: any) => ({ id: d.id, type: d.documentType, bytes: JSON.stringify(d.data)?.length ?? 0 })),
-    });
     return json(req, res, 200, filtered);
   }
 
@@ -1091,30 +1085,12 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     if (!existing || existing.userEmail !== userEmail || (type && existing.documentType !== type)) {
       return json(req, res, 404, { error: 'Documento non trovato' });
     }
-    // [doc-debug] TEMP: diagnostica documenti vuoti in prod
-    console.warn('[doc-debug] server GET /documents/:id', {
-      id: documentId,
-      type: existing.documentType,
-      title: existing.title,
-      hasData: existing.data != null,
-      dataIsObject: typeof existing.data === 'object',
-      dataKeys: existing.data && typeof existing.data === 'object' ? Object.keys(existing.data).slice(0, 30) : null,
-      dataBytes: JSON.stringify(existing.data)?.length,
-    });
     return json(req, res, 200, existing);
   }
 
   if (path === '/documents' && method === 'POST') {
     const v = validate(DocumentBodySchema, body);
     if (v.error) {
-      // [doc-debug] TEMP: cattura POST rifiutati da schema (doc non salvati in DB)
-      console.warn('[doc-debug] server POST /documents REJECTED', {
-        id: (body as any)?.document?.id,
-        type: (body as any)?.document?.documentType,
-        email: (body as any)?.email,
-        errors: v.errors.map((e: any) => e.message).slice(0, 5),
-        dataBytes: JSON.stringify((body as any)?.document)?.length,
-      });
       return json(req, res, 400, { errors: v.errors });
     }
     const { email, document } = v.data;
@@ -1136,14 +1112,6 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     };
 
     const dataToStore = extractDocumentData(document);
-    // [doc-debug] TEMP: diagnostica salvataggio in prod
-    console.warn('[doc-debug] server POST /documents', {
-      id: document.id,
-      type: document.documentType,
-      email,
-      dataKeys: dataToStore && typeof dataToStore === 'object' ? Object.keys(dataToStore as any).slice(0, 30) : null,
-      dataBytes: JSON.stringify(dataToStore)?.length,
-    });
     const existing = await (await getDb()).select().from(documentsTable).where(eq(documentsTable.id, document.id));
     if (existing.length > 0) {
       if (existing[0].userEmail !== email) {
@@ -1190,8 +1158,6 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
 
     const [existing] = await (await getDb()).select().from(documentsTable).where(eq(documentsTable.id, documentId));
     if (!existing) {
-      // [doc-debug] TEMP: capire perché doc appena creati danno 404
-      console.warn('[doc-debug] server DELETE /documents/:id NOT FOUND', { id: documentId, email });
       return json(req, res, 404, { error: 'Documento non trovato' });
     }
     if (existing.userEmail !== email) {
@@ -3407,13 +3373,12 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
     }
     const d = v.data;
     const sourceRef = d.sourceRef || 'auto_' + crypto.randomUUID();
-    // idempotency: se sourceRef esiste già → 409
-    const existing = await (await getDb()).select().from(intakesTable).where(eq(intakesTable.sourceRef, sourceRef));
-    if (existing.length > 0) return json(req, res, 409, { error: 'Brief già ricevuto' });
-    const id = 'intake_' + crypto.randomUUID();
-    const [created] = await (await getDb()).insert(intakesTable).values({
-      id,
-      status: 'new',
+    const db = await getDb();
+    // upsert: se sourceRef esiste → UPDATE, altrimenti INSERT
+    const existing = await db.select().from(intakesTable).where(eq(intakesTable.sourceRef, sourceRef));
+    const isUpdate = existing.length > 0;
+    const intakeId = isUpdate ? existing[0].id : 'intake_' + crypto.randomUUID();
+    const intakeFields = {
       businessName: d.businessName,
       ownerName: d.ownerName || null,
       sector: d.sector || null,
@@ -3425,10 +3390,19 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
       package: d.package || 'apertura',
       sourceRef,
       webAnswers: d.webAnswers || null,
-    }).returning();
+    };
+    if (isUpdate) {
+      await db.update(intakesTable).set({ ...intakeFields, updatedAt: sql`now()` })
+        .where(eq(intakesTable.id, intakeId));
+    } else {
+      await db.insert(intakesTable).values({
+        id: intakeId,
+        status: 'new',
+        ...intakeFields,
+      });
+    }
     // TB-027: intake crea/aggiorna il customer — dedup per email (fallback:
     // stesso businessName) → UPDATE invece di duplicato se esiste già.
-    const db = await getDb();
     const custContacts = (d.contacts || {}) as { email?: string };
     let matched = null;
     if (typeof custContacts.email === 'string' && custContacts.email.trim()) {
@@ -3452,7 +3426,7 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
       contacts: d.contacts || null,
       package: d.package || 'apertura',
       webAnswers: d.webAnswers || null,
-      intakeId: id,
+      intakeId,
       source: 'intake',
     };
     let custId: string;
@@ -3472,7 +3446,7 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
       });
     }
     // SEC-002: no PII in log
-    console.log('[intake] created', { id, sourceRef, customer: custId, businessName: d.businessName });
+    console.log('[intake] ' + (isUpdate ? 'updated' : 'created'), { id: intakeId, sourceRef, customer: custId, businessName: d.businessName });
     // TB-019+ auto-research: se il cliente ha un sito valido, parte subito
     // (best-effort, non fa fallire il 201; FIRECRAWL_API_KEY opzionale).
     let researchStatus: Record<string, string> | null = null;
@@ -3491,7 +3465,9 @@ const handleIntakes: RouteHandler = async (path, method, req, res, body) => {
         console.warn('[intake] auto-research fallita (best-effort):', (err as Error)?.message);
       }
     }
-    return json(req, res, 201, { data: { id: created.id, status: created.status, researchStatus } });
+    return json(req, res, isUpdate ? 200 : 201, {
+      data: { id: intakeId, status: isUpdate ? existing[0].status : 'new', updated: isUpdate, researchStatus },
+    });
   }
 
   // GET /intakes?status=&adminEmail= (admin)

@@ -119,7 +119,9 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
     generati (POST mai arrivato in DB? log `[doc-debug]` aggiunti a
     POST/DELETE/GET lista per capire); (b) record legacy con `data:null`
     mostrano warning "nessun contenuto" in Collection (vuoti, non crash).
-    `[doc-debug]` server+client tenuti finché editor confermato.
+    `[doc-debug]` server+client rimossi 2026-08-03 (diagnosi completata:
+    documenti fantasma da auto-build fallito, template quote con data:null
+    sono falsi positivi).
 - [ ] **TB-009 residuo**: conferma una tantum costi reali Gemini in
   dashboard Google AI Studio / GCP billing al primo volume produttivo
   (i `perImage` in `providerPricing.ts` sono stime conservative). No codice.

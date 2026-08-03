@@ -66,28 +66,11 @@ export function createDocumentsMethods(svc) {
       if (documentType) qs.set('type', documentType);
       const result = await api('GET', `/documents/${encodeURIComponent(docId)}?${qs.toString()}`);
       if (result.error) {
-        // [doc-debug] TEMP
-        console.warn('[doc-debug] getDocument: API errore', { docId, documentType, error: result.error, status: result.status });
         return null;
       }
-      // BUG 2026-08-01: `result.data || result` selezionava l'envelope jsonb
-      // quando presente, perdendo id/documentType → hydrateDocument ritornava
-      // { id: undefined, ... } → editor vuoto (useDocumentLoader: initialDoc null).
-      // Usa la RIGA completa se sembra una riga (id o documentType); altrimenti
-      // prova il wrapper { data } di endpoint che avvolgono la risposta.
       const isRow = result && typeof result === 'object' && (result.id != null || result.documentType != null);
       const raw = isRow ? result : (result?.data || result);
-      const hydrated = hydrateDocument(raw);
-      // [doc-debug] TEMP
-      console.info('[doc-debug] getDocument', {
-        docId,
-        documentType,
-        rawKeys: raw && typeof raw === 'object' ? Object.keys(raw).slice(0, 30) : null,
-        rawHasData: raw?.data != null,
-        rawDataKeys: raw?.data && typeof raw.data === 'object' ? Object.keys(raw.data).slice(0, 30) : null,
-        hydratedKeys: hydrated && typeof hydrated === 'object' ? Object.keys(hydrated).slice(0, 30) : null,
-      });
-      return hydrated;
+      return hydrateDocument(raw);
     },
 
     async saveDocument(email, document) {

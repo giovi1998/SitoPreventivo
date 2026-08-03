@@ -132,20 +132,6 @@ export function hydrateDocument(row) {
     };
   }
 
-  // [doc-debug] TEMP: idratazione senza contenuto — capire perché l'editor
-  // apre documenti vuoti in prod (envelope jsonb mancante o `data` null).
-  console.warn('[doc-debug] hydrateDocument: nessun contenuto', {
-    id,
-    documentType,
-    hasData: data != null,
-    dataIsObject: typeof data === 'object',
-    dataKeys: data && typeof data === 'object' ? Object.keys(data).slice(0, 25) : null,
-    restKeys: Object.keys(rest).slice(0, 25),
-    hasFlatFront: rest.front != null,
-    hasFlatBuilder: rest.builder != null,
-    hasFlatContent: rest.content != null,
-  });
-
   // Already flat (localStorage path): domain fields live on the row.
   // quote può usare colonne legacy come client/options/project direttamente.
   return {
