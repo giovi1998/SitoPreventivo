@@ -62,18 +62,14 @@ ${html}
 
 function injectLogoIntoHtml(html: string, logoUrl: string | null): string {
   if (!logoUrl) return html;
-  const logoImg = `<img src="${logoUrl}" alt="Logo" class="site-logo" style="height:40px;width:auto;display:inline-block;vertical-align:middle;" />`;
-  const navMatch = html.match(/<nav[^>]*>/i);
-  if (navMatch) {
-    return html.replace(navMatch[0], navMatch[0] + logoImg);
-  }
-  const headerMatch = html.match(/<header[^>]*>/i);
-  if (headerMatch) {
-    return html.replace(headerMatch[0], headerMatch[0] + logoImg);
+  const logoHtml = `<div class="site-logo-wrapper" style="display:flex;align-items:center;padding:8px 16px;"><img src="${logoUrl}" alt="Logo" class="site-logo" style="height:40px;width:auto;" /></div>`;
+  const headerContent = html.match(/(<header[^>]*>)([\s\S]*?)(<\/header>)/i);
+  if (headerContent) {
+    return html.replace(headerContent[0], `${headerContent[1]}${logoHtml}${headerContent[2]}${headerContent[3]}`);
   }
   const bodyMatch = html.match(/<body[^>]*>/i);
   if (bodyMatch) {
-    return html.replace(bodyMatch[0], bodyMatch[0] + '\n' + logoImg);
+    return html.replace(bodyMatch[0], bodyMatch[0] + '\n' + logoHtml);
   }
   return html;
 }
@@ -142,9 +138,31 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     }));
   }, []);
 
-  const updateStyle = useCallback((style: WebsiteStyle) => {
+  const updateStyle = useCallback(async (style: WebsiteStyle) => {
     setWebsite((prev) => ({ ...prev, style, updatedAt: new Date().toISOString() }));
-  }, []);
+    if (!websiteHasContent(website)) return;
+    setIsRefining(true);
+    try {
+      const result = await refine(
+        { html: website.html, css: website.css, js: website.js, pages: website.pages },
+        `Applica lo stile visivo "${style}" al sito. Cambia SOLO i colori, i font, i bordi, gli sfondi e le decorazioni CSS per adattarli allo stile ${style}. NON cambiare la struttura HTML, i contenuti, il layout o il JavaScript. Mantieni tutto il resto identico.`,
+        { modelId: aiModel || undefined },
+      );
+      setWebsite((prev) => ({
+        ...prev,
+        html: result.site.html,
+        css: result.site.css,
+        js: result.site.js,
+        pages: result.site.pages,
+        updatedAt: new Date().toISOString(),
+      }));
+      addToast('success', `Stile ${style} applicato`);
+    } catch (err) {
+      addToast('error', (err as Error)?.message || 'Errore cambio stile');
+    } finally {
+      setIsRefining(false);
+    }
+  }, [website, refine, addToast]);
 
   const updateCode = useCallback((field: 'html' | 'css' | 'js', value: string) => {
     setWebsite((prev) => ({ ...prev, [field]: value, updatedAt: new Date().toISOString() }));
