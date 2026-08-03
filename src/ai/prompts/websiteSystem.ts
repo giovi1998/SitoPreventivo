@@ -134,7 +134,17 @@ export function buildWebsiteHtmlPrompt(
   parts.push('Usa classi semantiche (es. class="hero", class="nav", class="footer", class="section-inner").');
   parts.push('Non generare tag <img> per il logo del brand. Non generare <span class="brand-mark">.');
   parts.push('Il logo viene gestito separatamente.');
-  parts.push('Rispondi SOLO con JSON: { "html": "...", "pages": ["index"] }');
+  if (brief.sections) {
+    parts.push(`\n⚠️ DEVI generare TUTTE le sezioni richieste: ${brief.sections}.`);
+    parts.push('Ogni sezione deve essere un <section> con id corrispondente (es. <section id="chi-siamo">).');
+  }
+  if (brief.cta) {
+    parts.push(`\nCall-to-action principale: "${brief.cta}". Includi un bottone/pulsante con questa CTA nella sezione hero.`);
+  }
+  if (brief.contacts) {
+    parts.push(`\nContatti: ${brief.contacts}. Includi nella sezione contatti o nel footer.`);
+  }
+  parts.push('\nRispondi SOLO con JSON: { "html": "...", "pages": ["index"] }');
   return parts.join('\n');
 }
 
@@ -169,13 +179,13 @@ Ecco la struttura HTML del sito:
 ${html.slice(0, 3000)}
 \`\`\`
 
-Genera SOLO JavaScript vanilla ES6+ per interazioni:
-- Menu hamburger mobile (usa classi .menu-toggle e .nav)
-- Smooth scroll per link anchor (#)
-- Form validation base se presente un form
-- Eventuali interazioni richieste dalle classi nell'HTML
+Genera SEMPRE JavaScript vanilla ES6+ per queste interazioni:
+1. **Smooth scroll** per TUTTI i link anchor (a[href^="#"]). Se non ci sono link anchor, aggiungi comunque la funzione.
+2. **Menu hamburger mobile**: se l'HTML ha un <button> o <div> con classe menu-toggle o hamburger, rendilo cliccabile per mostrare/nascondere il <nav>. Se non c'è, cerca il primo <button> dentro <header> e usalo come toggle.
+3. **Form validation**: se presente un <form>, validazione base (campi obbligatori, email format).
+4. **Header scroll effect**: aggiungi classe .scrolled al <header> quando scroll > 50px (per effetto ombra/trasparenza).
+5. **Anno corrente**: imposta l'anno corrente in qualsiasi elemento con classe .current-year.
 
-Progressive enhancement: il sito funziona anche senza JS.
 Rispondi SOLO con JSON: { "js": "..." }`;
 }
 

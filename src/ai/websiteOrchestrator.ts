@@ -104,41 +104,33 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const { html, pages } = htmlParsed.data;
     changes.push(`html:generated:pages=${pages.length}`);
 
-    // ─── Step 2: CSS ────────────────────────────────────────────
+    // ─── Step 2+3: CSS + JS in parallelo (streaming) ────────────
     const cssPrompt = buildWebsiteCssPrompt(html, style, brief);
     const cssMessages = this.buildMessages(
       promptRegistry.getPrompt('website-css'),
       cssPrompt,
     );
-    const cssResponse = await this.handleStream(provider, cssMessages, {
-      temperature: 0.7,
-      responseFormat: { type: 'json_object' },
-      maxTokens: 4096,
-    }, { onStream: options.onStream });
-    const cssParsed = this.parseJsonResponse(cssResponse.content ?? '', z.object({
-      css: z.string().default(''),
-    }));
-    const css = cssParsed.ok ? cssParsed.data.css : '';
-    changes.push(`css:${css.length}chars`);
-
-    // ─── Step 3: JS ─────────────────────────────────────────────
     const jsPrompt = buildWebsiteJsPrompt(html);
     const jsMessages = this.buildMessages(
       promptRegistry.getPrompt('website-js'),
       jsPrompt,
     );
-    const jsResponse = await this.handleStream(provider, jsMessages, {
-      temperature: 0.7,
-      responseFormat: { type: 'json_object' },
-      maxTokens: 2048,
-    }, { onStream: options.onStream });
+    const [cssResponse, jsResponse] = await Promise.all([
+      this.handleStream(provider, cssMessages, { temperature: 0.7, responseFormat: { type: 'json_object' }, maxTokens: 4096 }),
+      this.handleStream(provider, jsMessages, { temperature: 0.7, responseFormat: { type: 'json_object' }, maxTokens: 2048 }),
+    ]);
+    const cssParsed = this.parseJsonResponse(cssResponse.content ?? '', z.object({
+      css: z.string().default(''),
+    }));
+    const css = cssParsed.ok ? cssParsed.data.css : '';
+    changes.push(`css:${css.length}chars`);
     const jsParsed = this.parseJsonResponse(jsResponse.content ?? '', z.object({
       js: z.string().default(''),
     }));
     const js = jsParsed.ok ? jsParsed.data.js : '';
     changes.push(`js:${js.length}chars`);
 
-    // ─── Step 4: Verify ────────────────────────────────────────
+    // ─── Step 4: Verify (streaming) ─────────────────────────────
     const verifyPrompt = buildWebsiteVerifyPrompt(html, css, js);
     const verifyMessages = this.buildMessages(
       promptRegistry.getPrompt('website-verify'),
@@ -148,7 +140,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       temperature: 0.3,
       responseFormat: { type: 'json_object' },
       maxTokens: 2048,
-    }, { onStream: options.onStream });
+    });
     const verifyParsed = this.parseJsonResponse(verifyResponse.content ?? '', z.object({
       issues: z.array(z.string()).default([]),
       fixes: z.object({
