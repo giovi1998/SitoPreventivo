@@ -13,6 +13,7 @@ import AIProviderBadge from './ai/AIProviderBadge';
 import { getAiProviderDefault, setAiProviderDefault } from '../utils/uiPrefs';
 import { compressDataUrl } from '../utils/card/imageCompress';
 import { logger } from '../utils/logger';
+import { injectLogoIntoHtml } from '../utils/website/logoInjection';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import './WebsiteEditor.css';
@@ -68,21 +69,6 @@ ${html}
 </html>`;
 }
 
-function injectLogoIntoHtml(html: string, logoUrl: string | null): string {
-  if (!logoUrl) return html;
-  const logoHtml = `<div class="site-logo-wrapper" style="display:flex;align-items:center;padding:8px 16px;"><img src="${logoUrl}" alt="Logo" class="site-logo" style="height:40px;width:auto;" /></div>`;
-  let cleaned = html.replace(/<img[^>]*src\s*=\s*"data:image[^"]*"[^>]*\/?>/gi, '');
-  cleaned = cleaned.replace(/<span[^>]*class\s*=\s*"[^"]*brand-mark[^"]*"[^>]*>.*?<\/span>/gi, '');
-  const headerContent = cleaned.match(/(<header[^>]*>)([\s\S]*?)(<\/header>)/i);
-  if (headerContent) {
-    return cleaned.replace(headerContent[0], `${headerContent[1]}${logoHtml}${headerContent[2]}${headerContent[3]}`);
-  }
-  const bodyMatch = cleaned.match(/<body[^>]*>/i);
-  if (bodyMatch) {
-    return cleaned.replace(bodyMatch[0], bodyMatch[0] + '\n' + logoHtml);
-  }
-  return cleaned;
-}
 
 export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unlocked', onReset, onSaved }: WebsiteEditorProps) {
   const { save: saveDocumentGuarded } = useDocumentSave();
@@ -123,6 +109,15 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     loadedUpdatedAtRef.current = initialWebsite.updatedAt;
     setWebsite(mergeWebsiteWithDefaults(initialWebsite));
   }, [initialWebsite]);
+
+  useEffect(() => {
+    if (!website.customerId || website.logoUrl) return;
+    dataService.getCustomer(website.customerId).then((c) => {
+      const customer = (c as Record<string, unknown>)?.data as Record<string, unknown> | undefined ?? c as Record<string, unknown> | undefined;
+      if (!customer?.logoUrl) return;
+      setWebsite((prev) => ({ ...prev, logoUrl: String(customer.logoUrl), updatedAt: new Date().toISOString() }));
+    }).catch(() => {});
+  }, [website.customerId]);
 
   useEffect(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -231,7 +226,6 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         style: website.style,
         briefContext: website.briefContext,
         modelId: aiModel || undefined,
-        logoBase64: website.logoUrl || undefined,
         scrapedReference: scrapedRef || undefined,
       });
       const merged = {
@@ -564,7 +558,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                 <div className="refine-section">
                   <label>Raffina con AI</label>
                   <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder="Es. Rendi i colori più scuri, cambia il font in Inter..." rows={3} />
-                  <button className="btn-refine" onClick={handleRefine} disabled={isRefining || !refinePrompt.trim()}>
+                  <button className="btn-refine" onClick={() => handleRefine()} disabled={isRefining || !refinePrompt.trim()}>
                     {isRefining ? 'Raffinando…' : 'Raffina'}
                   </button>
                 </div>

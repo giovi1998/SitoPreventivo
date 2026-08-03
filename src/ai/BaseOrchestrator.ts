@@ -192,6 +192,7 @@ export abstract class BaseOrchestrator {
     options: {
       tools?: unknown;
       temperature?: number;
+      maxTokens?: number;
       responseFormat?: { type: 'json_object' };
     } = {},
     callbacks: {

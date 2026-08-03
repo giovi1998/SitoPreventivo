@@ -30,7 +30,6 @@ export interface UseAIWebsiteReturn {
       briefContext?: string;
       modelId?: string;
       onProgress?: (msg: string) => void;
-      logoBase64?: string;
       scrapedReference?: string;
     },
   ) => Promise<WebsiteProcessResult>;
@@ -92,7 +91,6 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
         briefContext?: string;
         modelId?: string;
         onProgress?: (msg: string) => void;
-        logoBase64?: string;
         scrapedReference?: string;
       },
     ) => {
@@ -111,7 +109,6 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
           style: options?.style,
           briefContext: options?.briefContext,
           modelId: resolvedModelId,
-          logoBase64: options?.logoBase64,
           scrapedReference: options?.scrapedReference,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {

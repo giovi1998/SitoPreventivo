@@ -382,7 +382,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   };
 
   const propagateLogoToDrafts = async (cid: string, logoUrl: string) => {
-    const rel = docs.filter((d) => d.documentType === 'businessCard' || d.documentType === 'flyer' || d.documentType === 'logo');
+    const rel = docs.filter((d) => d.documentType === 'businessCard' || d.documentType === 'flyer' || d.documentType === 'logo' || d.documentType === 'website');
     if (rel.length === 0) return;
     logger.appendLog('info', `Propago logo caricato a ${rel.length} draft…`, undefined, { docs: rel.map((d) => d.documentType) });
     let patched = 0;
@@ -397,6 +397,8 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       } else if (doc.documentType === 'logo') {
         const builder = (data.builder || {}) as Record<string, unknown>;
         updated = { ...data, builder: { ...builder, backgroundImage: logoUrl }, autoGeneratePending: false };
+      } else if (doc.documentType === 'website') {
+        updated = { ...data, logoUrl };
       } else {
         continue;
       }

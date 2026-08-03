@@ -65,7 +65,6 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       modelId?: string;
       onStream?: (chunk: AIStreamChunk) => void;
       userEmail?: string;
-      logoBase64?: string;
       scrapedReference?: string;
     } = {},
   ): Promise<WebsiteProcessResult> {
@@ -74,19 +73,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const systemPrompt = promptRegistry.getPrompt('website-system');
     const userPrompt = buildWebsiteGeneratePrompt(brief, options.style || 'modern', options.briefContext);
     const provider = providerRegistry.getProvider(options.modelId);
-    const hasVision = options.logoBase64 && (provider as { supportsVision?: boolean }).supportsVision;
     const userContentParts: string[] = [];
-    if (options.logoBase64) {
-      if (hasVision) {
-        userContentParts.push(`Logo/immagine del brand (base64 JPEG): ${options.logoBase64}`);
-      } else {
-        userContentParts.push('Il brand ha un logo caricato (non visibile a questo modello AI). Usa i colori preferiti dal brief per la palette.');
-      }
-    }
     userContentParts.push(userPrompt);
-    if (hasVision) {
-      userContentParts.push('Analizza il logo/immagine SOLO per estrarre la palette colori (primary, secondary, accent) e lo stile del font (serif/sans-serif, grassetto/leggero, elegante/moderno). NON usare il logo per decidere layout, contenuti o struttura del sito — quelli vanno dal brief. Applica i colori e lo stile font estratti al CSS del sito.');
-    }
     userContentParts.push('IMPORTANTE: NON generare tag <img> per il logo del brand. NON generare <span class="brand-mark"> o simili. Il logo viene gestito separatamente e iniettato dopo la generazione. Concentrati solo su layout, contenuti e stile CSS.');
     if (options.scrapedReference) {
       userContentParts.push(`\n## Riferimento stilistico da sito web esistente\n\nL'utente vuole uno stile simile a questo sito. Analizzane layout, colori, tipografia e struttura generale come ispirazione:\n\n${options.scrapedReference}`);

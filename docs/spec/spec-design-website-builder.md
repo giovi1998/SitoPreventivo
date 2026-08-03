@@ -57,7 +57,7 @@ Specifica il modulo **Website Builder** che permette all'admin di generare siti 
 - **Brief**: insieme strutturato di campi che descrivono il sito desiderato (14 campi, non solo textarea libero)
 - **Brief form**: pannello con campi specifici che guidano l'AI: nome attività, settore, descrizione, tono, target, pagine richieste, colori preferiti, font, CTA, sezioni, feature, contatti, social, note
 - **Framework**: `'vanilla'` — solo HTML/CSS/JS puri (v1)
-- **Style**: tema visivo — `'modern' | 'minimal' | 'corporate' | 'creative' | 'brutalist'`
+- **Style**: tema visivo — `'modern' | 'minimal' | 'corporate' | 'creative' | 'brutalist' | 'elegant' | 'vintage' | 'tech' | 'organic' | 'playful' | 'luxury' | 'editorial' | 'dark'`
 - **Pages**: array di nomi pagina (es. `['index', 'about', 'services', 'contact']`)
 - **Preview**: iframe che renderizza il codice generato via `srcdoc`
 - **Viewport toggle**: switch Mobile (375px) / Tablet (768px) / Desktop (100%) che ridimensiona l'iframe per testare responsive
@@ -86,14 +86,15 @@ Specifica il modulo **Website Builder** che permette all'admin di generare siti 
   10. **Sezioni desiderate** (stringa, max 300, placeholder "hero, chi_siamo, servizi, contatti...")
   11. **Feature speciali** (stringa, max 300) — es. "Galleria foto, form contatto, calcolatore prezzi"
   12. **Contatti** (stringa, max 300) — es. "Via Roma 1, 00100 Roma, info@panetteria.it"
-  13. **Social link** (stringa, max 300) — es. "Instagram: @panetteria, Facebook: /panetteria"
-  14. **Note extra** (textarea, max 500) — es. "Il cliente vuole design simile a www.esempio.com"
+  13. **Social links** (array di `{ platform, url }`) — es. `[{platform:"Instagram", url:"@panetteria"}]`; UI con bottone "+" per aggiungere
+  14. **Google Maps URL** (stringa, max 500) — embed o link alla mappa
+  15. **Note extra** (textarea, max 500) — es. "Il cliente vuole design simile a www.esempio.com"
 - **REQ-003**: I campi required (nome attività, descrizione) devono essere validati prima di chiamare l'AI
 - **REQ-004**: I campi con valori di default sensati (es. settore = other, tono = professionale) non bloccano la generazione
 
 ### Functional Requirements — AI Generation
 
-- **REQ-005**: Click "Genera" → costruisce prompt strutturato dai 14 campi → chiama `WebsiteOrchestrator.generateSite(brief, options)` → AI produce JSON con `{ html, css, js, pages[] }`. **Genera da zero**: non usa codice esistente.
+- **REQ-005**: Click "Genera" → costruisce prompt strutturato dai 15 campi → chiama `WebsiteOrchestrator.generateSite(brief, options)` → AI produce JSON con `{ html, css, js, pages[] }`. **Genera da zero**: non usa codice esistente.
 - **REQ-006**: Click "Raffina" → textarea per istruzione → `WebsiteOrchestrator.refineSite(site, instruction)` → AI modifica il codice **esistente** (merge parziale: se l'istruzione dice "cambia solo i colori", HTML/JS restano identici). Non rigenera da zero.
 - **REQ-007**: La preview iframe deve aggiornarsi automaticamente dopo la generazione o raffinamento AI
 - **REQ-008**: L'admin deve poter caricare un logo/immagine brand (sidebar, upload file → compressDataUrl → `logoUrl` nello schema)
@@ -211,7 +212,7 @@ Specifica il modulo **Website Builder** che permette all'admin di generare siti 
 // L'UI mostra preset/suggerimenti ma l'utente può scrivere qualsiasi valore.
 // L'AI usa il testo così com'è, senza validazione su valori permessi.
 
-export const websiteStyleSchema = z.enum(['modern', 'minimal', 'corporate', 'creative', 'brutalist']);
+export const websiteStyleSchema = z.enum(['modern', 'minimal', 'corporate', 'creative', 'brutalist', 'elegant', 'vintage', 'tech', 'organic', 'playful', 'luxury', 'editorial', 'dark']);
 export type WebsiteStyle = z.infer<typeof websiteStyleSchema>;
 
 // 14 campi del brief form — tutti stringhe libere tranne style
@@ -228,7 +229,8 @@ export const websiteBriefSchema = z.object({
   sections: z.string().max(300).default('hero, chi_siamo, contatti'),  // stringa, non array
   features: z.string().max(300).default(''),
   contacts: z.string().max(300).default(''),
-  social: z.string().max(300).default(''),
+  socials: z.array(z.object({ platform: z.string().max(50), url: z.string().max(300) })).default([]),
+  mapsUrl: z.string().max(500).default(''),
   notes: z.string().max(500).default(''),
 });
 export type WebsiteBrief = z.infer<typeof websiteBriefSchema>;
@@ -252,7 +254,8 @@ export const websiteSchema = z.object({
     sections: ['hero', 'chi_siamo', 'contatti'],
     features: '',
     contacts: '',
-    social: '',
+    socials: [],
+    mapsUrl: '',
     notes: '',
   }),
   briefContext: z.string().optional(),
@@ -315,7 +318,9 @@ Il prompt per `generateSite` è costruito dai 14 campi del brief form. I campi s
 
 ## Contatti e social
 - Contatti: {contacts}
-- Social: {social}
+- Social:
+  - {platform}: {url}
+- Google Maps: {mapsUrl}
 
 ## Note extra
 {notes}
@@ -481,8 +486,9 @@ const websiteDraft = {
     cta: '',
     sections: 'hero, chi_siamo, contatti',
     features: '',
-    contacts: formatContacts(cust.contacts),
-    social: '',
+    contacts: [contacts.address, contacts.phone, contacts.email].filter(Boolean).join(', '),
+    socials: [],
+    mapsUrl: asStr(cust.googleMapsUrl),
     notes: '',
   },
   briefContext: buildBriefContext(cust),

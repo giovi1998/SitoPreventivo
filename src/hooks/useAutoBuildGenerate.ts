@@ -39,6 +39,7 @@ export interface AutoBuildDoc {
 
 export interface AutoBuildCustomer {
   businessName?: string;
+  logoUrl?: string | null;
   detectedLogoUrl?: string | null;
   aiSuggestedFields?: Record<string, unknown> | null;
 }
@@ -443,6 +444,7 @@ async function generateFlyerDraft(
 async function generateWebsiteDraft(
   doc: AutoBuildDoc,
   brief: string,
+  _customer: AutoBuildCustomer,
   options?: AutoBuildGenerateOptions,
 ): Promise<void> {
   const briefData = (doc.data?.brief ?? {}) as Record<string, unknown>;
@@ -513,7 +515,7 @@ export function useAutoBuildGenerate() {
       } else if (doc.documentType === 'flyer') {
         await generateFlyerDraft(doc, brief, moodToTone(customer.aiSuggestedFields?.mood), cardDataRef.current, options);
       } else if (doc.documentType === 'website') {
-        await generateWebsiteDraft(doc, brief, options);
+        await generateWebsiteDraft(doc, brief, customer, options);
       }
     },
     [],

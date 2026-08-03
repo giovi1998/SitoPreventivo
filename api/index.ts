@@ -1459,7 +1459,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
       logAI({ tag: 'ai_chat', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
       return jsonWithRequestId(req, res, 503, { error: 'DeepSeek non configurato.' }, requestId);
     }
-    const { model, messages, response_format, temperature } = v.data;
+    const { model, messages, response_format, temperature, max_tokens } = v.data;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
     const startedAt = Date.now();
@@ -1473,6 +1473,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
           messages,
           response_format: response_format || { type: 'json_object' },
           temperature: temperature ?? 0.7,
+          ...(max_tokens ? { max_tokens } : {}),
         }),
         signal: controller.signal,
       });
