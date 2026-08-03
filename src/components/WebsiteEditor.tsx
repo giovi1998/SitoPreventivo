@@ -44,7 +44,7 @@ const STYLE_OPTIONS: { value: WebsiteStyle; label: string }[] = [
 ];
 
 const VIEWPORT_OPTIONS = [
-  { value: '100%', label: 'Desktop', icon: '🖥' },
+  { value: '100%', label: 'Desktop', icon: '💻' },
   { value: '768px', label: 'Tablet', icon: '📱' },
   { value: '375px', label: 'Mobile', icon: '📱' },
 ];
@@ -607,12 +607,10 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
             onClearLogs={resetAI}
           >
             <button className="btn-generate" onClick={handleGenerate} disabled={isProcessing}>
-              {isProcessing ? 'Generando…' : 'Genera sito con AI'}
+              {isProcessing ? 'Generando…' : websiteHasContent(website) ? 'Rigenera Sito' : 'Genera sito con AI'}
             </button>
-
             {websiteHasContent(website) && (
               <div className="refine-section">
-                <label>Raffina con AI</label>
                 <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder="Es. Rendi i colori più scuri, cambia il font in Inter..." rows={3} />
                 <button className="btn-refine" onClick={() => handleRefine()} disabled={isProcessing || !refinePrompt.trim()}>
                   {isProcessing ? 'Elaborazione in corso…' : 'Raffina'}

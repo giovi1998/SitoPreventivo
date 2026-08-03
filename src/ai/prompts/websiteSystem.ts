@@ -153,45 +153,61 @@ export function buildWebsiteCssPrompt(
   style: string,
   brief: { preferredColors?: string; font?: string },
 ): string {
-  return `# Generazione CSS per sito web
+  return `# Generazione CSS responsive per sito web
 
-Ecco la struttura HTML del sito:
+Ecco la struttura HTML completa del sito:
 \`\`\`html
-${html.slice(0, 3000)}
+${html.slice(0, 5000)}
 \`\`\`
 
 Stile visivo richiesto: ${style}
 ${brief.preferredColors ? `Colori preferiti: ${brief.preferredColors}` : ''}
 ${brief.font ? `Font preferito: ${brief.font}` : ''}
 
-Genera SOLO il CSS per stilizzare l'HTML sopra.
-Usa variabili CSS custom :root { --primary, --secondary, --accent, --bg, --text, --font }.
-CSS Grid / Flexbox per layout. Media query a 768px per mobile.
-Il CSS deve coprire TUTTE le classi usate nell'HTML.
-Rispondi SOLO con JSON: { "css": "..." }`;
+Genera CSS COMPLETO per OGNI classe/id usata nell'HTML sopra. NON omettere classi.
+
+OBBLIGATORIO:
+- Variabili CSS custom :root { --primary, --secondary, --accent, --bg, --text, --font }
+- Layout con CSS Grid o Flexbox (MAI float)
+- Media query @media (max-width: 768px) per mobile (almeno 5 regole responsive)
+- Media query @media (max-width: 480px) per small phone
+- Hamburger menu: nascosto su desktop (display:none), visibile su mobile
+- Transizioni fluide (transition: 0.3s)
+- Focus states per accessibilità (:focus-visible)
+- Stili per .hero, .hero h1, .hero p, .btn, .section-inner, .footer, .nav, .nav-links
+- Padding/margin coerenti (usa variabili --space-*)
+- Font-size fluidi con clamp() dove appropriato
+- Box-sizing: border-box su tutti gli elementi
+- Scroll-behavior: smooth sull'html
+
+Il CSS deve essere COMPLETO, RESPONSIVE e PRONTO ALL'USO.
+Rispondi SOLO con JSON: { "css": "..." }
+IL CAMPO "css" NON DEVE MAI ESSERE VUOTO.`;
 }
 
 export function buildWebsiteJsPrompt(html: string): string {
   return `# Generazione JavaScript per sito web
 
-Ecco la struttura HTML del sito:
+Ecco la struttura HTML completa del sito:
 \`\`\`html
 ${html.slice(0, 5000)}
 \`\`\`
 
-Genera SEMPRE JavaScript vanilla ES6+. Anche se l'HTML è semplice, DEVI produrre codice JS funzionante.
+GENERA SEMPRE ALMENO 8 FUNZIONI JAVASCRIPT. ANCHE SE IL SITO È SEMPLICE, DEVI PRODURRE CODICE JS FUNZIONANTE.
 
-Obbligatorio:
-1. **Smooth scroll** per TUTTI i link anchor (a[href^="#"]). Se non ci sono link anchor, aggiungi comunque la funzione.
+Funzioni da includere OBBLIGATORIAMENTE (in questo ordine):
+1. **Smooth scroll** per TUTTI i link anchor (a[href^="#"]). Se non ci sono, aggiungi comunque la funzione.
 2. **Menu hamburger mobile**: se l'HTML ha un <button> o <div> con classe menu-toggle o hamburger, rendilo cliccabile per mostrare/nascondere il <nav>. Se non c'è, cerca il primo <button> dentro <header> e usalo come toggle.
-3. **Header scroll effect**: aggiungi classe .scrolled al <header> quando scroll > 50px (per effetto ombra/trasparenza).
-4. **Anno corrente**: imposta l'anno corrente in qualsiasi elemento con classe .current-year.
+3. **Header scroll effect**: aggiungi classe .scrolled al <header> quando scroll > 50px.
+4. **Anno corrente**: imposta l'anno in elementi con classe .current-year.
+5. **Intersection Observer**: anima le sezioni quando entrano nel viewport (fade-in).
+6. **Click fuori dal menu**: chiudi il menu mobile quando si clicca fuori.
+7. **Lazy load immagini**: se presenti <img>, caricale quando entrano nel viewport.
+8. **Form submission**: se presente un <form>, previeni default e logga i dati.
 
-Opzionale:
-5. **Form validation**: se presente un <form>, validazione base (campi obbligatori, email format).
-
+FORMATO: usa funzioni dichiarate con function keyword o const arrow. NO classi.
 Rispondi SOLO con JSON: { "js": "..." }
-Il campo "js" NON DEVE essere vuoto. Scrivi almeno 10 righe di JavaScript funzionante.`;
+IL CAMPO "js" NON PUÒ ESSERE VUOTO. DEVE CONTENERE ALMENO 20 RIGHE DI CODICE.`;
 }
 
 export function buildWebsiteVerifyPrompt(
@@ -221,7 +237,9 @@ Controlla che HTML, CSS e JS siano coerenti:
 2. Ogni id usato nel JS esiste nell'HTML?
 3. Ci sono errori evidenti (tag non chiusi, sintassi CSS errata)?
 4. Il CSS copre tutte le sezioni dell'HTML?
+5. Il JS ha funzioni che referenziano elementi che non esistono nell'HTML?
 
 Se trovi problemi, fornisci le correzioni.
+Se non ci sono problemi, rispondi con issues vuoto.
 Rispondi SOLO con JSON: { "issues": ["..."], "fixes": { "html"?: "...", "css"?: "...", "js"?: "..." } }`;
 }
