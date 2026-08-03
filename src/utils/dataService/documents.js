@@ -84,7 +84,8 @@ export function createDocumentsMethods(svc) {
         // QR/quote/altri tipi mantengono `data` (payload QR legittimo).
         const isFlatDomainType = document.documentType === 'logo'
           || document.documentType === 'businessCard'
-          || document.documentType === 'flyer';
+          || document.documentType === 'flyer'
+          || document.documentType === 'website';
         let incoming = document;
         if (isFlatDomainType && incoming.data && typeof incoming.data === 'object' && !Array.isArray(incoming.data)) {
           incoming = { ...incoming, ...incoming.data };
@@ -140,7 +141,8 @@ export function createDocumentsMethods(svc) {
       if (!doc || !doc.documentType) return false;
       return doc.documentType === 'businessCard'
         || doc.documentType === 'logo'
-        || doc.documentType === 'flyer';
+        || doc.documentType === 'flyer'
+        || doc.documentType === 'website';
     },
 
     async duplicateDocument(doc, userEmail) {
@@ -238,6 +240,19 @@ export function createDocumentsMethods(svc) {
       }
       if (result.error) return { success: false, error: result.error };
       return { success: true };
+    },
+
+    async cleanupGhostDocuments() {
+      if (IS_LOCAL) {
+        const all = lsGet('precisionQuote_documents:v1') || [];
+        const before = all.length;
+        const kept = all.filter(d => d.data != null || d.front != null || d.builder != null || d.content != null);
+        lsSet('precisionQuote_documents:v1', kept);
+        return { deleted: before - kept.length };
+      }
+      const result = await api('POST', '/documents/cleanup-ghosts', { adminEmail: 'admin@gmail.com' });
+      if (result.error) return { error: result.error };
+      return result;
     },
 
     // ─── TEMPLATES ──────────────────────────────────

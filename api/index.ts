@@ -1169,6 +1169,16 @@ const handleDocuments: RouteHandler = async (path, method, req, res, body) => {
     return json(req, res, 200, { success: true });
   }
 
+  if (path === '/documents/cleanup-ghosts' && method === 'POST') {
+    if (!requireAdmin(req, res, body)) return;
+    const db = await getDb();
+    const deleted = await db.delete(documentsTable).where(
+      and(eq(documentsTable.status, 'BOZZA'), sql`data IS NULL`)
+    ).returning({ id: documentsTable.id });
+    console.log('[doc] cleanup-ghosts', { count: deleted.length, ids: deleted.map((d: any) => d.id) });
+    return json(req, res, 200, { deleted: deleted.length });
+  }
+
   return json(req, res, 404, { error: 'Endpoint documents non trovato' });
 };
 
