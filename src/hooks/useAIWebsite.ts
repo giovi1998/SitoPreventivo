@@ -101,6 +101,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
       const resolvedModelId = resolveProviderId(options?.modelId);
 
       info(`Generazione sito: "${brief.businessName}" — "${promptPreview}"`, undefined, { requestId });
+      info('Prompt HTML inviato', `Stile: ${options?.style || 'modern'}, Pagine: ${brief.pages || 'index'}, Settore: ${brief.sector || '-'}`, { requestId });
       const streamId = startStream('Generazione sito in corso…', {
         requestId,
         sessionId: getOrchestrator().getCurrentSessionId() ?? undefined,
@@ -123,6 +124,15 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
           },
           userEmail,
         });
+
+        // Log each step from changes array
+        for (const change of result.changes) {
+          if (change.startsWith('html:')) info('HTML generato', `${result.site.html.length} caratteri, ${result.site.pages.length} pagine`, { requestId });
+          else if (change.startsWith('css:')) info('CSS generato', `${result.site.css.length} caratteri`, { requestId });
+          else if (change.startsWith('js:')) info('JS generato', `${result.site.js.length} caratteri`, { requestId });
+          else if (change.startsWith('verify:')) info('Verifica completata', change.replace('verify:', ''), { requestId });
+          else if (change.startsWith('error:')) error('Errore generazione', change.replace('error:', ''), { requestId });
+        }
 
         const cost = result.response?.usage ? calculateCostUsd(resolvedModelId, result.response.usage) : 0;
         setLastCostUsd(cost);
