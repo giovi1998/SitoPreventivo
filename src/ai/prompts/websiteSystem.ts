@@ -126,11 +126,15 @@ export function buildWebsiteHtmlPrompt(
   if (brief.features) parts.push(`Feature: ${brief.features}`);
   if (brief.contacts) parts.push(`Contatti: ${brief.contacts}`);
   if (brief.mapsUrl) {
-    const embedUrl = brief.mapsUrl
-      .replace(/^https:\/\/maps\.app\.goo\.gl\//, 'https://maps.google.com/maps?q=')
-      .replace(/^https:\/\/www\.google\.com\/maps\//, 'https://www.google.com/maps/embed/v1/place?key=&q=');
-    parts.push(`Maps URL: ${embedUrl}`);
-    parts.push('⚠️ Per la mappa, genera un <iframe> con src="https://www.google.com/maps/embed/v1/place?key=&q=INDIRIZZO" o usa il link maps.google.com/maps?q=...&output=embed. NON usare maps.app.goo.gl (bloccato da X-Frame-Options).');
+    parts.push(`Maps URL (link esterno, NON per embed): ${brief.mapsUrl}`);
+    if (brief.contacts) {
+      const address = brief.contacts.split(',')[0].trim();
+      parts.push(`⚠️ Per l'iframe Google Maps usa l'INDIRIZZO dai contatti, NON il codice goo.gl:`);
+      parts.push(`  <iframe src="https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed" width="100%" height="400" style="border:0;" allowfullscreen="" loading="lazy"></iframe>`);
+      parts.push(`  Il parametro q deve contenere l'indirizzo reale (es. "Via+Dante+5%2FA"), non il codice breve.`);
+    } else {
+      parts.push('⚠️ Per l\'embed Google Maps usa l\'indirizzo reale come parametro q, non il codice goo.gl.');
+    }
   }
   if (brief.notes) parts.push(`Note: ${brief.notes}`);
   if (briefContext) parts.push(`Contesto: ${briefContext}`);
