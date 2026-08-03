@@ -91,7 +91,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const htmlResponse = await this.handleStream(provider, htmlMessages, {
       temperature: 0.7,
       responseFormat: { type: 'json_object' },
-      maxTokens: 4096,
+      maxTokens: 8192,
     }, { onStream: options.onStream });
     const htmlParsed = this.parseJsonResponse(htmlResponse.content ?? '', z.object({
       html: z.string().min(1),

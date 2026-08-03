@@ -600,6 +600,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
             onSubmitPrompt={(text) => handleRefine(text)}
             editorKind="website"
             defaultExpanded={true}
+            hidePrompt
             lastCostUsd={lastCostUsd}
             providerId={aiModel}
             onProviderChange={handleProviderChange}
