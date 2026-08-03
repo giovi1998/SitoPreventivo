@@ -82,6 +82,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     if (hasVision) {
       userContentParts.push('Analizza il logo/immagine SOLO per estrarre la palette colori (primary, secondary, accent) e lo stile del font (serif/sans-serif, grassetto/leggero, elegante/moderno). NON usare il logo per decidere layout, contenuti o struttura del sito — quelli vanno dal brief. Applica i colori e lo stile font estratti al CSS del sito.');
     }
+    userContentParts.push('IMPORTANTE: NON generare tag <img> per il logo del brand. NON generare <span class="brand-mark"> o simili. Il logo viene gestito separatamente e iniettato dopo la generazione. Concentrati solo su layout, contenuti e stile CSS.');
     if (options.scrapedReference) {
       userContentParts.push(`\n## Riferimento stilistico da sito web esistente\n\nL'utente vuole uno stile simile a questo sito. Analizzane layout, colori, tipografia e struttura generale come ispirazione:\n\n${options.scrapedReference}`);
     }

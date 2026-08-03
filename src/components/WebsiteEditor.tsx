@@ -63,15 +63,17 @@ ${html}
 function injectLogoIntoHtml(html: string, logoUrl: string | null): string {
   if (!logoUrl) return html;
   const logoHtml = `<div class="site-logo-wrapper" style="display:flex;align-items:center;padding:8px 16px;"><img src="${logoUrl}" alt="Logo" class="site-logo" style="height:40px;width:auto;" /></div>`;
-  const headerContent = html.match(/(<header[^>]*>)([\s\S]*?)(<\/header>)/i);
+  let cleaned = html.replace(/<img[^>]*src\s*=\s*"data:image[^"]*"[^>]*\/?>/gi, '');
+  cleaned = cleaned.replace(/<span[^>]*class\s*=\s*"[^"]*brand-mark[^"]*"[^>]*>.*?<\/span>/gi, '');
+  const headerContent = cleaned.match(/(<header[^>]*>)([\s\S]*?)(<\/header>)/i);
   if (headerContent) {
-    return html.replace(headerContent[0], `${headerContent[1]}${logoHtml}${headerContent[2]}${headerContent[3]}`);
+    return cleaned.replace(headerContent[0], `${headerContent[1]}${logoHtml}${headerContent[2]}${headerContent[3]}`);
   }
-  const bodyMatch = html.match(/<body[^>]*>/i);
+  const bodyMatch = cleaned.match(/<body[^>]*>/i);
   if (bodyMatch) {
-    return html.replace(bodyMatch[0], bodyMatch[0] + '\n' + logoHtml);
+    return cleaned.replace(bodyMatch[0], bodyMatch[0] + '\n' + logoHtml);
   }
-  return html;
+  return cleaned;
 }
 
 export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unlocked', onReset, onSaved }: WebsiteEditorProps) {
