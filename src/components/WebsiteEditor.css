@@ -182,6 +182,42 @@
   color: var(--accent);
 }
 
+.brief-images-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.brief-images-section label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.brief-image-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.brief-image-item {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.brief-image-item img {
+  width: 100%;
+  height: 60px;
+  object-fit: cover;
+  display: block;
+}
+
 .brief-style-select label {
   font-size: 0.75rem;
   font-weight: 600;

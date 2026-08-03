@@ -2498,6 +2498,16 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     }
   }
 
+  // TB-028: Website builder scrape reference — Firecrawl fetch per stile sito esistente.
+  if (path === '/ai/scrape' && method === 'GET') {
+    const requestId = getRequestId(req);
+    const url = typeof req.url === 'string' ? new URL(req.url, 'http://localhost').searchParams.get('url') : null;
+    if (!url) return jsonWithRequestId(req, res, 400, { error: 'Parametro url mancante' }, requestId);
+    const result = await fetchFirecrawlPage(url);
+    if (result.status !== 'ok') return jsonWithRequestId(req, res, 200, { text: '' }, requestId);
+    return jsonWithRequestId(req, res, 200, { text: result.markdown || '' }, requestId);
+  }
+
   if (path === '/ai/logo-generate' && method === 'POST') {
     const ip = getClientIp(req);
     const rl = consumeRateLimit(ip, 'aiLogo', 10, 60 * 1000);

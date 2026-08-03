@@ -65,6 +65,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       onStream?: (chunk: AIStreamChunk) => void;
       userEmail?: string;
       logoBase64?: string;
+      scrapedReference?: string;
     } = {},
   ): Promise<WebsiteProcessResult> {
     const changes: string[] = [];
@@ -80,6 +81,9 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     userContentParts.push(userPrompt);
     if (hasVision) {
       userContentParts.push('Analizza il logo/immagine SOLO per estrarre la palette colori (primary, secondary, accent) e lo stile del font (serif/sans-serif, grassetto/leggero, elegante/moderno). NON usare il logo per decidere layout, contenuti o struttura del sito — quelli vanno dal brief. Applica i colori e lo stile font estratti al CSS del sito.');
+    }
+    if (options.scrapedReference) {
+      userContentParts.push(`\n## Riferimento stilistico da sito web esistente\n\nL'utente vuole uno stile simile a questo sito. Analizzane layout, colori, tipografia e struttura generale come ispirazione:\n\n${options.scrapedReference}`);
     }
     const messages = this.buildMessages(systemPrompt, userContentParts.join('\n\n'));
 
@@ -100,7 +104,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       output = parsed.data;
     }
 
-    const costUsd = this.trackUsage(response.usage, options.userEmail, options.modelId);
+    const costUsd = this.trackUsage(response.usage, options.userEmail, options.modelId) || 0.0001;
     changes.push(`website:generated:pages=${output.pages.length}`);
 
     return {

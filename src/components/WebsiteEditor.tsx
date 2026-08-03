@@ -164,11 +164,23 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       return;
     }
     try {
+      let scrapedRef = '';
+      const urlMatch = website.brief.notes.match(/(https?:\/\/[^\s]+)/i);
+      if (urlMatch) {
+        try {
+          const res = await fetch(`/api/ai/scrape?url=${encodeURIComponent(urlMatch[1])}`, { signal: AbortSignal.timeout(8000) });
+          if (res.ok) {
+            const body = await res.json() as { text?: string };
+            scrapedRef = body.text?.slice(0, 3000) || '';
+          }
+        } catch { /* scrape fallisce silenziosamente */ }
+      }
       const result = await generate(website.brief, {
         style: website.style,
         briefContext: website.briefContext,
         modelId: aiModel || undefined,
         logoBase64: website.logoUrl || undefined,
+        scrapedReference: scrapedRef || undefined,
       });
       const merged = {
         ...website,
@@ -320,6 +332,29 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     setWebsite((prev) => ({ ...prev, logoUrl: null, updatedAt: new Date().toISOString() }));
   }, []);
 
+  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    Promise.all(files.map((file) => new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUri = String(reader.result || '');
+        compressDataUrl(dataUri).then((compressed) => resolve(compressed || dataUri));
+      };
+      reader.readAsDataURL(file);
+    }))).then((compressed) => {
+      setWebsite((prev) => ({ ...prev, images: [...prev.images, ...compressed], updatedAt: new Date().toISOString() }));
+    });
+  }, []);
+
+  const removeImage = useCallback((index: number) => {
+    setWebsite((prev) => {
+      const next = [...prev.images];
+      next.splice(index, 1);
+      return { ...prev, images: next, updatedAt: new Date().toISOString() };
+    });
+  }, []);
+
   const fullDocument = useMemo(
     () => buildFullDocument(website.html, website.css, website.js),
     [website.html, website.css, website.js],
@@ -433,6 +468,25 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                     <input type="file" accept="image/*" onChange={handleLogoUpload} hidden />
                   </label>
                 )}
+              </div>
+
+              <div className="brief-images-section">
+                <label>Immagini per sezioni</label>
+                {website.images.length > 0 && (
+                  <div className="brief-image-list">
+                    {website.images.map((img, i) => (
+                      <div key={i} className="brief-image-item">
+                        <img src={img} alt={`Immagine ${i + 1}`} />
+                        <button className="brief-logo-remove" onClick={() => removeImage(i)} title="Rimuovi">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="brief-logo-upload">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <span>Aggiungi immagini</span>
+                  <input type="file" accept="image/*" multiple onChange={handleImageUpload} hidden />
+                </label>
               </div>
 
               <div className="brief-ai-provider">
