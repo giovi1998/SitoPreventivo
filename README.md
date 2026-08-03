@@ -638,6 +638,12 @@ npm run test       # Vitest (76 file, 850+ test)
 npm run typecheck  # tsc --noEmit
 ```
 
+> **Locale vs produzione**: in locale (`npm run dev`) il data layer usa
+> localStorage, non l'API serverless. Le funzionalità che richiedono
+> l'API (webhook intake, auth con DB, CRM con Postgres, upsert intake)
+> funzionano solo su Vercel. Le modifiche frontend (UI, componenti,
+> hook, auto-refetch su focus tab) sono visibili in locale.
+
 ## Roadmap
 
 | Fase | Stato | Descrizione |

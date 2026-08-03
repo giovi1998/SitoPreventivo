@@ -85,7 +85,13 @@ in caso di research fallito usa il bottone "Research" in CRM.
 
 ### 5. Test
 
-Invia una risposta dal form. Verifica:
+> **Nota**: l'intake pipeline richiede il deployment su Vercel per testare
+> il webhook (`POST /api/intake`). In locale (`npm run dev`) il data layer
+> usa localStorage, non l'API — il form non può creare record via webhook.
+> Le modifiche frontend (banner rimosso, auto-refetch su focus tab) sono
+> invece visibili in locale.
+
+Invia una risposta dal form pubblicato. Verifica:
 - Google Sheet ha una nuova riga.
 - In Quickbrand CRM (`/app/customers`) appare un nuovo cliente con `source='intake'`.
 
