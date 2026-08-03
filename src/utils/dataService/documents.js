@@ -235,7 +235,6 @@ export function createDocumentsMethods(svc) {
       }
       const result = await api('DELETE', `/documents/${documentId}`, { email });
       if (result.error && result.error === 'Documento non trovato') {
-        console.warn('[doc-save] DELETE 404 — documento fantasma', { id: documentId, email, action: 'trattato come successo (idempotente)' });
         return { success: true };
       }
       if (result.error) return { success: false, error: result.error };
