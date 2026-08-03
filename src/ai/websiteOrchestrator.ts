@@ -55,7 +55,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       sections: string;
       features: string;
       contacts: string;
-      social: string;
+      socials: { platform: string; url: string }[];
       mapsUrl: string;
       notes: string;
     },
@@ -76,8 +76,12 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const provider = providerRegistry.getProvider(options.modelId);
     const hasVision = options.logoBase64 && (provider as { supportsVision?: boolean }).supportsVision;
     const userContentParts: string[] = [];
-    if (hasVision && options.logoBase64) {
-      userContentParts.push(`Logo/immagine del brand (base64 JPEG): ${options.logoBase64}`);
+    if (options.logoBase64) {
+      if (hasVision) {
+        userContentParts.push(`Logo/immagine del brand (base64 JPEG): ${options.logoBase64}`);
+      } else {
+        userContentParts.push('Il brand ha un logo caricato (non visibile a questo modello AI). Usa i colori preferiti dal brief per la palette.');
+      }
     }
     userContentParts.push(userPrompt);
     if (hasVision) {

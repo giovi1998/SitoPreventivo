@@ -336,7 +336,7 @@ export function createCrmMethods(svc) {
                 sections: 'hero, chi_siamo, contatti',
                 features: '',
                 contacts: [contacts.address, contacts.phone, contacts.email].filter(Boolean).join(', '),
-                social: '',
+                socials: [],
                 mapsUrl: '',
                 notes: '',
               },

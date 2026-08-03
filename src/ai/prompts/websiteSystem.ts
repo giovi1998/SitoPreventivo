@@ -38,7 +38,7 @@ export function buildWebsiteGeneratePrompt(
     sections: string;
     features: string;
     contacts: string;
-    social: string;
+    socials: { platform: string; url: string }[];
     mapsUrl: string;
     notes: string;
   },
@@ -67,7 +67,10 @@ export function buildWebsiteGeneratePrompt(
 
   parts.push('\n## Contatti e social');
   if (brief.contacts) parts.push(`- Contatti: ${brief.contacts}`);
-  if (brief.social) parts.push(`- Social: ${brief.social}`);
+  if (brief.socials && brief.socials.length > 0) {
+    const socialLines = brief.socials.filter(s => s.platform || s.url).map(s => `  - ${s.platform}: ${s.url}`);
+    if (socialLines.length > 0) parts.push(`- Social:\n${socialLines.join('\n')}`);
+  }
   if (brief.mapsUrl) parts.push(`- Google Maps: ${brief.mapsUrl}`);
 
   if (brief.notes) {

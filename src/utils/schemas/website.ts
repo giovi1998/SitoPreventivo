@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { aiStatsSchema } from '../aiStats';
 
-export const websiteStyleSchema = z.enum(['modern', 'minimal', 'corporate', 'creative', 'brutalist']);
+export const websiteStyleSchema = z.enum(['modern', 'minimal', 'corporate', 'creative', 'brutalist', 'elegant', 'vintage', 'tech', 'organic', 'playful', 'luxury', 'editorial', 'dark']);
 export type WebsiteStyle = z.infer<typeof websiteStyleSchema>;
 
 export const websiteBriefSchema = z.object({
@@ -17,7 +17,7 @@ export const websiteBriefSchema = z.object({
   sections: z.string().max(300).default('hero, chi_siamo, contatti'),
   features: z.string().max(300).default(''),
   contacts: z.string().max(300).default(''),
-  social: z.string().max(300).default(''),
+  socials: z.array(z.object({ platform: z.string().max(50).default(''), url: z.string().max(300).default('') })).default([]),
   mapsUrl: z.string().max(500).default(''),
   notes: z.string().max(500).default(''),
 });
@@ -42,7 +42,7 @@ export const websiteSchema = z.object({
     sections: 'hero, chi_siamo, contatti',
     features: '',
     contacts: '',
-    social: '',
+    socials: [],
     mapsUrl: '',
     notes: '',
   }),
@@ -76,7 +76,7 @@ const BRIEF_DEFAULTS: WebsiteBrief = {
   sections: 'hero, chi_siamo, contatti',
   features: '',
   contacts: '',
-  social: '',
+  socials: [],
   mapsUrl: '',
   notes: '',
 };

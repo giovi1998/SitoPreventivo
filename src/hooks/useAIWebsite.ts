@@ -21,7 +21,7 @@ export interface UseAIWebsiteReturn {
       sections: string;
       features: string;
       contacts: string;
-      social: string;
+      socials: { platform: string; url: string }[];
       mapsUrl: string;
       notes: string;
     },
@@ -83,7 +83,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
         sections: string;
         features: string;
         contacts: string;
-        social: string;
+        socials: { platform: string; url: string }[];
         mapsUrl: string;
         notes: string;
       },

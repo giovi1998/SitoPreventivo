@@ -460,7 +460,7 @@ async function generateWebsiteDraft(
       sections: String(briefData.sections || 'hero, chi_siamo, contatti'),
       features: String(briefData.features || ''),
       contacts: String(briefData.contacts || ''),
-      social: String(briefData.social || ''),
+      socials: Array.isArray(briefData.socials) ? briefData.socials : [],
       mapsUrl: String(briefData.mapsUrl || ''),
       notes: String(briefData.notes || ''),
     },

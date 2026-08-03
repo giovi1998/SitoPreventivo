@@ -31,6 +31,14 @@ const STYLE_OPTIONS: { value: WebsiteStyle; label: string }[] = [
   { value: 'corporate', label: 'Corporate' },
   { value: 'creative', label: 'Creativo' },
   { value: 'brutalist', label: 'Brutalista' },
+  { value: 'elegant', label: 'Elegante' },
+  { value: 'vintage', label: 'Vintage' },
+  { value: 'tech', label: 'Tech' },
+  { value: 'organic', label: 'Organico' },
+  { value: 'playful', label: 'Giocoso' },
+  { value: 'luxury', label: 'Lusso' },
+  { value: 'editorial', label: 'Editoriale' },
+  { value: 'dark', label: 'Dark' },
 ];
 
 const VIEWPORT_OPTIONS = [
@@ -140,6 +148,30 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     }));
   }, []);
 
+  const addSocial = useCallback(() => {
+    setWebsite((prev) => ({
+      ...prev,
+      brief: { ...prev.brief, socials: [...(prev.brief.socials || []), { platform: '', url: '' }] },
+      updatedAt: new Date().toISOString(),
+    }));
+  }, []);
+
+  const updateSocial = useCallback((index: number, field: 'platform' | 'url', value: string) => {
+    setWebsite((prev) => {
+      const socials = [...(prev.brief.socials || [])];
+      if (socials[index]) socials[index] = { ...socials[index], [field]: value };
+      return { ...prev, brief: { ...prev.brief, socials }, updatedAt: new Date().toISOString() };
+    });
+  }, []);
+
+  const removeSocial = useCallback((index: number) => {
+    setWebsite((prev) => {
+      const socials = [...(prev.brief.socials || [])];
+      socials.splice(index, 1);
+      return { ...prev, brief: { ...prev.brief, socials }, updatedAt: new Date().toISOString() };
+    });
+  }, []);
+
   const updateStyle = useCallback(async (style: WebsiteStyle) => {
     setWebsite((prev) => ({ ...prev, style, updatedAt: new Date().toISOString() }));
     if (!websiteHasContent(website)) return;
@@ -199,6 +231,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         style: website.style,
         briefContext: website.briefContext,
         modelId: aiModel || undefined,
+        logoBase64: website.logoUrl || undefined,
         scrapedReference: scrapedRef || undefined,
       });
       const merged = {
@@ -453,9 +486,16 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                 <label>Contatti</label>
                 <input type="text" value={website.brief.contacts} onChange={(e) => updateBrief('contacts', e.target.value)} placeholder="Via Roma 1, 00100 Roma, info@..." maxLength={300} />
               </div>
-              <div className="brief-field">
+              <div className="brief-field brief-field-full">
                 <label>Social link</label>
-                <input type="text" value={website.brief.social} onChange={(e) => updateBrief('social', e.target.value)} placeholder="Instagram: @..., Facebook: /..." maxLength={300} />
+                {website.brief.socials?.map((s, i) => (
+                  <div key={i} className="social-row">
+                    <input type="text" value={s.platform} onChange={(e) => updateSocial(i, 'platform', e.target.value)} placeholder="Piattaforma (es. Instagram)" maxLength={50} />
+                    <input type="text" value={s.url} onChange={(e) => updateSocial(i, 'url', e.target.value)} placeholder="URL o @username" maxLength={300} />
+                    <button type="button" className="social-remove" onClick={() => removeSocial(i)} title="Rimuovi">✕</button>
+                  </div>
+                ))}
+                <button type="button" className="social-add" onClick={addSocial}>+ Aggiungi social</button>
               </div>
               <div className="brief-field">
                 <label>Google Maps (URL)</label>
