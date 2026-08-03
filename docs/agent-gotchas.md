@@ -1198,3 +1198,61 @@ versione. **Mai cancellare il lockfile** in install puliti; se serve
 ripristino: `git checkout -- package-lock.json && npm install`. npm 12
 riscrive comunque il lockfile (pruning optional/peer deps: pg,
 @opentelemetry, ecc.) — innocuo, versioni core invariate.
+
+## 26. Thinking mode sempre attivo — no temperature (2026-08-03)
+
+Tutte le chiamate AI usano **thinking mode al massimo livello**.
+`temperature` rimosso ovunque (DeepSeek thinking mode lo ignora, Ollama
+non serve). Dettaglio per provider:
+
+### DeepSeek (API `api.deepseek.com/v1/chat/completions`)
+
+- Body include: `reasoning_effort: 'max'` + `extra_body: { thinking: { type: 'enabled' } }`
+- `temperature`/`top_p`/`presence_penalty`/`frequency_penalty` non supportati
+  in thinking mode (ignorati silenziosamente dall'API)
+- `reasoning_content` nel response: presente in `choices[0].message.reasoning_content`
+- **Multi-turn con tool calls**: `reasoning_content` DEVE essere ripassato
+  nell'assistant message (`reasoning_content` field). Senza tool calls,
+  viene ignorato dall'API. Implementato via `ChatMessage.reasoningContent`
+- **Streaming**: chunk include `delta.reasoning_content` → propagato come
+  `AIStreamChunk.reasoningContent`
+
+### Ollama (API `ollama.com/api/chat`)
+
+- Body include: `think: 'max'` (sostituisce `options.temperature`)
+- `think` accetta booleano o stringa (`low`/`medium`/`high`/`max`).
+  `max` = massimo sforzo di ragionamento
+- `message.thinking` nel response: contiene la traccia di ragionamento
+- **Streaming**: chunk include `message.thinking` → propagato come
+  `AIStreamChunk.reasoningContent`
+- **Structured outputs**: `format` field funziona con thinking abilitato
+- **Tool calling**: thinking + tools funzionano insieme; `reasoningContent`
+  va ripassato come `thinking` nel messaggio assistant
+
+### Provider registrati (6 totali)
+
+| ID | Provider class | Model | Vision | Pricing |
+|---|---|---|---|---|
+| `deepseek-v4-flash` | DeepSeekProvider | deepseek-v4-flash | no | $0.14/$0.28 per 1M tok |
+| `deepseek-v4-pro` | DeepSeekProvider | deepseek-v4-pro | no | $0.55/$2.19 per 1M tok |
+| `ollama-minimax-m3` | OllamaProProvider | minimax-m3:cloud | sì | $20/mo flat |
+| `ollama-deepseek-v4-flash` | OllamaProProvider | deepseek-v4-flash:cloud | no | $20/mo flat |
+| `ollama-deepseek-v4-pro` | OllamaProProvider | deepseek-v4-pro:cloud | no | $20/mo flat |
+| `ollama-qwen-3.5` | OllamaProProvider | qwen-3.5 | sì | $20/mo flat |
+
+### Regole per modifiche future
+
+1. **Mai reintrodurre `temperature`** in `ChatOptions` o body request.
+   Thinking mode è sempre attivo, `temperature` non ha effetto.
+2. **`reasoningEffort`** in `ChatOptions` (tipo `'low' | 'high' | 'max'`).
+   Default `'max'` in `BaseAIProvider.buildRequestBody`.
+3. **`reasoningContent`** in `ChatMessage` va popolato quando si ripassano
+   messaggi assistant con tool calls (DeepSeek richiede `reasoning_content`
+   nel messaggio). Per Ollama, il field si chiama `thinking` nel body API
+   ma è mappato a `reasoningContent` internamente.
+4. **Streaming**: entrambi i provider emettono `reasoningContent` nei chunk.
+   Il consumer può ignorarlo (non serve per il rendering finale) ma deve
+   accumularlo se deve ripassare il messaggio in multi-turn con tool calls.
+5. **`ollama-deepseek-v4-flash`** è un Ollama Pro provider che usa il model
+   `deepseek-v4-flash:cloud` (DeepSeek V4 Flash via Ollama Cloud, flat rate).
+   Non va confuso con `deepseek-v4-flash` (DeepSeekProvider, pay-per-token).

@@ -152,7 +152,7 @@ export abstract class BaseOrchestrator {
     messages: ChatMessage[],
     options: {
       tools?: unknown;
-      temperature?: number;
+      reasoningEffort?: 'low' | 'high' | 'max';
       responseFormat?: { type: 'json_object' };
       requestId?: string;
     } = {},
@@ -191,7 +191,7 @@ export abstract class BaseOrchestrator {
     messages: ChatMessage[],
     options: {
       tools?: unknown;
-      temperature?: number;
+      reasoningEffort?: 'low' | 'high' | 'max';
       maxTokens?: number;
       responseFormat?: { type: 'json_object' };
     } = {},

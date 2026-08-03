@@ -104,7 +104,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
     const response = await this.handleStream(
       provider,
       messages,
-      { temperature: 0.7, responseFormat: { type: 'json_object' } },
+      { reasoningEffort: 'max', responseFormat: { type: 'json_object' } },
       { onStream: options.onStream },
     );
 

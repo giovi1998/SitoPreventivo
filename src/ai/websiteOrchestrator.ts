@@ -89,7 +89,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       if (last) last.images = [options.logoBase64];
     }
     const htmlResponse = await this.handleStream(provider, htmlMessages, {
-      temperature: 0.7,
+      reasoningEffort: 'max',
       responseFormat: { type: 'json_object' },
       maxTokens: 8192,
     }, { onStream: options.onStream });
@@ -111,7 +111,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       { role: 'user', content: cssPrompt },
     ];
     const cssResponse = await this.handleStream(provider, cssMessages, {
-      temperature: 0.7,
+      reasoningEffort: 'max',
       responseFormat: { type: 'json_object' },
       maxTokens: 4096,
     });
@@ -128,7 +128,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       { role: 'user', content: jsPrompt },
     ];
     const jsResponse = await this.handleStream(provider, jsMessages, {
-      temperature: 0.7,
+      reasoningEffort: 'max',
       responseFormat: { type: 'json_object' },
       maxTokens: 4096,
     });
@@ -145,7 +145,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       { role: 'user', content: verifyPrompt },
     ];
     const verifyResponse = await this.handleStream(provider, verifyMessages, {
-      temperature: 0.3,
+      reasoningEffort: 'max',
       responseFormat: { type: 'json_object' },
       maxTokens: 2048,
     });
@@ -228,7 +228,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const response = await this.handleStream(
       provider,
       messages,
-      { temperature: 0.7, responseFormat: { type: 'json_object' }, maxTokens: 4096 },
+      { reasoningEffort: 'max', responseFormat: { type: 'json_object' }, maxTokens: 4096 },
       { onStream: options.onStream },
     );
 

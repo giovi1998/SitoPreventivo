@@ -13,6 +13,7 @@ export class AIProviderRegistry {
     this.register('deepseek-v4-pro', new DeepSeekProvider('deepseek-v4-pro'));
     // TB-023: Ollama Pro Cloud ($20/mo flat, multimodale, zero retention)
     this.register('ollama-minimax-m3', new OllamaProProvider('minimax-m3:cloud'));
+    this.register('ollama-deepseek-v4-flash', new OllamaProProvider('deepseek-v4-flash:cloud'));
     this.register('ollama-deepseek-v4-pro', new OllamaProProvider('deepseek-v4-pro:cloud'));
     this.register('ollama-qwen-3.5', new OllamaProProvider('qwen-3.5'));
   }

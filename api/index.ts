@@ -1280,6 +1280,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
               name: z.string().optional(),
               // TB-023: Ollama multimodal messages may include images
               images: z.array(z.string()).optional(),
+              reasoning_content: z.string().optional(),
               tool_calls: z
                 .array(
                   z.object({
@@ -1295,7 +1296,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
           .min(1)
           .max(50),
         response_format: z.object({ type: z.literal('json_object') }).optional(),
-        temperature: z.number().min(0).max(2).optional(),
+        reasoning_effort: z.enum(['low', 'high', 'max']).optional(),
         max_tokens: z.number().int().positive().max(8192).optional(),
         userEmail: z.string().email().optional(),
         // TB-023: provider routing (default deepseek)
@@ -1333,7 +1334,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
         logAI({ tag: 'ai_chat', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
         return jsonWithRequestId(req, res, 503, { error: 'Ollama non configurato. Configura OLLAMA_API_KEY su Vercel.' }, requestId);
       }
-      const { model, messages, temperature, max_tokens, tools, format, options: ollamaOptions } = v.data;
+      const { model, messages, max_tokens, tools, format, options: ollamaOptions } = v.data;
       const ollamaModel = model || 'minimax-m3:cloud';
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000); // Ollama Cloud più lento di DeepSeek
@@ -1346,6 +1347,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
             const msg: Record<string, unknown> = { role: m.role, content: m.content };
             if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
             if (m.name) msg.name = m.name;
+            if (m.reasoning_content) msg.thinking = m.reasoning_content;
             if (m.images && m.images.length > 0) msg.images = m.images;
             if (m.tool_calls && m.tool_calls.length > 0) {
               msg.tool_calls = m.tool_calls.map((tc) => ({
@@ -1355,10 +1357,8 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
             return msg;
           }),
           stream: false,
+          think: 'max',
         };
-        if (temperature !== undefined) {
-          ollamaBody.options = { ...(ollamaBody.options as object | undefined), temperature };
-        }
         if (max_tokens !== undefined) {
           ollamaBody.options = { ...(ollamaBody.options as object | undefined), num_predict: max_tokens };
         }
@@ -1459,7 +1459,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
       logAI({ tag: 'ai_chat', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
       return jsonWithRequestId(req, res, 503, { error: 'DeepSeek non configurato.' }, requestId);
     }
-    const { model, messages, response_format, temperature, max_tokens } = v.data;
+    const { model, messages, response_format, reasoning_effort, max_tokens } = v.data;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
     const startedAt = Date.now();
@@ -1472,7 +1472,8 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
           model: model || 'deepseek-v4-flash',
           messages,
           response_format: response_format || { type: 'json_object' },
-          temperature: temperature ?? 0.7,
+          reasoning_effort: reasoning_effort ?? 'max',
+          extra_body: { thinking: { type: 'enabled' } },
           ...(max_tokens ? { max_tokens } : {}),
         }),
         signal: controller.signal,
@@ -1597,7 +1598,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
             { role: 'user', content: userMsg },
           ],
           response_format: { type: 'json_object' },
-          temperature: 0.7,
+          reasoning_effort: 'max',
+          extra_body: { thinking: { type: 'enabled' } },
         }),
         signal: controller.signal,
       });
@@ -1693,12 +1695,13 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
               name: z.string().optional(),
               // TB-023: Ollama multimodal messages may include images
               images: z.array(z.string()).optional(),
+              reasoning_content: z.string().optional(),
             }),
           )
           .min(1)
           .max(50),
         tools: z.array(z.any()).optional(),
-        temperature: z.number().min(0).max(2).optional(),
+        reasoning_effort: z.enum(['low', 'high', 'max']).optional(),
         max_tokens: z.number().int().positive().max(8192).optional(),
         userEmail: z.string().email().optional(),
         // TB-023: provider routing (default deepseek)
@@ -1724,7 +1727,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
         return jsonWithRequestId(req, res, 503, { error: 'Ollama non configurato. Configura OLLAMA_API_KEY su Vercel.' }, requestId);
       }
-      const { model, messages, temperature, max_tokens, tools, options: ollamaOptions, format } = v.data;
+      const { model, messages, max_tokens, tools, options: ollamaOptions, format } = v.data;
       const ollamaModel = model || 'minimax-m3:cloud';
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000);
@@ -1736,14 +1739,13 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
             const msg: Record<string, unknown> = { role: m.role, content: m.content };
             if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
             if (m.name) msg.name = m.name;
+            if (m.reasoning_content) msg.thinking = m.reasoning_content;
             if (m.images && m.images.length > 0) msg.images = m.images;
             return msg;
           }),
           stream: true,
+          think: 'max',
         };
-        if (temperature !== undefined) {
-          ollamaBody.options = { ...(ollamaBody.options as object | undefined), temperature };
-        }
         if (max_tokens !== undefined) {
           ollamaBody.options = { ...(ollamaBody.options as object | undefined), num_predict: max_tokens };
         }
@@ -1856,13 +1858,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
       return jsonWithRequestId(req, res, 503, { error: 'DeepSeek non configurato.' }, requestId);
     }
-    const { model, messages, tools, temperature, max_tokens } = v.data;
+    const { model, messages, tools, reasoning_effort, max_tokens } = v.data;
     const upBody = {
       model: model || 'deepseek-v4-flash',
       messages,
       stream: true,
       ...(tools ? { tools } : {}),
-      ...(temperature !== undefined ? { temperature } : { temperature: 0.7 }),
+      reasoning_effort: reasoning_effort ?? 'max',
+      extra_body: { thinking: { type: 'enabled' } },
       ...(max_tokens ? { max_tokens } : {}),
     };
     let apiRes: Response;
@@ -2457,7 +2460,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         ],
         stream: false,
         format: 'json',
-        options: { temperature: 0.6 },
+        think: 'max',
       };
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60_000);
@@ -2679,7 +2682,8 @@ async function callDeepSeekAiFill(prompt: string): Promise<{ fields: Record<stri
           { role: 'user', content: prompt },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.7,
+        reasoning_effort: 'max',
+        extra_body: { thinking: { type: 'enabled' } },
       }),
       signal: AbortSignal.timeout(25000),
     });

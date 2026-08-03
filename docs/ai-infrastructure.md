@@ -1,6 +1,6 @@
 # AI Infrastructure
 
-> Ultimo aggiornamento: 2026-07-21
+> Ultimo aggiornamento: 2026-08-03
 
 ---
 
@@ -52,11 +52,12 @@
 | Provider | Modello | Tipo | Chiave env |
 |----------|---------|------|------------|
 | DeepSeek | `deepseek-v4-flash` | Text (chat) | `DEEPSEEK_API_KEY` |
+| DeepSeek | `deepseek-v4-pro` | Text (chat) | `DEEPSEEK_API_KEY` |
 | Ollama Pro | `minimax-m3:cloud` | Text + Vision | `OLLAMA_API_KEY` |
+| Ollama Pro | `deepseek-v4-flash:cloud` | Text | `OLLAMA_API_KEY` |
 | Ollama Pro | `deepseek-v4-pro:cloud` | Text | `OLLAMA_API_KEY` |
 | Ollama Pro | `qwen-3.5` | Text | `OLLAMA_API_KEY` |
 | Gemini | `gemini-3.1-flash-image` | Image gen | `GEMINI_API_KEY` |
-| Gemini Flash | `gemini-2.0-flash-preview-image-generation` | Image gen | `GEMINI_API_KEY` |
 
 ### Dual-mode (dev vs prod)
 
@@ -73,7 +74,11 @@ I provider immagine (Gemini) sono **sempre server-side**, sia in dev che in prod
 
 1. Parametro esplicito `modelId` (se presente)
 2. Default utente: `aiProviderDefault` da `pq_ui:v1`
-3. Fallback: `deepseek-v4-flash` (registry default)
+3. Fallback: `ollama-minimax-m3` (registry default, MiniMax M3 via Ollama Pro)
+
+### Thinking mode
+
+Tutte le chiamate AI usano **thinking mode al massimo livello** (`reasoning_effort: 'max'` per DeepSeek, `think: 'max'` per Ollama). `temperature` non è più supportato (DeepSeek thinking mode lo ignora, Ollama non serve). Vedi `docs/agent-gotchas.md` §26 per dettagli.
 
 ---
 

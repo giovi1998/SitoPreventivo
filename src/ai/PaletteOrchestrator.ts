@@ -52,7 +52,7 @@ export class PaletteAIOrchestrator extends BaseOrchestrator {
     const messages = this.buildMessages(systemPrompt, userPrompt);
     const { response, providerId: finalProviderId } = await this.executeWithFallback(
       providerId, messages,
-      { temperature: 0.7, responseFormat: { type: 'json_object' } },
+      { reasoningEffort: 'max', responseFormat: { type: 'json_object' } },
       { onStream: options.onStream },
     );
     const raw = response.content || '[]';

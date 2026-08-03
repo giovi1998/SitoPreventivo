@@ -259,7 +259,7 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
       session.messages,
       {
         tools: toolsDefs,
-        temperature: wantsTools ? 0.7 : 0.2,
+        reasoningEffort: 'max',
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
         requestId: options?.requestId,
       },
@@ -352,7 +352,7 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
 
         const followUpProvider = providerRegistry.getProvider(finalProviderId);
         const followUp = await followUpProvider.chat(session.messages, {
-          temperature: 0.4,
+          reasoningEffort: 'max',
           responseFormat: { type: 'json_object' },
         });
 

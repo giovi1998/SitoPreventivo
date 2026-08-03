@@ -73,6 +73,20 @@ describe('OllamaProProvider', () => {
       expect(body.messages[0].content).toBe('ciao');
       expect(body.provider).toBe('ollama');
       expect(body.stream).toBe(false);
+      expect(body.think).toBe('max');
+    });
+
+    it('includes think:max in body', async () => {
+      const p = new OllamaProProvider();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+      await p.chat([{ role: 'user', content: 'ciao' }]);
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.think).toBe('max');
     });
 
     it('translates responseFormat json_object to format:json', async () => {

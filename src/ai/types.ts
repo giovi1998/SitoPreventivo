@@ -7,6 +7,7 @@ export interface ChatMessage {
   name?: string;
   toolCalls?: AIToolCall[];
   images?: string[];
+  reasoningContent?: string;
 }
 
 export interface AIToolCall {
@@ -21,6 +22,7 @@ export interface AIToolCall {
 export interface AIResponse {
   content: string | null;
   toolCalls?: AIToolCall[];
+  reasoningContent?: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -46,7 +48,7 @@ export type ToolExecutor<T = unknown> = (args: Record<string, unknown>, payload:
 
 export interface ChatOptions {
   tools?: ToolDefinition[];
-  temperature?: number;
+  reasoningEffort?: 'low' | 'high' | 'max';
   maxTokens?: number;
   responseFormat?: { type: 'json_object' | 'text' };
   signal?: AbortSignal;
@@ -59,6 +61,7 @@ export interface AIStreamChunk {
   type: 'content' | 'tool_call' | 'done' | 'error';
   content?: string;
   toolCall?: AIToolCall;
+  reasoningContent?: string;
   usage?: AIResponse['usage'];
   error?: string;
 }

@@ -23,6 +23,7 @@ export abstract class BaseAIProvider implements AIProvider {
         };
         if (m.toolCallId) msg.tool_call_id = m.toolCallId;
         if (m.name) msg.name = m.name;
+        if (m.reasoningContent) msg.reasoning_content = m.reasoningContent;
         if (m.toolCalls && m.toolCalls.length > 0) {
           msg.tool_calls = m.toolCalls.map((tc: AIToolCall) => ({
             id: tc.id,
@@ -36,7 +37,8 @@ export abstract class BaseAIProvider implements AIProvider {
         return msg;
       }),
       ...(options?.tools && this.supportsTools ? { tools: options.tools } : {}),
-      ...(options?.temperature !== undefined ? { temperature: options.temperature } : { temperature: 0.7 }),
+      reasoning_effort: options?.reasoningEffort ?? 'max',
+      extra_body: { thinking: { type: 'enabled' } },
       ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {}),
       ...(options?.responseFormat ? { response_format: options.responseFormat } : {}),
       ...(options?.stream ? { stream: true } : {}),

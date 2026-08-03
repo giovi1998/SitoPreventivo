@@ -42,15 +42,16 @@ describe('BaseAIProvider.buildRequestBody', () => {
     const body = p['buildRequestBody']([], { tools: [{ type: 'function', function: { name: 'x', description: 'd', parameters: {} } }] });
     expect(body.tools).toBeUndefined();
   });
-  it('uses default temperature when not provided', () => {
+  it('adds reasoning_effort and extra_body.thinking', () => {
     const p = new TestProvider();
     const body = p.callBuildRequestBody([]);
-    expect(body.temperature).toBe(0.7);
+    expect(body.reasoning_effort).toBe('max');
+    expect(body.extra_body).toEqual({ thinking: { type: 'enabled' } });
   });
-  it('respects custom temperature', () => {
+  it('respects custom reasoningEffort', () => {
     const p = new TestProvider();
-    const body = p.callBuildRequestBody([], { temperature: 0.3 });
-    expect(body.temperature).toBe(0.3);
+    const body = p.callBuildRequestBody([], { reasoningEffort: 'low' });
+    expect(body.reasoning_effort).toBe('low');
   });
   it('includes stream flag when set', () => {
     const p = new TestProvider();

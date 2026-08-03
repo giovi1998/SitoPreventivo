@@ -119,6 +119,7 @@ export class OllamaProProvider extends BaseAIProvider {
         const msg: Record<string, unknown> = { role: m.role, content: m.content };
         if (m.toolCallId) msg.tool_call_id = m.toolCallId;
         if (m.name) msg.name = m.name;
+        if (m.reasoningContent) msg.thinking = m.reasoningContent;
         if (m.toolCalls && m.toolCalls.length > 0) {
           msg.tool_calls = m.toolCalls.map((tc) => ({
             function: { name: tc.function.name, arguments: tc.function.arguments },
@@ -132,9 +133,7 @@ export class OllamaProProvider extends BaseAIProvider {
         return msg;
       }),
       stream,
-      ...(options?.temperature !== undefined
-        ? { options: { temperature: options.temperature } }
-        : {}),
+      think: 'max',
       ...(options?.maxTokens ? { options: { num_predict: options.maxTokens } } : {}),
       ...(options?.responseFormat?.type === 'json_object' ? { format: 'json' } : {}),
       ...(options?.tools && this.supportsTools ? { tools: options.tools } : {}),
@@ -190,11 +189,13 @@ export class OllamaProProvider extends BaseAIProvider {
       return {
         content: choice.message?.content || null,
         toolCalls: this.parseToolCalls(choice),
+        reasoningContent: choice.message?.reasoning_content || choice.message?.thinking || undefined,
         usage: this.parseUsage(data),
       };
     }
     // Formato Ollama raw
     const content = data.message?.content || null;
+    const reasoningContent = data.message?.thinking || undefined;
     const toolCalls = data.message?.tool_calls?.map((tc: any) => ({
       id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       type: 'function' as const,
@@ -209,6 +210,7 @@ export class OllamaProProvider extends BaseAIProvider {
     return {
       content,
       toolCalls: toolCalls?.length ? toolCalls : undefined,
+      reasoningContent,
       usage: this.parseOllamaUsage(data),
     };
   }
@@ -296,6 +298,12 @@ export class OllamaProProvider extends BaseAIProvider {
               };
             }
             const delta = parsed.choices?.[0]?.delta;
+            if (delta?.reasoning_content) {
+              yield { type: 'content', content: '', reasoningContent: delta.reasoning_content };
+            }
+            if (delta?.thinking) {
+              yield { type: 'content', content: '', reasoningContent: delta.thinking };
+            }
             if (delta?.content) {
               yield { type: 'content', content: delta.content };
             }

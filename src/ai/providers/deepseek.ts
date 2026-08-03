@@ -91,6 +91,7 @@ export class DeepSeekProvider extends BaseAIProvider {
     return {
       content: choice?.message?.content || null,
       toolCalls: this.parseToolCalls(choice),
+      reasoningContent: choice?.message?.reasoning_content || undefined,
       usage: this.parseUsage(data),
     };
   }
@@ -230,6 +231,10 @@ export class DeepSeekProvider extends BaseAIProvider {
             }
 
             if (!delta) continue;
+
+            if (delta.reasoning_content) {
+              yield { type: 'content', content: '', reasoningContent: delta.reasoning_content };
+            }
 
             if (delta.content) {
               chunkCount++;

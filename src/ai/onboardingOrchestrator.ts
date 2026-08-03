@@ -46,7 +46,7 @@ export class OnboardingAIOrchestrator extends BaseOrchestrator {
     const response = await this.handleStream(
       provider,
       messages,
-      { temperature: 0.5, responseFormat: { type: 'json_object' } },
+      { reasoningEffort: 'max', responseFormat: { type: 'json_object' } },
       { onStream: options.onStream },
     );
 

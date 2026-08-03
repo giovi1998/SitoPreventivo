@@ -20,7 +20,7 @@ const aiChatSchema = z.object({
     .min(1)
     .max(50),
   response_format: z.object({ type: z.literal('json_object') }).optional(),
-  temperature: z.number().min(0).max(2).optional(),
+  reasoning_effort: z.enum(['low', 'high', 'max']).optional(),
   max_tokens: z.number().int().positive().max(8192).optional(),
   userEmail: z.string().email().optional(),
 });
@@ -46,7 +46,7 @@ describe('AI endpoint Zod schemas (spec 7)', () => {
           { role: 'user', content: 'msg' },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.7,
+        reasoning_effort: 'max',
         max_tokens: 1024,
         userEmail: 'user@example.com',
       });
@@ -79,10 +79,18 @@ describe('AI endpoint Zod schemas (spec 7)', () => {
       expect(result.success).toBe(false);
     });
 
-    it('rejects temperature > 2', () => {
+    it('accepts reasoning_effort enum', () => {
       const result = aiChatSchema.safeParse({
         messages: [{ role: 'user', content: 'x' }],
-        temperature: 3,
+        reasoning_effort: 'max',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects invalid reasoning_effort', () => {
+      const result = aiChatSchema.safeParse({
+        messages: [{ role: 'user', content: 'x' }],
+        reasoning_effort: 'extreme',
       });
       expect(result.success).toBe(false);
     });
@@ -171,7 +179,7 @@ const aiChatSchemaTB023 = z.object({
     .min(1)
     .max(50),
   response_format: z.object({ type: z.literal('json_object') }).optional(),
-  temperature: z.number().min(0).max(2).optional(),
+  reasoning_effort: z.enum(['low', 'high', 'max']).optional(),
   max_tokens: z.number().int().positive().max(8192).optional(),
   userEmail: z.string().email().optional(),
   provider: z.enum(['deepseek', 'ollama']).optional(),

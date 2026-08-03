@@ -115,7 +115,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       primaryProviderId,
       session.messages,
       {
-        temperature: wantsAnalysis ? 0.3 : 0.4,
+        reasoningEffort: 'max',
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
         requestId: options?.requestId,
@@ -175,7 +175,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         });
 
         const followUp = await provider.chat(session.messages, {
-          temperature: 0.4,
+          reasoningEffort: 'max',
           responseFormat: { type: 'json_object' },
         });
 

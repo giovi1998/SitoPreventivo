@@ -190,7 +190,7 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
       primaryProviderId,
       session.messages,
       {
-        temperature: 0.7,
+        reasoningEffort: 'max',
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : { type: 'json_object' },
         requestId: options?.requestId,
@@ -238,7 +238,7 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
 
         const followUpProvider = providerRegistry.getProvider(finalProviderId);
         const followUp = await followUpProvider.chat(session.messages, {
-          temperature: 0.4,
+          reasoningEffort: 'max',
           responseFormat: { type: 'json_object' },
         });
 
