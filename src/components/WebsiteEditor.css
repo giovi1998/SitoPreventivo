@@ -109,6 +109,12 @@
   gap: 16px;
 }
 
+.brief-ai-provider {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+
 .brief-style-select label {
   font-size: 0.75rem;
   font-weight: 600;

@@ -9,6 +9,8 @@ import { useDocumentSave } from '../hooks/useDocumentSave';
 import { useAIWebsite } from '../hooks/useAIWebsite';
 import { withAiCall } from '../utils/aiStats';
 import { DocumentAiStats } from './DocumentAiStats';
+import AIProviderBadge from './ai/AIProviderBadge';
+import { getAiProviderDefault, setAiProviderDefault } from '../utils/uiPrefs';
 import { logger } from '../utils/logger';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -67,6 +69,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const [viewport, setViewport] = useState('100%');
   const [refinePrompt, setRefinePrompt] = useState('');
   const [isRefining, setIsRefining] = useState(false);
+  const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || '');
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedIdRef = useRef<string | undefined>(initialWebsite?.id);
   const loadedUpdatedAtRef = useRef<string | undefined>(initialWebsite?.updatedAt);
@@ -141,6 +144,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       const result = await generate(website.brief, {
         style: website.style,
         briefContext: website.briefContext,
+        modelId: aiModel || undefined,
       });
       const merged = {
         ...website,
@@ -170,6 +174,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       const result = await refine(
         { html: website.html, css: website.css, js: website.js, pages: website.pages },
         refinePrompt,
+        { modelId: aiModel || undefined },
       );
       setWebsite((prev) => ({
         ...prev,
@@ -269,6 +274,11 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     window.open(url, '_blank');
   }, [website]);
 
+  const handleProviderChange = useCallback((providerId: string) => {
+    setAiProviderDefault(providerId);
+    setAiModel(providerId);
+  }, []);
+
   const fullDocument = useMemo(
     () => buildFullDocument(website.html, website.css, website.js),
     [website.html, website.css, website.js],
@@ -366,6 +376,10 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                     <button key={opt.value} className={`style-pill${website.style === opt.value ? ' active' : ''}`} onClick={() => updateStyle(opt.value)}>{opt.label}</button>
                   ))}
                 </div>
+              </div>
+
+              <div className="brief-ai-provider">
+                <AIProviderBadge lastCostUsd={lastCostUsd} onProviderChange={handleProviderChange} />
               </div>
 
               <button className="btn-generate" onClick={handleGenerate} disabled={isProcessing}>
