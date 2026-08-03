@@ -79,7 +79,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     }
     userContentParts.push(userPrompt);
     if (hasVision) {
-      userContentParts.push('Analizza il logo/immagine per estrarne i colori dominanti, lo stile visivo e il mood. Usa questi elementi per generare un sito coerente col brand.');
+      userContentParts.push('Analizza il logo/immagine SOLO per estrarre la palette colori (primary, secondary, accent) e lo stile del font (serif/sans-serif, grassetto/leggero, elegante/moderno). NON usare il logo per decidere layout, contenuti o struttura del sito — quelli vanno dal brief. Applica i colori e lo stile font estratti al CSS del sito.');
     }
     const messages = this.buildMessages(systemPrompt, userContentParts.join('\n\n'));
 
