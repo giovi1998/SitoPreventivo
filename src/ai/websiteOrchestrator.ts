@@ -64,7 +64,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       briefContext?: string;
       modelId?: string;
       onStream?: (chunk: AIStreamChunk) => void;
-      onStep?: (step: string, detail: string) => void;
+      onStep?: (step: string, promptText: string) => void;
+      onStepResult?: (step: string, responseText: string) => void;
       userEmail?: string;
       logoBase64?: string;
       scrapedReference?: string;
@@ -77,8 +78,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const hasVision = options.logoBase64 && (provider as { supportsVision?: boolean }).supportsVision;
 
     // ─── Step 1: HTML ───────────────────────────────────────────
-    options.onStep?.('html', `Stile: ${style}, Pagine: ${brief.pages || 'index'}, Settore: ${brief.sector || '-'}`);
     const htmlPrompt = buildWebsiteHtmlPrompt(brief, style, options.briefContext);
+    options.onStep?.('html', htmlPrompt);
     if (options.scrapedReference) {
       changes.push(`scraped:${options.scrapedReference.length}chars`);
     }
@@ -105,10 +106,11 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     }
     const { html, pages } = htmlParsed.data;
     changes.push(`html:generated:pages=${pages.length}`);
+    options.onStepResult?.('html', htmlResponse.content ?? '');
 
     // ─── Step 2: CSS (non-stream, sessione fresca) ───────────────
-    options.onStep?.('css', `${style}, ${brief.preferredColors ? `Colori: ${brief.preferredColors}` : ''}`);
     const cssPrompt = buildWebsiteCssPrompt(html, style, brief);
+    options.onStep?.('css', cssPrompt);
     const cssMessages: ChatMessage[] = [
       { role: 'system', content: promptRegistry.getPrompt('website-css') },
       { role: 'user', content: cssPrompt },
@@ -123,10 +125,11 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     }));
     const css = cssParsed.ok ? cssParsed.data.css : '';
     changes.push(`css:${css.length}chars`);
+    options.onStepResult?.('css', cssResponse.content ?? '');
 
     // ─── Step 3: JS (non-stream, sessione fresca) ─────────────────
-    options.onStep?.('js', '');
     const jsPrompt = buildWebsiteJsPrompt(html);
+    options.onStep?.('js', jsPrompt);
     const jsMessages: ChatMessage[] = [
       { role: 'system', content: promptRegistry.getPrompt('website-js') },
       { role: 'user', content: jsPrompt },
@@ -141,10 +144,11 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     }));
     const js = jsParsed.ok ? jsParsed.data.js : '';
     changes.push(`js:${js.length}chars`);
+    options.onStepResult?.('js', jsResponse.content ?? '');
 
     // ─── Step 4: Verify (non-stream, sessione fresca) ─────────────
-    options.onStep?.('verify', '');
     const verifyPrompt = buildWebsiteVerifyPrompt(html, css, js);
+    options.onStep?.('verify', verifyPrompt);
     const verifyMessages: ChatMessage[] = [
       { role: 'system', content: promptRegistry.getPrompt('website-verify') },
       { role: 'user', content: verifyPrompt },
@@ -152,7 +156,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const verifyResponse = await provider.chat(verifyMessages, {
       reasoningEffort: 'max',
       responseFormat: { type: 'json_object' },
-      maxTokens: 2048,
+      maxTokens: 8192,
     });
     const verifyParsed = this.parseJsonResponse(verifyResponse.content ?? '', z.object({
       issues: z.array(z.string()).default([]),

@@ -129,7 +129,8 @@ export function buildWebsiteHtmlPrompt(
     const embedUrl = brief.mapsUrl
       .replace(/^https:\/\/maps\.app\.goo\.gl\//, 'https://maps.google.com/maps?q=')
       .replace(/^https:\/\/www\.google\.com\/maps\//, 'https://www.google.com/maps/embed/v1/place?key=&q=');
-    parts.push(`Maps: ${embedUrl}`);
+    parts.push(`Maps URL: ${embedUrl}`);
+    parts.push('⚠️ Per la mappa, genera un <iframe> con src="https://www.google.com/maps/embed/v1/place?key=&q=INDIRIZZO" o usa il link maps.google.com/maps?q=...&output=embed. NON usare maps.app.goo.gl (bloccato da X-Frame-Options).');
   }
   if (brief.notes) parts.push(`Note: ${brief.notes}`);
   if (briefContext) parts.push(`Contesto: ${briefContext}`);

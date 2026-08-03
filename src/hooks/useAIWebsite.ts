@@ -121,11 +121,19 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
               throw new Error(chunk.error);
             }
           },
-          onStep: (step, detail) => {
-            if (step === 'html') info('Prompt HTML inviato', detail, { requestId });
-            else if (step === 'css') info('Prompt CSS inviato', detail, { requestId });
-            else if (step === 'js') info('Prompt JS inviato', '', { requestId });
-            else if (step === 'verify') info('Prompt Verify inviato', '', { requestId });
+          onStep: (step, promptText) => {
+            const preview = promptText.length > 200 ? promptText.slice(0, 200) + '…' : promptText;
+            if (step === 'html') info('Prompt HTML', preview, { requestId });
+            else if (step === 'css') info('Prompt CSS', preview, { requestId });
+            else if (step === 'js') info('Prompt JS', preview, { requestId });
+            else if (step === 'verify') info('Prompt Verify', preview, { requestId });
+          },
+          onStepResult: (step, content) => {
+            const preview = content.length > 200 ? content.slice(0, 200) + '…' : content;
+            if (step === 'html') info('Risposta HTML', preview, { requestId });
+            else if (step === 'css') info('Risposta CSS', preview, { requestId });
+            else if (step === 'js') info('Risposta JS', preview, { requestId });
+            else if (step === 'verify') info('Risposta Verify', preview, { requestId });
           },
           userEmail,
         });

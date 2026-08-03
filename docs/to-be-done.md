@@ -46,7 +46,19 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   - Guardia anti-regressione: soglia minima px/cm dell'asset nel render.
   - Nota: aggiungere test AI richiede mock provider (mai chiavi reali in CI).
 
-- [ ] **3. "Genera bozze AI" in PROD non funziona (debug)**: la sequenza
+- [ ] **3. Selettore UI reasoningEffort**: aggiungere controllo nel badge
+  provider o in Settings per cambiare `reasoningEffort` (`low`/`high`/`max`).
+  Attualmente hardcoded `'max'` in `BaseAIProvider.buildRequestBody`. Utile
+  per utenti che vogliono risposte più veloci/economiche (DeepSeek low =
+  meno token reasoning, Ollama low = meno thinking). Coinvolge:
+  - `ChatOptions.reasoningEffort` già presente
+  - `BaseAIProvider.buildRequestBody` già usa `options.reasoningEffort ?? 'max'`
+  - UI: `AIProviderBadge` o nuovo pannello in Settings
+  - Persistenza: `pq_ui:v1` (nuovo campo `aiReasoningEffort`)
+  - Provider: DeepSeek accetta `low`/`high`/`max`, Ollama `low`/`medium`/`high`/`max`
+    (mappatura: `low`→`low`, `high`→`high`, `max`→`max`; `medium` solo Ollama)
+
+- [ ] **4. "Genera bozze AI" in PROD non funziona (debug)**: la sequenza
   logo→card→flyer da CRM (`/app/customers/:id` → Genera bozze AI) fallisce
   o produce errori in produzione, mentre in locale probabilmente va. Non è
   ancora mai stato validato live E2E (vedi **TB-027h follow-up** più sotto).
