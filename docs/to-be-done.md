@@ -113,15 +113,21 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   PROD (envelope jsonb → `hydrateDocument`, mai provato live). Record
   legacy doppia-shape in localStorage: si sanano al primo save; se serve,
   migrazione one-shot da console (snippet in gotchas §23).
-  - Stato 2026-08-01: fix `GET /documents/:id` live (id/documentType persi
-    con riga envelope → editor clienti vuoto, risolto). Aperti 2 problemi
-    prod in diagnosi: (a) `DELETE /documents/:id` → 404 su doc appena
-    generati (POST mai arrivato in DB? log `[doc-debug]` aggiunti a
-    POST/DELETE/GET lista per capire); (b) record legacy con `data:null`
-    mostrano warning "nessun contenuto" in Collection (vuoti, non crash).
-    `[doc-debug]` server+client rimossi 2026-08-03 (diagnosi completata:
-    documenti fantasma da auto-build fallito, template quote con data:null
-    sono falsi positivi).
+  - Stato 2026-08-03: log `[doc-debug]` rimossi (commit bb7ea3b).
+    Diagnosi completata via log server-side: i 3 sintomi erano:
+    (a) `DELETE /documents/:id` 404 → documenti fantasma da POST
+    auto-build fallito (schema/rete/rate-limit). `deleteDocument` tratta
+    404 come successo (idempotente), nessun crash. **Non riproducibile in
+    locale** — solo in PROD quando il POST fallisce ma il client mantiene
+    lo stato ottimistico.
+    (b) `hydrateDocument: nessun contenuto` per `tpl_*` → falsi positivi
+    (template quote legacy con `data:null`, zero impatto).
+    (c) `hydrateDocument: nessun contenuto` per logo/flyer → documenti
+    CRM auto-build con `data:null` in DB (creati da versione precedente).
+    **Verifica**: deployare in PROD, aprire CollectionView, controllare
+    che non compaiano più i warning in console. Per i documenti fantasma
+    esistenti, refresh pagina li rimuove dall'UI (GET /documents non li
+    restituisce).
 - [ ] **TB-009 residuo**: conferma una tantum costi reali Gemini in
   dashboard Google AI Studio / GCP billing al primo volume produttivo
   (i `perImage` in `providerPricing.ts` sono stime conservative). No codice.
