@@ -82,6 +82,7 @@ export default defineConfig(({ mode }) => {
             if (body.format === 'json' || body.response_format?.type === 'json_object') ollamaReq.format = 'json';
             if (body.think || body.reasoning_effort) ollamaReq.think = body.think || body.reasoning_effort;
             if (body.max_tokens) ollamaReq.options = { ...(ollamaReq.options || {}), num_predict: body.max_tokens };
+            let streamStarted = false;
             try {
               const apiRes = await fetch('https://ollama.com/api/chat', {
                 method: 'POST',
@@ -103,6 +104,7 @@ export default defineConfig(({ mode }) => {
                 res.setHeader('Cache-Control', 'no-cache, no-transform');
                 res.setHeader('Connection', 'keep-alive');
                 res.setHeader('X-Accel-Buffering', 'no');
+                streamStarted = true;
                 const reader = apiRes.body?.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
@@ -153,6 +155,16 @@ export default defineConfig(({ mode }) => {
               });
             } catch (err) {
               const msg = err?.message || 'unknown';
+              // Se lo stream è già partito, non possiamo fare json()
+              // (setHeader → ERR_HTTP_HEADERS_SENT crash del server).
+              if (streamStarted) {
+                try {
+                  res.write(`data: ${JSON.stringify({ error: `Ollama error: ${msg.slice(0, 200)}` })}\n\n`);
+                  res.write('data: [DONE]\n\n');
+                  res.end();
+                } catch { /* client già disconnesso */ }
+                return;
+              }
               return json(res, 502, { error: `Ollama error: ${msg.slice(0, 200)}` });
             } finally {
               clearTimeout(timeout);
@@ -399,6 +411,7 @@ export default defineConfig(({ mode }) => {
                 const tools = body.tools;
                 const reasoningEffort = body.reasoning_effort || body.think || body.reasoningEffort;
                 const options = { temperature, maxTokens, responseFormat, tools, reasoningEffort };
+                let streamStarted = false;
 
                 try {
                   // Ollama in SSR non può usare fetch relativo: bypassiamo il
@@ -427,6 +440,7 @@ export default defineConfig(({ mode }) => {
                     res.setHeader('Cache-Control', 'no-cache, no-transform');
                     res.setHeader('Connection', 'keep-alive');
                     res.setHeader('X-Accel-Buffering', 'no');
+                    streamStarted = true;
                     for await (const chunk of provider.stream(messages, { ...options, stream: true })) {
                       if (chunk.type === 'content') {
                         res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: chunk.content } }] })}\n\n`);
@@ -453,6 +467,17 @@ export default defineConfig(({ mode }) => {
                   });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
+                  // Se lo stream è già partito (header SSE inviati) NON possiamo
+                  // fare json() (setHeader → ERR_HTTP_HEADERS_SENT crash server).
+                  // Invia l'errore come evento SSE e chiudi.
+                  if (streamStarted) {
+                    try {
+                      res.write(`data: ${JSON.stringify({ error: `AI error: ${msg.slice(0, 200)}` })}\n\n`);
+                      res.write('data: [DONE]\n\n');
+                      res.end();
+                    } catch { /* client già disconnesso */ }
+                    return;
+                  }
                   return json(res, 502, { error: `AI error: ${msg.slice(0, 200)}` });
                 }
               }
