@@ -13,6 +13,7 @@ import AIProviderBadge from './ai/AIProviderBadge';
 import { getAiProviderDefault, setAiProviderDefault, getAiVisionEnabled } from '../utils/uiPrefs';
 import { providerSupportsVision } from '../utils/resolveProviderId';
 import { captureElementAsBase64 } from '../utils/ai/captureElement';
+import html2canvas from 'html2canvas';
 import { compressDataUrl } from '../utils/card/imageCompress';
 import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
@@ -376,6 +377,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
 
   // Vision: cattura preview desktop+mobile da un container offscreen nel
   // DOM principale (iframe srcdoc sandbox non è catturabile da canvas).
+  // Usa html2canvas (più affidabile di foreignObject SVG con iframe/immagini).
   const captureVisionPreviews = useCallback(async (): Promise<string[]> => {
     const el = visionPreviewRef.current;
     if (!el || !websiteHasContent(website)) return [];
@@ -386,9 +388,23 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     for (const width of widths) {
       el.style.width = `${width}px`;
       // Attendi un frame per il reflow
-      await new Promise((r) => setTimeout(r, 60));
-      const shot = await captureElementAsBase64(el, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' });
-      if (shot) shots.push(shot);
+      await new Promise((r) => setTimeout(r, 80));
+      try {
+        const canvas = await html2canvas(el, {
+          width: el.scrollWidth,
+          height: el.scrollHeight,
+          windowWidth: width,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          scale: Math.min(1, 1024 / width),
+        });
+        const shot = canvas.toDataURL('image/jpeg', 0.7);
+        if (shot && shot.length > 500) shots.push(shot);
+      } catch {
+        // fallback: cattura via foreignObject se html2canvas fallisce
+        const shot = await captureElementAsBase64(el, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' });
+        if (shot) shots.push(shot);
+      }
     }
     return shots;
   }, [website, aiModel]);
@@ -413,11 +429,14 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+    // Compressione aggressiva: le immagini finiscono nel documento salvato
+    // (HTML base64 inline + array images[]) → max 120KB l'una per stare
+    // sotto il body 4MB anche con 6-8 immagini.
     Promise.all(files.map((file) => new Promise<string>((resolve) => {
       const reader = new FileReader();
       reader.onload = () => {
         const dataUri = String(reader.result || '');
-        compressDataUrl(dataUri).then((compressed) => resolve(compressed || dataUri));
+        compressDataUrl(dataUri, 512, 120_000).then((compressed) => resolve(compressed || dataUri));
       };
       reader.readAsDataURL(file);
     }))).then((compressed) => {
