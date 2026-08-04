@@ -65,7 +65,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       modelId?: string;
       onStream?: (chunk: AIStreamChunk) => void;
       onStep?: (step: string, promptText: string) => void;
-      onStepResult?: (step: string, responseText: string) => void;
+      onStepResult?: (step: string, responseText: string, meta: { durationMs: number; tokens?: number }) => void;
       userEmail?: string;
       logoBase64?: string;
       scrapedReference?: string;
@@ -76,6 +76,11 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const provider = providerRegistry.getProvider(options.modelId);
     const style = options.style || 'modern';
     const hasVision = options.logoBase64 && (provider as { supportsVision?: boolean }).supportsVision;
+
+    const stepMeta = (start: number, response: AIResponse) => ({
+      durationMs: Date.now() - start,
+      tokens: response.usage?.totalTokens,
+    });
 
     // ─── Step 1: HTML ───────────────────────────────────────────
     const htmlPrompt = buildWebsiteHtmlPrompt(brief, style, options.briefContext);
@@ -91,8 +96,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       const last = htmlMessages[htmlMessages.length - 1];
       if (last) last.images = [options.logoBase64];
     }
+    const htmlStart = Date.now();
     const htmlResponse = await this.handleStream(provider, htmlMessages, {
-      reasoningEffort: 'max',
       responseFormat: { type: 'json_object' },
       maxTokens: 8192,
     }, { onStream: options.onStream });
@@ -106,7 +111,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     }
     const { html, pages } = htmlParsed.data;
     changes.push(`html:generated:pages=${pages.length}`);
-    options.onStepResult?.('html', htmlResponse.content ?? '');
+    options.onStepResult?.('html', htmlResponse.content ?? '', stepMeta(htmlStart, htmlResponse));
 
     // ─── Step 2: CSS (non-stream, sessione fresca) ───────────────
     const cssPrompt = buildWebsiteCssPrompt(html, style, brief);
@@ -115,8 +120,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       { role: 'system', content: promptRegistry.getPrompt('website-css') },
       { role: 'user', content: cssPrompt },
     ];
+    const cssStart = Date.now();
     const cssResponse = await provider.chat(cssMessages, {
-      reasoningEffort: 'max',
       responseFormat: { type: 'json_object' },
       maxTokens: 8192,
     });
@@ -125,7 +130,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     }));
     const css = cssParsed.ok ? cssParsed.data.css : '';
     changes.push(`css:${css.length}chars`);
-    options.onStepResult?.('css', cssResponse.content ?? '');
+    options.onStepResult?.('css', cssResponse.content ?? '', stepMeta(cssStart, cssResponse));
 
     // ─── Step 3: JS (non-stream, sessione fresca) ─────────────────
     const jsPrompt = buildWebsiteJsPrompt(html);
@@ -134,8 +139,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       { role: 'system', content: promptRegistry.getPrompt('website-js') },
       { role: 'user', content: jsPrompt },
     ];
+    const jsStart = Date.now();
     const jsResponse = await provider.chat(jsMessages, {
-      reasoningEffort: 'max',
       responseFormat: { type: 'json_object' },
       maxTokens: 8192,
     });
@@ -144,7 +149,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     }));
     const js = jsParsed.ok ? jsParsed.data.js : '';
     changes.push(`js:${js.length}chars`);
-    options.onStepResult?.('js', jsResponse.content ?? '');
+    options.onStepResult?.('js', jsResponse.content ?? '', stepMeta(jsStart, jsResponse));
 
     // ─── Step 4: Verify (non-stream, sessione fresca) ─────────────
     const verifyPrompt = buildWebsiteVerifyPrompt(html, css, js);
@@ -153,8 +158,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       { role: 'system', content: promptRegistry.getPrompt('website-verify') },
       { role: 'user', content: verifyPrompt },
     ];
+    const verifyStart = Date.now();
     const verifyResponse = await provider.chat(verifyMessages, {
-      reasoningEffort: 'max',
       responseFormat: { type: 'json_object' },
       maxTokens: 8192,
     });
@@ -169,7 +174,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     if (verifyParsed.ok) {
       const { issues, fixes } = verifyParsed.data;
       if (issues.length > 0) {
-        changes.push(`verify:${issues.length}issues`);
+        changes.push(`verify:${issues.length}issues:${issues.slice(0, 3).join(' | ')}`);
         if (fixes?.html) changes.push('verify:html:fixed');
         if (fixes?.css) changes.push('verify:css:fixed');
         if (fixes?.js) changes.push('verify:js:fixed');
@@ -177,6 +182,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         changes.push('verify:ok');
       }
     }
+    options.onStepResult?.('verify', verifyResponse.content ?? '', stepMeta(verifyStart, verifyResponse));
 
     const totalCost = (this.trackUsage(htmlResponse.usage, options.userEmail, options.modelId) || 0.0001)
       + (this.trackUsage(cssResponse.usage, options.userEmail, options.modelId) || 0)
@@ -199,6 +205,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     options: {
       modelId?: string;
       onStream?: (chunk: AIStreamChunk) => void;
+      onStep?: (step: string, promptText: string) => void;
+      onStepResult?: (step: string, responseText: string, meta: { durationMs: number; tokens?: number }) => void;
       userEmail?: string;
     } = {},
   ): Promise<WebsiteRefineResult> {
@@ -230,16 +238,25 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       'Rispondi SOLO con un oggetto JSON. Includi SOLO i campi che devono cambiare (html, css, js, pages).',
       'Se un campo non cambia, omettilo.',
     ].join('\n');
+    options.onStep?.('refine', currentCode);
 
     const provider = providerRegistry.getProvider(options.modelId);
-    const messages = this.buildMessages(systemPrompt, currentCode);
+    const messages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: currentCode },
+    ];
 
+    const refineStart = Date.now();
     const response = await this.handleStream(
       provider,
       messages,
-      { reasoningEffort: 'max', responseFormat: { type: 'json_object' }, maxTokens: 4096 },
+      { responseFormat: { type: 'json_object' }, maxTokens: 8192 },
       { onStream: options.onStream },
     );
+    options.onStepResult?.('refine', response.content ?? '', {
+      durationMs: Date.now() - refineStart,
+      tokens: response.usage?.totalTokens,
+    });
 
     const content = response.content ?? '';
     const parsed = this.parseJsonResponse(content, websiteAIRefineSchema);

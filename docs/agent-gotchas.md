@@ -1300,3 +1300,70 @@ non serve). Dettaglio per provider:
 7. **KV cache**: `usage.cachedTokens` = `prompt_cache_hit_tokens` (DeepSeek).
    Se un giorno si tracciano costi reali, i token cache-hit vanno fatturati
    a tariffa cache (più bassa), non a quella full.
+
+---
+
+## 26. Website Builder — prompt & mappa (2026-08-04)
+
+Dettagli per `src/ai/prompts/websiteSystem.ts` e `src/ai/websiteOrchestrator.ts`.
+
+### 26.1 Google Maps embed
+
+- `maps.app.goo.gl/<codice>` è un redirect short-link: **NON funziona come
+  parametro `q`** nell'iframe (`google.com/maps?q=...`). L'AI che copia il
+  codice goo.gl produce la mappa del mondo senza pin.
+- Fix: nel prompt HTML l'iframe va fornito **già completo e sanitizzato**,
+  con istruzione "usa ESATTAMENTE questo iframe, NON costruirne un altro".
+- `sanitizeMapAddress(contacts)`: rimuove emoji/icone (regex range
+  `\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}`) e prende indirizzo +
+  città (primi 2 elementi separati da virgola) → `q=Via+Dante+5%2FA+Cagliari`.
+  Google geocodifica il testo con pin, non il codice breve.
+- Le emoji nei contatti del brief (`📍 Via Dante 5/A`) finivano nel `q` se
+  non sanitizzate — sempre passare da `sanitizeMapAddress`.
+
+### 26.2 Logo & emoji nel brand
+
+- L'AI tende a generare emoji (es. 🍦) nel brand/hero quando il brief le
+  contiene nella descrizione. Prompt HTML ora vieta: "🚫 EMOJI NEL TESTO:
+  NON usare emoji nel brand, nei titoli o nel testo visibile".
+- Logo: l'AI NON deve mai generare `<img>`, `<svg>` logo, `<span
+  class="brand-mark">` o placeholder. Il logo reale è iniettato dopo via
+  `injectLogoIntoHtml` (brand/nav-inner/header). Il `.brand` deve contenere
+  solo il testo del nome attività.
+
+### 26.3 Font del brief vs firma stile
+
+- Il selettore stile (13 stili, `styleVisualSignature`) descrive
+  peso/forma/lettering, MAI il nome del font. Se il brief richiede un font,
+  `--font` DEVE essere quel font — la firma stile non lo sovrascrive.
+- Prompt CSS: "Font preferito (OBBLIGATORIO, massima priorità)" + nota
+  "NON sostituirlo con la firma dello stile" + "NON importare altri font Google".
+- Test: `src/ai/prompts/__tests__/websiteSystem.test.ts` (7 test: mappa
+  sanitized, social obbligatori, firma stile, fallback modern, font priority,
+  emoji vietate).
+
+### 26.4 Stile pill senza refine automatico
+
+- `updateStyle` in `WebsiteEditor` salva SOLO la preferenza `style` +
+  toast "Premi Raffina per applicarlo". Il refine parte solo su click
+  esplicito "Raffina" (o rigenerazione).
+
+### 26.5 Costo per admin
+
+- `BaseOrchestrator.trackUsage`: admin (`admin@gmail.com`) non traccia
+  `trackTokens` server-side ma il **costo va comunque calcolato e ritornato**
+  per il badge `lastCostUsd`. Bug storico: early return 0 per admin →
+  badge sempre $0 con DeepSeek pay-per-token.
+- `WebsiteOrchestrator.generateSite` somma `trackUsage` dei 4 step in
+  `aiCall.costUsd`; il hook usa `result.aiCall?.costUsd` (non solo l'usage
+  del primo step).
+
+### 26.6 Step generation (riepilogo stato)
+
+- 4 step sequenziali: HTML (stream) → CSS (non-stream) → JS (non-stream) →
+  Verify (non-stream). Ognuno con array messaggi **fresco**
+  (`[{system},{user}]`), mai `buildMessages` (accumula storia → AI confusa).
+- `reasoningEffort`: non hardcodato negli step — fallisce su
+  `options.reasoningEffort ?? getAiReasoningEffort()` (selettore UI).
+- `onStep`/`onStepResult` con meta `{durationMs, tokens}` per log dettagliati
+  (preview 300/500 char, durata, token, prime 3 issue verify).

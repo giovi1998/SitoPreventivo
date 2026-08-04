@@ -31,6 +31,26 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
   `options.reasoningEffort` → `getAiReasoningEffort()` → `'max'`.
   Ollama `think` e server proxy mappano `reasoning_effort`. Test: uiPrefs,
   AIProviderBadge, base. Vedi `docs/agent-gotchas.md` §26.
+- **Website Builder — fixes prompt, mappa, logo, font, costo (2026-08-04)**:
+  - **Mappa Google con pin**: `maps.app.goo.gl/<codice>` non funziona come
+    `q` nell'iframe (mondo senza pin). Fix: iframe già completo e
+    sanitizzato nel prompt + `sanitizeMapAddress()` (strip emoji, indirizzo
+    + città) → `q=Via+Dante+5%2FA+Cagliari`. Test dedicato.
+  - **Emoji vietate nel brand/hero**: prompt HTML vieta emoji nel testo
+    visibile (prima l'AI metteva 🍦 dal brief).
+  - **Font del brief con priorità massima**: la firma stile descrive solo
+    peso/forma/lettering; `--font` DEVE essere il font richiesto dal brief.
+  - **Logo**: l'AI non genera mai `<img>`/`<svg>` logo/`brand-mark`; il
+    `.brand` contiene solo il nome. Iniezione dopo via `injectLogoIntoHtml`.
+  - **Stile pill senza refine automatico**: `updateStyle` salva solo la
+    preferenza + toast "Premi Raffina"; il refine parte solo su click.
+  - **Costo admin corretto**: `trackUsage` calcola e ritorna il costo anche
+    per admin (solo `trackTokens` server-side saltato) → badge non più $0
+    con DeepSeek. `aiCall.costUsd` = somma 4 step.
+  - **Log AI dettagliati**: preview 300/500 char, durata + token per step,
+    prime 3 issue verify nel log.
+  - Test: `websiteSystem.test.ts` (7), `BaseOrchestrator.cost.test.ts` (6).
+    Vedi `docs/agent-gotchas.md` §26.
 
 ## 2026-08-03
 

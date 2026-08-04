@@ -122,18 +122,19 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
             }
           },
           onStep: (step, promptText) => {
-            const preview = promptText.length > 200 ? promptText.slice(0, 200) + '…' : promptText;
+            const preview = promptText.length > 300 ? promptText.slice(0, 300) + '…' : promptText;
             if (step === 'html') info('Prompt HTML', preview, { requestId });
             else if (step === 'css') info('Prompt CSS', preview, { requestId });
             else if (step === 'js') info('Prompt JS', preview, { requestId });
             else if (step === 'verify') info('Prompt Verify', preview, { requestId });
           },
-          onStepResult: (step, content) => {
-            const preview = content.length > 200 ? content.slice(0, 200) + '…' : content;
-            if (step === 'html') info('Risposta HTML', preview, { requestId });
-            else if (step === 'css') info('Risposta CSS', preview, { requestId });
-            else if (step === 'js') info('Risposta JS', preview, { requestId });
-            else if (step === 'verify') info('Risposta Verify', preview, { requestId });
+          onStepResult: (step, content, meta) => {
+            const preview = content.length > 500 ? content.slice(0, 500) + '…' : content;
+            const detail = `${(meta?.durationMs ?? 0) / 1000}s${meta?.tokens ? ` · ${meta.tokens} tok` : ''}\n${preview}`;
+            if (step === 'html') info('Risposta HTML', detail, { requestId });
+            else if (step === 'css') info('Risposta CSS', detail, { requestId });
+            else if (step === 'js') info('Risposta JS', detail, { requestId });
+            else if (step === 'verify') info('Risposta Verify', detail, { requestId });
           },
           userEmail,
         });
@@ -147,13 +148,13 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
           else if (change.startsWith('error:')) error('Errore generazione', change.replace('error:', ''), { requestId });
         }
 
-        const cost = result.response?.usage ? calculateCostUsd(resolvedModelId, result.response.usage) : 0;
+        const cost = result.aiCall?.costUsd ?? (result.response?.usage ? calculateCostUsd(resolvedModelId, result.response.usage) : 0);
         setLastCostUsd(cost);
         finalizeStream(streamId, true, {
           costUsd: cost,
           modelId: resolvedModelId,
           requestId,
-          detail: `Pagine: ${result.site.pages.join(', ')}`,
+          detail: `Pagine: ${result.site.pages.join(', ')}, HTML ${result.site.html.length}ch, CSS ${result.site.css.length}ch, JS ${result.site.js.length}ch`,
         });
 
         success('Sito generato', `${result.site.pages.length} pagine, ${result.site.html.length} caratteri HTML`, { requestId });
@@ -192,6 +193,19 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
               options?.onProgress?.(`Raffinamento… ${chunk.content.length} caratteri`);
             } else if (chunk.type === 'error' && chunk.error) {
               throw new Error(chunk.error);
+            }
+          },
+          onStep: (step, promptText) => {
+            if (step === 'refine') {
+              const preview = promptText.length > 300 ? promptText.slice(0, 300) + '…' : promptText;
+              info('Prompt Raffina', preview, { requestId });
+            }
+          },
+          onStepResult: (step, content, meta) => {
+            if (step === 'refine') {
+              const preview = content.length > 500 ? content.slice(0, 500) + '…' : content;
+              const detail = `${(meta?.durationMs ?? 0) / 1000}s${meta?.tokens ? ` · ${meta.tokens} tok` : ''}\n${preview}`;
+              info('Risposta Raffina', detail, { requestId });
             }
           },
           userEmail,

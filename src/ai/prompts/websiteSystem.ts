@@ -128,10 +128,10 @@ export function buildWebsiteHtmlPrompt(
   if (brief.mapsUrl) {
     parts.push(`Maps URL (link esterno, NON per embed): ${brief.mapsUrl}`);
     if (brief.contacts) {
-      const address = brief.contacts.split(',')[0].trim();
-      parts.push(`⚠️ Per l'iframe Google Maps usa l'INDIRIZZO dai contatti, NON il codice goo.gl:`);
+      const address = sanitizeMapAddress(brief.contacts);
+      parts.push(`⚠️ MAPPA OBBLIGATORIA — usa ESATTAMENTE questo iframe nella sezione contatti (NON costruirne un altro, NON copiare l'emoji):`);
       parts.push(`  <iframe src="https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed" width="100%" height="400" style="border:0;" allowfullscreen="" loading="lazy"></iframe>`);
-      parts.push(`  Il parametro q deve contenere l'indirizzo reale (es. "Via+Dante+5%2FA"), non il codice breve.`);
+      parts.push(`  Il parametro q deve essere esattamente "${encodeURIComponent(address)}" (indirizzo senza emoji/icone + città).`);
     } else {
       parts.push('⚠️ Per l\'embed Google Maps usa l\'indirizzo reale come parametro q, non il codice goo.gl.');
     }
@@ -142,8 +142,10 @@ export function buildWebsiteHtmlPrompt(
   parts.push('\n---');
   parts.push('Genera SOLO la struttura HTML del sito web. Nessun CSS, nessun JavaScript.');
   parts.push('Usa classi semantiche (es. class="hero", class="nav", class="footer", class="section-inner").');
-  parts.push('Non generare tag <img> per il logo del brand. Non generare <span class="brand-mark">.');
-  parts.push('Il logo viene gestito separatamente.');
+  parts.push('🚫 LOGO: NON generare MAI tag <img>, <svg> logo, <span class="brand-mark">, né testo logo placeholder.');
+  parts.push('Il logo reale viene iniettato automaticamente DOPO la generazione nel .brand o .nav-inner.');
+  parts.push('Nella <div class="brand"> metti SOLO il testo del nome attività.');
+  parts.push('🚫 EMOJI NEL TESTO: NON usare emoji nel brand, nei titoli o nel testo visibile (es. 🍦 gelato). Usa solo testo pulito.');
   parts.push('\n⚠️ STRUTTURA NAV OBBLIGATORIA:');
   parts.push('- <header class="nav"> o <nav class="nav"> con <div class="nav-inner">');
   parts.push('- <div class="brand"> con il nome attività (il logo viene iniettato dopo)');
@@ -158,6 +160,15 @@ export function buildWebsiteHtmlPrompt(
   parts.push('- Ogni sezione deve avere <div class="section-inner"> per contenuto centrato');
   parts.push('- Aggiungi classe .current-year nel footer per l\'anno automatico via JS');
   parts.push('- I link social devono avere target="_blank" rel="noopener"');
+  if (brief.socials && brief.socials.length > 0) {
+    const socialLines = brief.socials.filter(s => s.platform || s.url).map(s => `  - ${s.platform}: ${s.url}`);
+    if (socialLines.length > 0) {
+      parts.push('\n⚠️ SOCIAL OBBLIGATORI — includi TUTTI questi nel footer (sezione social):');
+      parts.push(socialLines.join('\n'));
+      parts.push('  Usa <a href="URL" target="_blank" rel="noopener"> con il nome della piattaforma come testo.');
+      parts.push('  Se il valore è un @username (senza URL), costruisci il link col dominio della piattaforma.');
+    }
+  }
   if (brief.sections) {
     parts.push(`\n⚠️ DEVI generare TUTTE le sezioni richieste: ${brief.sections}.`);
     parts.push('Ogni sezione deve essere un <section> con id corrispondente (es. <section id="chi-siamo">).');
@@ -170,6 +181,13 @@ export function buildWebsiteHtmlPrompt(
   }
   parts.push('\nRispondi SOLO con JSON: { "html": "...", "pages": ["index"] }');
   return parts.join('\n');
+}
+
+/** Rimuove emoji/icone dall'indirizzo per Google Maps (es. "📍 Via Dante 5/A" → "Via Dante 5/A"). */
+function sanitizeMapAddress(contacts: string): string {
+  const cleaned = contacts.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '').trim();
+  const partsList = cleaned.split(',').map(p => p.trim()).filter(Boolean);
+  return partsList.slice(0, 2).join(' ');
 }
 
 export function buildWebsiteCssPrompt(
@@ -186,7 +204,9 @@ ${html.slice(0, 5000)}
 
 Stile visivo richiesto: ${style}
 ${brief.preferredColors ? `Colori preferiti: ${brief.preferredColors}` : ''}
-${brief.font ? `Font preferito: ${brief.font}` : ''}
+${brief.font ? `Font preferito (OBBLIGATORIO, massima priorità): ${brief.font}` : ''}
+
+${brief.font ? `⚠️ FONT: usa "${brief.font}" come font principale (--font). NON importare altri font Google, NON sostituirlo con la firma dello stile. Lo stile cambia peso/forma/lettering, MAI il nome del font richiesto.` : ''}
 
 Genera CSS COMPLETO per OGNI classe/id usata nell'HTML sopra. NON omettere classi.
 
@@ -224,9 +244,70 @@ QUALITÀ PREMIUM:
 - Transizioni solo su transform e opacity (performance)
 - Mobile-first: layout a 1 colonna sotto 768px
 
+CARATTERE VISIVO PER STILE — applica le firme distintive di "${style}":
+${styleVisualSignature(style)}
+${brief.font ? `\n⚠️ NOTA FONT: la firma dello stile descrive peso/forma/lettering, MAI il nome del font. Se il brief richiede "${brief.font}", --font DEVE essere "${brief.font}".` : ''}
+
 Il CSS deve essere COMPLETO, RESPONSIVE e PRONTO ALL'USO.
 Rispondi SOLO con JSON: { "css": "..." }
 IL CAMPO "css" NON DEVE MAI ESSERE VUOTO.`;
+}
+
+function styleVisualSignature(style: string): string {
+  const signatures: Record<string, string> = {
+    modern: `- Firma: pulito, spazi ariosi, forme morbide (radius 12-16px), gradiente sottile sul hero
+- Micro-interazioni: hover lift sui card/btn, ombre soft tinted
+- Tipografia: sans geometrica, headline bold con tracking tight`,
+    minimal: `- Firma: riduzione assoluta, molto whitespace, 1 solo accent
+- Niente decorazioni: solo tipografia, layout e colore
+- Bordi sottili (1px), radius 0-4px, ombre quasi assenti
+- Tipografia: sans neutra, grande scala tipografica`,
+    corporate: `- Firma: professionale, fiducia, struttura a griglia rigida
+- Colori sobri (blu navy/teal/grigio), accent singolo
+- Card con bordi definiti, ombre leggere, header stabile
+- Tipografia: sans classica (Roboto/Inter), headings semibold`,
+    creative: `- Firma: audace, asimmetria controllata, forme geometriche
+- Elementi decorativi: forme SVG, pattern, angoli tagliati
+- Tipografia: display bold con accento corsivo/italic su una parola
+- Colori vivaci ma bilanciati, gradienti mirati (mai AI-purple)`,
+    brutalist: `- Firma: grezzo, monospace, bordi spessi (2-3px), shadow hard offset
+- Niente radius, niente gradienti, niente ombre morbide
+- Tipografia: mono o sans estremo, testo grande, UPPERCASE
+- Colori: alto contrasto (nero su bianco + 1 neon accent)`,
+    elegant: `- Firma: raffinato, serif display, molto whitespace, dettagli dorati
+- Font serif (Playfair/Cormorant) per headline, sans per body
+- Ombre leggere, border sottili, radius generoso su card
+- Palette: neutri caldi o freddi + 1 accent metallico (oro/rame/argento)`,
+    vintage: `- Firma: retrò, texture carta, bordi doppi, tinte sbiadite
+- Font serif con letterpress, UPPERCASE su etichette
+- Decorazioni: filigrane, pattern sottili, bordi ornamentali
+- Palette: crema/avorio + accent terracotta/verde salvia/marrone`,
+    tech: `- Firma: futuristico, glassmorphism, griglie, terminal hints
+- backdrop-filter blur, bordi 1px trasparenti, glow sottile sull'accent
+- Tipografia: mono per label/eyebrow, sans per body
+- Palette: dark o light tech (blu elettrico/ciano accent su scuro)`,
+    organic: `- Firma: naturale, forme fluide, texture organiche
+- Border-radius asimmetrici (bordo blob), gradienti morbidi
+- Tipografia: font con curve (sans umanista o serif dolce)
+- Palette: verdi, terracotta, crema, legno`,
+    playful: `- Firma: gioioso, colori vivaci, forme arrotondate (radius 20px+)
+- Decorazioni: blob shapes, emoji-adjacent, sticker-style badge
+- Tipografia: font arrotondato/grottesco, headline con spessore variabile
+- Micro-animazioni: bounce/float sottili su elementi chiave`,
+    luxury: `- Firma: premium, dark o light opulento, dettagli gold/chrome
+- Spazi generosi, tipografia grande, tracking ampio su label
+- Texture: gradienti metallici sottili, border 1px dorato
+- Tipografia: serif display elegante + sans light per body`,
+    editorial: `- Firma: magazine, griglia asimmetrica, numeri grandi, serif
+- Layout: colonne editoriali, headline enorme, pull-quote
+- Tipografia: serif per headline/body, mono per etichette
+- Palette: monocromatico + 1 accent deciso`,
+    dark: `- Firma: dark mode completo, contrasto alto, glow moderato
+- Sfondo off-black (mai #000 puro), superficie elevate via overlay
+- Accent luminoso singolo, testo off-white
+- Tipografia: sans chiara, headline bold, mono per label`,
+  };
+  return signatures[style] ?? signatures.modern;
 }
 
 export function buildWebsiteJsPrompt(html: string): string {

@@ -246,10 +246,12 @@ export abstract class BaseOrchestrator {
     providerId?: string,
   ): number {
     if (!usage) return 0;
-    if (!userEmail || userEmail === 'admin@gmail.com') return 0;
     const totalTokens = usage.totalTokens ?? (usage.promptTokens + usage.completionTokens);
     if (!totalTokens) return 0;
     const costUsd = providerId ? calculateCostUsd(providerId, usage) : 0;
+    // Admin non viene tracciato server-side ma il costo va comunque calcolato
+    // per mostrarlo nel badge (lastCostUsd).
+    if (!userEmail || userEmail === 'admin@gmail.com') return costUsd;
     try {
       dataService.trackTokens(userEmail, totalTokens, costUsd);
     } catch {

@@ -167,28 +167,12 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     });
   }, []);
 
-  const updateStyle = useCallback(async (style: WebsiteStyle) => {
+  const updateStyle = useCallback((style: WebsiteStyle) => {
+    // Salva solo la preferenza stile: il refine parte solo quando l'utente
+    // clicca "Raffina" (o rigenera con "Rigenera Sito").
     setWebsite((prev) => ({ ...prev, style, updatedAt: new Date().toISOString() }));
-    if (!websiteHasContent(website)) return;
-    try {
-      const result = await refine(
-        { html: website.html, css: website.css, js: website.js, pages: website.pages },
-        `Applica lo stile visivo "${style}" al sito. Cambia SOLO i colori, i font, i bordi, gli sfondi e le decorazioni CSS per adattarli allo stile ${style}. NON cambiare la struttura HTML, i contenuti, il layout o il JavaScript. Mantieni tutto il resto identico.`,
-        { modelId: aiModel || undefined },
-      );
-      setWebsite((prev) => ({
-        ...prev,
-        html: result.site.html,
-        css: result.site.css,
-        js: result.site.js,
-        pages: result.site.pages,
-        updatedAt: new Date().toISOString(),
-      }));
-      addToast('success', `Stile ${style} applicato`);
-    } catch (err) {
-      addToast('error', (err as Error)?.message || 'Errore cambio stile');
-    }
-  }, [website, refine, addToast]);
+    addToast('info', `Stile "${style}" selezionato. Premi Raffina per applicarlo al sito esistente.`);
+  }, [addToast]);
 
   const updateCode = useCallback((field: 'html' | 'css' | 'js', value: string) => {
     setWebsite((prev) => ({ ...prev, [field]: value, updatedAt: new Date().toISOString() }));

@@ -49,14 +49,14 @@ describe('BaseOrchestrator trackUsage cost tracking (spec TB-023 §6.1)', () => 
     expect(mockTrackTokens).toHaveBeenCalledWith('user@test.com', 1000, 0);
   });
 
-  it('admin is never charged: trackTokens not called', () => {
+  it('admin is never charged: trackTokens not called, ma cost calcolato per badge', () => {
     const o = new TestOrchestrator();
     const cost = o.testTrackUsage({ promptTokens: 600, completionTokens: 400, totalTokens: 1000 }, 'admin@gmail.com', 'deepseek-v4-flash');
-    expect(cost).toBe(0);
+    expect(cost).toBe(0.000196);
     expect(mockTrackTokens).not.toHaveBeenCalled();
   });
 
-  it('missing userEmail or usage: no tracking, cost 0', () => {
+  it('missing userEmail or usage: no tracking, cost computed solo se providerId', () => {
     const o = new TestOrchestrator();
     expect(o.testTrackUsage({ promptTokens: 1, completionTokens: 1, totalTokens: 2 }, undefined, 'deepseek-v4-flash')).toBe(0);
     expect(o.testTrackUsage(undefined, 'user@test.com', 'deepseek-v4-flash')).toBe(0);
