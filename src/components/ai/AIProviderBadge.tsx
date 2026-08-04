@@ -3,6 +3,8 @@ import { providerRegistry } from '../../ai/providers/registry';
 import {
   getAiProviderDefault,
   setAiProviderDefault,
+  getAiReasoningEffort,
+  setAiReasoningEffort,
 } from '../../utils/uiPrefs';
 import { formatCostUsd, getPricingLabel, OLLAMA_PRO_FLAT_MONTHLY, PRICING } from '../../ai/providerPricing';
 import './AIProviderBadge.css';
@@ -53,6 +55,9 @@ export default function AIProviderBadge({
   const tooltipTimer = useRef<number | null>(null);
   const [selectedId, setSelectedId] = useState<string>(
     () => getAiProviderDefault() || providerRegistry.getDefaultId()
+  );
+  const [reasoningEffort, setReasoningEffort] = useState<'low' | 'high' | 'max'>(
+    () => getAiReasoningEffort()
   );
   const ref = useRef<HTMLDivElement>(null);
 
@@ -193,7 +198,24 @@ export default function AIProviderBadge({
             </div>
           ))}
           <div className="ai-provider-badge__menu-footer">
-            Ollama Pro: ${OLLAMA_PRO_FLAT_MONTHLY}/mese flat · 50x free usage
+            <div className="ai-provider-badge__effort">
+              <span className="ai-provider-badge__effort-label">Ragionamento</span>
+              <div className="ai-provider-badge__effort-options">
+                {(['low', 'high', 'max'] as const).map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    className={`ai-provider-badge__effort-btn ${e === reasoningEffort ? 'is-selected' : ''}`}
+                    onClick={() => { setReasoningEffort(e); setAiReasoningEffort(e); }}
+                  >
+                    {e === 'low' ? 'Veloce' : e === 'high' ? 'Profondo' : 'Massimo'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="ai-provider-badge__menu-footer-note">
+              Ollama Pro: ${OLLAMA_PRO_FLAT_MONTHLY}/mese flat · 50x free usage
+            </div>
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 import type { AIProvider, ChatMessage, ChatOptions, AIResponse, AIStreamChunk, AIToolCall } from '../types';
+import { getAiReasoningEffort } from '../../utils/uiPrefs';
 
 export abstract class BaseAIProvider implements AIProvider {
   abstract readonly name: string;
@@ -37,7 +38,7 @@ export abstract class BaseAIProvider implements AIProvider {
         return msg;
       }),
       ...(options?.tools && this.supportsTools ? { tools: options.tools } : {}),
-      reasoning_effort: options?.reasoningEffort ?? 'max',
+      reasoning_effort: options?.reasoningEffort ?? getAiReasoningEffort(),
       extra_body: { thinking: { type: 'enabled' } },
       ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {}),
       ...(options?.responseFormat ? { response_format: options.responseFormat } : {}),

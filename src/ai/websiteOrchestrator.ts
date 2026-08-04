@@ -256,6 +256,12 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       pages: refine.pages ?? site.pages,
     };
 
+    // Detect quali parti sono cambiate
+    if (merged.html !== site.html) changes.push(`refine:html:changed:${site.html.length}->${merged.html.length}chars`);
+    if (merged.css !== site.css) changes.push(`refine:css:changed:${site.css.length}->${merged.css.length}chars`);
+    if (merged.js !== site.js) changes.push(`refine:js:changed:${site.js.length}->${merged.js.length}chars`);
+    if (merged.pages.join(',') !== site.pages.join(',')) changes.push(`refine:pages:changed`);
+
     this.trackUsage(response.usage, options.userEmail, options.modelId);
     changes.push('website:refined');
 

@@ -22,6 +22,8 @@ export interface UiPrefs {
   aiVisionEnabled?: boolean;
 
   aiAutoFallback?: boolean;
+  /** Livello di ragionamento AI (low/high/max). Default 'max'. */
+  aiReasoningEffort?: 'low' | 'high' | 'max';
 }
 
 const KEY = 'pq_ui:v1';
@@ -46,6 +48,7 @@ export function getUiPrefs(): UiPrefs {
     aiVisionEnabled: parsed.aiVisionEnabled,
 
     aiAutoFallback: parsed.aiAutoFallback,
+    aiReasoningEffort: parsed.aiReasoningEffort,
   };
   } catch {
     return { ...DEFAULTS, aiConsoleExpanded: {} };
@@ -132,5 +135,15 @@ export function getAiAutoFallback(): boolean {
 export function setAiAutoFallback(enabled: boolean): void {
   const prefs = getUiPrefs();
   prefs.aiAutoFallback = enabled;
+  save(prefs);
+}
+
+export function getAiReasoningEffort(): 'low' | 'high' | 'max' {
+  return getUiPrefs().aiReasoningEffort ?? 'max';
+}
+
+export function setAiReasoningEffort(effort: 'low' | 'high' | 'max'): void {
+  const prefs = getUiPrefs();
+  prefs.aiReasoningEffort = effort;
   save(prefs);
 }

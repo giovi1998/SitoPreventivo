@@ -201,6 +201,14 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
         setLastCostUsd(cost);
         finalizeStream(streamId, true, { costUsd: cost, modelId: resolvedModelId, requestId });
 
+        // Log modifiche per parte (html/css/js)
+        for (const change of result.changes) {
+          if (change.startsWith('refine:html:')) info('Modifica HTML', change.replace('refine:html:', ''), { requestId });
+          else if (change.startsWith('refine:css:')) info('Modifica CSS', change.replace('refine:css:', ''), { requestId });
+          else if (change.startsWith('refine:js:')) info('Modifica JS', change.replace('refine:js:', ''), { requestId });
+          else if (change.startsWith('refine:pages:')) info('Modifica Pagine', '', { requestId });
+        }
+
         success('Sito raffinato', instruction.slice(0, 80), { requestId });
         return result;
       } catch (err) {
