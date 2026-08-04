@@ -43,4 +43,23 @@ describe('injectImagesIntoHtml', () => {
     const html = '<main><p>test</p></main>';
     expect(injectImagesIntoHtml(html, [])).toBe(html);
   });
+
+  it('inietta immagini nei gallery-item di tipo <button> (caso AI)', () => {
+    const html = '<div class="gallery-grid"><button class="gallery-item" style="--g1:#a8d977;"><span class="gallery-emoji">🍨</span><div class="gallery-overlay"><h3>Pistacchio</h3></div></button><button class="gallery-item" style="--g1:#f4e4c1;"><span class="gallery-emoji">🌰</span></button></div>';
+    const out = injectImagesIntoHtml(html, [IMG1, IMG2]);
+    expect(out).toContain(`<img src="${IMG1}"`);
+    expect(out).toContain(`<img src="${IMG2}"`);
+    expect(out).toContain('Pistacchio');
+    expect(out).toContain('gallery-emoji');
+  });
+
+  it('mantiene i gallery-item che hanno già img (doppio inject evitato)', () => {
+    const html = `<div class="gallery"><div class="gallery-item"><img src="${IMG1}" /></div><div class="gallery-item"></div></div>`;
+    const out = injectImagesIntoHtml(html, [IMG2, IMG3]);
+    // IMG1 (già presente, non toccato) + IMG2 (item vuoto) + IMG3 (extra) = 3 img
+    expect(out.match(/<img/g) ?? []).toHaveLength(3);
+    expect(out).toContain(`src="${IMG1}"`);
+    expect(out).toContain(`src="${IMG2}"`);
+    expect(out).toContain(`src="${IMG3}"`);
+  });
 });

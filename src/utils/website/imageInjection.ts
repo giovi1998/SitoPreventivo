@@ -2,10 +2,11 @@
  * Inietta le immagini caricate dal brief nel HTML generato dall'AI.
  *
  * Strategia:
- * 1. Se l'HTML ha `.gallery-item` vuoti → riempili con <img src="{base64}">.
- * 2. Se NON ci sono gallery item e ci sono immagini → aggiungi una sezione
- *    `#gallery` con griglia prima del footer (o in coda al body).
- * 3. Se l'AI ha generato gallery ma non ci sono immagini → rimuovi i
+ * 1. Se l'HTML ha `.gallery-item` (div O button) senza <img> → inietta le
+ *    immagini reali. Se ci sono più immagini che item, aggiunge nuovi item.
+ * 2. Se NON ci sono gallery item e ci sono immagini → aggiunge una sezione
+ *    `#gallery` con griglia prima del footer.
+ * 3. Se l'AI ha generato gallery ma non ci sono immagini → rimuove i
  *    `.gallery-item` vuoti (niente buchi grigi).
  */
 export function injectImagesIntoHtml(html: string, images: string[]): string {
@@ -15,19 +16,47 @@ export function injectImagesIntoHtml(html: string, images: string[]): string {
 
   let out = html;
 
-  // Caso 1: gallery-item vuoti → riempi
-  const itemRegex = /<div[^>]*class\s*=\s*"[^"]*\bgallery-item\b[^"]*"[^>]*>\s*<\/div>/gi;
-  let itemIndex = 0;
-  const filled = out.replace(itemRegex, (match) => {
-    if (itemIndex >= images.length) return match;
-    const img = images[itemIndex];
-    itemIndex++;
-    return `<div class="gallery-item"><img src="${img}" alt="Foto ${itemIndex}" loading="lazy" /></div>`;
-  });
-  if (filled !== out) {
-    // Se sono state riempite, rimuovi eventuali gallery-item rimasti vuoti
-    // (più immagini che item) e il wrapper gallery se completamente vuoto.
-    out = removeEmptyGalleryItems(filled);
+  // Caso 1: gallery-item esistenti (div o button) → inietta immagini
+  const itemRegex = /<(div|button)[^>]*class\s*=\s*"[^"]*\bgallery-item\b[^"]*"[^>]*>([\s\S]*?)<\/(?:div|button)>/gi;
+  const items: Array<{ match: string; isDiv: boolean; inner: string }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = itemRegex.exec(out)) !== null) {
+    const isDiv = m[1].toLowerCase() === 'div';
+    const inner = m[2];
+    // Solo item SENZA <img> (quelli con img già hanno un'immagine reale)
+    if (!/<img/i.test(inner)) {
+      items.push({ match: m[0], isDiv, inner });
+    }
+  }
+
+  if (items.length > 0) {
+    let imgIndex = 0;
+    const filled = out.replace(itemRegex, (match, tag: string, inner: string) => {
+      if (/<img/i.test(inner)) return match;
+      if (imgIndex >= images.length) return match;
+      const img = images[imgIndex];
+      imgIndex++;
+      const imgHtml = `<img src="${img}" alt="Foto ${imgIndex}" loading="lazy" />`;
+      const openTag = `<${tag}${match.slice(tag.length + 1, match.indexOf('>'))}>`;
+      return `${openTag}${imgHtml}${inner}</${tag}>`;
+    });
+    out = filled;
+
+    // Rimuovi eventuali item rimasti VUOTI (più item che immagini)
+    out = out.replace(/<(div|button)[^>]*class\s*=\s*"[^"]*\bgallery-item\b[^"]*"[^>]*>\s*<\/(?:div|button)>/gi, '');
+
+    // Se restano immagini non usate → aggiungi altri item
+    if (imgIndex < images.length) {
+      const extra = images.slice(imgIndex).map((img) =>
+        `<div class="gallery-item"><img src="${img}" alt="Foto" loading="lazy" /></div>`
+      ).join('\n');
+      const galleryWrap = out.match(/(<div[^>]*class\s*=\s*"[^"]*\bgallery\b[^"]*"[^>]*>)([\s\S]*?)(<\/div>)/i);
+      if (galleryWrap) {
+        out = out.replace(galleryWrap[0], `${galleryWrap[1]}${galleryWrap[2]}\n${extra}${galleryWrap[3]}`);
+      } else {
+        out += `\n${extra}`;
+      }
+    }
     return out;
   }
 
@@ -50,11 +79,11 @@ function buildGallerySection(images: string[]): string {
 }
 
 function removeEmptyGalleryItems(html: string): string {
-  let out = html.replace(/<div[^>]*class\s*=\s*"[^"]*\bgallery-item\b[^"]*"[^>]*>\s*<\/div>/gi, '');
+  let out = html.replace(/<(div|button)[^>]*class\s*=\s*"[^"]*\bgallery-item\b[^"]*"[^>]*>\s*<\/(?:div|button)>/gi, '');
   // Rimuovi il wrapper .gallery se è rimasto senza item
   out = out.replace(/<div[^>]*class\s*=\s*"[^"]*\bgallery\b[^"]*"[^>]*>\s*<\/div>/gi, '');
   // Rimuovi sezione gallery SOLO se non contiene immagini riempite
-  out = out.replace(/<section[^>]*id\s*=\s*"gallery"[^>]*>([\s\S]*?)<\/section>/gi, (_m, inner: string) => {
+  out = out.replace(/<section[^>]*id\s*=\s*"(?:gallery|galleria)"[^>]*>([\s\S]*?)<\/section>/gi, (_m, inner: string) => {
     return inner.includes('<img') ? _m : '';
   });
   return out;
