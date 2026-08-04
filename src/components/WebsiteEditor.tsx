@@ -90,7 +90,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const loadedIdRef = useRef<string | undefined>(initialWebsite?.id);
   const loadedUpdatedAtRef = useRef<string | undefined>(initialWebsite?.updatedAt);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const visionPreviewRef = useRef<HTMLDivElement | null>(null);
+  const visionPreviewRef = useRef<HTMLIFrameElement | null>(null);
   const { addToast } = useToast();
 
   const {
@@ -375,26 +375,27 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     setAiModel(providerId);
   }, []);
 
-  // Vision: cattura preview desktop+mobile da un container offscreen nel
-  // DOM principale (iframe srcdoc sandbox non è catturabile da canvas).
-  // Usa html2canvas (più affidabile di foreignObject SVG con iframe/immagini).
-  // Le preview vengono compresse a ~40KB: il body /api/ai/chat/stream va
-  // sotto il limite del dev proxy (altrimenti ERR_CONNECTION_RESET).
+  // Vision: cattura preview desktop+mobile da un iframe srcdoc ISOLATO
+  // (documento separato: il CSS del sito NON contamina il DOM principale).
+  // Le preview vengono compresse a ~40KB per non superare il body proxy.
   const captureVisionPreviews = useCallback(async (): Promise<string[]> => {
-    const el = visionPreviewRef.current;
-    if (!el || !websiteHasContent(website)) return [];
+    const iframe = visionPreviewRef.current;
+    if (!iframe) return [];
+    const doc = iframe.contentDocument;
+    const body = doc?.body as HTMLElement | undefined;
+    if (!doc || !body || !websiteHasContent(website)) return [];
     const visionEnabled = getAiVisionEnabled() && providerSupportsVision(aiModel);
     if (!visionEnabled) return [];
     const shots: string[] = [];
     const widths = [1024, 375];
     for (const width of widths) {
-      el.style.width = `${width}px`;
+      iframe.style.width = `${width}px`;
       // Attendi un frame per il reflow
       await new Promise((r) => setTimeout(r, 80));
       try {
-        const canvas = await html2canvas(el, {
-          width: el.scrollWidth,
-          height: el.scrollHeight,
+        const canvas = await html2canvas(body, {
+          width: body.scrollWidth,
+          height: body.scrollHeight,
           windowWidth: width,
           useCORS: true,
           backgroundColor: '#ffffff',
@@ -404,8 +405,8 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         const compressed = raw ? await compressDataUrl(raw, 640, 40_000) : null;
         if (compressed && compressed.length > 500) shots.push(compressed);
       } catch {
-        // fallback: cattura via foreignObject se html2canvas fallisce
-        const shot = await captureElementAsBase64(el, { maxWidth: 640, quality: 0.7, type: 'image/jpeg' });
+        // fallback: cattura via foreignObject
+        const shot = await captureElementAsBase64(body, { maxWidth: 640, quality: 0.7, type: 'image/jpeg' });
         const compressed = shot ? await compressDataUrl(shot, 640, 40_000) : null;
         if (compressed && compressed.length > 500) shots.push(compressed);
       }
@@ -689,12 +690,12 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         onCancel={() => setShowSaveDialog(false)}
       />
 
-      <div
+      <iframe
         ref={visionPreviewRef}
         className="website-vision-preview"
         aria-hidden="true"
-        style={{ position: 'fixed', left: '-99999px', top: '0', width: '1024px', pointerEvents: 'none', opacity: '0.999' }}
-        dangerouslySetInnerHTML={{ __html: websiteHasContent(website) ? buildFullDocument(website.html, website.css, website.js) : '' }}
+        title="Preview vision"
+        srcDoc={websiteHasContent(website) ? buildFullDocument(website.html, website.css, website.js) : ''}
       />
     </div>
   );

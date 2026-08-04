@@ -10,10 +10,12 @@
   left: -99999px;
   top: 0;
   width: 1024px;
+  height: 800px;
   pointer-events: none;
   opacity: 0.999;
   z-index: -1;
   background: #fff;
+  border: none;
 }
 
 .website-editor-header {
