@@ -32,12 +32,13 @@ export interface UseAIWebsiteReturn {
       onProgress?: (msg: string) => void;
       logoBase64?: string;
       scrapedReference?: string;
+      visionPreviews?: string[];
     },
   ) => Promise<WebsiteProcessResult>;
   refine: (
     site: { html: string; css: string; js: string; pages: string[] },
     instruction: string,
-    options?: { modelId?: string; onProgress?: (msg: string) => void },
+    options?: { modelId?: string; onProgress?: (msg: string) => void; visionPreviews?: string[] },
   ) => Promise<WebsiteRefineResult>;
   reset: () => void;
   logs: ReturnType<typeof useAILogs>['logs'];
@@ -94,6 +95,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
         onProgress?: (msg: string) => void;
         logoBase64?: string;
         scrapedReference?: string;
+        visionPreviews?: string[];
       },
     ) => {
       const requestId = newRequestId();
@@ -113,6 +115,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
           modelId: resolvedModelId,
           logoBase64: options?.logoBase64,
           scrapedReference: options?.scrapedReference,
+          visionPreviews: options?.visionPreviews,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -172,7 +175,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
     async (
       site: { html: string; css: string; js: string; pages: string[] },
       instruction: string,
-      options?: { modelId?: string; onProgress?: (msg: string) => void },
+      options?: { modelId?: string; onProgress?: (msg: string) => void; visionPreviews?: string[] },
     ) => {
       const requestId = newRequestId();
       const resolvedModelId = resolveProviderId(options?.modelId);
@@ -187,6 +190,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
       try {
         const result = await getOrchestrator().refineSite(site, instruction, {
           modelId: resolvedModelId,
+          visionPreviews: options?.visionPreviews,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);

@@ -5,6 +5,17 @@
   gap: 0;
 }
 
+.website-vision-preview {
+  position: fixed;
+  left: -99999px;
+  top: 0;
+  width: 1024px;
+  pointer-events: none;
+  opacity: 0.999;
+  z-index: -1;
+  background: #fff;
+}
+
 .website-editor-header {
   display: flex;
   align-items: center;

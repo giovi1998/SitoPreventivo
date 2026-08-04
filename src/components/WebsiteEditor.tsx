@@ -10,10 +10,13 @@ import { useAIWebsite } from '../hooks/useAIWebsite';
 import { withAiCall } from '../utils/aiStats';
 import { DocumentAiStats } from './DocumentAiStats';
 import AIProviderBadge from './ai/AIProviderBadge';
-import { getAiProviderDefault, setAiProviderDefault } from '../utils/uiPrefs';
+import { getAiProviderDefault, setAiProviderDefault, getAiVisionEnabled } from '../utils/uiPrefs';
+import { providerSupportsVision } from '../utils/resolveProviderId';
+import { captureElementAsBase64 } from '../utils/ai/captureElement';
 import { compressDataUrl } from '../utils/card/imageCompress';
 import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
+import { injectImagesIntoHtml } from '../utils/website/imageInjection';
 import AIConsole from './ai/AIConsole';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -86,6 +89,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const loadedIdRef = useRef<string | undefined>(initialWebsite?.id);
   const loadedUpdatedAtRef = useRef<string | undefined>(initialWebsite?.updatedAt);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const visionPreviewRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
 
   const {
@@ -209,10 +213,11 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         modelId: aiModel || undefined,
         logoBase64: website.logoUrl || undefined,
         scrapedReference: scrapedRef || undefined,
+        visionPreviews: await captureVisionPreviews(),
       });
       const merged = {
         ...website,
-        html: injectLogoIntoHtml(result.site.html, website.logoUrl),
+        html: injectImagesIntoHtml(injectLogoIntoHtml(result.site.html, website.logoUrl), website.images),
         css: result.site.css,
         js: result.site.js,
         pages: result.site.pages,
@@ -238,7 +243,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       const result = await refine(
         { html: website.html, css: website.css, js: website.js, pages: website.pages },
         prompt,
-        { modelId: aiModel || undefined },
+        { modelId: aiModel || undefined, visionPreviews: await captureVisionPreviews() },
       );
       setWebsite((prev) => ({
         ...prev,
@@ -307,7 +312,35 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       const zip = new JSZip();
       const name = website.brief.businessName || website.title || 'sito-web';
       const folder = zip.folder(`sito-${name}`)!;
+      const assetsFolder = zip.folder(`sito-${name}/assets`)!;
       const pages = website.pages.length > 0 ? website.pages : ['index'];
+
+      // Raccogli le immagini (logo + gallery) per l'export in assets/
+      const assetMap: Record<string, string> = {}; // dataUrl → nome file
+      let assetCounter = 0;
+      const registerAsset = (dataUrl: string | null | undefined): string | null => {
+        if (!dataUrl) return null;
+        if (assetMap[dataUrl]) return assetMap[dataUrl];
+        const isLogo = dataUrl === website.logoUrl;
+        const ext = dataUrl.startsWith('data:image/svg') ? 'svg' : 'jpg';
+        const fileName = `assets/${isLogo ? 'logo' : `img-${assetCounter + 1}`}.${ext}`;
+        assetMap[dataUrl] = fileName;
+        assetCounter++;
+        const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+        assetsFolder.file(fileName.replace('assets/', ''), base64, { base64: true });
+        return fileName;
+      };
+
+      const replaceSrcs = (html: string): string => {
+        return html.replace(/src="(data:[^"]+)"/g, (_m, dataUrl: string) => {
+          const fileName = registerAsset(dataUrl);
+          return fileName ? `src="${fileName}"` : _m;
+        });
+      };
+
+      // Registra logo e immagini per i src nei documenti
+      const logoFile = registerAsset(website.logoUrl);
+      for (const img of website.images) registerAsset(img);
 
       for (const page of pages) {
         const pageHtml = page === 'index'
@@ -315,7 +348,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
           : website.html.replace(/<section[^>]*id="[^"]*"[^>]*>[\s\S]*?<\/section>/g, '')
               .replace(/<header>[\s\S]*?<\/header>/, '')
               .replace(/<footer>[\s\S]*?<\/footer>/, '');
-        const doc = buildFullDocument(pageHtml, website.css, website.js);
+        const doc = buildFullDocument(replaceSrcs(pageHtml), website.css, website.js);
         folder.file(`${page}.html`, doc);
       }
 
@@ -340,6 +373,25 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     setAiProviderDefault(providerId);
     setAiModel(providerId);
   }, []);
+
+  // Vision: cattura preview desktop+mobile da un container offscreen nel
+  // DOM principale (iframe srcdoc sandbox non è catturabile da canvas).
+  const captureVisionPreviews = useCallback(async (): Promise<string[]> => {
+    const el = visionPreviewRef.current;
+    if (!el || !websiteHasContent(website)) return [];
+    const visionEnabled = getAiVisionEnabled() && providerSupportsVision(aiModel);
+    if (!visionEnabled) return [];
+    const shots: string[] = [];
+    const widths = [1024, 375];
+    for (const width of widths) {
+      el.style.width = `${width}px`;
+      // Attendi un frame per il reflow
+      await new Promise((r) => setTimeout(r, 60));
+      const shot = await captureElementAsBase64(el, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' });
+      if (shot) shots.push(shot);
+    }
+    return shots;
+  }, [website, aiModel]);
 
   const handleLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -612,6 +664,14 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         placeholder="Es. Sito - Panetteria Artigianale"
         onSave={handleSave}
         onCancel={() => setShowSaveDialog(false)}
+      />
+
+      <div
+        ref={visionPreviewRef}
+        className="website-vision-preview"
+        aria-hidden="true"
+        style={{ position: 'fixed', left: '-99999px', top: '0', width: '1024px', pointerEvents: 'none', opacity: '0.999' }}
+        dangerouslySetInnerHTML={{ __html: websiteHasContent(website) ? buildFullDocument(website.html, website.css, website.js) : '' }}
       />
     </div>
   );

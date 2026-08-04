@@ -179,6 +179,12 @@ export function buildWebsiteHtmlPrompt(
   if (brief.contacts) {
     parts.push(`\nContatti: ${brief.contacts}. Includi nella sezione contatti o nel footer.`);
   }
+  if (brief.features && /galleri|foto|immagini|photo/i.test(brief.features)) {
+    parts.push(`\n⚠️ GALLERY: il brief richiede immagini (feature: "${brief.features}").`);
+    parts.push('Genera una sezione gallery con <div class="gallery" aria-label="Galleria foto"> contenente');
+    parts.push('esattamente 3 <div class="gallery-item"></div> VUOTI (senza <img>): le immagini vengono');
+    parts.push('iniettate automaticamente DOPO la generazione.');
+  }
   parts.push('\nRispondi SOLO con JSON: { "html": "...", "pages": ["index"] }');
   return parts.join('\n');
 }

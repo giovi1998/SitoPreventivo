@@ -69,6 +69,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       userEmail?: string;
       logoBase64?: string;
       scrapedReference?: string;
+      visionPreviews?: string[];
     } = {},
   ): Promise<WebsiteProcessResult> {
     const changes: string[] = [];
@@ -95,6 +96,10 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     if (hasVision && options.logoBase64) {
       const last = htmlMessages[htmlMessages.length - 1];
       if (last) last.images = [options.logoBase64];
+    }
+    if (options.visionPreviews && options.visionPreviews.length > 0) {
+      const last = htmlMessages[htmlMessages.length - 1];
+      if (last) last.images = [...(last.images ?? []), ...options.visionPreviews];
     }
     const htmlStart = Date.now();
     const htmlResponse = await this.handleStream(provider, htmlMessages, {
@@ -208,6 +213,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       onStep?: (step: string, promptText: string) => void;
       onStepResult?: (step: string, responseText: string, meta: { durationMs: number; tokens?: number }) => void;
       userEmail?: string;
+      visionPreviews?: string[];
     } = {},
   ): Promise<WebsiteRefineResult> {
     const changes: string[] = [];
@@ -245,6 +251,10 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       { role: 'system', content: systemPrompt },
       { role: 'user', content: currentCode },
     ];
+    if (options.visionPreviews && options.visionPreviews.length > 0) {
+      const last = messages[messages.length - 1];
+      if (last) last.images = options.visionPreviews;
+    }
 
     const refineStart = Date.now();
     const response = await this.handleStream(

@@ -233,6 +233,42 @@ describe('CollectionView preview SVG (TB-025)', () => {
     expect(preview.querySelector('svg')).toBeTruthy();
     expect(screen.getByTestId('card-badflyer')).toBeTruthy();
   });
+
+  it('website document renders SVG preview with brand color and h1 heading', async () => {
+    seedDocumentsLocalStorage([
+      makeDocument({
+        id: 'site1',
+        documentType: 'website',
+        title: 'Sito Panetteria',
+        brief: { businessName: 'Panetteria Aurora' },
+        css: ':root { --primary: #B45309; --bg: #FFFBEB; }',
+        html: '<h1>Pane Fresco Ogni Mattina</h1>',
+        pages: ['index', 'about'],
+      }),
+    ]);
+    await renderCollection();
+    const preview = document.querySelector('[data-testid="preview-site1"]') as HTMLElement;
+    expect(preview).toBeTruthy();
+    expect(preview.querySelector('svg')).toBeTruthy();
+    expect(preview.textContent).toContain('Pane Fresco Ogni Mattina');
+  });
+
+  it('website without code still renders SVG preview (placeholder), no crash', async () => {
+    seedDocumentsLocalStorage([
+      makeDocument({
+        id: 'site2',
+        documentType: 'website',
+        title: 'Sito Nuovo',
+        brief: { businessName: 'Caffè Roma' },
+        pages: ['index'],
+      }),
+    ]);
+    await renderCollection();
+    const preview = document.querySelector('[data-testid="preview-site2"]') as HTMLElement;
+    expect(preview).toBeTruthy();
+    expect(preview.querySelector('svg')).toBeTruthy();
+    expect(preview.textContent).toContain('Caffè Roma');
+  });
 });
 
 describe('CollectionView aiStats badge (TB-026)', () => {

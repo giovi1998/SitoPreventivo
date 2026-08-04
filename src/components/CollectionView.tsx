@@ -625,7 +625,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                             borderRadius: '8px', marginBottom: '8px',
                           }}
                         />
-                      ) : (type === 'logo' || type === 'businessCard' || type === 'flyer' || type === 'quote') && buildPreviewSvg(doc) ? (
+                      ) : (type === 'logo' || type === 'businessCard' || type === 'flyer' || type === 'quote' || type === 'website') && buildPreviewSvg(doc) ? (
                         <div
                           className="collection-preview-svg"
                           data-testid={`preview-${doc.id}`}
