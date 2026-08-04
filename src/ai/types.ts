@@ -27,6 +27,8 @@ export interface AIResponse {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    /** DeepSeek KV cache: token input serviti da cache (non ricalcolati). */
+    cachedTokens?: number;
   };
 }
 
@@ -51,6 +53,8 @@ export interface ChatOptions {
   reasoningEffort?: 'low' | 'high' | 'max';
   maxTokens?: number;
   responseFormat?: { type: 'json_object' | 'text' };
+  /** Ollama structured outputs: JSON schema passato in `format` (oltre a `'json'`). */
+  jsonSchema?: Record<string, unknown>;
   signal?: AbortSignal;
   stream?: boolean;
   /** Observability: client-generated request id propagated to the server. */

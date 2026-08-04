@@ -1213,9 +1213,17 @@ non serve). Dettaglio per provider:
 - `reasoning_content` nel response: presente in `choices[0].message.reasoning_content`
 - **Multi-turn con tool calls**: `reasoning_content` DEVE essere ripassato
   nell'assistant message (`reasoning_content` field). Senza tool calls,
-  viene ignorato dall'API. Implementato via `ChatMessage.reasoningContent`
+  viene ignorato dall'API. Con `tools` nel body, **mancarlo → 400**
+  (doc ufficiale thinking_mode → tool_calls). Implementato:
+  - `ChatMessage.reasoningContent` serializzato come `reasoning_content`
+  - `handleStream` accumula `reasoningContent` dai chunk streaming
+  - Orchestratori quote/card/flyer lo ripassano nell'assistant con toolCalls
 - **Streaming**: chunk include `delta.reasoning_content` → propagato come
   `AIStreamChunk.reasoningContent`
+- **KV cache (doc ufficiale kv_cache)**: abilitata di default server-side.
+  `usage.prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` parsati in
+  `usage.cachedTokens` (client + proxy stream). Cache hit = prefisso
+  riutilizzato integralmente; i token cache-hit costano meno in fatturazione.
 
 ### Ollama (API `ollama.com/api/chat`)
 
@@ -1226,9 +1234,15 @@ non serve). Dettaglio per provider:
 - `message.thinking` nel response: contiene la traccia di ragionamento
 - **Streaming**: chunk include `message.thinking` → propagato come
   `AIStreamChunk.reasoningContent`
-- **Structured outputs**: `format` field funziona con thinking abilitato
+- **Structured outputs (doc ufficiale)**: `format` accetta `'json'` o un
+  **JSON schema** (Ollama `format: <schema>`). `ChatOptions.jsonSchema`
+  passa lo schema; `responseFormat.json_object` resta mappato a `'json'`.
+  Cloud attualmente NON supporta structured outputs (doc ufficiale nota) —
+  schema passato solo a runtime locale/self-host
 - **Tool calling**: thinking + tools funzionano insieme; `reasoningContent`
   va ripassato come `thinking` nel messaggio assistant
+- **Streaming proxy**: `message.thinking` Ollama è propagato come
+  `delta.reasoning_content` nel SSE normalizzato (parity client)
 
 ### Selettore UI effort (2026-08-04)
 
@@ -1272,12 +1286,17 @@ non serve). Dettaglio per provider:
    nel messaggio). Per Ollama, il field si chiama `thinking` nel body API
    ma è mappato a `reasoningContent` internamente.
 4. **Streaming**: entrambi i provider emettono `reasoningContent` nei chunk.
-   Il consumer può ignorarlo (non serve per il rendering finale) ma deve
-   accumularlo se deve ripassare il messaggio in multi-turn con tool calls.
+   `handleStream` lo accumula; gli orchestratori DEBBONO ripassarlo
+   nell'assistant message quando ci sono `toolCalls` (DeepSeek → 400 se
+   manca). Nuovo orchestratore tool-aware: seguire lo stesso pattern.
 5. **`ollama-deepseek-v4-flash`** è un Ollama Pro provider che usa il model
    `deepseek-v4-flash:cloud` (DeepSeek V4 Flash via Ollama Cloud, flat rate).
    Non va confuso con `deepseek-v4-flash` (DeepSeekProvider, pay-per-token).
 6. **`ollama-deepseek-v4-flash-0731`** usa il tag mensile Ollama Pro Cloud
    `deepseek-v4-flash:0731-cloud` (snapshot build del mese). Stesso flat rate.
    Tag nuovi vanno registrati in `registry.ts` + `providerPricing.ts` +
-   `providerModelShort` (UI label).
+   `providerModelShort` (UI label). **Suffisso `-cloud` è obbligatorio**
+   per i model Ollama Pro Cloud (`:0731` → 404/`Provider non trovato`).
+7. **KV cache**: `usage.cachedTokens` = `prompt_cache_hit_tokens` (DeepSeek).
+   Se un giorno si tracciano costi reali, i token cache-hit vanno fatturati
+   a tariffa cache (più bassa), non a quella full.

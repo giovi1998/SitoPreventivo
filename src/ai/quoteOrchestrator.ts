@@ -294,6 +294,7 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
         role: 'assistant',
         content: aiResponse.content || '',
         toolCalls: aiResponse.toolCalls,
+        reasoningContent: aiResponse.reasoningContent,
       });
 
       for (const toolCall of aiResponse.toolCalls) {

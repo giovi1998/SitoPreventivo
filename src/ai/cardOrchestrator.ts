@@ -148,6 +148,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         role: 'assistant',
         content: aiResponse.content || '',
         toolCalls: aiResponse.toolCalls,
+        reasoningContent: aiResponse.reasoningContent,
       });
 
       for (const toolCall of aiResponse.toolCalls) {

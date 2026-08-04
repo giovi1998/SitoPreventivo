@@ -227,6 +227,7 @@ export class DeepSeekProvider extends BaseAIProvider {
                 promptTokens: parsed.usage.prompt_tokens ?? 0,
                 completionTokens: parsed.usage.completion_tokens ?? 0,
                 totalTokens: parsed.usage.total_tokens ?? 0,
+                cachedTokens: parsed.usage.prompt_cache_hit_tokens ?? undefined,
               };
             }
 

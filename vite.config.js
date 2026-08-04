@@ -78,6 +78,10 @@ export default defineConfig(({ mode }) => {
             const messages = Array.isArray(body.messages) ? body.messages : [];
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 300_000);
+            const ollamaReq = { model, messages, stream: true };
+            if (body.format === 'json' || body.response_format?.type === 'json_object') ollamaReq.format = 'json';
+            if (body.think || body.reasoning_effort) ollamaReq.think = body.think || body.reasoning_effort;
+            if (body.max_tokens) ollamaReq.options = { ...(ollamaReq.options || {}), num_predict: body.max_tokens };
             try {
               const apiRes = await fetch('https://ollama.com/api/chat', {
                 method: 'POST',
@@ -86,7 +90,7 @@ export default defineConfig(({ mode }) => {
                   Authorization: `Bearer ${ollamaKey}`,
                   Accept: 'application/x-ndjson',
                 },
-                body: JSON.stringify({ model, messages, stream: true }),
+                body: JSON.stringify(ollamaReq),
                 signal: controller.signal,
               });
               if (!apiRes.ok) {
@@ -393,7 +397,8 @@ export default defineConfig(({ mode }) => {
                 const maxTokens = body.max_tokens || body.maxTokens;
                 const responseFormat = body.response_format || body.responseFormat;
                 const tools = body.tools;
-                const options = { temperature, maxTokens, responseFormat, tools };
+                const reasoningEffort = body.reasoning_effort || body.think || body.reasoningEffort;
+                const options = { temperature, maxTokens, responseFormat, tools, reasoningEffort };
 
                 try {
                   // Ollama in SSR non può usare fetch relativo: bypassiamo il

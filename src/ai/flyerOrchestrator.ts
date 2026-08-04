@@ -207,6 +207,7 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
         role: 'assistant',
         content: aiResponse.content || '',
         toolCalls: aiResponse.toolCalls,
+        reasoningContent: aiResponse.reasoningContent,
       });
 
       for (const toolCall of aiResponse.toolCalls) {

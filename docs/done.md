@@ -3,6 +3,35 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-04
+
+- **Harness upgrade v2 — thinking/tool/KV-cache/structured (allineamento
+  doc ufficiali DeepSeek + Ollama)**: 
+  - **CRITICO fix multi-round tool calls**: `handleStream` ora accumula
+    `reasoningContent` dai chunk e gli orchestratori (quote/card/flyer) lo
+    ripassano nel messaggio assistant con `toolCalls`. Senza, DeepSeek
+    thinking-mode risponde 400 su richieste con `tools` (doc thinking_mode →
+    tool_calls).
+  - **KV cache DeepSeek**: `parseUsage` legge `prompt_cache_hit_tokens` →
+    `usage.cachedTokens` (client + proxy stream). Basis per costo reale
+    cache hit futuro.
+  - **Structured outputs Ollama**: nuovo `ChatOptions.jsonSchema` →
+    `format: <schema>` (doc structured-outputs, non solo `'json'`).
+  - **Streaming Ollama proxy**: `message.thinking` propagato come
+    `delta.reasoning_content` nel SSE (doc streaming → thinking).
+  - Test: `BaseOrchestrator.reasoning.test.ts` (4), base cache tokens,
+    ollamaPro jsonSchema. Vedi `docs/agent-gotchas.md` §26.
+- **Provider `ollama-deepseek-v4-flash-0731`**: tag mensile Ollama Pro Cloud
+  `deepseek-v4-flash:0731-cloud` (flat $20/mo), label UI "V4 Flash 0731",
+  pricing, test registry. Model corretto da `:0731` → `:0731-cloud`
+  (suffisso `-cloud` obbligatorio per Ollama Pro Cloud).
+- **Selettore UI reasoningEffort (Veloce/Profondo/Massimo)**: aggiunto nel
+  dropdown `AIProviderBadge` — selettore a 3 livelli che persiste in
+  `pq_ui:v1` (`aiReasoningEffort`, default `max`). Priority chain:
+  `options.reasoningEffort` → `getAiReasoningEffort()` → `'max'`.
+  Ollama `think` e server proxy mappano `reasoning_effort`. Test: uiPrefs,
+  AIProviderBadge, base. Vedi `docs/agent-gotchas.md` §26.
+
 ## 2026-08-03
 
 - **Selettore UI reasoningEffort (Veloce/Profondo/Massimo)**: aggiunto nel

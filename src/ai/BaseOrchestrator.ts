@@ -200,6 +200,7 @@ export abstract class BaseOrchestrator {
     } = {}
   ): Promise<AIResponse> {
     let content = '';
+    let reasoningContent = '';
     const toolCalls = new Map<string, AIToolCall>();
     let usage: AIUsage | undefined;
 
@@ -208,6 +209,7 @@ export abstract class BaseOrchestrator {
         callbacks.onStream(chunk);
         if (chunk.type === 'content') {
           content += chunk.content || '';
+          reasoningContent += chunk.reasoningContent || '';
         } else if (chunk.type === 'tool_call' && chunk.toolCall) {
           toolCalls.set(chunk.toolCall.id, chunk.toolCall);
         } else if (chunk.type === 'done' && chunk.usage) {
@@ -220,6 +222,7 @@ export abstract class BaseOrchestrator {
       return {
         content: content || null,
         toolCalls: toolCallsList.length > 0 ? toolCallsList : undefined,
+        reasoningContent: reasoningContent || undefined,
         usage,
       };
     }

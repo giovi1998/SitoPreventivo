@@ -77,7 +77,14 @@ describe('BaseAIProvider.parseUsage', () => {
   it('extracts token counts', () => {
     const p = new TestProvider();
     const u = p.callParseUsage({ usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } });
-    expect(u).toEqual({ promptTokens: 10, completionTokens: 20, totalTokens: 30 });
+    expect(u).toEqual({ promptTokens: 10, completionTokens: 20, totalTokens: 30, cachedTokens: undefined });
+  });
+  it('extracts DeepSeek KV cache tokens (prompt_cache_hit_tokens)', () => {
+    const p = new TestProvider();
+    const u = p.callParseUsage({
+      usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, prompt_cache_hit_tokens: 80 },
+    });
+    expect(u?.cachedTokens).toBe(80);
   });
   it('returns undefined when no usage', () => {
     const p = new TestProvider();

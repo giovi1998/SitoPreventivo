@@ -102,6 +102,20 @@ describe('OllamaProProvider', () => {
       expect(body.format).toBe('json');
     });
 
+    it('passes jsonSchema as structured-outputs format (schema object, non solo "json")', async () => {
+      const p = new OllamaProProvider();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+      const schema = { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] };
+      await p.chat([{ role: 'user', content: 'x' }], { jsonSchema: schema });
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.format).toEqual(schema);
+    });
+
     it('passes tools when supported', async () => {
       const p = new OllamaProProvider();
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(

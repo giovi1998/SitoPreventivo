@@ -1,5 +1,6 @@
 import { BaseAIProvider } from './base';
 import type { ChatMessage, ChatOptions, AIResponse, AIStreamChunk } from '../types';
+import { getAiReasoningEffort } from '../../utils/uiPrefs';
 import dataService from '../../utils/dataService';
 
 /**
@@ -133,8 +134,9 @@ export class OllamaProProvider extends BaseAIProvider {
         return msg;
       }),
       stream,
-      think: options?.reasoningEffort ?? 'max',
+      think: options?.reasoningEffort ?? getAiReasoningEffort(),
       ...(options?.maxTokens ? { options: { num_predict: options.maxTokens } } : {}),
+      ...(options?.jsonSchema ? { format: options.jsonSchema } : {}),
       ...(options?.responseFormat?.type === 'json_object' ? { format: 'json' } : {}),
       ...(options?.tools && this.supportsTools ? { tools: options.tools } : {}),
     };

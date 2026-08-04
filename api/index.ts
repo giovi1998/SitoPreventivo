@@ -1334,7 +1334,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
         logAI({ tag: 'ai_chat', requestId, email: userEmail, outcome: 'error', durationMs: 0, errorKind: 'missing_api_key' });
         return jsonWithRequestId(req, res, 503, { error: 'Ollama non configurato. Configura OLLAMA_API_KEY su Vercel.' }, requestId);
       }
-      const { model, messages, max_tokens, tools, format, options: ollamaOptions } = v.data;
+      const { model, messages, max_tokens, tools, format, options: ollamaOptions, reasoning_effort } = v.data;
       const ollamaModel = model || 'minimax-m3:cloud';
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60000); // Ollama Cloud più lento di DeepSeek
@@ -1357,7 +1357,7 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
             return msg;
           }),
           stream: false,
-          think: 'max',
+          think: reasoning_effort ?? 'max',
         };
         if (max_tokens !== undefined) {
           ollamaBody.options = { ...(ollamaBody.options as object | undefined), num_predict: max_tokens };
@@ -1827,6 +1827,9 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
               const ssePayload: Record<string, unknown> = {
                 choices: [{ index: 0, delta: { content } }],
               };
+              if (parsed.message?.thinking) {
+                (ssePayload.choices as any)[0].delta.reasoning_content = parsed.message.thinking;
+              }
               if (parsed.message?.tool_calls) {
                 (ssePayload.choices as any)[0].delta.tool_calls = parsed.message.tool_calls.map((tc: any, i: number) => ({
                   index: i,
