@@ -5,6 +5,8 @@ import {
   setSidebarCollapsed,
   getAiConsoleExpanded,
   setAiConsoleExpanded,
+  getAiReasoningEffort,
+  setAiReasoningEffort,
 } from '../uiPrefs';
 
 const KEY = 'pq_ui:v1';
@@ -48,5 +50,21 @@ describe('uiPrefs (pq_ui:v1, REQ-DS-006 + REQ-AI-003)', () => {
     });
     expect(() => setSidebarCollapsed(true)).not.toThrow();
     spy.mockRestore();
+  });
+
+  it('aiReasoningEffort default è max', () => {
+    expect(getAiReasoningEffort()).toBe('max');
+  });
+
+  it('aiReasoningEffort persiste e ritorna il valore salvato', () => {
+    setAiReasoningEffort('low');
+    expect(getAiReasoningEffort()).toBe('low');
+    const raw = JSON.parse(localStorage.getItem(KEY)!);
+    expect(raw.aiReasoningEffort).toBe('low');
+  });
+
+  it('aiReasoningEffort valido resta, invalido non crasha', () => {
+    localStorage.setItem(KEY, JSON.stringify({ version: 1, aiReasoningEffort: 'medium' }));
+    expect(getAiReasoningEffort()).toBe('medium');
   });
 });

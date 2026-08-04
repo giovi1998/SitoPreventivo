@@ -53,4 +53,23 @@ describe('AIProviderBadge', () => {
     expect(tip.textContent).toContain('$1.23');
     vi.useRealTimers();
   });
+
+  it('menu shows reasoning effort selector with 3 levels', () => {
+    render(<AIProviderBadge />);
+    fireEvent.click(screen.getByTestId('ai-provider-badge'));
+    expect(screen.getByText('Ragionamento')).toBeInTheDocument();
+    expect(screen.getByText('Veloce')).toBeInTheDocument();
+    expect(screen.getByText('Profondo')).toBeInTheDocument();
+    expect(screen.getByText('Massimo')).toBeInTheDocument();
+  });
+
+  it('clicking an effort level selects it', () => {
+    render(<AIProviderBadge />);
+    fireEvent.click(screen.getByTestId('ai-provider-badge'));
+    const lowBtn = screen.getByText('Veloce');
+    fireEvent.click(lowBtn);
+    expect(lowBtn.closest('button')?.classList.contains('is-selected')).toBe(true);
+    const raw = JSON.parse(localStorage.getItem('pq_ui:v1')!);
+    expect(raw.aiReasoningEffort).toBe('low');
+  });
 });

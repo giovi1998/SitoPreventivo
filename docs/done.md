@@ -5,6 +5,12 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-03
 
+- **Selettore UI reasoningEffort (Veloce/Profondo/Massimo)**: aggiunto nel
+  dropdown `AIProviderBadge` — selettore a 3 livelli che persiste in
+  `pq_ui:v1` (`aiReasoningEffort`, default `max`). `BaseAIProvider.buildRequestBody`
+  legge `options.reasoningEffort ?? getAiReasoningEffort()`. Test: uiPrefs
+  (persistenza + default), AIProviderBadge (render selettore + click),
+  base (default e custom). Vedi `docs/agent-gotchas.md` §26.
 - **Website 4-step generation (spec-design-website-4step-generation)**: HTML → CSS → JS → Verify con 4 agenti separati, fresh session per step, non-stream per CSS/JS/Verify (solo HTML stream), `reasoningEffort: 'max'`, `maxTokens: 8192` per tutti, `onStep` callback per log separati, maps embed URL conversion, brand flex rule, rail padding-bottom 72px per ActionBar. Spec creata e cancellata.
 - **Website Builder (TB-028) — implementazione completa**: nuovo tipo documento `website` con editor dedicato, AI orchestrator, preview iframe con viewport toggle (375/768/100%), code editor (CodeMirror 6 installato), export ZIP multi-pagina, integrazione CRM auto-build + Collection + CustomerDetail. 6 file creati, 18 modificati. Spec `docs/spec/spec-design-website-builder.md` v1.2.
   - Upload logo/immagine brand (sidebar, compressDataUrl, `logoUrl` nello schema)
