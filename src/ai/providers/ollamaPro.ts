@@ -133,7 +133,7 @@ export class OllamaProProvider extends BaseAIProvider {
         return msg;
       }),
       stream,
-      think: 'max',
+      think: options?.reasoningEffort ?? 'max',
       ...(options?.maxTokens ? { options: { num_predict: options.maxTokens } } : {}),
       ...(options?.responseFormat?.type === 'json_object' ? { format: 'json' } : {}),
       ...(options?.tools && this.supportsTools ? { tools: options.tools } : {}),
