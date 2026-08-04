@@ -40,18 +40,6 @@ function newRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/**
- * Ollama vuole base64 puro nei campi `images`, senza il prefisso
- * "data:image/...;base64,". Le preview vision (html2canvas) e i logo
- * arrivano come data URL completi → strip qui (anche server proxy
- * deve farlo? No: qui basta, il body parte già pulito).
- */
-function stripDataUrlPrefix(dataUrl: string): string {
-  const idx = dataUrl.indexOf(',');
-  if (dataUrl.startsWith('data:') && idx !== -1) return dataUrl.slice(idx + 1);
-  return dataUrl;
-}
-
 export interface OllamaChatMessage extends ChatMessage {
   images?: string[];
 }
@@ -142,7 +130,10 @@ export class OllamaProProvider extends BaseAIProvider {
         // prefisso "data:image/...;base64," (400 illegal base64 altrimenti).
         const om = m as OllamaChatMessage;
         if (om.images && om.images.length > 0) {
-          msg.images = om.images.map(stripDataUrlPrefix);
+          msg.images = om.images.map((img: string) => {
+            const idx = img.indexOf(',');
+            return img.startsWith('data:') && idx !== -1 ? img.slice(idx + 1) : img;
+          });
         }
         return msg;
       }),
