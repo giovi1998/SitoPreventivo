@@ -378,6 +378,8 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   // Vision: cattura preview desktop+mobile da un container offscreen nel
   // DOM principale (iframe srcdoc sandbox non è catturabile da canvas).
   // Usa html2canvas (più affidabile di foreignObject SVG con iframe/immagini).
+  // Le preview vengono compresse a ~40KB: il body /api/ai/chat/stream va
+  // sotto il limite del dev proxy (altrimenti ERR_CONNECTION_RESET).
   const captureVisionPreviews = useCallback(async (): Promise<string[]> => {
     const el = visionPreviewRef.current;
     if (!el || !websiteHasContent(website)) return [];
@@ -396,14 +398,16 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
           windowWidth: width,
           useCORS: true,
           backgroundColor: '#ffffff',
-          scale: Math.min(1, 1024 / width),
+          scale: Math.min(1, 640 / width),
         });
-        const shot = canvas.toDataURL('image/jpeg', 0.7);
-        if (shot && shot.length > 500) shots.push(shot);
+        const raw = canvas.toDataURL('image/jpeg', 0.7);
+        const compressed = raw ? await compressDataUrl(raw, 640, 40_000) : null;
+        if (compressed && compressed.length > 500) shots.push(compressed);
       } catch {
         // fallback: cattura via foreignObject se html2canvas fallisce
-        const shot = await captureElementAsBase64(el, { maxWidth: 1024, quality: 0.8, type: 'image/jpeg' });
-        if (shot) shots.push(shot);
+        const shot = await captureElementAsBase64(el, { maxWidth: 640, quality: 0.7, type: 'image/jpeg' });
+        const compressed = shot ? await compressDataUrl(shot, 640, 40_000) : null;
+        if (compressed && compressed.length > 500) shots.push(compressed);
       }
     }
     return shots;
