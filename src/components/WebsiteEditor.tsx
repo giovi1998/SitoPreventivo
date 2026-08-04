@@ -613,7 +613,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
               </div>
               <div className="preview-wrapper" style={{ width: viewport }}>
                 <iframe
-                  sandbox="allow-scripts"
+                  sandbox="allow-scripts allow-same-origin"
                   srcDoc={fullDocument}
                   title="Anteprima sito"
                   className="preview-iframe"
