@@ -18,6 +18,7 @@ import { compressDataUrl } from '../utils/card/imageCompress';
 import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
 import { injectImagesIntoHtml } from '../utils/website/imageInjection';
+import { sanitizeGeneratedWebsite } from '../utils/website/sanitizeGenerated';
 import AIConsole from './ai/AIConsole';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -216,10 +217,11 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         scrapedReference: scrapedRef || undefined,
         visionPreviews: await captureVisionPreviews(),
       });
+      const cleaned = sanitizeGeneratedWebsite(result.site.html, result.site.css);
       const merged = {
         ...website,
-        html: injectImagesIntoHtml(injectLogoIntoHtml(result.site.html, website.logoUrl), website.images),
-        css: result.site.css,
+        html: injectImagesIntoHtml(injectLogoIntoHtml(cleaned.html, website.logoUrl), website.images),
+        css: cleaned.css,
         js: result.site.js,
         pages: result.site.pages,
         source: 'ai' as const,

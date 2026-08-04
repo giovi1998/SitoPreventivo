@@ -146,6 +146,8 @@ export function buildWebsiteHtmlPrompt(
   parts.push('Il logo reale viene iniettato automaticamente DOPO la generazione nel .brand o .nav-inner.');
   parts.push('Nella <div class="brand"> metti SOLO il testo del nome attività.');
   parts.push('🚫 EMOJI NEL TESTO: NON usare emoji nel brand, nei titoli o nel testo visibile (es. 🍦 gelato). Usa solo testo pulito.');
+  parts.push('🚫 DIV DECORATIVI: NON creare div vuoti o decorativi senza contenuto (es. <div class="shape">, <div class="hero-shapes">, <span class="dot">). Se serve un elemento visivo, usa SVG inline o CSS sul contenitore.');
+  parts.push('🚫 PSEUDO-ELEMENTI CON EMOJI: NON usare ::before/::after con content: "🍦" o simili. Gli pseudo-elementi servono solo per gradienti/sfumature geometriche.');
   parts.push('\n⚠️ STRUTTURA NAV OBBLIGATORIA:');
   parts.push('- <header class="nav"> o <nav class="nav"> con <div class="nav-inner">');
   parts.push('- <div class="brand"> con il nome attività (il logo viene iniettato dopo)');
@@ -249,6 +251,13 @@ QUALITÀ PREMIUM:
 - Contrasto WCAG AA: testo su sfondo almeno 4.5:1
 - Transizioni solo su transform e opacity (performance)
 - Mobile-first: layout a 1 colonna sotto 768px
+
+🚫 VIETATO:
+- NON usare ::before / ::after con content: "🍦" o altre emoji/icone decorative.
+  Pseudo-elementi SOLO per gradienti/sfumature geometriche (mai emoji, mai testo).
+- NON creare div vuoti o decorativi senza contenuto reale (es. <div class="shape">, <div class="hero-shapes">).
+  Se servono elementi visivi, usa SVG inline o gradienti sul contenitore.
+- NON usare emoji nel testo visibile (titoli, bottoni, brand). Solo testo pulito.
 
 CARATTERE VISIVO PER STILE — applica le firme distintive di "${style}":
 ${styleVisualSignature(style)}
