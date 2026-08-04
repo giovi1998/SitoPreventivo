@@ -47,6 +47,6 @@ describe('AIProviderRegistry', () => {
     const r = new AIProviderRegistry();
     const p = r.getProvider('ollama-deepseek-v4-flash-0731');
     expect(p).toBeDefined();
-    expect(p.model).toBe('deepseek-v4-flash:0731');
+    expect(p.model).toBe('deepseek-v4-flash:0731-cloud');
   });
 });

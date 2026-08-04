@@ -55,7 +55,7 @@
 | DeepSeek | `deepseek-v4-pro` | Text (chat) | `DEEPSEEK_API_KEY` |
 | Ollama Pro | `minimax-m3:cloud` | Text + Vision | `OLLAMA_API_KEY` |
 | Ollama Pro | `deepseek-v4-flash:cloud` | Text | `OLLAMA_API_KEY` |
-| Ollama Pro | `deepseek-v4-flash:0731` | Text | `OLLAMA_API_KEY` |
+| Ollama Pro | `deepseek-v4-flash:0731-cloud` | Text | `OLLAMA_API_KEY` |
 | Ollama Pro | `deepseek-v4-pro:cloud` | Text | `OLLAMA_API_KEY` |
 | Ollama Pro | `qwen-3.5` | Text | `OLLAMA_API_KEY` |
 | Gemini | `gemini-3.1-flash-image` | Image gen | `GEMINI_API_KEY` |

@@ -1237,7 +1237,7 @@ non serve). Dettaglio per provider:
 | `deepseek-v4-pro` | DeepSeekProvider | deepseek-v4-pro | no | $0.55/$2.19 per 1M tok |
 | `ollama-minimax-m3` | OllamaProProvider | minimax-m3:cloud | sì | $20/mo flat |
 | `ollama-deepseek-v4-flash` | OllamaProProvider | deepseek-v4-flash:cloud | no | $20/mo flat |
-| `ollama-deepseek-v4-flash-0731` | OllamaProProvider | deepseek-v4-flash:0731 | no | $20/mo flat |
+| `ollama-deepseek-v4-flash-0731` | OllamaProProvider | deepseek-v4-flash:0731-cloud | no | $20/mo flat |
 | `ollama-deepseek-v4-pro` | OllamaProProvider | deepseek-v4-pro:cloud | no | $20/mo flat |
 | `ollama-qwen-3.5` | OllamaProProvider | qwen-3.5 | sì | $20/mo flat |
 
@@ -1257,7 +1257,7 @@ non serve). Dettaglio per provider:
 5. **`ollama-deepseek-v4-flash`** è un Ollama Pro provider che usa il model
    `deepseek-v4-flash:cloud` (DeepSeek V4 Flash via Ollama Cloud, flat rate).
    Non va confuso con `deepseek-v4-flash` (DeepSeekProvider, pay-per-token).
-6. **`ollama-deepseek-v4-flash-0731`** usa il tag mensile Ollama Pro
-   `deepseek-v4-flash:0731` (snapshot build del mese). Stesso flat rate.
+6. **`ollama-deepseek-v4-flash-0731`** usa il tag mensile Ollama Pro Cloud
+   `deepseek-v4-flash:0731-cloud` (snapshot build del mese). Stesso flat rate.
    Tag nuovi vanno registrati in `registry.ts` + `providerPricing.ts` +
    `providerModelShort` (UI label).
