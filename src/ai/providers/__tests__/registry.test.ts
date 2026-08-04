@@ -21,7 +21,7 @@ describe('AIProviderRegistry', () => {
   it('lists providers', () => {
     const r = new AIProviderRegistry();
     const list = r.listProviders();
-    expect(list.length).toBe(6);
+    expect(list.length).toBe(7);
     expect(list[0]).toHaveProperty('supportsStreaming');
     expect(list[0]).toHaveProperty('supportsTools');
   });
@@ -41,5 +41,12 @@ describe('AIProviderRegistry', () => {
     const p = r.getProvider('ollama-deepseek-v4-flash');
     expect(p).toBeDefined();
     expect(p.model).toBe('deepseek-v4-flash:cloud');
+  });
+
+  it('includes ollama-deepseek-v4-flash-0731', () => {
+    const r = new AIProviderRegistry();
+    const p = r.getProvider('ollama-deepseek-v4-flash-0731');
+    expect(p).toBeDefined();
+    expect(p.model).toBe('deepseek-v4-flash:0731');
   });
 });

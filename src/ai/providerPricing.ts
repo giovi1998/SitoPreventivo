@@ -26,6 +26,7 @@ export const PRICING: Record<string, ProviderPricing> = {
   // (il costo fisso mensile è visibility separata in admin dashboard)
   'ollama-minimax-m3': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-deepseek-v4-flash': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-deepseek-v4-flash-0731': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-deepseek-v4-pro': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-qwen-3.5': { input: 0, output: 0, unit: 'flat_monthly' },
   // Provider ID nel registry è 'ollama-minimax-m3' ma il model è

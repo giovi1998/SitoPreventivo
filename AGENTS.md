@@ -59,8 +59,8 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
   `/api/ai/chat`; DeepSeek fallback/selezionabile; Gemini Nano Banana
   (immagini: logo background, card cover/icon). Chiavi solo server-side.
   **Thinking mode sempre attivo** (`reasoning_effort: 'max'` / `think: 'max'`),
-  `temperature` rimosso ovunque. 6 provider registrati (3 DeepSeek pay-per-token,
-  3 Ollama Pro flat $20/mo). Vedi `docs/agent-gotchas.md` §26.
+  `temperature` rimosso ovunque. 7 provider registrati (3 DeepSeek pay-per-token,
+  4 Ollama Pro flat $20/mo). Vedi `docs/agent-gotchas.md` §26.
 
 ## Key Files
 
