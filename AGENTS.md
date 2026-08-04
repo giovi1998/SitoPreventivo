@@ -58,8 +58,10 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
   multimodale/vision, flat rate) per tutti gli orchestratori via proxy
   `/api/ai/chat`; DeepSeek fallback/selezionabile; Gemini Nano Banana
   (immagini: logo background, card cover/icon). Chiavi solo server-side.
-  **Thinking mode sempre attivo** (`reasoning_effort: 'max'` / `think: 'max'`),
-  `temperature` rimosso ovunque. 7 provider registrati (3 DeepSeek pay-per-token,
+  **Thinking mode sempre attivo** (`reasoning_effort`/`think` configurabile,
+  default `'max'`, selettore Veloce/Profondo/Massimo nel badge provider,
+  persistito in `pq_ui:v1` `aiReasoningEffort`), `temperature` rimosso
+  ovunque. 7 provider registrati (3 DeepSeek pay-per-token,
   4 Ollama Pro flat $20/mo). Vedi `docs/agent-gotchas.md` §26.
 
 ## Key Files
@@ -120,7 +122,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `api/__tests__/setup.ts` | `createMockDrizzleDb`: mock Drizzle standardizzato per test API |
 | `src/test-setup.ts` | Setup vitest globale: cleanup RTL + reset localStorage/sessionStorage in `beforeEach` |
 | `src/hooks/useMediaQuery.ts` | Breakpoint canonici `BP_SHELL=768`/`BP_WORKSPACE=1024` + hook mobile |
-| `src/utils/uiPrefs.ts` | `pq_ui:v1` (sidebarCollapsed, aiConsoleExpanded per editor) |
+| `src/utils/uiPrefs.ts` | `pq_ui:v1` (sidebarCollapsed, aiConsoleExpanded per editor, `aiProviderDefault`, `aiVisionEnabled`, `aiAutoFallback`, `aiReasoningEffort`) |
 | `vite.config.js` | Port 8000, SPA fallback, dev proxy `/api/ai/*`, `loadEnv()` esplicito |
 | `vercel.json` | Build: `db:migrate && build`; rewrites (ordine critico) |
 | `docs/agent-gotchas.md` | **Dettaglio completo gotchas + roadmap fasi** (leggere prima di toccare i moduli) |
@@ -435,7 +437,7 @@ Chiavi **versionate** `nome:vN`; cambio schema → `v(N+1)` + fallback lettura
 - `unlock_codes`, `registeredUsers`, `deepseekApiKey` — dev only
 - `authToken`, `userEmail`, `username`, `userRole`, `dataRegistrazione` — sessione
 - `pq_ai_logs:v1` — ring buffer AI log in **sessionStorage**, max 100, mai base64
-- `pq_ui:v1` — preferenze UI (`uiPrefs.ts`)
+- `pq_ui:v1` — preferenze UI (`uiPrefs.ts`: sidebarCollapsed, aiConsoleExpanded, aiProviderDefault, aiImageModelDefault, aiVisionEnabled, aiAutoFallback, **aiReasoningEffort**) 
 - `logoAiChat:v1` / `logoAiChat:v1:<docId>` — backup best-effort chat logo AI (TTL 24h, try/catch, senza bgImages se quota). Chiave per-documento; globale legacy solo fallback lettura
 - `cardIconPromptLibrary:v1`, `logoPromptLibrary:v1` — librerie prompt
 - `pq_customers:v1` — TB-027 CRM clienti (dev/local cache, PROD via API)

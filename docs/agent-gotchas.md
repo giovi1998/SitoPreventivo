@@ -1219,7 +1219,8 @@ non serve). Dettaglio per provider:
 
 ### Ollama (API `ollama.com/api/chat`)
 
-- Body include: `think: 'max'` (sostituisce `options.temperature`)
+- Body include: `think: <effort>` (sostituisce `options.temperature`).
+  Valore: `options.reasoningEffort ?? getAiReasoningEffort()` (default `'max'`)
 - `think` accetta booleano o stringa (`low`/`medium`/`high`/`max`).
   `max` = massimo sforzo di ragionamento
 - `message.thinking` nel response: contiene la traccia di ragionamento
@@ -1228,6 +1229,23 @@ non serve). Dettaglio per provider:
 - **Structured outputs**: `format` field funziona con thinking abilitato
 - **Tool calling**: thinking + tools funzionano insieme; `reasoningContent`
   va ripassato come `thinking` nel messaggio assistant
+
+### Selettore UI effort (2026-08-04)
+
+- Dropdown `AIProviderBadge` ha un selettore a 3 livelli:
+  `Veloce` (`low`) / `Profondo` (`high`) / `Massimo` (`max`)
+- Persistito in `pq_ui:v1` campo `aiReasoningEffort` (getter/setter in
+  `uiPrefs.ts`: `getAiReasoningEffort` / `setAiReasoningEffort`).
+  Default `'max'`
+- Priority chain effettiva: `options.reasoningEffort` (orchestratore)
+  → `getAiReasoningEffort()` (pref utente) → `'max'`
+- Mappatura per provider: DeepSeek accetta `low`/`high`/`max`; Ollama
+  `low`/`medium`/`high`/`max` (`medium` solo Ollama — il selettore UI
+  non lo espone, resta via options esplicite)
+- Server proxy (`api/index.ts`): `reasoning_effort` nel body è accettato
+  anche per provider `ollama` e mappato a `think` (`reasoning_effort ?? 'max'`)
+- Dev proxy (`vite.config.js`): propaga `think`/`format`/`num_predict` e
+  `reasoningEffort` nelle options verso il provider Ollama
 
 ### Provider registrati (7 totali)
 
@@ -1246,7 +1264,9 @@ non serve). Dettaglio per provider:
 1. **Mai reintrodurre `temperature`** in `ChatOptions` o body request.
    Thinking mode è sempre attivo, `temperature` non ha effetto.
 2. **`reasoningEffort`** in `ChatOptions` (tipo `'low' | 'high' | 'max'`).
-   Default `'max'` in `BaseAIProvider.buildRequestBody`.
+   Priority: `options.reasoningEffort` → `getAiReasoningEffort()` (pref
+   utente `pq_ui:v1`) → `'max'`. Mai hardcodare `'max'` in chiamate che
+   devono rispettare la preferenza utente.
 3. **`reasoningContent`** in `ChatMessage` va popolato quando si ripassano
    messaggi assistant con tool calls (DeepSeek richiede `reasoning_content`
    nel messaggio). Per Ollama, il field si chiama `thinking` nel body API

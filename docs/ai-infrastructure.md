@@ -79,7 +79,12 @@ I provider immagine (Gemini) sono **sempre server-side**, sia in dev che in prod
 
 ### Thinking mode
 
-Tutte le chiamate AI usano **thinking mode al massimo livello** (`reasoning_effort: 'max'` per DeepSeek, `think: 'max'` per Ollama). `temperature` non è più supportato (DeepSeek thinking mode lo ignora, Ollama non serve). Vedi `docs/agent-gotchas.md` §26 per dettagli.
+Tutte le chiamate AI usano **thinking mode** con effort configurabile.
+Priority chain: `options.reasoningEffort` → pref utente `aiReasoningEffort`
+(`pq_ui:v1`, selettore Veloce/Profondo/Massimo nel badge provider) → default
+`'max'`. DeepSeek: `reasoning_effort` + `extra_body.thinking`; Ollama:
+`think` (accetta anche `medium`). `temperature` non è più supportato.
+Vedi `docs/agent-gotchas.md` §26.
 
 ---
 
