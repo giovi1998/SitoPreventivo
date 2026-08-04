@@ -430,13 +430,13 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     // Compressione aggressiva: le immagini finiscono nel documento salvato
-    // (HTML base64 inline + array images[]) → max 120KB l'una per stare
-    // sotto il body 4MB anche con 6-8 immagini.
+    // (HTML base64 inline + array images[]) → max 60KB l'una per stare
+    // sotto la quota localStorage e il body 4MB anche con 8-10 immagini.
     Promise.all(files.map((file) => new Promise<string>((resolve) => {
       const reader = new FileReader();
       reader.onload = () => {
         const dataUri = String(reader.result || '');
-        compressDataUrl(dataUri, 512, 120_000).then((compressed) => resolve(compressed || dataUri));
+        compressDataUrl(dataUri, 400, 60_000).then((compressed) => resolve(compressed || dataUri));
       };
       reader.readAsDataURL(file);
     }))).then((compressed) => {
