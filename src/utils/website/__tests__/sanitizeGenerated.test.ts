@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeGeneratedCss, sanitizeGeneratedHtml, sanitizeGeneratedWebsite } from '../sanitizeGenerated';
+import { sanitizeGeneratedCss, sanitizeGeneratedHtml, sanitizeGeneratedWebsite, ensureResponsiveGallery } from '../sanitizeGenerated';
 
 describe('sanitizeGeneratedCss', () => {
   it('rimuove ::before con content emoji', () => {
@@ -20,6 +20,31 @@ describe('sanitizeGeneratedCss', () => {
     const out = sanitizeGeneratedCss(css);
     expect(out).toContain('linear-gradient');
     expect(out).toContain('content: "›"');
+  });
+
+  it('rimuove ::before/::after su brand/logo con content non vuoto (gelato visibile)', () => {
+    const css = `.brand::before { content: "🍦"; position: absolute; }\n.brand::after { content: url(data:image/png;base64,xxx); }`;
+    const out = sanitizeGeneratedCss(css);
+    expect(out).not.toContain('.brand::before');
+    expect(out).not.toContain('.brand::after');
+  });
+
+  it('mantiene ::before su brand se content vuoto (gradiente)', () => {
+    const css = `.brand::before { content: ""; background: radial-gradient(...); }`;
+    expect(sanitizeGeneratedCss(css)).toContain('.brand::before');
+  });
+
+  it('ensureResponsiveGallery aggiunge regole gallery se mancanti', () => {
+    const css = `.hero { padding: 2rem; }`;
+    const out = ensureResponsiveGallery(css);
+    expect(out).toContain('grid-template-columns: repeat(auto-fill');
+    expect(out).toContain('.gallery-item img');
+  });
+
+  it('ensureResponsiveGallery non duplica se gallery già definita', () => {
+    const css = `.gallery { display: grid; grid-template-columns: repeat(3, 1fr); }`;
+    const out = ensureResponsiveGallery(css);
+    expect(out).not.toContain('/* sicurezza: immagini gallery responsive */');
   });
 
   it('non tocca CSS senza pseudo-elementi', () => {

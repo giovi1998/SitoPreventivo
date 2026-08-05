@@ -116,8 +116,6 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
     oltre ai log AI — aggiungere indicatore step corrente.
   - **Provider default stale**: se l'ID salvato in `pq_ui:v1` non esiste più,
     il badge mostra l'ID vecchio (fallback silenzioso in resolveProviderId).
-  - **Save quota localStorage**: immagini duplicate (inline HTML + array
-    `images[]`) — dedupe al save per ridurre l'occupazione.
 - [ ] **Card flusso completo in clienti**: auto-build → Genera bozze AI →
   preview/editor senza errori quota/JSON/vision. Verificare E2E con
   Playwright su cliente reale.

@@ -36,6 +36,51 @@ export async function compressPayloadImages(payload) {
       }
     }
   }
+  // Website: immagini base64 vivono dentro `html` (iniettate), `logoUrl`
+  // e `images[]` al top level — nessun path fisso. Senza compressione un
+  // sito con hero/gallery supera la quota localStorage e il save fallisce.
+  if (typeof out.html === 'string' && out.html.includes('data:image/')) {
+    const compressDataUrl = await loadCompressDataUrl();
+    const html = out.html;
+    const bigSrcs = [];
+    const srcRe = /(data:image\/[^"')]+)/gi;
+    let m;
+    while ((m = srcRe.exec(html)) !== null) {
+      if (m[1].length > B64_COMPRESS_MIN_CHARS) bigSrcs.push(m[1]);
+    }
+    if (bigSrcs.length > 0) {
+      let next = html;
+      for (const src of new Set(bigSrcs)) {
+        try {
+          const compressed = await compressDataUrl(src, 768, 200_000);
+          if (compressed && compressed !== src) next = next.split(src).join(compressed);
+        } catch { /* immagine non comprimibile: resta l'originale */ }
+      }
+      out = { ...out, html: next };
+    }
+  }
+  if (typeof out.logoUrl === 'string' && out.logoUrl.startsWith('data:') && out.logoUrl.length > B64_COMPRESS_MIN_CHARS) {
+    try {
+      const compressDataUrl = await loadCompressDataUrl();
+      const compressed = await compressDataUrl(out.logoUrl, 768, 200_000);
+      if (compressed && compressed !== out.logoUrl) out = { ...out, logoUrl: compressed };
+    } catch { /* immagine non comprimibile: resta l'originale */ }
+  }
+  if (Array.isArray(out.images)) {
+    const compressDataUrl = await loadCompressDataUrl();
+    let changed = false;
+    const next = [];
+    for (const img of out.images) {
+      if (typeof img === 'string' && img.startsWith('data:') && img.length > B64_COMPRESS_MIN_CHARS) {
+        try {
+          const compressed = await compressDataUrl(img, 768, 200_000);
+          if (compressed && compressed !== img) { next.push(compressed); changed = true; continue; }
+        } catch { /* immagine non comprimibile: resta l'originale */ }
+      }
+      next.push(img);
+    }
+    if (changed) out = { ...out, images: next };
+  }
   return out;
 }
 

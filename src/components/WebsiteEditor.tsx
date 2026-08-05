@@ -257,8 +257,18 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
 
   const handleSave = useCallback(async (customName: string) => {
     const title = customName || website.title || 'Sito Web';
+    // Dedupe: le immagini già iniettate nell'HTML non devono restare anche
+    // in `images[]` (doppione in localStorage → QuotaExceededError → save
+    // fallisce silenziosamente).
+    const inlineImages: string[] = [];
+    const imgRe = /src="(data:image\/[^"]+)"/gi;
+    let imgM: RegExpExecArray | null;
+    while ((imgM = imgRe.exec(website.html)) !== null) {
+      inlineImages.push(imgM[1]);
+    }
     const toSave: Website = {
       ...website,
+      images: website.images.filter((img) => !inlineImages.includes(img)),
       userEmail,
       title,
       updatedAt: new Date().toISOString(),
@@ -271,7 +281,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         }
         if (result.error) { addToast('error', result.error); return; }
         setWebsite(toSave);
-        addToast('success', `«${title}» salvato`);
+        addToast('success', `«${title}» salvato (${toSave.images.length} immagini)`);
         setShowSaveDialog(false);
         if (onSaved) onSaved(toSave);
       })

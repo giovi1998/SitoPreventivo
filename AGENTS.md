@@ -299,6 +299,10 @@ dedupe, dataService SSR-safe) ✅ completed 2026-07-29 —
 vedi `docs/agent-gotchas.md` §20. TB-027h (storage locale canonico FLAT
 logo/card/flyer, fix Collection non aggiornata dopo "Genera bozze AI")
 ✅ completed 2026-07-30 — vedi `docs/agent-gotchas.md` §23.
+Website Builder ✅ completed 2026-08-05 (preview SVG reale foreignObject,
+export ZIP condiviso editor+Collection, fix save quota — compressione
+immagini website + dedupe inline/array, test roundtrip) —
+vedi `docs/agent-gotchas.md` §26.12.
 
 ## TODO (prossimi task)
 

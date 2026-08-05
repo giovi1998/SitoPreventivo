@@ -789,8 +789,8 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                               .finally(() => setExportingId(null));
                           }}
                           data-testid={`export-${doc.id}`}
-                          title="Esporta ZIP (HTML+CSS+JS)"
-                          disabled={exportingId === doc.id}
+                          title={doc.html || doc.css ? 'Esporta ZIP (HTML+CSS+JS)' : 'Genera il sito prima di esportare'}
+                          disabled={exportingId === doc.id || (!doc.html && !doc.css)}
                         >
                           <Icon name="download" />{exportingId === doc.id ? 'Esportando…' : 'ZIP'}
                         </button>

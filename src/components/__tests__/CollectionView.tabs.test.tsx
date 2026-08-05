@@ -45,12 +45,12 @@ async function renderCollection(ctxOverrides: Record<string, any> = {}, opts: { 
 }
 
 describe('CollectionView, tabs (phase 6)', () => {
-  it('admin renders all 7 tabs with labels in the order: Tutti, Preventivi, QR Code, Bigliettini, Volantini, Loghi, Immagini Generate', async () => {
+  it('admin renders all 8 tabs with labels in the order: Tutti, Preventivi, QR Code, Bigliettini, Volantini, Loghi, Siti Web, Immagini Generate', async () => {
     seedDocumentsLocalStorage([]);
     await renderCollection({}, { role: 'admin' });
     const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
     const tabs = within(tablist).getAllByRole('tab');
-    expect(tabs).toHaveLength(7);
+    expect(tabs).toHaveLength(8);
     const labels = tabs.map((t) => t.textContent || '');
     expect(labels[0]).toMatch(/Tutti/);
     expect(labels[1]).toMatch(/Preventivi/);
@@ -58,22 +58,24 @@ describe('CollectionView, tabs (phase 6)', () => {
     expect(labels[3]).toMatch(/Bigliettini/);
     expect(labels[4]).toMatch(/Volantini/);
     expect(labels[5]).toMatch(/Loghi/);
-    expect(labels[6]).toMatch(/Immagini Generate/);
+    expect(labels[6]).toMatch(/Siti Web/);
+    expect(labels[7]).toMatch(/Immagini Generate/);
   });
 
-  it('non-admin renders 6 tabs (no "Preventivi") in the order: Tutti, QR Code, Bigliettini, Volantini, Loghi, Immagini Generate', async () => {
+  it('non-admin renders 7 tabs (no "Preventivi") in the order: Tutti, QR Code, Bigliettini, Volantini, Loghi, Siti Web, Immagini Generate', async () => {
     seedDocumentsLocalStorage([]);
     await renderCollection({}, { role: 'user' });
     const tablist = screen.getByRole('tablist', { name: /Tipo documento/i });
     const tabs = within(tablist).getAllByRole('tab');
-    expect(tabs).toHaveLength(6);
+    expect(tabs).toHaveLength(7);
     const labels = tabs.map((t) => t.textContent || '');
     expect(labels[0]).toMatch(/Tutti/);
     expect(labels[1]).toMatch(/QR Code/);
     expect(labels[2]).toMatch(/Bigliettini/);
     expect(labels[3]).toMatch(/Volantini/);
     expect(labels[4]).toMatch(/Loghi/);
-    expect(labels[5]).toMatch(/Immagini Generate/);
+    expect(labels[5]).toMatch(/Siti Web/);
+    expect(labels[6]).toMatch(/Immagini Generate/);
     expect(labels.some((l) => /Preventivi/.test(l))).toBe(false);
   });
 
@@ -114,6 +116,7 @@ describe('CollectionView, tabs (phase 6)', () => {
     expect(within(tablist).getByRole('tab', { name: /Bigliettini.*1/ })).toBeInTheDocument();
     expect(within(tablist).getByRole('tab', { name: /Volantini.*0/ })).toBeInTheDocument();
     expect(within(tablist).getByRole('tab', { name: /Loghi.*0/ })).toBeInTheDocument();
+    expect(within(tablist).getByRole('tab', { name: /Siti Web.*0/ })).toBeInTheDocument();
   });
 
   it('non-admin: Preventivi tab is always hidden (admin-only data)', async () => {

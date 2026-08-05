@@ -1422,3 +1422,47 @@ Dettagli per `src/ai/prompts/websiteSystem.ts` e `src/ai/websiteOrchestrator.ts`
 - Prompt CSS/HTML vietano ::before emoji e div decorativi (doppia difesa:
   prompt + sanitize).
 - Test: `src/utils/website/__tests__/sanitizeGenerated.test.ts` (7).
+
+### 26.12 Preview SVG reale (foreignObject) + compressione website (2026-08-05)
+
+**Preview Collection/CRM (`src/utils/docPreviewSvg.ts`)**:
+- `buildWebsitePreviewSvg` renderizza HTML/CSS reali dentro `<foreignObject>`
+  (320×200 o 375×234 se il CSS ha media query mobile → layout mobile vero).
+- `scopeCss(css, '.ws-preview')`: parser CSS custom (no dipendenze) che
+  scopa TUTTE le regole con prefisso `.ws-preview` — `:root`/`html`/`body`
+  → wrapper, altri selettori prefixati, `@media`/`@supports` ricorsivi,
+  `@keyframes`/`@font-face`/`@page` globali, `@import`/`@charset` drop
+  con contenuto. Se NON scoppi, il CSS del sito contamina l'app host
+  (stesso bug del vision iframe §26.8).
+- `stripScripts(html)` rimuove `<script>` e `on*` attrs — MAI `dangerouslySetInnerHTML`
+  con HTML sito non sanitizzato. `</style` escape per non chiudere il tag host.
+- Fallback `buildWebsitePlaceholderSvg` se nessun codice o HTML vuoto dopo strip.
+- `DocPreview` component in CollectionView: `useMemo` su `[doc]` (1 sola
+  chiamata per card, prima `buildPreviewSvg(doc)` girava 2× per card + a
+  ogni re-render). Altezza card website 160px.
+- **Nota Safari**: `foreignObject` non renderizzato su Safari < 14 — fallback
+  placeholder solo su browser vecchi (accettato).
+
+**Save quota localStorage (bug 2026-08-05: save website falliva silenziosamente)**:
+- Sintomi: "Spazio locale esaurito (immagine troppo grande)" a salvare sito
+  con hero/gallery; ZIP vuoto (draft mai salvato). Cause doppie:
+  1. `handleSave` (WebsiteEditor) NON dedupava più le immagini iniettate
+     nell'HTML da `images[]` → doppione ≈ 2× spazio (la dedupe era nel
+     vecchio codice pre-refactor export).
+  2. `compressPayloadImages` (dataService/images.js) copriva solo path
+     fissi (`front.*`, `builder.backgroundImage`, `content.heroImage`) —
+     i campi website (`html` con src base64 inline, `logoUrl`, `images[]`)
+     NON erano compressi → un sito superava quota subito.
+- Fix: (a) dedupe in `handleSave` (`inlineImages` da `html` → filter
+  `images[]`); (b) `compressPayloadImages` esteso: src `data:image/` >300K
+  chars dentro `html` compressi a 768px/200KB (Set per src duplicati),
+  `logoUrl` e ogni `images[]` grande compressi. try/catch per immagine
+  non comprimibile (resta originale, no crash).
+- `cleanupGhostDocuments` (documents.js:248) filtra solo
+  `front/builder/content != null` → website flat con solo `html/css/js`
+  verrebbe cancellato. Nessun chiamante oggi, ma se riattivato va
+  esteso a `html != null || css != null`.
+- Regressione: `websiteRoundtrip.test.ts` (6) — save/load/export con JSZip
+  reale (mock `file-saver` cattura blob, zip ispezionato con `JSZip.loadAsync`).
+- Test stale TB-028 fixati: tabs Collection (8 admin/7 non-admin con "Siti
+  Web"), `useRouteView` ROUTE_PATHS 11 chiavi.

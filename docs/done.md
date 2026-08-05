@@ -3,6 +3,39 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-05
+
+- **Website Builder — preview SVG reale + fixes save/export (2026-08-05)**:
+  - **Preview Collection/CRM reale**: `buildWebsitePreviewSvg` ora renderizza
+    HTML/CSS del sito dentro `<foreignObject>` (contenuti, colori, layout
+    veri, non più mockup). CSS scoped con parser custom (`scopeCss`):
+    `:root`/`body`/`html` → wrapper `.ws-preview`, selettori prefixati,
+    `@media`/`@supports` ricorsivi, `@keyframes`/`@font-face` globali.
+    `<script>` e `on*` attrs strippati (sandbox). Viewport fedele: media
+    query mobile nel CSS → 375px (layout mobile vero), altrimenti 320px.
+    Badge pagine overlay se multi-pagina. Fallback placeholder se sito
+    senza codice o HTML vuoto dopo strip. Test `docPreviewSvg.test.ts` (9).
+  - **Memoizzazione preview**: `DocPreview` component in CollectionView
+    (`useMemo` su `[doc]`) — 1 chiamata per card, niente ricalcolo a ogni
+    re-render; altezza preview website 160px.
+  - **Export ZIP da Collection** (REQ-060): bottone ZIP sul card website;
+    `src/utils/websiteExport.ts` condiviso editor+Collection
+    (`exportWebsiteZip`, `buildWebsiteFullDocument`), JSZip/saveAs rimossi
+    dall'editor. Bottone disabilitato se sito senza codice.
+  - **Fix save quota localStorage**: (a) `handleSave` dedupes le immagini
+    già iniettate nell'HTML (non restano in `images[]` — doppione → quota);
+    (b) `compressPayloadImages` esteso ai campi website: immagini base64
+    dentro `html`, `logoUrl`, `images[]` compressi a 768px/200KB pre-save
+    (prima nessun path fisso li copriva → QuotaExceededError → save
+    falliva silenziosamente). try/catch su compressione (immagine non
+    comprimibile resta originale).
+  - **Fix test stale TB-028**: `CollectionView.tabs.test.tsx` (8 tab admin,
+    7 non-admin, "Siti Web" incluso), `useRouteView.test.tsx` (11 chiavi
+    ROUTE_PATHS).
+  - Test: `docPreviewSvg.test.ts` (9), `websiteExport.test.ts` (5),
+    `websiteRoundtrip.test.ts` (6 — save/load/export integrazione JSZip
+    reale). Typecheck verde.
+
 ## 2026-08-04
 
 - **Harness upgrade v2 — thinking/tool/KV-cache/structured (allineamento
