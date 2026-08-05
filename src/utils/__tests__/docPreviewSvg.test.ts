@@ -43,6 +43,41 @@ describe('buildPreviewSvg website preview', () => {
     expect(svg).not.toContain('<script');
   });
 
+  it('website with mobile media query renders at 375px viewport', () => {
+    const svg = buildPreviewSvg({
+      documentType: 'website',
+      brief: { businessName: 'X' },
+      css: '@media (max-width: 768px) { .hero { font-size: 14px; } }',
+      html: '<div class="hero">Ciao</div>',
+      pages: ['index'],
+    });
+    expect(svg).toContain('viewBox="0 0 375 234"');
+    expect(svg).toContain('width:375px');
+  });
+
+  it('website multi-page renders page count badge', () => {
+    const svg = buildPreviewSvg({
+      documentType: 'website',
+      brief: { businessName: 'X' },
+      css: '',
+      html: '<h1>Home</h1>',
+      pages: ['index', 'about', 'contact'],
+    });
+    expect(svg).toContain('3 p.');
+  });
+
+  it('website with script-only html falls back to placeholder', () => {
+    const svg = buildPreviewSvg({
+      documentType: 'website',
+      brief: { businessName: 'Solo Script' },
+      html: '<script>alert(1)</script>',
+      css: '',
+      pages: ['index'],
+    });
+    expect(svg).not.toContain('<foreignObject');
+    expect(svg).toContain('Solo Script');
+  });
+
   it('website without code falls back to placeholder with businessName', () => {
     const svg = buildPreviewSvg({
       documentType: 'website',

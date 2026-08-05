@@ -1342,11 +1342,11 @@ Dettagli per `src/ai/prompts/websiteSystem.ts` e `src/ai/websiteOrchestrator.ts`
   sanitized, social obbligatori, firma stile, fallback modern, font priority,
   emoji vietate).
 
-### 26.4 Stile pill senza refine automatico
+### 26.4 Stile pill → precompila refine
 
-- `updateStyle` in `WebsiteEditor` salva SOLO la preferenza `style` +
-  toast "Premi Raffina per applicarlo". Il refine parte solo su click
-  esplicito "Raffina" (o rigenerazione).
+- `updateStyle` in `WebsiteEditor` salva la preferenza `style` e, se il sito
+  ha contenuto, **pre-compila il prompt di refine** "Applica lo stile visivo
+  X..." — l'utente preme solo "Raffina". Il refine NON parte da solo.
 
 ### 26.5 Costo per admin
 
@@ -1367,3 +1367,58 @@ Dettagli per `src/ai/prompts/websiteSystem.ts` e `src/ai/websiteOrchestrator.ts`
   `options.reasoningEffort ?? getAiReasoningEffort()` (selettore UI).
 - `onStep`/`onStepResult` con meta `{durationMs, tokens}` per log dettagliati
   (preview 300/500 char, durata, token, prime 3 issue verify).
+- `verifyIssues`/`verifyFixesApplied` nel `WebsiteProcessResult`/`RefineResult`
+  → pannello UI in WebsiteEditor.
+
+### 26.7 Gallery immagini
+
+- `injectImagesIntoHtml` (`src/utils/website/imageInjection.ts`) riempie i
+  `.gallery-item` (div **o button**, con o senza contenuto) con le immagini
+  caricate; se non c'è gallery aggiunge sezione `#gallery` prima del footer;
+  rimuove i placeholder vuoti (loop per wrapper annidati); non tocca item
+  che hanno già `<img>` (doppio-inject evitato).
+- Prompt HTML: gallery-item come `<div class="gallery-item"></div>` VUOTI,
+  senza `<img>`/emoji/`<button>`.
+- Test: `src/utils/website/__tests__/imageInjection.test.ts` (7).
+
+### 26.8 Vision preview (html2canvas, iframe isolato)
+
+- La preview vision per il refine usa un **`<iframe srcDoc>`** posizionato
+  fuori schermo: documento ISOLATO → il CSS del sito NON contamina il DOM
+  dell'app (bug storico: `:root` del sito sovrascriveva `--accent` ecc. e
+  colorava i bottoni dell'editor).
+- Cattura desktop (1024) + mobile (375) via `html2canvas` su
+  `iframe.contentDocument.body`, poi `compressDataUrl(640px, 40KB)` —
+  il body `/api/ai/chat/stream` deve stare sotto il limite proxy
+  (altrimenti `ERR_CONNECTION_RESET` e crash dev server).
+- Attivo solo se `getAiVisionEnabled() && providerSupportsVision(model)`.
+- Ollama vuole **base64 puro** in `images` (senza prefisso `data:...;base64,`)
+  → `buildOllamaBody` strippa il prefisso inline (400 illegal base64 altrimenti).
+
+### 26.9 Export ZIP condiviso
+
+- `src/utils/websiteExport.ts` (`exportWebsiteZip`, `buildWebsiteFullDocument`)
+  condiviso da editor + Collection: immagini/logo base64 → `assets/` con
+  `src` relativi, `.html` per pagina. Test: `websiteExport.test.ts` (5).
+- `api/index.ts` bodyParser `1mb` → `4mb` (documenti website con immagini
+  inline superavano 1MB → salvataggio 413).
+
+### 26.10 Dev proxy: ERR_HTTP_HEADERS_SENT
+
+- Quando uno stream AI fallisce DOPO l'invio degli header SSE, `json()` su
+  quella response lancia `ERR_HTTP_HEADERS_SENT` → **crash del dev server**.
+- Fix (vite.config.js, entrambi i path stream — DeepSeek SSR + proxyOllamaChat):
+  flag `streamStarted`; se true, l'errore viene scritto come **evento SSE**
+  (`data: {error}` + `[DONE]`) invece di `json()`.
+
+### 26.11 Sanitize post-generazione
+
+- `src/utils/website/sanitizeGenerated.ts`:
+  - `sanitizeGeneratedCss`: rimuove blocchi `X::before/::after` con
+    `content: "<emoji>"` (regex range emoji).
+  - `sanitizeGeneratedHtml`: rimuove (in loop) div/span vuoti decorativi
+    (`.shape`, `.hero-shapes`, `.dot`, `.blob`, ...).
+  - Applicato in `handleGenerate` prima di inject logo/immagini.
+- Prompt CSS/HTML vietano ::before emoji e div decorativi (doppia difesa:
+  prompt + sanitize).
+- Test: `src/utils/website/__tests__/sanitizeGenerated.test.ts` (7).

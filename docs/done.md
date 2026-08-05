@@ -51,6 +51,40 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
     prime 3 issue verify nel log.
   - Test: `websiteSystem.test.ts` (7), `BaseOrchestrator.cost.test.ts` (6).
     Vedi `docs/agent-gotchas.md` §26.
+- **Website Builder — gallery, vision preview, salvataggio, export (2026-08-04,
+  commit 28e6259 → 97289b1)**:
+  - **Gallery immagini**: `injectImagesIntoHtml` riempie i `.gallery-item`
+    (div o button) con le immagini caricate; se non c'è gallery aggiunge una
+    sezione `#gallery`; rimuove i placeholder vuoti. Prompt: gallery-item
+    vuoti senza `<img>`/emoji/`<button>`.
+  - **Vision preview via html2canvas**: container offscreen → iframe srcdoc
+    ISOLATO (il CSS del sito non contamina il DOM app — bug colore bottoni
+    risolto). Cattura desktop (1024) + mobile (375), compresse a 40KB
+    (evita ERR_CONNECTION_RESET sul body proxy). Fallback foreignObject.
+    Attivo solo se vision ON + provider vision.
+  - **Salvataggio >1MB**: bodyParser API `1mb` → `4mb` (limite Vercel
+    Hobby). Compressione immagini upload 512px/60KB (duplicate inline+array,
+    quota localStorage).
+  - **Ollama images base64 puro**: `buildOllamaBody` strippa il prefisso
+    `data:...;base64,` dalle immagini (400 illegal base64 altrimenti).
+  - **Export ZIP con assets/**: nuova `src/utils/websiteExport.ts` condivisa
+    editor+Collection — immagini/logo in `assets/` con src relativi,
+    file `.html` per pagina. Test `websiteExport.test.ts` (5).
+  - **Dev proxy ERR_HTTP_HEADERS_SENT**: errore stream inviato come SSE se
+    gli header sono già partiti (no crash server).
+  - **Sandbox iframe preview**: `allow-scripts allow-same-origin` (Google
+    Maps embed funzionante).
+  - **Logo robusto**: classe unica `qb-site-logo` + inline `!important`
+    (il CSS AI non lo sovrascrive).
+  - **Pseudo-elementi emoji vietati**: prompt + `sanitizeGeneratedWebsite`
+    post-generazione (rimuove `::before/::after` con content emoji, div
+    decorativi vuoti).
+  - **Stile pill → precompila refine**: clic su stile compila il prompt
+    "Applica lo stile X" (basta premere Raffina).
+  - **Verify issues nella UI**: pannello toast con le issue del Verify
+    agent dopo generate/refine (`verifyIssues` nel result).
+  - Test: `imageInjection.test.ts` (7), `sanitizeGenerated.test.ts` (7),
+    `websiteExport.test.ts` (5).
 
 ## 2026-08-03
 

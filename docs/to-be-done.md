@@ -97,6 +97,27 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ### Backlog tecnico corrente
 
+- [ ] **Website Builder — backlog miglioramenti (2026-08-04)**:
+  - **Test unitari mancanti**: `websiteOrchestrator.ts` e `useAIWebsite.ts`
+    non hanno test dedicati (regola AGENTS: nuovi file ≥60% coverage).
+  - **Multi-pagina reale**: l'export ZIP genera pagine ma con lo stesso HTML
+    (sezioni rimosse); l'AI genera di fatto solo `index`. Valutare prompt
+    multi-pagina vero o accettare single-page.
+  - **Verify feedback**: il pannello issue esiste (commit 97289b1) ma non ha
+    ancora azione "applica fix automaticamente" (i `fixes` dell'AI vengono
+    loggati ma non applicati al codice).
+  - **SEO head post-process**: `meta description`/OG tags iniettati dal brief
+    se l'AI li omette.
+  - **Accessibilità verificata dal Verify agent**: `alt`, `aria-label`,
+    contrasto — aggiungere check espliciti al prompt verify.
+  - **Vision preview cache**: riusare l'ultimo screenshot se il codice non è
+    cambiato (html2canvas ~700ms × 2 viewport a ogni generate/refine).
+  - **Progress per step nella UI**: i 4 step (~3 min) non mostrano progresso
+    oltre ai log AI — aggiungere indicatore step corrente.
+  - **Provider default stale**: se l'ID salvato in `pq_ui:v1` non esiste più,
+    il badge mostra l'ID vecchio (fallback silenzioso in resolveProviderId).
+  - **Save quota localStorage**: immagini duplicate (inline HTML + array
+    `images[]`) — dedupe al save per ridurre l'occupazione.
 - [ ] **Card flusso completo in clienti**: auto-build → Genera bozze AI →
   preview/editor senza errori quota/JSON/vision. Verificare E2E con
   Playwright su cliente reale.
