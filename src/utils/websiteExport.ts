@@ -19,6 +19,22 @@ ${html}
 }
 
 /**
+ * Sanitizza il nome file/cartella ZIP: rimuove caratteri illegali nei
+ * filesystem (Windows: \ / : * ? " < > |) e spazi multipli. Un nome con
+ * "|" (es. businessName "A | B") rende la cartella illeggibile in
+ * Explorer → ZIP scaricato ma apparentemente vuoto.
+ */
+export function sanitizeZipName(raw: string): string {
+  const cleaned = raw
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^-+|-+$/g, '');
+  if (!cleaned || !/[a-zA-Z0-9]/.test(cleaned)) return 'sito-web';
+  return cleaned.slice(0, 60);
+}
+
+/**
  * Esporta il sito come ZIP: file .html separati per pagina (CSS/JS
  * inline), immagini base64 → assets/ come file separati. Logica
  * condivisa editor + Collection (REQ-045..049, REQ-060).
@@ -29,9 +45,11 @@ export async function exportWebsiteZip(
 ): Promise<{ fileName: string; assetCount: number }> {
   const website = mergeWebsiteWithDefaults(input);
   const zip = new JSZip();
-  const name = website.brief.businessName || website.title || 'sito-web';
-  const folder = zip.folder(`sito-${name}`)!;
-  const assetsFolder = zip.folder(`sito-${name}/assets`)!;
+  const rawName = website.brief.businessName || website.title || 'sito-web';
+  const safeName = sanitizeZipName(rawName);
+  const baseFolder = `sito-${safeName}`;
+  const folder = zip.folder(baseFolder)!;
+  const assetsFolder = zip.folder(`${baseFolder}/assets`)!;
   const pages = website.pages.length > 0 ? website.pages : ['index'];
 
   // Raccogli le immagini (logo + gallery) per l'export in assets/
@@ -75,6 +93,7 @@ export async function exportWebsiteZip(
   }
 
   const blob = await zip.generateAsync({ type: 'blob' });
-  saveAs(blob, `sito-${name}.zip`);
-  return { fileName: `sito-${name}.zip`, assetCount: extracted };
+  const fileName = `sito-${safeName}.zip`;
+  saveAs(blob, fileName);
+  return { fileName, assetCount: extracted };
 }

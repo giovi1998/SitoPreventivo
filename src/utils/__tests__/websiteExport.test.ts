@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildWebsiteFullDocument, exportWebsiteZip } from '../websiteExport';
+import { buildWebsiteFullDocument, exportWebsiteZip, sanitizeZipName } from '../websiteExport';
 import type { Website } from '../schemas/website';
 
 const saveAsMock = vi.fn();
@@ -78,7 +78,30 @@ describe('buildWebsiteFullDocument', () => {
   });
 });
 
+describe('sanitizeZipName', () => {
+  it('rimuove caratteri illegali Windows (pipe, slash, colonne)', () => {
+    expect(sanitizeZipName('A | B')).toBe('A - B');
+    expect(sanitizeZipName('a/b:c')).toBe('a-b-c');
+    expect(sanitizeZipName('x?y*')).toBe('x-y');
+  });
+
+  it('fallback a sito-web se vuoto o solo caratteri illegali', () => {
+    expect(sanitizeZipName('')).toBe('sito-web');
+    expect(sanitizeZipName('||||')).toBe('sito-web');
+  });
+
+  it('tronca a 60 caratteri', () => {
+    expect(sanitizeZipName('a'.repeat(100))).toHaveLength(60);
+  });
+});
+
 describe('exportWebsiteZip', () => {
+  it('usa nome file sanitizzato quando businessName ha caratteri illegali', async () => {
+    const web = makeWebsite({ brief: { ...makeWebsite().brief!, businessName: 'Gelateria | Chiccheria' } });
+    await exportWebsiteZip(web);
+    expect(saveAsMock).toHaveBeenCalledWith(expect.any(Blob), 'sito-Gelateria - Chiccheria.zip');
+  });
+
   it('creates zip with index.html and triggers saveAs', async () => {
     const res = await exportWebsiteZip(makeWebsite());
     expect(saveAsMock).toHaveBeenCalledWith(expect.any(Blob), 'sito-Panetteria.zip');
