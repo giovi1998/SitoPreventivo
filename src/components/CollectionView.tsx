@@ -7,6 +7,7 @@ import { AppContext, AuthContext } from '../contexts';
 import dataService from '../utils/dataService';
 import type { DocumentType } from '../utils/documentSchemas';
 import { buildPreviewSvg } from '../utils/docPreviewSvg';
+import { exportWebsiteZip } from '../utils/websiteExport';
 import { formatAiStatsCompact, type AiStats, aiStatsTotalCalls, documentAiStatsTitle } from '../utils/aiStats';
 import { useToast } from '../hooks/useToast';
 import { useRefetchOnFocus } from '../hooks/useRefetchOnFocus';
@@ -172,6 +173,44 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
   return debounced;
 }
 
+// Memoizza la preview SVG per documento: ricalcola solo quando il doc
+// cambia riferimento (save/refresh), non a ogni re-render della griglia.
+function DocPreview({ doc, type, fallbackIcon }: { doc: any; type: DocumentType; fallbackIcon: string }) {
+  const previewSvg = useMemo(() => buildPreviewSvg(doc), [doc]);
+  if (!previewSvg) {
+    return (
+      <span className={`doc-icon doc-icon-${type}`} aria-hidden="true">
+        <Icon name={fallbackIcon} />
+      </span>
+    );
+  }
+  return (
+    <div
+      className="collection-preview-svg"
+      data-testid={`preview-${doc.id}`}
+      style={{
+        width: '100%',
+        height:
+          type === 'businessCard' ? '110px'
+          : type === 'flyer' || type === 'website' ? '160px'
+          : type === 'quote' ? '150px'
+          : '120px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background:
+          type === 'businessCard' || type === 'quote' ? '#fff' : 'transparent',
+        borderRadius: '8px',
+        marginBottom: '8px',
+        overflow: 'hidden',
+        border:
+          type === 'businessCard' || type === 'quote' ? '1px solid #e5e7eb' : 'none',
+      }}
+      dangerouslySetInnerHTML={{ __html: previewSvg }}
+    />
+  );
+}
+
 interface CollectionViewProps {
   activeId?: string;
 }
@@ -201,6 +240,7 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [exportingId, setExportingId] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Re-fetch when user changes or refreshDocuments is invoked.
@@ -625,31 +665,11 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                             borderRadius: '8px', marginBottom: '8px',
                           }}
                         />
-                      ) : (type === 'logo' || type === 'businessCard' || type === 'flyer' || type === 'quote' || type === 'website') && buildPreviewSvg(doc) ? (
-                        <div
-                          className="collection-preview-svg"
-                          data-testid={`preview-${doc.id}`}
-                          style={{
-                            width: '100%',
-                            height:
-                              type === 'businessCard' ? '110px'
-                              : type === 'flyer' ? '160px'
-                              : type === 'quote' ? '150px'
-                              : '120px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background:
-                              type === 'businessCard' || type === 'quote' ? '#fff' : 'transparent',
-                            borderRadius: '8px',
-                            marginBottom: '8px',
-                            overflow: 'hidden',
-                            border:
-                              type === 'businessCard' || type === 'quote' ? '1px solid #e5e7eb' : 'none',
-                          }}
-                          dangerouslySetInnerHTML={{
-                            __html: buildPreviewSvg(doc),
-                          }}
+                      ) : (type === 'logo' || type === 'businessCard' || type === 'flyer' || type === 'quote' || type === 'website') ? (
+                        <DocPreview
+                          doc={doc}
+                          type={type}
+                          fallbackIcon={TYPE_ICONS[type] || 'doc'}
                         />
                       ) : (
                         <span className={`doc-icon doc-icon-${type}`} aria-hidden="true">
@@ -756,6 +776,23 @@ export default function CollectionView({ activeId }: CollectionViewProps) {
                           title="Scarica immagine"
                         >
                           <Icon name="download" />Scarica
+                        </button>
+                      )}
+                      {type === 'website' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExportingId(doc.id);
+                            exportWebsiteZip(doc as never)
+                              .then(() => addToast('success', 'ZIP scaricato'))
+                              .catch(() => addToast('error', 'Errore export ZIP'))
+                              .finally(() => setExportingId(null));
+                          }}
+                          data-testid={`export-${doc.id}`}
+                          title="Esporta ZIP (HTML+CSS+JS)"
+                          disabled={exportingId === doc.id}
+                        >
+                          <Icon name="download" />{exportingId === doc.id ? 'Esportando…' : 'ZIP'}
                         </button>
                       )}
                       <button

@@ -32,12 +32,16 @@ export interface WebsiteProcessResult {
   heroImages: Array<{ prompt: string; base64: string }>;
   aiCall?: { kind: 'websiteCode'; costUsd: number };
   heroCalls?: Array<{ kind: 'hero'; costUsd: number }>;
+  verifyIssues?: string[];
+  verifyFixesApplied?: string[];
 }
 
 export interface WebsiteRefineResult {
   site: { html: string; css: string; js: string; pages: string[] };
   changes: string[];
   response: AIResponse;
+  verifyIssues?: string[];
+  verifyFixesApplied?: string[];
 }
 
 export class WebsiteOrchestrator extends BaseOrchestrator {
@@ -176,13 +180,16 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         js: z.string().optional(),
       }).optional(),
     }));
+    let verifyIssues: string[] | undefined;
+    let verifyFixesApplied: string[] | undefined;
     if (verifyParsed.ok) {
       const { issues, fixes } = verifyParsed.data;
       if (issues.length > 0) {
+        verifyIssues = issues;
         changes.push(`verify:${issues.length}issues:${issues.slice(0, 3).join(' | ')}`);
-        if (fixes?.html) changes.push('verify:html:fixed');
-        if (fixes?.css) changes.push('verify:css:fixed');
-        if (fixes?.js) changes.push('verify:js:fixed');
+        if (fixes?.html) { changes.push('verify:html:fixed'); (verifyFixesApplied ??= []).push('html'); }
+        if (fixes?.css) { changes.push('verify:css:fixed'); (verifyFixesApplied ??= []).push('css'); }
+        if (fixes?.js) { changes.push('verify:js:fixed'); (verifyFixesApplied ??= []).push('js'); }
       } else {
         changes.push('verify:ok');
       }
@@ -201,6 +208,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       changes,
       heroImages: [],
       aiCall: { kind: 'websiteCode', costUsd: totalCost },
+      verifyIssues,
+      verifyFixesApplied,
     };
   }
 

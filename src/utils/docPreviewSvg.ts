@@ -53,17 +53,27 @@ function buildWebsitePreviewSvg(doc: any): string {
   const html = typeof doc.html === 'string' ? doc.html : '';
   if (!html && !css) return buildWebsitePlaceholderSvg(doc);
 
+  const safeHtml = stripScripts(html).trim();
+  if (!safeHtml) return buildWebsitePlaceholderSvg(doc);
+
+  // Viewport fedele: se il CSS ha media query mobile, renderizza a 375px
+  // (layout mobile vero), altrimenti 320px (layout desktop scalato).
+  const mobile = /@media[^{]*max-width\s*:\s*(768|767|640|480)\s*px/.test(css);
+  const w = mobile ? 375 : 320;
+  const h = Math.round(w * 0.625);
+
   const bg = extractCssColor(css, ['--bg', '--background']) || '#ffffff';
   const safeCss = scopeCss(css, '.ws-preview').replace(/<\/style/gi, '<\\/style');
-  const safeHtml = stripScripts(html);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">
-    <rect width="320" height="200" fill="${escapeXml(bg)}"/>
-    <foreignObject x="0" y="0" width="320" height="200">
-      <div xmlns="http://www.w3.org/1999/xhtml" class="ws-preview" style="width:320px;height:200px;overflow:hidden">
+  const pageCount = Array.isArray(doc.pages) ? doc.pages.length : 1;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
+    <rect width="${w}" height="${h}" fill="${escapeXml(bg)}"/>
+    <foreignObject x="0" y="0" width="${w}" height="${h}">
+      <div xmlns="http://www.w3.org/1999/xhtml" class="ws-preview" style="width:${w}px;height:${h}px;overflow:hidden">
         <style>${safeCss}</style>
         ${safeHtml}
       </div>
     </foreignObject>
+    ${pageCount > 1 ? `<rect x="${w - 46}" y="${h - 22}" width="38" height="14" rx="7" fill="#1a1a2e" opacity="0.75"/><text x="${w - 27}" y="${h - 12}" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#ffffff">${pageCount} p.</text>` : ''}
   </svg>`;
 }
 

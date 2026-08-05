@@ -20,8 +20,7 @@ import { injectLogoIntoHtml } from '../utils/website/logoInjection';
 import { injectImagesIntoHtml } from '../utils/website/imageInjection';
 import { sanitizeGeneratedWebsite } from '../utils/website/sanitizeGenerated';
 import AIConsole from './ai/AIConsole';
-import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
+import { buildWebsiteFullDocument, exportWebsiteZip } from '../utils/websiteExport';
 import './WebsiteEditor.css';
 
 interface WebsiteEditorProps {
@@ -60,21 +59,6 @@ function websiteHasContent(w: Website): boolean {
   return !!(w.html || w.css || w.js);
 }
 
-function buildFullDocument(html: string, css: string, js: string): string {
-  return `<!DOCTYPE html>
-<html lang="it">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>${css}</style>
-</head>
-<body>
-${html}
-<script>${js}</script>
-</body>
-</html>`;
-}
-
 
 export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unlocked', onReset, onSaved }: WebsiteEditorProps) {
   const { save: saveDocumentGuarded } = useDocumentSave();
@@ -85,6 +69,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const [exporting, setExporting] = useState(false);
   const [viewport, setViewport] = useState('100%');
   const [refinePrompt, setRefinePrompt] = useState('');
+  const [verifyIssues, setVerifyIssues] = useState<string[] | null>(null);
   const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || '');
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isProcessingRef = useRef(false);
@@ -174,11 +159,16 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   }, []);
 
   const updateStyle = useCallback((style: WebsiteStyle) => {
-    // Salva solo la preferenza stile: il refine parte solo quando l'utente
-    // clicca "Raffina" (o rigenera con "Rigenera Sito").
+    // Salva la preferenza stile e pre-compila il prompt di refine:
+    // l'utente preme "Raffina" e lo stile viene applicato al sito esistente.
     setWebsite((prev) => ({ ...prev, style, updatedAt: new Date().toISOString() }));
-    addToast('info', `Stile "${style}" selezionato. Premi Raffina per applicarlo al sito esistente.`);
-  }, [addToast]);
+    if (websiteHasContent(website)) {
+      setRefinePrompt(`Applica lo stile visivo "${style}" al sito. Cambia SOLO i colori, i font, i bordi, gli sfondi e le decorazioni CSS. NON cambiare la struttura HTML, i contenuti o il JavaScript.`);
+      addToast('info', `Stile "${style}" pronto. Premi Raffina per applicarlo.`);
+    } else {
+      addToast('info', `Stile "${style}" selezionato.`);
+    }
+  }, [website, addToast]);
 
   const updateCode = useCallback((field: 'html' | 'css' | 'js', value: string) => {
     setWebsite((prev) => ({ ...prev, [field]: value, updatedAt: new Date().toISOString() }));
@@ -229,6 +219,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       };
       const withCost = result.aiCall ? withAiCall(merged, result.aiCall.kind, result.aiCall.costUsd) : merged;
       setWebsite(withCost);
+      setVerifyIssues(result.verifyIssues?.length ? result.verifyIssues : null);
       setTab('preview');
       addToast('success', `Sito generato: ${result.site.pages.length} pagine`);
     } catch (err) {
@@ -257,6 +248,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         updatedAt: new Date().toISOString(),
       }));
       setRefinePrompt('');
+      setVerifyIssues(result.verifyIssues?.length ? result.verifyIssues : null);
       addToast('success', 'Sito raffinato');
     } catch (err) {
       addToast('error', (err as Error)?.message || 'Errore raffinamento');
@@ -312,52 +304,8 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const handleExportZip = useCallback(async () => {
     setExporting(true);
     try {
-      const zip = new JSZip();
-      const name = website.brief.businessName || website.title || 'sito-web';
-      const folder = zip.folder(`sito-${name}`)!;
-      const assetsFolder = zip.folder(`sito-${name}/assets`)!;
-      const pages = website.pages.length > 0 ? website.pages : ['index'];
-
-      // Raccogli le immagini (logo + gallery) per l'export in assets/
-      const assetMap: Record<string, string> = {}; // dataUrl → nome file
-      let assetCounter = 0;
-      const registerAsset = (dataUrl: string | null | undefined): string | null => {
-        if (!dataUrl) return null;
-        if (assetMap[dataUrl]) return assetMap[dataUrl];
-        const isLogo = dataUrl === website.logoUrl;
-        const ext = dataUrl.startsWith('data:image/svg') ? 'svg' : 'jpg';
-        const fileName = `assets/${isLogo ? 'logo' : `img-${assetCounter + 1}`}.${ext}`;
-        assetMap[dataUrl] = fileName;
-        assetCounter++;
-        const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-        assetsFolder.file(fileName.replace('assets/', ''), base64, { base64: true });
-        return fileName;
-      };
-
-      const replaceSrcs = (html: string): string => {
-        return html.replace(/src="(data:[^"]+)"/g, (_m, dataUrl: string) => {
-          const fileName = registerAsset(dataUrl);
-          return fileName ? `src="${fileName}"` : _m;
-        });
-      };
-
-      // Registra logo e immagini per i src nei documenti
-      const logoFile = registerAsset(website.logoUrl);
-      for (const img of website.images) registerAsset(img);
-
-      for (const page of pages) {
-        const pageHtml = page === 'index'
-          ? website.html
-          : website.html.replace(/<section[^>]*id="[^"]*"[^>]*>[\s\S]*?<\/section>/g, '')
-              .replace(/<header>[\s\S]*?<\/header>/, '')
-              .replace(/<footer>[\s\S]*?<\/footer>/, '');
-        const doc = buildFullDocument(replaceSrcs(pageHtml), website.css, website.js);
-        folder.file(`${page}.html`, doc);
-      }
-
-      const blob = await zip.generateAsync({ type: 'blob' });
-      saveAs(blob, `sito-${name}.zip`);
-      addToast('success', 'ZIP scaricato');
+      const { assetCount } = await exportWebsiteZip(website);
+      addToast('success', `ZIP scaricato (${assetCount} immagini)`);
     } catch (err) {
       addToast('error', (err as Error)?.message || 'Errore export ZIP');
     } finally {
@@ -366,7 +314,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   }, [website, addToast]);
 
   const handleOpenInNewTab = useCallback(() => {
-    const doc = buildFullDocument(website.html, website.css, website.js);
+    const doc = buildWebsiteFullDocument(website.html, website.css, website.js);
     const blob = new Blob([doc], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
@@ -460,7 +408,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   }, []);
 
   const fullDocument = useMemo(
-    () => buildFullDocument(website.html, website.css, website.js),
+    () => buildWebsiteFullDocument(website.html, website.css, website.js),
     [website.html, website.css, website.js],
   );
 
@@ -683,6 +631,21 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         </div>
       </div>
 
+      {verifyIssues && verifyIssues.length > 0 && (
+        <div className="verify-issues-panel">
+          <div className="verify-issues-header">
+            <span>⚠️ {verifyIssues.length} problemi rilevati dal controllo qualità</span>
+            <button type="button" className="verify-issues-close" onClick={() => setVerifyIssues(null)} aria-label="Chiudi">✕</button>
+          </div>
+          <ul className="verify-issues-list">
+            {verifyIssues.slice(0, 5).map((issue, i) => (
+              <li key={i}>{issue}</li>
+            ))}
+            {verifyIssues.length > 5 && <li>… e altri {verifyIssues.length - 5}</li>}
+          </ul>
+        </div>
+      )}
+
       <SaveDialog
         open={showSaveDialog}
         defaultName={website.title || website.brief.businessName || 'Sito Web'}
@@ -697,7 +660,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         className="website-vision-preview"
         aria-hidden="true"
         title="Preview vision"
-        srcDoc={websiteHasContent(website) ? buildFullDocument(website.html, website.css, website.js) : ''}
+        srcDoc={websiteHasContent(website) ? buildWebsiteFullDocument(website.html, website.css, website.js) : ''}
       />
     </div>
   );
