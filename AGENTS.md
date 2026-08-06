@@ -15,20 +15,24 @@ npm run db:generate  # Generate Drizzle migration
 npm run db:migrate   # Apply migrations to Neon
 ```
 
-## Output Style (caveman skill) — OBBLIGATORIO SEMPRE
+## Output Style (adhd-caveman skill) — OBBLIGATORIO SEMPRE
 
 **Regola hard**: ad ogni avvio sessione (anche dopo refresh), PRIMA di rispondere
-a qualunque prompt utente, devi **invocare `skill("caveman")`** via tool.
+a qualunque prompt utente, devi **invocare `skill("adhd-caveman")`** via tool.
 Senza quella chiamata la skill non è attiva (opencode non auto-carica le skill
-legate solo a descrizione). AGENTS.md elenca `caveman` in "Active Skills" ma è
-informativo — l'azione obbligatoria è la `skill("caveman")` all'inizio della
-sessione.
+legate solo a descrizione). AGENTS.md elenca `adhd-caveman` in "Active Skills"
+ma è informativo — l'azione obbligatoria è la `skill("adhd-caveman")`
+all'inizio della sessione.
 
-Compressione output attiva via skill `caveman` (`.agents/skills/caveman/SKILL.md`).
-Stile terso, ~-65% token. La skill si **disattiva automaticamente**
-(auto-clarity) su: warning sicurezza, conferme azioni irreversibili, sequenze
-multi-step ambigue, utente che chiede chiarimento. Non forzare lo stile terso
-in quei casi.
+Compressione output + struttura ADHD via skill `adhd-caveman`
+(`.agents/skills/adhd-caveman/SKILL.md`): fusione di caveman (stile terso,
+~-65% token, livelli lite/full — **ultra rimosso**) e i-have-adhd (lead with
+action, passi numerati, stato ripetuto, time estimates, cap liste a 5, wins
+visibili). ADHD layer **sempre attivo** (non opt-in). La skill si **disattiva
+automaticamente** (auto-clarity) su: warning sicurezza, conferme azioni
+irreversibili, sequenze multi-step ambigue, richieste "explain", debug
+spiral, utente che chiede chiarimento. Non forzare lo stile terso in quei
+casi.
 
 ## Code Style (lean-code skill) — OBBLIGATORIO SEMPRE
 
@@ -364,7 +368,9 @@ task completati spuntati in to-be-done.
    ancora presenti in `docs/spec/` quando pushi codice.
 
 **Struttura docs (2026-07-30)**: documenti in `docs/` (inclusi
-`AI_ARCHITECTURE.md`, `to-be-done.md`, `done.md`), spec attivi in
+`AI_ARCHITECTURE.md`, `to-be-done.md`, `done.md`, `design-criteria.md` —
+criteri tipografici card/logo/flyer con fonti, riferimento design review
+§27 gotchas), spec attivi in
 `docs/spec/`. Root solo: `AGENTS.md`, `README.md`, `DESIGN.md`,
 `REQUIREMENTS.md`.
 
@@ -540,8 +546,9 @@ skill** (`.agents/skills/<name>/SKILL.md`):
 - `vercel-composition-patterns` — component design
 - `web-design-guidelines` — review UI/accessibilità
 - `writing-guidelines` — docs/prose style
-- `caveman` — compressione output (sempre, vedi "Output Style" sopra per
-  regola hard di invocazione `skill("caveman")` ad ogni sessione)
+- `adhd-caveman` — compressione output + struttura ADHD (sempre, vedi
+  "Output Style" sopra per regola hard di invocazione
+  `skill("adhd-caveman")` ad ogni sessione)
 - `ai-prompt-engineering` — quando tocchi `src/ai/prompts/*` o `*Orchestrator.ts`
 - `vercel-serverless-monolith` — quando tocchi `api/index.ts` o `api/`
 - `pdf-client-side` — quando tocchi `*Generator.ts` o `watermark.ts`

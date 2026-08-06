@@ -72,21 +72,19 @@ Server su `http://localhost:8000`
 
 ## AI Coding Agent Optimization (solo sviluppatori)
 
-### Caveman (compressione output)
+### ADHD Caveman (compressione output + struttura ADHD)
 
-Skill auto-attiva che forza l'agente a rispondere in stile terso (drop articoli, no filler, frammenti OK). Caricata da `.agents/skills/caveman/SKILL.md` ad ogni avvio di opencode.
+Skill auto-attiva che forza l'agente a rispondere in stile terso (drop articoli, no filler, frammenti OK) **e** con struttura ADHD (lead with action, passi numerati, stato ripetuto, time estimates, cap liste a 5, wins visibili). Fusione di caveman + i-have-adhd. Caricata da `.agents/skills/adhd-caveman/SKILL.md` ad ogni avvio di opencode.
 
 | Comando | Effetto |
 |---------|---------|
-| `/caveman` | attiva (default `full`) |
-| `/caveman lite` | solo anti-filler, frasi complete |
-| `/caveman ultra` | telegrafico, abbreviazioni |
-| `/caveman commit` | messaggi di commit ≤50 char |
-| "normal mode" / "stop caveman" | disattiva |
+| `/adhd-caveman` | attiva (default `full`) |
+| `/adhd-caveman lite` | solo anti-filler, frasi complete |
+| "normal mode" / "stop caveman" / "stop adhd mode" | disattiva |
 
-Installazione: `npx skills add https://github.com/juliusbrussee/caveman --skill caveman`
+Nota: il livello `ultra` di caveman è stato rimosso (mai usato); il layer ADHD è sempre attivo, non opt-in.
 
-La skill **si auto-disattiva** in caso di: warning di sicurezza, conferme di azioni irreversibili, sequenze multi-step dove l'ordine dei frammenti può confondere. È un comportamento voluto (regola `Auto-Clarity`), non un bug.
+La skill **si auto-disattiva** in caso di: warning di sicurezza, conferme di azioni irreversibili, sequenze multi-step dove l'ordine dei frammenti può confondere, richieste "explain", debug spiral, ambiguità reale. È un comportamento voluto (regola `Auto-Clarity`), non un bug.
 
 ## AI Co-Editor (DeepSeek)
 
