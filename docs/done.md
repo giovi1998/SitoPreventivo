@@ -324,7 +324,7 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
   (persistenza + default), AIProviderBadge (render selettore + click),
   base (default e custom). Vedi `docs/agent-gotchas.md` §26.
 - **Website 4-step generation (spec-design-website-4step-generation)**: HTML → CSS → JS → Verify con 4 agenti separati, fresh session per step, non-stream per CSS/JS/Verify (solo HTML stream), `reasoningEffort: 'max'`, `maxTokens: 8192` per tutti, `onStep` callback per log separati, maps embed URL conversion, brand flex rule, rail padding-bottom 72px per ActionBar. Spec creata e cancellata.
-- **Website Builder (TB-028) — implementazione completa**: nuovo tipo documento `website` con editor dedicato, AI orchestrator, preview iframe con viewport toggle (375/768/100%), code editor (CodeMirror 6 installato), export ZIP multi-pagina, integrazione CRM auto-build + Collection + CustomerDetail. 6 file creati, 18 modificati. Spec `docs/spec/spec-design-website-builder.md` v1.2.
+- **Website Builder (TB-028) — implementazione completa**: nuovo tipo documento `website` con editor dedicato, AI orchestrator, preview iframe con viewport toggle (375/768/100%), code editor (CodeMirror 6 installato), export ZIP multi-pagina, integrazione CRM auto-build + Collection + CustomerDetail. 6 file creati, 18 modificati. Spec `spec-design-website-builder.md` v1.2 (cancellata 2026-08-06).
   - Upload logo/immagine brand (sidebar, compressDataUrl, `logoUrl` nello schema)
   - Vision AI sul logo: estrazione SOLO palette colori e stile font (non layout/contenuti)
   - Logo iniettato nell'HTML generato dopo `<nav>`/`<header>`/`<body>`
@@ -492,10 +492,10 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 - **TB-027** CRM + auto-research + auto-build: tabella `customers`,
   flag `REGISTRATION_ENABLED`, CRM UI, Firecrawl scraping →
   `customer_knowledge`, AI gap-filling, auto-build draft logo/card/flyer
-  (gotchas §17, spec `spec/spec-architecture-crm-auto-build.md`).
+  (gotchas §17, spec `spec-architecture-crm-auto-build.md`, cancellata 2026-08-06).
 - **TB-019** Intake pipeline → porta ingresso CRM: tabella `intakes`,
   `/api/intake` pubblico, IntakeList in CRM, intake → record cliente
-  (spec `spec/spec-intake-pipeline.md`).
+  (spec `spec-intake-pipeline.md`, cancellata 2026-08-06).
 
 ## 2026-07-27
 
@@ -529,4 +529,5 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
   card-vision-input, flyer-hero-image, flyer-vision-grounded-hero,
   logo-vision-grounded-background, card-grid-layout-event-audit,
   logo-text-auto-positioning, tool-ai-card-flyer-tools,
-  ai-first-ux-redesign, ai-harness-upgrade.
+  ai-first-ux-redesign, ai-harness-upgrade, card-nudge-layout-template,
+  architecture-crm-auto-build, intake-pipeline, design-website-builder.
