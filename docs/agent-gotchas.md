@@ -1894,6 +1894,32 @@ codice valido (con fixato integro+lungo), fix distruttivo RIFIUTATO (corto),
 fix rotto rifiutato, recheck con issue deterministiche residue, matrice 3
 provider. Gate: typecheck + suite verde.
 
+### 26.24 Auto-build website in PROD — timeout 60s (2026-08-05)
+
+**Bug (to-be-done #3, mai validato live)**: "Genera bozze AI" da CRM in
+PROD falliva sul website (logo/card/flyer ok). Causa: Vercel Hobby limita
+le richieste **sincrone** a 60s, quelle **streaming** a 300s. Gli step
+CSS/JS/Verify/pagine usavano `provider.chat` (sincrono) → il CSS da
+100-130s e il JS da ~90s venivano uccisi → step falliti. In locale nessun
+limite → sembrava funzionare.
+
+**Fix (tutti gli step website su SSE)**:
+1. **`onStream` SEMPRE attivo nel websiteOrchestrator**: `handleStream`
+   usa il path stream SOLO se `onStream` è passato. Ora `streamSink =
+   options.onStream ?? (() => {})` passato a html/css/js/page/verify →
+   in auto-build (dove `onStream` è undefined) gli step usano comunque
+   SSE → limite 300s Hobby. Prima l'HTML cadeva su `chat` sincrono in
+   auto-build (e CSS/JS/verify anche nell'editor!).
+2. **`generateWebsiteDraft` salva `pagesHtml`** (mancava → pagine
+   secondarie perse nell'auto-build) e costo da `result.aiCall?.costUsd`
+   (non solo usage HTML).
+3. **`streamSink` riusa il sink utente** se fornito (nessun doppio log).
+
+**Test**: matrice 3 provider aggiornata — TUTTI gli step via SSE (i mock
+servono SSE per ogni chiamata stream, non solo la prima). Gate: typecheck
++ 541 test verdi. Validazione live PROD ancora da fare (to-be-done #3:
+riprovare "Genera bozze AI" con cliente reale).
+
 **Test**: `siteAnalyser.test.ts` (12 — tag/parentesi/pseudo/alt/iframe/emoji/
 stringhe JS), `seoMeta.test.ts` (9 — sanitize, ordine, coerenza og:desc),
 `websiteOrchestrator.test.ts` (15 — tool precompilati, loop recheck

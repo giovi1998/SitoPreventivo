@@ -63,9 +63,9 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
   });
 
   for (const { id, label } of PROVIDERS) {
-    it(`${label}: sito completo (HTML stream + CSS + JS + verify tools)`, async () => {
+    it(`${label}: sito completo (tutti gli step via SSE stream, verify con risultati nel prompt)`, async () => {
       const queue = [
-        JSON.stringify({ html: htmlOk, pages: ['index'] }), // html (stream)
+        JSON.stringify({ html: htmlOk, pages: ['index'] }), // html
         JSON.stringify({ css: 'body { color: #000; }' }),   // css
         JSON.stringify({ js: 'console.log(1);' }),          // js
         JSON.stringify({ issues: [] }),                     // verify
@@ -76,11 +76,16 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
         const u = String(url);
         n++;
         const body = init?.body ? JSON.parse(String(init.body)) : null;
-        // Stream = body.stream true (Ollama proxy /api/ai/chat e DeepSeek
-        // api.deepseek.com). Chat = body senza stream (stessi URL).
+        // Tutti gli step usano SSE (body.stream true): CSS/JS/Verify
+        // inclusi — limite 300s Hobby (sincrone = 60s, auto-build PROD).
         const isStreamRequest = !!body?.stream;
-        if (isStreamRequest && n === 1) {
-          const contentPayload = JSON.stringify(JSON.stringify({ html: htmlOk, pages: ['index'] }));
+        if (isStreamRequest) {
+          if (n === 4) {
+            state.verifyHasTools = Array.isArray(body?.tools) && body.tools.length > 0;
+            state.verifyHasToolCalls = body.messages.some((m: any) => m.tool_calls);
+            state.verifyHasAnalyzeInPrompt = body.messages.some((m: any) => m.role === 'user' && String(m.content).includes('RISULTATI ANALISI'));
+          }
+          const contentPayload = JSON.stringify(queue[n - 1] ?? JSON.stringify({ issues: [] }));
           const sseBody = [
             `data: {"choices":[{"delta":{"content":${contentPayload}}}]}`,
             `data: {"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`,
@@ -88,12 +93,6 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
             '',
           ].join('\n');
           return new Response(sseBody, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
-        }
-        // Cattura il body del verify (chat n.4: css=2, js=3, verify=4)
-        if (n === 4) {
-          state.verifyHasTools = Array.isArray(body?.tools) && body.tools.length > 0;
-          state.verifyHasToolCalls = body.messages.some((m: any) => m.tool_calls);
-          state.verifyHasAnalyzeInPrompt = body.messages.some((m: any) => m.role === 'user' && String(m.content).includes('RISULTATI ANALISI'));
         }
         return new Response(JSON.stringify({
           choices: [{ message: { content: queue[n - 1] ?? JSON.stringify({ issues: [] }) } }],
@@ -128,7 +127,7 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
       const brokenCss = '.nav { display: flex;';
       const fixedCss = '.nav { display: flex; }';
       const queue = [
-        JSON.stringify({ html: htmlOk, pages: ['index'] }), // html (stream)
+        JSON.stringify({ html: htmlOk, pages: ['index'] }), // html
         JSON.stringify({ css: brokenCss }),                  // css
         JSON.stringify({ js: 'console.log(1);' }),           // js
         JSON.stringify({ issues: ['css rotto'], fixes: { css: fixedCss } }), // verify pass1
@@ -139,8 +138,9 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
         const u = String(url);
         n++;
         const body = init?.body ? JSON.parse(String(init.body)) : null;
-        if (!!body?.stream && n === 1) {
-          const contentPayload = JSON.stringify(JSON.stringify({ html: htmlOk, pages: ['index'] }));
+        // Tutti gli step su SSE (vedi test sopra)
+        if (!!body?.stream) {
+          const contentPayload = JSON.stringify(queue[n - 1] ?? JSON.stringify({ issues: [] }));
           const sseBody = [
             `data: {"choices":[{"delta":{"content":${contentPayload}}}]}`,
             'data: [DONE]',

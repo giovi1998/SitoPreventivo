@@ -475,13 +475,14 @@ async function generateWebsiteDraft(
       logoBase64,
     },
   );
-  const aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'websiteCode', textCost(result.response?.usage));
+  const aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'websiteCode', result.aiCall?.costUsd ?? textCost(result.response?.usage));
   await saveDraft(doc, {
     ...(doc.data as Record<string, unknown>),
     html: injectLogoIntoHtml(result.site.html, logoBase64 || null),
     css: result.site.css,
     js: result.site.js,
     pages: result.site.pages,
+    pagesHtml: result.site.pagesHtml,
     source: 'ai',
     aiStats,
     logoUrl: logoBase64 || (doc.data?.logoUrl as string | undefined) || null,

@@ -127,10 +127,17 @@ describe('WebsiteOrchestrator.generateSite', () => {
       { content: JSON.stringify({ issues: [] }), usage: usage() },
     );
     let verifyUserContent = '';
-    fakeProvider.chat.mockImplementation(async (messages: any[]) => {
-      const userMsg = messages.find((m) => m.role === 'user' && String(m.content).includes('RISULTATI ANALISI'));
-      if (userMsg) verifyUserContent = String(userMsg.content);
-      return chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+    let verifyMessages: any[] = [];
+    fakeProvider.stream.mockImplementation(async function* (messages: any[]) {
+      const userMsg = messages.find((m: any) => m.role === 'user' && String(m.content).includes('RISULTATI ANALISI'));
+      if (userMsg) {
+        verifyUserContent = String(userMsg.content);
+        verifyMessages = messages;
+      }
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+      const content = typeof r.content === 'string' ? r.content : '';
+      if (content) yield { type: 'content' as const, content };
+      yield { type: 'done' as const, usage: r.usage };
     });
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
     expect(result.changes).toContain('verify:ok');
@@ -140,10 +147,12 @@ describe('WebsiteOrchestrator.generateSite', () => {
     expect(verifyUserContent).toContain('analyze_site("css")');
     expect(verifyUserContent).toContain('analyze_site("js")');
     // Nessun messaggio con tool_calls né opzioni tools nella chiamata verify
-    const verifyCall = fakeProvider.chat.mock.calls[3];
-    expect(verifyCall[0].some((m: any) => m.toolCalls)).toBe(false);
-    expect(verifyCall[1].tools).toBeUndefined();
-    expect(verifyCall[1].responseFormat).toEqual({ type: 'json_object' });
+    expect(verifyMessages.some((m: any) => m.toolCalls)).toBe(false);
+    const verifyStreamOpts = fakeProvider.stream.mock.calls.find((c: any[]) =>
+      c[0].some((m: any) => String(m.content).includes('RISULTATI ANALISI'))
+    )?.[1];
+    expect(verifyStreamOpts?.tools).toBeUndefined();
+    expect(verifyStreamOpts?.responseFormat).toEqual({ type: 'json_object' });
     expect(result.site.html).toContain('Benvenuto');
   });
 
@@ -154,12 +163,18 @@ describe('WebsiteOrchestrator.generateSite', () => {
       { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
       { content: JSON.stringify({ js: '' }), usage: usage() },
     );
-    // chat: html(1), css(2), js(3), verify(4) fallisce
-    let chatCalls = 0;
-    fakeProvider.chat.mockImplementation(async () => {
-      chatCalls++;
-      if (chatCalls === 4) throw new Error('Ollama (400): can\'t find closing \'}\' symbol');
-      return chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+    // stream: html(1), css(2), js(3), verify(4) fallisce
+    let streamCalls = 0;
+    fakeProvider.stream.mockImplementation(async function* () {
+      streamCalls++;
+      if (streamCalls === 4) {
+        yield { type: 'error', error: 'Ollama (400): can\'t find closing \'}\' symbol' };
+        return;
+      }
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+      const content = typeof r.content === 'string' ? r.content : '';
+      if (content) yield { type: 'content' as const, content };
+      yield { type: 'done' as const, usage: r.usage };
     });
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
     expect(result.site.html).toContain('Benvenuto');
@@ -174,12 +189,18 @@ describe('WebsiteOrchestrator.generateSite', () => {
       { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
       { content: JSON.stringify({ issues: [] }), usage: usage() },
     );
-    // chat: html(1), css(2) fallisce, js(3), verify(4)
-    let chatCalls = 0;
-    fakeProvider.chat.mockImplementation(async () => {
-      chatCalls++;
-      if (chatCalls === 2) throw new Error('Ollama (502): Ollama error: This operation was aborted');
-      return chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+    // stream: html(1), css(2) fallisce, js(3), verify(4)
+    let streamCalls = 0;
+    fakeProvider.stream.mockImplementation(async function* () {
+      streamCalls++;
+      if (streamCalls === 2) {
+        yield { type: 'error', error: 'Ollama (502): Ollama error: This operation was aborted' };
+        return;
+      }
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+      const content = typeof r.content === 'string' ? r.content : '';
+      if (content) yield { type: 'content' as const, content };
+      yield { type: 'done' as const, usage: r.usage };
     });
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
     expect(result.site.html).toContain('Benvenuto');
@@ -195,11 +216,17 @@ describe('WebsiteOrchestrator.generateSite', () => {
       { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
       { content: JSON.stringify({ issues: [] }), usage: usage() },
     );
-    let chatCalls = 0;
-    fakeProvider.chat.mockImplementation(async () => {
-      chatCalls++;
-      if (chatCalls === 3) throw new Error('Ollama (502): aborted');
-      return chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+    let streamCalls = 0;
+    fakeProvider.stream.mockImplementation(async function* () {
+      streamCalls++;
+      if (streamCalls === 3) {
+        yield { type: 'error', error: 'Ollama (502): aborted' };
+        return;
+      }
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+      const content = typeof r.content === 'string' ? r.content : '';
+      if (content) yield { type: 'content' as const, content };
+      yield { type: 'done' as const, usage: r.usage };
     });
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
     expect(result.site.html).toContain('Benvenuto');
@@ -215,12 +242,18 @@ describe('WebsiteOrchestrator.generateSite', () => {
       { content: JSON.stringify({ js: '' }), usage: usage() },
       { content: JSON.stringify({ issues: [] }), usage: usage() },
     );
-    // chat: html(1), page:about(2) fallisce, css(3), js(4), verify(5)
-    let chatCalls = 0;
-    fakeProvider.chat.mockImplementation(async () => {
-      chatCalls++;
-      if (chatCalls === 2) throw new Error('Ollama (502): aborted');
-      return chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+    // stream: html(1), page:about(2) fallisce, css(3), js(4), verify(5)
+    let streamCalls = 0;
+    fakeProvider.stream.mockImplementation(async function* () {
+      streamCalls++;
+      if (streamCalls === 2) {
+        yield { type: 'error', error: 'Ollama (502): aborted' };
+        return;
+      }
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+      const content = typeof r.content === 'string' ? r.content : '';
+      if (content) yield { type: 'content' as const, content };
+      yield { type: 'done' as const, usage: r.usage };
     });
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
     expect(result.site.html).toContain('Benvenuto');
@@ -317,15 +350,18 @@ describe('WebsiteOrchestrator.generateSite', () => {
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
     expect(result.changes).toContain('verify:ok');
     expect(result.verifyIssues).toBeUndefined();
-    // La chiamata verify (chat index 3) NON deve avere tool_calls/tools:
-    // il formato tool di Ollama (arguments object, tool_name) diverge da
-    // DeepSeek → i tool_calls precompilati causavano il 400. Ora i
-    // risultati sono nel prompt user.
-    const verifyCall = fakeProvider.chat.mock.calls[3];
-    const messages = verifyCall[0];
+    // La chiamata verify (stream, con RISULTATI ANALISI nel prompt) NON deve
+    // avere tool_calls/tools: il formato tool di Ollama (arguments object,
+    // tool_name) diverge da DeepSeek → i tool_calls precompilati causavano
+    // il 400. Ora i risultati sono nel prompt user.
+    const verifyCall = fakeProvider.stream.mock.calls.find((c: any[]) =>
+      c[0].some((m: any) => String(m.content).includes('RISULTATI ANALISI'))
+    );
+    expect(verifyCall).toBeDefined();
+    const messages = verifyCall![0];
     expect(messages.some((m: any) => m.toolCalls)).toBe(false);
-    expect(verifyCall[1].tools).toBeUndefined();
-    expect(verifyCall[1].responseFormat).toEqual({ type: 'json_object' });
+    expect(verifyCall![1].tools).toBeUndefined();
+    expect(verifyCall![1].responseFormat).toEqual({ type: 'json_object' });
     // Il messaggio user contiene i risultati deterministici
     const userMsg = messages.find((m: any) => m.role === 'user');
     expect(String(userMsg.content)).toContain('RISULTATI ANALISI DETERMINISTICA');

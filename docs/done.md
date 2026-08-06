@@ -5,6 +5,16 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-05
 
+- **Auto-build website PROD — timeout 60s sincrono → SSE (2026-08-05)**
+  (gotchas §26.24):
+  - "Genera bozze AI" in PROD falliva sul website: Vercel Hobby limita le
+    richieste sincrone a 60s (streaming 300s) → CSS 100-130s/JS 90s
+    uccisi. Fix: `onStream` SEMPRE attivo (no-op se assente) → tutti gli
+    step website (html/css/js/page/verify) su SSE anche in auto-build.
+  - `generateWebsiteDraft` salva `pagesHtml` (mancava) + costo da
+    `aiCall.costUsd`.
+  - Test: matrice 3 provider con tutti gli step SSE. Gate: typecheck +
+    541 test verdi. Validazione live PROD da fare (to-be-done #3).
 - **Website verify — fix automatici di qualità + guardia anti-distruzione (2026-08-05)**
   (gotchas §26.23):
   - Il verify segnalava 5 problemi reali (iframe title, emoji CTA,

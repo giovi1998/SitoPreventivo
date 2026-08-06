@@ -109,6 +109,11 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       if (last) last.images = [...(last.images ?? []), ...options.visionPreviews];
     }
     const htmlStart = Date.now();
+    // onStream SEMPRE attivo (no-op se non fornito): `handleStream` usa il
+    // path stream (SSE) SOLO se onStream è presente. Su Vercel Hobby lo
+    // streaming ha limite 300s, la chat sincrona 60s → senza onStream
+    // l'auto-build in PROD (dove onStream è undefined) falliva sempre.
+    const streamSink = options.onStream ?? (() => {});
     const htmlResponse = await this.handleStream(provider, htmlMessages, {
       responseFormat: { type: 'json_object' },
       // 8192 non bastano: il sito completo (head SEO + hero + sezioni) può
@@ -117,7 +122,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       maxTokens: 16384,
       // Struttura del sito: ragionamento pieno ('max').
       reasoningEffort: 'max',
-    }, { onStream: options.onStream });
+    }, { onStream: streamSink });
     const htmlParsed = this.parseJsonResponse(htmlResponse.content ?? '', z.object({
       html: z.string().min(1),
       pages: z.array(z.string()).min(1).default(['index']),
@@ -163,11 +168,14 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         let pageResponse: AIResponse | null = null;
         let pageParsed: { ok: boolean; error?: string; data?: { html: string } } = { ok: false, error: 'fetch failed' };
         try {
-          pageResponse = await provider.chat(pageMessages, {
+          // handleStream (SSE): su Vercel Hobby le richieste sincrone hanno
+          // limite 60s, quelle streaming 300s. CSS/JS/verify/pagine possono
+          // superare 60s → senza stream l'auto-build in PROD falliva (gotcha §26.24).
+          pageResponse = await this.handleStream(provider, pageMessages, {
             responseFormat: { type: 'json_object' },
             maxTokens: 16384,
             reasoningEffort: 'max',
-          });
+          }, { onStream: streamSink });
           pagesCost += this.trackUsage(pageResponse.usage, options.userEmail, options.modelId) || 0;
           pageParsed = this.parseJsonResponse(pageResponse.content ?? '', z.object({
             html: z.string().min(1),
@@ -195,13 +203,14 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     let cssResponse: AIResponse | null = null;
     let cssParsed: { ok: boolean; data?: { css?: string } } = { ok: false };
     try {
-      cssResponse = await provider.chat(cssMessages, {
+      // handleStream (SSE) — vedi nota step pagine: limite 300s Hobby.
+      cssResponse = await this.handleStream(provider, cssMessages, {
         responseFormat: { type: 'json_object' },
         maxTokens: 16384,
         // CSS = output lungo su prompt piccolo: 'high' basta, 'max' costa
         // il doppio del tempo (180s osservati).
         reasoningEffort: 'high',
-      });
+      }, { onStream: streamSink });
       cssParsed = this.parseJsonResponse(cssResponse.content ?? '', z.object({
         css: z.string().default(''),
       }));
@@ -225,12 +234,13 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     let jsResponse: AIResponse | null = null;
     let jsParsed: { ok: boolean; data?: { js?: string } } = { ok: false };
     try {
-      jsResponse = await provider.chat(jsMessages, {
+      // handleStream (SSE) — vedi nota step pagine: limite 300s Hobby.
+      jsResponse = await this.handleStream(provider, jsMessages, {
         responseFormat: { type: 'json_object' },
         maxTokens: 16384,
         // JS = output medio su prompt piccolo: 'high' basta (91s con 'max').
         reasoningEffort: 'high',
-      });
+      }, { onStream: streamSink });
       jsParsed = this.parseJsonResponse(jsResponse.content ?? '', z.object({
         js: z.string().default(''),
       }));
@@ -274,13 +284,14 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       let verifyResponse: AIResponse | null = null;
       let verifyError: unknown = null;
       try {
-        verifyResponse = await provider.chat(verifyMessages, {
+        // handleStream (SSE) — vedi nota step pagine: limite 300s Hobby.
+        verifyResponse = await this.handleStream(provider, verifyMessages, {
           responseFormat: { type: 'json_object' },
           maxTokens: 16384,
           // reasoning 'high' (non 'max'): il verify lavora su prompt da
           // 50-60K token e con think:max impiegava 194s — 'high' basta.
           reasoningEffort: 'high',
-        });
+        }, { onStream: streamSink });
       } catch (err) {
         verifyError = err;
       }
