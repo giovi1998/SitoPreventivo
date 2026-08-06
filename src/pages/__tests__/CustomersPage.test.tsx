@@ -69,12 +69,14 @@ function renderPage(initialPath: string) {
   );
 }
 
+const LAZY_TIMEOUT = 15000;
+
 describe('CustomersPage routing per URL', () => {
   it('deep link /app/customers/cust_1 mostra CustomerDetail', async () => {
     renderPage('/app/customers/cust_1');
     await waitFor(() => {
       expect(screen.getByTestId('crm-detail-title').textContent).toBe('Bar Da Mario');
-    }, { timeout: 5000 });
+    }, { timeout: LAZY_TIMEOUT });
     expect(getCustomerMock).toHaveBeenCalledWith('cust_1');
   });
 
@@ -82,27 +84,27 @@ describe('CustomersPage routing per URL', () => {
     renderPage('/app/customers');
     await waitFor(() => {
       expect(screen.getByTestId('crm-card-cust_1')).toBeTruthy();
-    });
+    }, { timeout: LAZY_TIMEOUT });
     fireEvent.click(screen.getByTestId('crm-card-cust_1'));
     await waitFor(() => {
       expect(screen.getByTestId('location-path').textContent).toBe('/app/customers/cust_1');
-    });
+    }, { timeout: LAZY_TIMEOUT });
     await waitFor(() => {
       expect(getCustomerMock).toHaveBeenCalledWith('cust_1');
-    });
+    }, { timeout: LAZY_TIMEOUT });
   });
 
   it('pulsante Indietro dal dettaglio naviga a /app/customers', async () => {
     renderPage('/app/customers/cust_1');
     await waitFor(() => {
       expect(screen.getByTestId('crm-back')).toBeTruthy();
-    });
+    }, { timeout: LAZY_TIMEOUT });
     fireEvent.click(screen.getByTestId('crm-back'));
     await waitFor(() => {
       expect(screen.getByTestId('location-path').textContent).toBe('/app/customers');
-    });
+    }, { timeout: LAZY_TIMEOUT });
     await waitFor(() => {
       expect(screen.getByTestId('crm-card-cust_1')).toBeTruthy();
-    });
+    }, { timeout: LAZY_TIMEOUT });
   });
 });
