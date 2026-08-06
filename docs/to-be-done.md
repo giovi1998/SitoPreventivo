@@ -6,30 +6,6 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ### 🎯 Sprint prossima settimana (priorità utente 2026-08-01)
 
-- [ ] **1. Qualità visiva card / logo / flyer (design review)**: l'utente NON
-  è soddisfatto dell'estetica — es. la card "non piace", scritte troppo
-  piccole. Obiettivo: revisione tipografica + proporzioni su TUTTI e 3 i
-  generatori. Checklist per ciascuno:
-  - **Card** (`src/components/CardEditor.tsx` + `src/utils/card/`): gerarchia
-    tipografica fronte/retro (nome > ruolo > company > contatti), dimensione
-    minima leggibile (≥8-9px a 640px logici di anteprima), padding/gap grid,
-    coerenza preview ↔ export (mismatch wrapping/font metrics residui
-    documentati in `docs/agent-gotchas.md` §6), presenza di `--card-font-scale`
-    legacy (default 1) e se il font è davvero leggibile su card piccola in
-    Collection/CRM.
-  - **Logo** (`src/utils/logo/svgBuilder.ts` + `fitText()`): testo/tagline
-    troncato o troppo piccolo sul viewBox, scala icona vs testo, contrasto su
-    `backgroundImage` (textBackdrop/offset), leggibilità in anteprima e in
-    export PNG/PDF/JPG.
-  - **Flyer** (`src/utils/flyer/`): `font-size` unitless mm (viewBox in mm),
-    `GLYPH_HEIGHT_FACTOR=1.15`, budget copy al font minimo = hard limit (§7),
-    spaziature sezione, gerarchia heading/body/CTA, leggibilità anteprima vs
-    PDF/PNG export.
-  - Criterio di uscita: ogni fix verificato con **screenshot prima/dopo**
-    (browser reale, non jsdom) e, dove tocca rendering/export, test di
-    regressione aggiornati. NON cambiare layout engine prima di aver capito
-    dove vive il problema (preview vs export vs entrambi).
-
 - [ ] **2. Immagini AI con background pixelato (verifica Playwright)**: le
   immagini generate (logo background, card cover/icon) arrivano a **512px**
   (`image_size: '512'`, clamp server 500KB) e scalate su aree grandi →
@@ -108,6 +84,14 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ### Backlog tecnico corrente
 
+- [ ] **Verifica visiva modifiche AI (flyer/card/logo) con screenshot
+  (2026-08-06)**: le modifiche recenti agli oggetti AI (design review
+  tipografica §27: reference frame card, tagline logo, floor stampa flyer,
+  qualità output AI) vanno controllate meglio con gli screen fatti
+  (screenshot E2E/design-review) — confronto visivo preview vs export su
+  casi reali, non solo test unitari. Da verificare: gerarchia tipografica
+  card 22/16/14, tagline logo 0.42× wordmark, floor flyer (headline 24pt /
+  body 10pt), pixel density immagini AI (512px su aree grandi).
 - [ ] **Website Builder — follow-up multi-pagina (2026-08-05)**: possibile
   raffinamento quando si vede il risultato reale: qualità delle pagine
   secondarie (contenuti), nav identica, asset condivisi. Base fatta
