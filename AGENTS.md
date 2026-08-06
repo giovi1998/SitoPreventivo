@@ -30,6 +30,25 @@ Stile terso, ~-65% token. La skill si **disattiva automaticamente**
 multi-step ambigue, utente che chiede chiarimento. Non forzare lo stile terso
 in quei casi.
 
+## Code Style (lean-code skill) — OBBLIGATORIO SEMPRE
+
+**Regola hard**: PRIMA di scrivere o modificare codice in `src/`, `api/`,
+`db/` (nuovo codice, refactor, bug fix, PR review, scelta dipendenze, test),
+devi **invocare `skill("lean-code")`** via tool. Senza quella chiamata la
+skill non è attiva (opencode non auto-carica le skill legate solo a
+descrizione). AGENTS.md elenca `lean-code` in "Active Skills" ma è
+informativo — l'azione obbligatoria è la `skill("lean-code")` PRIMA di
+toccare codice.
+
+Fusione lazy-YAGNI + Clean Code (`.agents/skills/lean-code/SKILL.md`): ladder
+(esiste già? stdlib? nativo? deps installate? una riga? solo poi il minimo),
+root-cause fix, no astrazioni non richieste, marker `lean-code:` per corner
+cut con ceiling+upgrade path, naming intention-revealing, funzioni piccole
+(<20 righe), no commenti inutili. Si **disattiva automaticamente** solo su:
+warning sicurezza (validation/rate limit/auth = mai semplificare), conferme
+azioni irreversibili. Non applicare stile lazy a codice non richiesto di
+semplificare.
+
 ## Pre-push Checklist
 
 Prima di consigliare un push, esegui e conferma tutto verde:
@@ -542,7 +561,8 @@ skill** (`.agents/skills/<name>/SKILL.md`):
   righe, una sola cosa), no commenti inutili (spiega in codice), law of
   Demeter, error handling via exceptions non return codes, F.I.R.S.T.
   test. Invoca `skill("lean-code")` PRIMA di scrivere codice nuovo o
-  refactor.
+  refactor (sempre, vedi "Code Style (lean-code skill)" sopra per
+  regola hard di invocazione `skill("lean-code")` ad ogni sessione).
 
 On-demand (solo se il task lo richiede): `deploy-to-vercel`,
 `vercel-cli-with-tokens`, `vercel-optimize`, `gpt-taste` /
