@@ -10,7 +10,7 @@ export function createCrmMethods(svc) {
   return {
     // ─── TB-027 CRM: customers ──────────────────────────
     // Admin-only. LOCAL usa localStorage (key pq_customers:v1), PROD API.
-    // ponytail: localStorage come cache/seed per dev, POST crea su API.
+    // lean-code: localStorage come cache/seed per dev, POST crea su API.
 
     async getCustomers(status) {
       if (IS_LOCAL) {

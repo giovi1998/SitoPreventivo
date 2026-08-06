@@ -455,7 +455,7 @@ non accede. Riduce friction a zero per il cliente.
 
 Whitelabel futuro: se Quickbrand si vende come strumento ad altre
 agenzie, la modalità multi-utente riattiva. Cancellare codice = lavoro
-perso. Feature flag è 1 riga. Ponytail: non cancellare ciò che ha
+perso. Feature flag è 1 riga. lean-code: non cancellare ciò che ha
 valore futuro noto.
 
 ### Perché auto-research con Google Places

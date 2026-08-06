@@ -2556,7 +2556,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
 
 // --- TB-027 CRM: customers ---
 // Spec: spec-architecture-crm-auto-build.md. Admin-only CRUD + research +
-// ai-fill + auto-build pipeline. Ponytail: best-effort research (Places fail
+// ai-fill + auto-build pipeline. lean-code: best-effort research (Places fail
 // non blocca), AI fill riusa DeepSeek copy, auto-build crea draft (no gen AI
 // di default).
 
@@ -2617,7 +2617,7 @@ function requireAdmin(req: VercelRequest, res: VercelResponse, body: Record<stri
   return true;
 }
 
-// ponytail: clamp immagine data URL a 500KB. best-effort, no crash se >.
+// lean-code: clamp immagine data URL a 500KB. best-effort, no crash se >.
 function clampDataUrl(dataUrl: string, maxBytes = 500 * 1024): string {
   if (dataUrl.length <= maxBytes) return dataUrl;
   return dataUrl.slice(0, maxBytes);
@@ -3361,7 +3361,7 @@ const handleCustomers: RouteHandler = async (path, method, req, res, body) => {
     } as Record<string, unknown>);
     created.push(flyerId);
     // autoGenerate deferred: AI generation è responsabilità editor (CON-001
-    // quality check). Qui creiamo solo draft. ponytail: non lanciamo AI qui,
+    // quality check). Qui creiamo solo draft. lean-code: non lanciamo AI qui,
     // l'admin attiva generazione manualmente nell'editor.
     void autoGenerate;
     await db.update(customersTable).set({ status: 'done', updatedAt: new Date() }).where(eq(customersTable.id, id));

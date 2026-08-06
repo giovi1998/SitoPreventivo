@@ -1,5 +1,5 @@
 // TB-027 B5: palette prompt builder. DeepSeek → JSON array di 3 palette.
-// ponytail: prompt inline nel builder, niente file prompt separato (YAGNI).
+// lean-code: prompt inline nel builder, niente file prompt separato (YAGNI).
 
 export interface PaletteBrief {
   businessName: string;

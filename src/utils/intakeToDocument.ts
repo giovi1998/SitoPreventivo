@@ -1,6 +1,6 @@
 // TB-019: mapping brief intake → document draft data.
 // Shape allineate a createEmpty*() factories (documentSchemas.ts).
-// ponytail: riusiamo factories come base, sovrascriviamo campi brief.
+// lean-code: riusiamo factories come base, sovrascriviamo campi brief.
 
 import { createEmptyCard, createEmptyLogo, createEmptyFlyer } from './documentSchemas';
 

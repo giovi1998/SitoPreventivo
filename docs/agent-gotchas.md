@@ -703,7 +703,7 @@ Codice signup/onboarding **conservato** dietro feature flag
    `AdminRoute` guard. Sidebar: voce "Clienti" sopra "Documenti"
    (admin-only) sia desktop che mobile drawer. `ROUTE_PATHS.customers`
    in `useRouteView.ts` (auto-mappa via `pathToView`).
-  6. **Auto-research best-effort**: Ponytail — Firecrawl fallisce → status
+  6. **Auto-research best-effort**: Lean-code — Firecrawl fallisce → status
      `no_key`/`fail`/`no_website`, cliente non bloccato, auto-build
      procede con AI fill. Logo detection: fetch favicon.ico, clamp 200KB,
      reject SSRF verso `127.*|10.*|192.168.*|169.254.*|localhost`.

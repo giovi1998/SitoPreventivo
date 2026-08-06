@@ -1,0 +1,23 @@
+{
+  "skill_name": "lean-code",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Ho una funzione che valida email e password e ritorna stringhe di errore in italiano che i callers confrontano con `if (err === 'EMAIL_INVALID')`. Alcuni callers non controllano nemmeno il valore di ritorno, quindi un'email invalida passa silenziosa. Refactora in modo pulito: voglio gestione errori migliore (exception? altro?) ma senza riscrivere tutti i callers se non serve. Il comportamento verso l'utente non deve cambiare.",
+      "expected_output": "Root-cause fix (guida condivisa, non patch per-caller), scelta motivata exceptions vs return codes, naming intention-revealing, diff minimo",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Devo aggiungere una cache alle risposte di fetch dell'API preventivi: la ricerca nella Collection rifà fetch a ogni keystroke. Non voglio installare librerie nuove. La cache deve invalidarsi dopo 30 secondi. Che implementazione scegli e perché? Tieni conto che il codice è TypeScript client-side.",
+      "expected_output": "Ladder YAGNI rispettata: soluzione nativa/una riga se possibile, nessuna dep nuova, marker lean-code: sul ceiling se serve, spiegazione breve",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Questo file è illeggibile: variabili `d`, `x`, `r`, funzione `doStuff` di 80 righe con 3 responsabilità, e commenti del tipo `// set value here`. Pulisci il codice applicando clean code senza cambiare comportamento. Non serve che esegua, basta il refactor.",
+      "expected_output": "Naming intention-revealing, funzioni piccole una-una-cosa, commenti ridondanti rimossi, struttura a livelli di astrazione, nessun commento spiegante il what",
+      "files": []
+    }
+  ]
+}

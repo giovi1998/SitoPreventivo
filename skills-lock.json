@@ -13,12 +13,6 @@
       "skillPath": "skills/caveman/SKILL.md",
       "computedHash": "b0e7741886c0c32270cedc1a2fc21c2879d90964d3ce00f24952de7064613404"
     },
-    "clean-code": {
-      "source": "sickn33/antigravity-awesome-skills",
-      "sourceType": "github",
-      "skillPath": "skills/clean-code/SKILL.md",
-      "computedHash": "551e1ac1c416d9df11fce8bc613c3595794f1f5e634d20c5b3e257afded11ed7"
-    },
     "deploy-to-vercel": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
@@ -60,6 +54,12 @@
       "sourceType": "github",
       "skillPath": "skills/soft-skill/SKILL.md",
       "computedHash": "f730e4132775f13eea19e3dc39afc6bb453cfc0498872b127ad8f0d47cfd802d"
+    },
+    "i-have-adhd": {
+      "source": "ayghri/i-have-adhd",
+      "sourceType": "github",
+      "skillPath": "skills/i-have-adhd/SKILL.md",
+      "computedHash": "177e5b780239a1a819d9eb00d512b6af44ecc7792f4cdcb1e5fb6f03c74a8ee4"
     },
     "image-to-code": {
       "source": "leonxlnx/taste-skill",
@@ -103,17 +103,17 @@
       "skillPath": "skills/playwright-cli/SKILL.md",
       "computedHash": "fcba6ff28cfd109d224f0d8b55bfc0f81e514bdf2941c65662fd17ff6368cb1c"
     },
-    "ponytail": {
-      "source": "dietrichgebert/ponytail",
-      "sourceType": "github",
-      "skillPath": "skills/ponytail/SKILL.md",
-      "computedHash": "9e8d05cbbaf6dc38f0cffc924c09b3cbe76d94ba4ba0d09bde803da2f8c6b5a0"
-    },
     "redesign-existing-projects": {
       "source": "leonxlnx/taste-skill",
       "sourceType": "github",
       "skillPath": "skills/redesign-skill/SKILL.md",
       "computedHash": "47eced3e960a2c961d3cbee11fa1216264f589344b586a5cbd03967cd6b9c54b"
+    },
+    "skill-creator": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/skill-creator/SKILL.md",
+      "computedHash": "7e3c9cd74e9e2b4828527a857170e86310f2dab5ea8030a9043df2c7e6c88857"
     },
     "stitch-design-taste": {
       "source": "leonxlnx/taste-skill",

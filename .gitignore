@@ -103,3 +103,7 @@ storybook-static/
 # Playwright test artifacts
 test-results/
 playwright-report/
+
+# Python bytecode
+__pycache__/
+*.pyc

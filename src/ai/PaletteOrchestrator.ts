@@ -1,6 +1,6 @@
 // TB-027 B5: palette AI orchestrator. Genera 3 palette suggerite da brief.
 // Riusa BaseOrchestrator (handleStream, parseJsonResponse, trackUsage).
-// ponytail: niente tools, niente image gen (SVG preview è client-side puro).
+// lean-code: niente tools, niente image gen (SVG preview è client-side puro).
 
 import { z } from 'zod';
 import { BaseOrchestrator } from './BaseOrchestrator';
