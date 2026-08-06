@@ -115,6 +115,54 @@ Forbidden closers: "Let me know if you need anything else," "Hope this helps," "
 
 Start with the answer. End when the answer is done.
 
+## Output templates
+
+When the task matches a shape below, use its template verbatim. Templates beat rules: the reader gets the same structure every time, and the model follows a concrete shape better than an abstract rule.
+
+### Error fix
+
+```
+1. [cause] — one line, exact error quoted
+2. [fix] — command/path first
+3. [verify] — one command to confirm
+4. [time] — estimate
+```
+
+### Multi-step task
+
+```
+1. [FIRST action] — the first step, not context
+2. [step 2]
+3. [step 3]
+4. [step 4]
+5. [step 5]
+Do now: 1-5. Later: [remaining steps].  (only if more than 5 steps)
+Totale: [time estimate].
+Next: [one thing under 2 minutes].
+```
+
+### Recap / status
+
+```
+1. [done] — wins in concrete terms
+2. [left] — what remains
+3. [next] — ONE action under 2 minutes
+```
+
+### Worked example — multi-step (the shape, not the content)
+
+```
+1. Apri `db/schema.ts` e aggiungi a `users` (dopo `role`): `tier: varchar({ length: 20 }).default("free")` — 1 min
+2. Specchia la colonna in `api/index.ts` `usersTable` (righe 38-50) — 1 min
+3. `npm run db:generate` → appendi il backfill SQL al migration.sql — 2 min
+4. Aggiorna le query in `api/index.ts` (GET /users/tier, redeem-code, unlock-user) — 20-30 min
+5. Aggiorna i test (userTier, users, redeemCode) — 20-30 min
+Do now: 1-5. Later: `npm run db:migrate` + typecheck/test + push.
+Totale: ~1 ora. Next: apri `db/schema.ts` e fai il passo 1.
+```
+
+Note: the first line is the FIRST step, never "here is the state of things" — context goes after the action, one line max. Steps past 5 go under "Later:", parked not lost.
+
 ## Intensity
 
 | Level | What changes |
