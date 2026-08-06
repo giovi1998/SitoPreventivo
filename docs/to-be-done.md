@@ -85,13 +85,32 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 ### Backlog tecnico corrente
 
 - [ ] **Verifica visiva modifiche AI (flyer/card/logo) con screenshot
-  (2026-08-06)**: le modifiche recenti agli oggetti AI (design review
-  tipografica §27: reference frame card, tagline logo, floor stampa flyer,
-  qualità output AI) vanno controllate meglio con gli screen fatti
-  (screenshot E2E/design-review) — confronto visivo preview vs export su
-  casi reali, non solo test unitari. Da verificare: gerarchia tipografica
-  card 22/16/14, tagline logo 0.42× wordmark, floor flyer (headline 24pt /
-  body 10pt), pixel density immagini AI (512px su aree grandi).
+  (2026-08-06)**: le modifiche della design review tipografica (§27:
+  reference frame card 640×414, gerarchia 22/16/14, tagline logo 0.42×
+  wordmark, floor stampa flyer 24pt/10pt, qualità output AI) vanno
+  **controllate visivamente**, non solo con test unitari. I test jsdom
+  verificano i numeri, non l'aspetto — servono screenshot reali di
+  preview E export sullo stesso documento AI.
+  **Prova = La Chiccheria** (cliente demo già nel CRM, brief completo:
+  pasticceria, bordeaux/crema, Via Roma 42 Cagliari): genera i 3 oggetti
+  AI (logo/card/flyer) e confronta.
+  **Template di confronto per ciascun oggetto** (preview vs export
+  affiancati, contact sheet):
+  - **Logo**: tagline leggibile (0.42× wordmark), contrasto testo su
+    `backgroundImage`, bordo pulito a 1024px (export PNG 1024).
+  - **Card**: gerarchia 22/16/14 (nome > ruolo > company), contatti retro
+    leggibili (≥7pt stampa), coerenza wrap/font preview ↔ export.
+  - **Flyer**: floor stampa (headline 24pt / body 10pt rispettati),
+    sezioni spaziate, hero non sfocata (max-side ≥1000).
+  **Script**: `scripts/design-review-ai-gen.mjs` — genera i 3 oggetti AI
+  per La Chiccheria, salva preview (`ai/*-ai.png`), scarica gli export
+  reali via UI (`export/*.png`) e produce i contact sheet
+  (`compare/*-compare.png`) + `report.json` con dimensioni reali e
+  threshold pixel (logo 1024², card ≥1000×600, flyer ≥1000×600).
+  **Da verificare manualmente sui contact sheet**: le righe del template
+  qui sopra (le dimensioni sono automatiche, la leggibilità è visiva).
+  Nota: pixel density immagini AI (512px su aree grandi) è coperta dal
+  task #2 (immagini pixelate) — qui si guarda la resa tipografica.
 - [ ] **Website Builder — follow-up multi-pagina (2026-08-05)**: possibile
   raffinamento quando si vede il risultato reale: qualità delle pagine
   secondarie (contenuti), nav identica, asset condivisi. Base fatta
