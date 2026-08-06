@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWebsiteHtmlPrompt, buildWebsiteCssPrompt } from '../websiteSystem';
+import { buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteVerifyPrompt, buildWebsitePagePrompt } from '../websiteSystem';
 
 const baseBrief = {
   businessName: 'Gelateria Chiccheria',
@@ -69,5 +69,50 @@ describe('websiteSystem prompts (maps + socials)', () => {
     const prompt = buildWebsiteHtmlPrompt(baseBrief, 'elegant');
     expect(prompt).toContain('EMOJI NEL TESTO');
     expect(prompt).toContain('NON usare emoji nel brand');
+  });
+
+  it('HTML prompt: vieta esplicitamente gli SVG', () => {
+    const prompt = buildWebsiteHtmlPrompt(baseBrief, 'elegant');
+    expect(prompt).toContain('SVG');
+    expect(prompt).toContain('NON creare MAI tag <svg>');
+  });
+
+  it('HTML prompt: istruzioni multi-pagina con link relativi', () => {
+    const prompt = buildWebsiteHtmlPrompt(baseBrief, 'elegant');
+    expect(prompt).toContain('MULTI-PAGINA');
+    expect(prompt).toContain('href="about.html"');
+  });
+
+  it('page prompt: genera pagina dedicata con nav identica e senza SVG/emoji', () => {
+    const prompt = buildWebsitePagePrompt('about', {
+      businessName: 'Gelateria Chiccheria',
+      description: 'Gelateria artigianale',
+      tone: 'amichevole',
+      target: 'giovani',
+      cta: 'Assaggia',
+      contacts: 'Via Dante 5',
+      socials: [],
+    }, '<header class="nav"><div class="nav-inner"><div class="brand">Nome</div></div></header>');
+    expect(prompt).toContain('Genera SOLO la struttura HTML della pagina "about"');
+    expect(prompt).toContain('NAV DA USARE IDENTICA');
+    expect(prompt).toContain('NON creare MAI tag <svg>');
+    expect(prompt).toContain('.current-year');
+    expect(prompt).toContain('NON usare emoji');
+  });
+
+  it('verify prompt: check accessibilità + divieti ::before/::after con contenuto e SVG', () => {
+    const prompt = buildWebsiteVerifyPrompt('<h1>x</h1>', 'h1{}', '');
+    expect(prompt).toContain('ACCESSIBILITÀ');
+    expect(prompt).toContain('aria-label');
+    expect(prompt).toContain('contrasto');
+    expect(prompt).toContain('::before');
+    expect(prompt).toContain('content: ""');
+    expect(prompt).toContain('tag <svg>');
+  });
+
+  it('CSS prompt: pseudo-elementi solo con content vuoto, no SVG', () => {
+    const prompt = buildWebsiteCssPrompt('<div class="hero"></div>', 'modern', {});
+    expect(prompt).toContain('content: "" obbligatorio');
+    expect(prompt).toContain('NON stilizzare MAI tag <svg>');
   });
 });

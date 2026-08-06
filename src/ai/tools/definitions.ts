@@ -316,6 +316,24 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'analyze_site',
+      description: 'Analisi deterministica del sito generato: controlla tag HTML bilanciati, parentesi CSS/JS (troncamenti e sintassi rotta), ::before/::after con content non vuoto, img senza alt, iframe senza title, emoji nel testo visibile. Il codice passato è SEMPRE completo: se l\'analisi trova parentesi/tag non chiusi, il problema è reale nel sito, non nel prompt. Chiama una volta per parte (html, css, js).',
+      parameters: {
+        type: 'object',
+        properties: {
+          part: {
+            type: 'string',
+            enum: ['html', 'css', 'js'],
+            description: 'Quale parte del sito analizzare',
+          },
+        },
+        required: ['part'],
+      },
+    },
+  },
 ];
 
 export function getToolNames(): string[] {

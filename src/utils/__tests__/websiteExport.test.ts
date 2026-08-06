@@ -116,6 +116,26 @@ describe('exportWebsiteZip', () => {
     expect(names).toContain('about.html');
   });
 
+  it("multi-pagina: about.html usa il pagesHtml dedicato, non l'index", async () => {
+    await exportWebsiteZip(
+      makeWebsite({
+        pages: ['index', 'about'],
+        pagesHtml: { about: '<h1>Chi siamo</h1>' },
+      }),
+    );
+    const about = zipState.files.find((f) => f.name === 'about.html');
+    const index = zipState.files.find((f) => f.name === 'index.html');
+    expect(String(about?.content)).toContain('<h1>Chi siamo</h1>');
+    expect(String(about?.content)).not.toContain('<h1>Home</h1>');
+    expect(String(index?.content)).toContain('<h1>Home</h1>');
+  });
+
+  it("multi-pagina senza pagesHtml: fallback all'html index", async () => {
+    await exportWebsiteZip(makeWebsite({ pages: ['index', 'contact'] }));
+    const contact = zipState.files.find((f) => f.name === 'contact.html');
+    expect(String(contact?.content)).toContain('<h1>Home</h1>');
+  });
+
   it('moves base64 images to assets/ as separate files', async () => {
     const logo = 'data:image/png;base64,QUJDRA==';
     await exportWebsiteZip(

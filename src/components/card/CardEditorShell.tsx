@@ -31,7 +31,7 @@ import { useIsMobileWorkspace } from '../../hooks/useMediaQuery';
 import { useCardPreviewZoom } from '../../hooks/useCardPreviewZoom';
 import { useCardAIFloating } from '../../hooks/useCardAIFloating';
 import { useDocumentSave } from '../../hooks/useDocumentSave';
-import { getAiProviderDefault } from '../../utils/uiPrefs';
+import { getValidatedProviderDefault } from '../../utils/uiPrefs';
 import { providerRegistry } from '../../ai/providers/registry';
 import CardSaveAction from './CardSaveAction';
 import CardExportMenu from './CardExportMenu';
@@ -66,7 +66,7 @@ export default function CardEditorShell({ userEmail, initialCard, tier, onReset,
 
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [aiText, setAiText] = useState('');
-  const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || providerRegistry.getDefaultId());
+  const [aiModel, setAiModel] = useState(() => getValidatedProviderDefault(providerRegistry));
   const loadedIdRef = useRef<string | undefined>(initialCard?.id);
 
   // Always attach layout events on the card editor (localhost + prod).

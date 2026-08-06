@@ -7,6 +7,9 @@ import {
   setAiConsoleExpanded,
   getAiReasoningEffort,
   setAiReasoningEffort,
+  getAiProviderDefault,
+  setAiProviderDefault,
+  getValidatedProviderDefault,
 } from '../uiPrefs';
 
 const KEY = 'pq_ui:v1';
@@ -66,5 +69,24 @@ describe('uiPrefs (pq_ui:v1, REQ-DS-006 + REQ-AI-003)', () => {
   it('aiReasoningEffort valido resta, invalido non crasha', () => {
     localStorage.setItem(KEY, JSON.stringify({ version: 1, aiReasoningEffort: 'medium' }));
     expect(getAiReasoningEffort()).toBe('medium');
+  });
+
+  it('getValidatedProviderDefault: pref valida → ritorna la pref', () => {
+    setAiProviderDefault('ollama-minimax-m3');
+    const registry = { listProviders: () => [{ id: 'ollama-minimax-m3' }, { id: 'deepseek-v4-flash' }], getDefaultId: () => 'ollama-minimax-m3' };
+    expect(getValidatedProviderDefault(registry)).toBe('ollama-minimax-m3');
+  });
+
+  it('getValidatedProviderDefault: pref stale → default registry + pref ripulita', () => {
+    setAiProviderDefault('provider-rimosso');
+    const registry = { listProviders: () => [{ id: 'ollama-minimax-m3' }], getDefaultId: () => 'ollama-minimax-m3' };
+    expect(getValidatedProviderDefault(registry)).toBe('ollama-minimax-m3');
+    expect(getAiProviderDefault()).toBe('ollama-minimax-m3');
+  });
+
+  it('getValidatedProviderDefault: nessuna pref → default registry senza scrittura', () => {
+    const registry = { listProviders: () => [{ id: 'ollama-minimax-m3' }], getDefaultId: () => 'ollama-minimax-m3' };
+    expect(getValidatedProviderDefault(registry)).toBe('ollama-minimax-m3');
+    expect(localStorage.getItem(KEY)).toBeNull();
   });
 });

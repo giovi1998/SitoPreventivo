@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { promptRegistry } from './prompts/registry';
-import { buildWebsiteGeneratePrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteJsPrompt, buildWebsiteVerifyPrompt } from './prompts/websiteSystem';
+import { buildWebsiteGeneratePrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteJsPrompt, buildWebsiteVerifyPrompt, buildWebsitePagePrompt } from './prompts/websiteSystem';
+import { ensureSeoMeta, stripSocialCanonical } from '../utils/website/seoMeta';
+import { analyzeSiteCode } from '../utils/website/siteAnalyser';
 import { providerRegistry } from './providers/registry';
 import type { AIStreamChunk, AIResponse, ChatMessage } from './types';
 
@@ -20,12 +22,13 @@ export const websiteAIRefineSchema = z.object({
   css: z.string().optional(),
   js: z.string().optional(),
   pages: z.array(z.string()).optional(),
+  pagesHtml: z.record(z.string(), z.string()).optional(),
   description: z.string().optional(),
 });
 export type WebsiteAIRefine = z.infer<typeof websiteAIRefineSchema>;
 
 export interface WebsiteProcessResult {
-  site: { html: string; css: string; js: string; pages: string[] };
+  site: { html: string; css: string; js: string; pages: string[]; pagesHtml: Record<string, string> };
   response: AIResponse;
   sessionId: string;
   changes: string[];
@@ -37,7 +40,7 @@ export interface WebsiteProcessResult {
 }
 
 export interface WebsiteRefineResult {
-  site: { html: string; css: string; js: string; pages: string[] };
+  site: { html: string; css: string; js: string; pages: string[]; pagesHtml: Record<string, string> };
   changes: string[];
   response: AIResponse;
   verifyIssues?: string[];
@@ -108,7 +111,12 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const htmlStart = Date.now();
     const htmlResponse = await this.handleStream(provider, htmlMessages, {
       responseFormat: { type: 'json_object' },
-      maxTokens: 8192,
+      // 8192 non bastano: il sito completo (head SEO + hero + sezioni) può
+      // superare i 10k token e Ollama con format:json rifiuta il JSON
+      // troncato (400 "can't find closing '}' symbol").
+      maxTokens: 16384,
+      // Struttura del sito: ragionamento pieno ('max').
+      reasoningEffort: 'max',
     }, { onStream: options.onStream });
     const htmlParsed = this.parseJsonResponse(htmlResponse.content ?? '', z.object({
       html: z.string().min(1),
@@ -118,91 +126,253 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       changes.push(`error:html:${htmlParsed.error}`);
       return this.fallbackResult(brief.businessName, htmlResponse, sessionId, changes);
     }
-    const { html, pages } = htmlParsed.data;
+    const { html: rawHtml, pages } = htmlParsed.data;
     changes.push(`html:generated:pages=${pages.length}`);
     options.onStepResult?.('html', htmlResponse.content ?? '', stepMeta(htmlStart, htmlResponse));
+    // SEO head post-process: l'AI omette spesso meta description/OG → inietta
+    // quelli dal brief (solo se assenti, mai duplicare). Rimuove anche la
+    // canonical che l'AI inventa verso social (Instagram ecc.) — problema
+    // SEO critico (i motori tratterebbero il profilo come sito ufficiale).
+    let html = ensureSeoMeta(stripSocialCanonical(rawHtml), { businessName: brief.businessName, description: brief.description });
+    if (html !== rawHtml) changes.push('seo:meta-injected');
 
-    // ─── Step 2: CSS (non-stream, sessione fresca) ───────────────
-    const cssPrompt = buildWebsiteCssPrompt(html, style, brief);
+    // ─── Step 2: Pagine secondarie (multi-pagina reale) ───────────
+    // Ogni pagina ha il suo HTML dedicato (nav+footer condivisi); CSS/JS
+    // restano comuni e vengono generati vedendo TUTTE le pagine.
+    const pagesHtml: Record<string, string> = {};
+    let pagesCost = 0;
+    const secondaryPages = pages.filter((p) => p !== 'index');
+    if (secondaryPages.length > 0) {
+      const navHtml = extractNavFromHtml(html);
+      for (const page of secondaryPages) {
+        const pagePrompt = buildWebsitePagePrompt(page, {
+          businessName: brief.businessName,
+          description: brief.description,
+          tone: brief.tone,
+          target: brief.target,
+          cta: brief.cta,
+          contacts: brief.contacts,
+          socials: brief.socials,
+        }, navHtml);
+        options.onStep?.(`page:${page}`, pagePrompt);
+        const pageMessages: ChatMessage[] = [
+          { role: 'system', content: promptRegistry.getPrompt('website-page') },
+          { role: 'user', content: pagePrompt },
+        ];
+        const pageStart = Date.now();
+        let pageResponse: AIResponse | null = null;
+        let pageParsed: { ok: boolean; error?: string; data?: { html: string } } = { ok: false, error: 'fetch failed' };
+        try {
+          pageResponse = await provider.chat(pageMessages, {
+            responseFormat: { type: 'json_object' },
+            maxTokens: 16384,
+            reasoningEffort: 'max',
+          });
+          pagesCost += this.trackUsage(pageResponse.usage, options.userEmail, options.modelId) || 0;
+          pageParsed = this.parseJsonResponse(pageResponse.content ?? '', z.object({
+            html: z.string().min(1),
+          }));
+        } catch (err) {
+          // Pagina best-effort: un suo errore NON deve perdere il sito
+          changes.push(`error:page:${page}:${err instanceof Error ? err.message.slice(0, 120) : 'unknown'}`);
+        }
+        const pageHtml = pageParsed.ok && pageParsed.data ? ensureSeoMeta(pageParsed.data.html, { businessName: brief.businessName, description: brief.description }) : '';
+        if (pageHtml) pagesHtml[page] = pageHtml;
+        changes.push(pageParsed.ok ? `page:${page}:generated` : `error:page:${page}`);
+        options.onStepResult?.('page', pageResponse?.content ?? '', stepMeta(pageStart, pageResponse ?? { usage: undefined } as AIResponse));
+      }
+    }
+    const allPagesHtml = [html, ...Object.values(pagesHtml)].join('\n\n');
+
+    // ─── Step 3: CSS (non-stream, sessione fresca) ────────────────
+    const cssPrompt = buildWebsiteCssPrompt(allPagesHtml, style, brief);
     options.onStep?.('css', cssPrompt);
     const cssMessages: ChatMessage[] = [
       { role: 'system', content: promptRegistry.getPrompt('website-css') },
       { role: 'user', content: cssPrompt },
     ];
     const cssStart = Date.now();
-    const cssResponse = await provider.chat(cssMessages, {
-      responseFormat: { type: 'json_object' },
-      maxTokens: 8192,
-    });
-    const cssParsed = this.parseJsonResponse(cssResponse.content ?? '', z.object({
-      css: z.string().default(''),
-    }));
-    const css = cssParsed.ok ? cssParsed.data.css : '';
+    let cssResponse: AIResponse | null = null;
+    let cssParsed: { ok: boolean; data?: { css?: string } } = { ok: false };
+    try {
+      cssResponse = await provider.chat(cssMessages, {
+        responseFormat: { type: 'json_object' },
+        maxTokens: 16384,
+        // CSS = output lungo su prompt piccolo: 'high' basta, 'max' costa
+        // il doppio del tempo (180s osservati).
+        reasoningEffort: 'high',
+      });
+      cssParsed = this.parseJsonResponse(cssResponse.content ?? '', z.object({
+        css: z.string().default(''),
+      }));
+    } catch (err) {
+      // CSS best-effort: un timeout/errore NON deve perdere il sito
+      // (solo HTML e Verify sono critici). Il sito resta usabile senza.
+      changes.push(`error:css:${err instanceof Error ? err.message.slice(0, 120) : 'unknown'}`);
+    }
+    let css = cssParsed.ok && cssParsed.data?.css ? cssParsed.data.css : '';
     changes.push(`css:${css.length}chars`);
-    options.onStepResult?.('css', cssResponse.content ?? '', stepMeta(cssStart, cssResponse));
+    options.onStepResult?.('css', cssResponse?.content ?? '', stepMeta(cssStart, cssResponse ?? { usage: undefined } as AIResponse));
 
-    // ─── Step 3: JS (non-stream, sessione fresca) ─────────────────
-    const jsPrompt = buildWebsiteJsPrompt(html);
+    // ─── Step 4: JS (non-stream, sessione fresca) ─────────────────
+    const jsPrompt = buildWebsiteJsPrompt(allPagesHtml);
     options.onStep?.('js', jsPrompt);
     const jsMessages: ChatMessage[] = [
       { role: 'system', content: promptRegistry.getPrompt('website-js') },
       { role: 'user', content: jsPrompt },
     ];
     const jsStart = Date.now();
-    const jsResponse = await provider.chat(jsMessages, {
-      responseFormat: { type: 'json_object' },
-      maxTokens: 8192,
-    });
-    const jsParsed = this.parseJsonResponse(jsResponse.content ?? '', z.object({
-      js: z.string().default(''),
-    }));
-    const js = jsParsed.ok ? jsParsed.data.js : '';
+    let jsResponse: AIResponse | null = null;
+    let jsParsed: { ok: boolean; data?: { js?: string } } = { ok: false };
+    try {
+      jsResponse = await provider.chat(jsMessages, {
+        responseFormat: { type: 'json_object' },
+        maxTokens: 16384,
+        // JS = output medio su prompt piccolo: 'high' basta (91s con 'max').
+        reasoningEffort: 'high',
+      });
+      jsParsed = this.parseJsonResponse(jsResponse.content ?? '', z.object({
+        js: z.string().default(''),
+      }));
+    } catch (err) {
+      // JS best-effort: un timeout/errore NON deve perdere il sito.
+      changes.push(`error:js:${err instanceof Error ? err.message.slice(0, 120) : 'unknown'}`);
+    }
+    let js = jsParsed.ok && jsParsed.data?.js ? jsParsed.data.js : '';
     changes.push(`js:${js.length}chars`);
-    options.onStepResult?.('js', jsResponse.content ?? '', stepMeta(jsStart, jsResponse));
+    options.onStepResult?.('js', jsResponse?.content ?? '', stepMeta(jsStart, jsResponse ?? { usage: undefined } as AIResponse));
 
-    // ─── Step 4: Verify (non-stream, sessione fresca) ─────────────
-    const verifyPrompt = buildWebsiteVerifyPrompt(html, css, js);
-    options.onStep?.('verify', verifyPrompt);
-    const verifyMessages: ChatMessage[] = [
-      { role: 'system', content: promptRegistry.getPrompt('website-verify') },
-      { role: 'user', content: verifyPrompt },
-    ];
+    // ─── Step 5: Verify (non-stream, sessione fresca) ─────────────
+    // Loop di verifica (max 2 pass). I risultati del tool deterministico
+    // analyze_site vengono passati NEL PROMPT come messaggio user (NON
+    // come tool_calls precompilati: il formato richiesto da Ollama —
+    // arguments object + tool_name — diverge da DeepSeek e causava 400
+    // "can't find closing '}' symbol"). Al primo giro vengono applicati i
+    // fixes; al secondo si verifica che non restino problemi reali.
     const verifyStart = Date.now();
-    const verifyResponse = await provider.chat(verifyMessages, {
-      responseFormat: { type: 'json_object' },
-      maxTokens: 8192,
-    });
-    const verifyParsed = this.parseJsonResponse(verifyResponse.content ?? '', z.object({
-      issues: z.array(z.string()).default([]),
-      fixes: z.object({
-        html: z.string().optional(),
-        css: z.string().optional(),
-        js: z.string().optional(),
-      }).optional(),
-    }));
     let verifyIssues: string[] | undefined;
     let verifyFixesApplied: string[] | undefined;
-    if (verifyParsed.ok) {
+    let currentCss = css;
+    let currentJs = js;
+    let verifyCost = 0;
+    let lastVerifyResponse: AIResponse | null = null;
+    for (let pass = 0; pass < 2; pass++) {
+      // Fonte di verità deterministico (sempre calcolato lato client)
+      const toolResults: Array<{ part: string; result: { ok: boolean; issues: string[] } }> = [
+        { part: 'html', result: analyzeSiteCode(allPagesHtml, 'html') },
+        { part: 'css', result: analyzeSiteCode(currentCss, 'css') },
+        { part: 'js', result: analyzeSiteCode(currentJs, 'js') },
+      ];
+      const analyzeSummary = toolResults
+        .map((tr) => `analyze_site("${tr.part}"): ${JSON.stringify(tr.result)}`)
+        .join('\n');
+      const verifyMessages: ChatMessage[] = [
+        { role: 'system', content: promptRegistry.getPrompt('website-verify') },
+        { role: 'user', content: `${buildWebsiteVerifyPrompt(allPagesHtml, currentCss, currentJs)}\n\nRISULTATI ANALISI DETERMINISTICA (fonte di verità, calcolati lato client):\n${analyzeSummary}` },
+      ];
+      options.onStep?.('verify', `pass ${pass + 1} (con analyze_site)`);
+      let verifyResponse: AIResponse | null = null;
+      let verifyError: unknown = null;
+      try {
+        verifyResponse = await provider.chat(verifyMessages, {
+          responseFormat: { type: 'json_object' },
+          maxTokens: 16384,
+          // reasoning 'high' (non 'max'): il verify lavora su prompt da
+          // 50-60K token e con think:max impiegava 194s — 'high' basta.
+          reasoningEffort: 'high',
+        });
+      } catch (err) {
+        verifyError = err;
+      }
+      if (!verifyResponse) {
+        // Verify è best-effort: un suo errore NON deve perdere il sito
+        // già generato (html/css/js/pages restano quelli buoni).
+        changes.push(`verify:error:${verifyError instanceof Error ? verifyError.message.slice(0, 120) : 'unknown'}`);
+        break;
+      }
+      verifyCost += this.trackUsage(verifyResponse.usage, options.userEmail, options.modelId) || 0;
+      lastVerifyResponse = verifyResponse;
+      const verifyParsed = this.parseJsonResponse(verifyResponse.content ?? '', z.object({
+        issues: z.array(z.string()).default([]),
+        fixes: z.object({
+          html: z.string().optional(),
+          css: z.string().optional(),
+          js: z.string().optional(),
+        }).optional(),
+      }));
+      if (!verifyParsed.ok) {
+        if (pass === 0) changes.push(`verify:error:${verifyParsed.error}`);
+        break;
+      }
       const { issues, fixes } = verifyParsed.data;
-      if (issues.length > 0) {
+
+      // Applica i fixes dell'AI con guardia anti-distruzione:
+      // 1. il fixato deve essere deterministicamente integro
+      //    (analyzeSiteCode(fix).ok) — fixes di qualità/accessibilità
+      //    (title iframe, aria-label, emoji) passano anche su codice valido;
+      // 2. il fixato non deve perdere sezioni: lunghezza ≥50% dell'originale
+      //    (una riscrittura che taglia mappa/contatti/form viene bloccata).
+      const applyVerifyFixes = (): void => {
+        if (fixes?.html && fixes.html !== html && analyzeSiteCode(fixes.html, 'html').ok && fixes.html.length >= html.length * 0.6) {
+          html = fixes.html;
+          changes.push('verify:html:fixed');
+          (verifyFixesApplied ??= []).push('html');
+        }
+        if (fixes?.css && fixes.css !== currentCss && analyzeSiteCode(fixes.css, 'css').ok && fixes.css.length >= currentCss.length * 0.6) {
+          currentCss = fixes.css;
+          changes.push('verify:css:fixed');
+          (verifyFixesApplied ??= []).push('css');
+        }
+        if (fixes?.js && fixes.js !== currentJs && analyzeSiteCode(fixes.js, 'js').ok && fixes.js.length >= currentJs.length * 0.6) {
+          currentJs = fixes.js;
+          changes.push('verify:js:fixed');
+          (verifyFixesApplied ??= []).push('js');
+        }
+      };
+
+      if (issues.length === 0) {
+        if (pass === 1) verifyIssues = undefined; // recheck pulito: problemi risolti, niente pannello
+        changes.push('verify:ok');
+        break;
+      }
+      if (pass === 0) {
         verifyIssues = issues;
         changes.push(`verify:${issues.length}issues:${issues.slice(0, 3).join(' | ')}`);
-        if (fixes?.html) { changes.push('verify:html:fixed'); (verifyFixesApplied ??= []).push('html'); }
-        if (fixes?.css) { changes.push('verify:css:fixed'); (verifyFixesApplied ??= []).push('css'); }
-        if (fixes?.js) { changes.push('verify:js:fixed'); (verifyFixesApplied ??= []).push('js'); }
+        applyVerifyFixes();
       } else {
-        changes.push('verify:ok');
+        // Secondo pass: applica i fixes ANCHE qui (il primo fix può essere
+        // stato parziale) e verifica coi recheck deterministico.
+        applyVerifyFixes();
+        const recheck = [
+          analyzeSiteCode(allPagesHtml, 'html'),
+          analyzeSiteCode(currentCss, 'css'),
+          analyzeSiteCode(currentJs, 'js'),
+        ];
+        if (recheck.every((r) => r.ok)) {
+          verifyIssues = undefined;
+          changes.push('verify:recheck:ok');
+          break;
+        }
+        // Fonte di verità finale = issue DETERMINISTICHE residue (non le
+        // inventate dal modello): il pannello mostra problemi reali.
+        verifyIssues = recheck.flatMap((r) => r.issues);
+        changes.push(`verify:recheck:${verifyIssues.length}issues`);
+        break;
       }
     }
-    options.onStepResult?.('verify', verifyResponse.content ?? '', stepMeta(verifyStart, verifyResponse));
+    css = currentCss;
+    js = currentJs;
+    const verifyOutcome = verifyIssues ? `issues:${verifyIssues.length}` : 'ok';
+    options.onStepResult?.('verify', lastVerifyResponse?.content ?? verifyOutcome, stepMeta(verifyStart, lastVerifyResponse ?? { usage: undefined } as AIResponse));
 
     const totalCost = (this.trackUsage(htmlResponse.usage, options.userEmail, options.modelId) || 0.0001)
-      + (this.trackUsage(cssResponse.usage, options.userEmail, options.modelId) || 0)
-      + (this.trackUsage(jsResponse.usage, options.userEmail, options.modelId) || 0)
-      + (this.trackUsage(verifyResponse.usage, options.userEmail, options.modelId) || 0);
+      + (cssResponse ? this.trackUsage(cssResponse.usage, options.userEmail, options.modelId) || 0 : 0)
+      + (jsResponse ? this.trackUsage(jsResponse.usage, options.userEmail, options.modelId) || 0 : 0)
+      + verifyCost
+      + pagesCost;
 
     return {
-      site: { html, css, js, pages },
+      site: { html, css, js, pages, pagesHtml },
       response: htmlResponse,
       sessionId,
       changes,
@@ -214,7 +384,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
   }
 
   async refineSite(
-    site: { html: string; css: string; js: string; pages: string[] },
+    site: { html: string; css: string; js: string; pages: string[]; pagesHtml: Record<string, string> },
     instruction: string,
     options: {
       modelId?: string;
@@ -228,14 +398,18 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
     const systemPrompt = promptRegistry.getPrompt('website-system');
+    const pagesBlock = site.pages.length > 1
+      ? Object.entries(site.pagesHtml).map(([name, pHtml]) => `### HTML ${name}:${pHtml ? `\n\`\`\`html\n${pHtml}\n\`\`\`` : ' (mancante)'}`).join('\n\n')
+      : '';
     const currentCode = [
       '## Codice corrente del sito',
       '',
-      '### HTML:',
+      '### HTML (index):',
       '```html',
       site.html,
       '```',
       '',
+      pagesBlock,
       '### CSS:',
       '```css',
       site.css,
@@ -250,7 +424,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       '',
       `Istruzione di modifica: ${instruction}`,
       '',
-      'Rispondi SOLO con un oggetto JSON. Includi SOLO i campi che devono cambiare (html, css, js, pages).',
+      'Rispondi SOLO con un oggetto JSON. Includi SOLO i campi che devono cambiare (html, css, js, pages, pagesHtml).',
+      'pagesHtml è un oggetto { nomePagina: htmlCompleto } per le pagine secondarie (NON la index).',
       'Se un campo non cambia, omettilo.',
     ].join('\n');
     options.onStep?.('refine', currentCode);
@@ -269,7 +444,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const response = await this.handleStream(
       provider,
       messages,
-      { responseFormat: { type: 'json_object' }, maxTokens: 8192 },
+      { responseFormat: { type: 'json_object' }, maxTokens: 16384, reasoningEffort: 'max' },
       { onStream: options.onStream },
     );
     options.onStepResult?.('refine', response.content ?? '', {
@@ -290,6 +465,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       css: refine.css ?? site.css,
       js: refine.js ?? site.js,
       pages: refine.pages ?? site.pages,
+      pagesHtml: refine.pagesHtml ? { ...site.pagesHtml, ...refine.pagesHtml } : site.pagesHtml,
     };
 
     // Detect quali parti sono cambiate
@@ -297,6 +473,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     if (merged.css !== site.css) changes.push(`refine:css:changed:${site.css.length}->${merged.css.length}chars`);
     if (merged.js !== site.js) changes.push(`refine:js:changed:${site.js.length}->${merged.js.length}chars`);
     if (merged.pages.join(',') !== site.pages.join(',')) changes.push(`refine:pages:changed`);
+    if (JSON.stringify(merged.pagesHtml) !== JSON.stringify(site.pagesHtml)) changes.push(`refine:pagesHtml:changed`);
 
     this.trackUsage(response.usage, options.userEmail, options.modelId);
     changes.push('website:refined');
@@ -312,7 +489,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
   ): WebsiteProcessResult {
     const fb = fallbackWebsiteOutput(businessName);
     return {
-      site: { html: fb.html, css: fb.css, js: fb.js, pages: fb.pages },
+      site: { html: fb.html, css: fb.css, js: fb.js, pages: fb.pages, pagesHtml: {} },
       response,
       sessionId,
       changes,
@@ -322,8 +499,16 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
   }
 }
 
-function fallbackWebsiteOutput(businessName: string): WebsiteAIOutput {
-  const name = businessName || 'Il mio sito';
+/**
+ * Estrae la nav (header/nav fino a /nav o /header) dall'HTML index per
+ * riusarla identica nelle pagine secondarie (stesso brand, stessi link).
+ */
+function extractNavFromHtml(html: string): string {
+  const navMatch = html.match(/<(header|nav)[\s\S]*?<\/(?:header|nav)>/i);
+  return navMatch ? navMatch[0] : '';
+}
+
+function fallbackWebsiteOutput(businessName: string): WebsiteAIOutput {  const name = businessName || 'Il mio sito';
   return {
     html: `<header><nav><a href="index.html">Home</a></nav></header><main><section class="hero"><h1>${name}</h1><p>Benvenuto nel nostro sito. Siamo in costruzione.</p></section></main><footer><p>© ${new Date().getFullYear()} ${name}</p></footer>`,
     css: `:root { --primary: #01696F; --secondary: #1a1a2e; --accent: #E11D48; --bg: #FFFFFF; --text: #1a1a2e; --font: 'Inter', sans-serif; } * { margin: 0; padding: 0; box-sizing: border-box; } body { font-family: var(--font); color: var(--text); background: var(--bg); } .hero { min-height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: linear-gradient(135deg, var(--primary), var(--secondary)); color: #fff; padding: 2rem; } .hero h1 { font-size: 2.5rem; margin-bottom: 1rem; } @media (max-width: 768px) { .hero h1 { font-size: 1.8rem; } }`,
@@ -331,3 +516,4 @@ function fallbackWebsiteOutput(businessName: string): WebsiteAIOutput {
     pages: ['index'],
   };
 }
+

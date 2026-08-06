@@ -72,11 +72,26 @@ describe('website save roundtrip (IS_LOCAL)', () => {
       id: 'website_mp',
       pages: ['index', 'about'],
       html: '<h1>Home</h1><a href="about.html">Chi</a>',
+      pagesHtml: { about: '<h1>Chi siamo</h1>' },
     }));
     const { documents } = await dataService.getDocuments('user@test.com', 'website');
     const found = documents.find((d: any) => d.id === 'website_mp');
     expect(found).toBeTruthy();
     expect(found.pages).toEqual(['index', 'about']);
+    expect(found.pagesHtml?.about).toContain('Chi siamo');
+  });
+
+  it('multi-page export: about.html contiene il contenuto dedicato', async () => {
+    await exportWebsiteZip(makeWebsite({
+      pages: ['index', 'about'],
+      pagesHtml: { about: '<h1>Chi siamo</h1>' },
+    }));
+    const zip = await JSZip.loadAsync(await savedBlobs[0].blob.arrayBuffer());
+    const aboutEntry = Object.values(zip.files).find((f: any) => f.name.endsWith('about.html'));
+    expect(aboutEntry).toBeTruthy();
+    const content = await (aboutEntry as any).async('string');
+    expect(content).toContain('<h1>Chi siamo</h1>');
+    expect(content).not.toContain('<h1>Home</h1>');
   });
 
   it('does not crash with html containing base64 images', async () => {

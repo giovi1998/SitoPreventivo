@@ -27,7 +27,7 @@ import { tryCatch } from '../utils/errors';
 import { FREE_DOCUMENT_LIMIT } from '../utils/watermark';
 import { logger } from '../utils/logger';
 import { isLocalhost } from '../utils/env';
-import { getAiProviderDefault, setAiProviderDefault } from '../utils/uiPrefs';
+import { getAiProviderDefault, getValidatedProviderDefault, setAiProviderDefault } from '../utils/uiPrefs';
 import { providerRegistry } from '../ai/providers/registry';
 import { incrementAiStats } from '../utils/aiStats';
 
@@ -75,7 +75,7 @@ export default function AppShell() {
   const [quotes, setQuotes] = useState<any[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [aiText, setAiText] = useState("Rendi il preventivo più professionale e aggiungi dettagli tecnici");
-  const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || providerRegistry.getDefaultId());
+  const [aiModel, setAiModel] = useState(() => getValidatedProviderDefault(providerRegistry));
   const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);

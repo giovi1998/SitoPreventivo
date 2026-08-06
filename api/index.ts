@@ -1337,7 +1337,10 @@ const handleAI: RouteHandler = async (path, method, req, res, body) => {
       const { model, messages, max_tokens, tools, format, options: ollamaOptions, reasoning_effort } = v.data;
       const ollamaModel = model || 'minimax-m3:cloud';
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60000); // Ollama Cloud più lento di DeepSeek
+      // Ollama con thinking 'max' + output 16k tok: le generazioni website
+      // (CSS/JS lunghi) superano i 60s — timeout alzato a 600s (gotcha
+      // §26.20: a 60s il CSS da 100-130s falliva sempre → sito mai generato).
+      const timeout = setTimeout(() => controller.abort(), 600000); // Ollama Cloud più lento di DeepSeek
       const startedAt = Date.now();
       let apiRes: Response;
       try {

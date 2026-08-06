@@ -93,6 +93,20 @@ export function getAiProviderDefault(): string | undefined {
   return getUiPrefs().aiProviderDefault;
 }
 
+/**
+ * Provider default VALIDATO: se l'ID salvato non esiste più nel registry
+ * (stale, es. provider rimosso), ritorna il default di registry e ripulisce
+ * la pref. Senza, il badge/editor mostrano un ID morto (fallback silenzioso).
+ */
+export function getValidatedProviderDefault(
+  registry: { listProviders(): { id: string }[]; getDefaultId(): string },
+): string {
+  const pref = getUiPrefs().aiProviderDefault;
+  if (pref && registry.listProviders().some((p) => p.id === pref)) return pref;
+  if (pref) setAiProviderDefault(registry.getDefaultId());
+  return registry.getDefaultId();
+}
+
 export function setAiProviderDefault(providerId: string): void {
   const prefs = getUiPrefs();
   prefs.aiProviderDefault = providerId;

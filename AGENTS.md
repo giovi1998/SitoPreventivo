@@ -302,7 +302,26 @@ logo/card/flyer, fix Collection non aggiornata dopo "Genera bozze AI")
 Website Builder ✅ completed 2026-08-05 (preview SVG reale foreignObject,
 export ZIP condiviso editor+Collection, fix save quota — compressione
 immagini website + dedupe inline/array, test roundtrip) —
-vedi `docs/agent-gotchas.md` §26.12.
+vedi `docs/agent-gotchas.md` §26.12. Website backlog 2026-08-05 ✅ completed
+(test unitari orchestrator+hook, verify fixes applicati, SEO meta dal brief,
+accessibilità nel prompt verify, step progress UI, vision cache, provider
+default stale) — vedi `docs/agent-gotchas.md` §26.13. Website multi-pagina
+reale ✅ completed 2026-08-05 (`pagesHtml` per pagina, step AI `page:<nome>`,
+CSS/JS/Verify su tutte le pagine, preview+code switcher, export contenuto
+dedicato, verify rules ::before/SVG) — vedi `docs/agent-gotchas.md` §26.14.
+Verify determinismo ✅ completed 2026-08-05 (root cause "troncati" era il
+prompt slice; tool deterministico `analyze_site` precompilato per
+DeepSeek/Ollama, loop verify 2 pass, SEO meta sanitizzato+ordinato) —
+vedi `docs/agent-gotchas.md` §26.15. Verify fix-guard ✅ completed 2026-08-05
+(tool deterministico = fonte di verità: fix AI rifiutati su codice integro
+— prima il modello riscriveva il sito buono perdendo mappa/contatti;
+recheck deterministico pass 2; canonical social rimossa; sanitize meta
+esistenti) — vedi `docs/agent-gotchas.md` §26.16. Verify tools + maxTokens
+✅ completed 2026-08-05 (tools dichiarati in richiesta — prima 400 silenzioso
+e verify morto; maxTokens 16384 — JSON troncato a 8192 rifiutato da
+format:json; tool-call del modello gestiti) — vedi `docs/agent-gotchas.md`
+§26.17.
+Residuo: follow-up qualità pagine secondarie — vedi `docs/to-be-done.md`.
 
 ## TODO (prossimi task)
 

@@ -245,7 +245,7 @@ export function createDocumentsMethods(svc) {
       if (IS_LOCAL) {
         const all = lsGet('precisionQuote_documents:v1') || [];
         const before = all.length;
-        const kept = all.filter(d => d.data != null || d.front != null || d.builder != null || d.content != null);
+        const kept = all.filter(d => d.data != null || d.front != null || d.builder != null || d.content != null || d.html != null || d.css != null);
         lsSet('precisionQuote_documents:v1', kept);
         return { deleted: before - kept.length };
       }

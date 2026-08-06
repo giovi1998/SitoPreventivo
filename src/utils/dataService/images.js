@@ -59,6 +59,33 @@ export async function compressPayloadImages(payload) {
       out = { ...out, html: next };
     }
   }
+  // Website multi-pagina: le immagini possono vivere anche nell'HTML delle
+  // pagine secondarie (pagesHtml) → stessa compressione pre-save.
+  if (out.pagesHtml && typeof out.pagesHtml === 'object') {
+    const compressDataUrl = await loadCompressDataUrl();
+    const srcRe = /(data:image\/[^"')]+)/gi;
+    let pagesChanged = false;
+    const nextPages = { ...out.pagesHtml };
+    for (const [name, pageHtml] of Object.entries(out.pagesHtml)) {
+      if (typeof pageHtml !== 'string' || !pageHtml.includes('data:image/')) continue;
+      const bigSrcs = [];
+      let m;
+      while ((m = srcRe.exec(pageHtml)) !== null) {
+        if (m[1].length > B64_COMPRESS_MIN_CHARS) bigSrcs.push(m[1]);
+      }
+      if (bigSrcs.length === 0) continue;
+      let next = pageHtml;
+      for (const src of new Set(bigSrcs)) {
+        try {
+          const compressed = await compressDataUrl(src, 768, 200_000);
+          if (compressed && compressed !== src) next = next.split(src).join(compressed);
+        } catch { /* immagine non comprimibile: resta l'originale */ }
+      }
+      nextPages[name] = next;
+      pagesChanged = true;
+    }
+    if (pagesChanged) out = { ...out, pagesHtml: nextPages };
+  }
   if (typeof out.logoUrl === 'string' && out.logoUrl.startsWith('data:') && out.logoUrl.length > B64_COMPRESS_MIN_CHARS) {
     try {
       const compressDataUrl = await loadCompressDataUrl();

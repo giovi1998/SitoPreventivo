@@ -145,4 +145,50 @@ describe('vite dev API proxy (vite.config.js)', () => {
     const body = JSON.parse(res.body);
     expect(body.error).toBe('Ollama (500): upstream down');
   });
+
+  it('fallback Ollama PROPAGA i tools dichiarati (verify analyze_site) — regressione 400', async () => {
+    // Il verify precompila tool_calls nel body: senza tools dichiarati
+    // Ollama risponde 400 "Value looks like object, but can't find
+    // closing '}' symbol" (bug 2026-08-05, §26.18).
+    process.env.OLLAMA_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('data: {"message":{"content":"ok"}}\ndata: {"done":true}\n', {
+        status: 200,
+        headers: { 'Content-Type': 'application/x-ndjson' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const api = await loadApiMiddleware(async () => null);
+    const res = mockRes();
+    const messages = [
+      { role: 'user', content: 'verifica' },
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [{ function: { name: 'analyze_site', arguments: '{"part":"html"}' } }],
+      },
+      { role: 'tool', content: '{"ok":true,"issues":[]}', name: 'analyze_site', tool_call_id: 'analyze-html' },
+    ];
+    await api(
+      mockReq('POST', '/api/ai/chat', {
+        provider: 'ollama-minimax-m3',
+        model: 'minimax-m3:cloud',
+        messages,
+        tools: [{ type: 'function', function: { name: 'analyze_site', description: 'd', parameters: {} } }],
+        stream: true,
+      }),
+      res,
+      () => {},
+    );
+    expect(res.statusCode).toBe(200);
+    const upstreamCall = fetchMock.mock.calls[0];
+    const upstreamBody = JSON.parse((upstreamCall[1] as RequestInit).body as string);
+    // Il body upstream DEVE contenere i tools e i tool_calls precompilati
+    expect(upstreamBody.tools).toBeDefined();
+    expect(upstreamBody.tools[0].function.name).toBe('analyze_site');
+    const withToolCalls = upstreamBody.messages.filter((m: any) => m.tool_calls);
+    expect(withToolCalls).toHaveLength(1);
+    expect(withToolCalls[0].content).toBe('');
+    expect(withToolCalls[0].tool_calls[0].function.name).toBe('analyze_site');
+  });
 });

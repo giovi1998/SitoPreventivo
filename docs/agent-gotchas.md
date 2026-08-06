@@ -1466,3 +1466,436 @@ Dettagli per `src/ai/prompts/websiteSystem.ts` e `src/ai/websiteOrchestrator.ts`
   reale (mock `file-saver` cattura blob, zip ispezionato con `JSZip.loadAsync`).
 - Test stale TB-028 fixati: tabs Collection (8 admin/7 non-admin con "Siti
   Web"), `useRouteView` ROUTE_PATHS 11 chiavi.
+
+### 26.13 Website backlog 2026-08-05 — verify fixes, SEO, step UI, cache, provider stale
+
+**Verify fixes applicati al codice** (`websiteOrchestrator.generateSite`):
+- I `fixes` del Verify agent (html/css/js) ora vengono APPLICATI al sito
+  finale (prima erano solo loggati). `html`/`css`/`js` sono `let`; il fix
+  viene saltato se identico al codice corrente (niente changes fantasma).
+  `verifyFixesApplied` espone le parti corrette (pannello issue).
+- SEO post-process: `ensureSeoMeta` (`src/utils/website/seoMeta.ts`) inietta
+  nel `<head>` `meta description` + OG tags (`og:title/description/type/
+  site_name`) dal brief se l'AI li omette — MAI duplicare tag esistenti
+  (regex name/property), escape XML, `og:type=website` sempre se assente.
+  Log `seo:meta-injected` in changes. Applicato SUBITO dopo lo step HTML
+  (prima di CSS/JS/Verify → il verify vede già i meta).
+- Prompt verify con check ACCESSIBILITÀ espliciti (WCAG AA): `alt` su ogni
+  img, label su form, aria-label su icon-button, `title` su iframe,
+  contrasto 4.5:1/3:1, interattivi raggiungibili da tastiera.
+- Test: `websiteOrchestrator.test.ts` (8: happy path con SEO, fixes applicati,
+  issues senza fixes, fallback html non-JSON, onStep 4 step, refine merge
+  parziale/errore/onStep), `seoMeta.test.ts` (7).
+
+**Step progress UI**: `useAIWebsite` espone `currentStep` (set su `onStep`,
+reset su `onStepResult`/errore/`reset`). WebsiteEditor mostra indicatore
+con spinner + label (html/css/js/verify/refine) sotto il bottone Genera.
+CSS: `.website-step-indicator` (+ keyframes spin).
+
+**Vision preview cache**: `captureVisionPreviews` (WebsiteEditor) riusa gli
+screenshot dell'ultima chiamata se `html+css+js` sono invariati (cacheKey
+join `|`); ref `lastVisionCacheRef` locale all'editor + `lastVisionCache`
+dal hook (sync solo on mount — cache ref dell'editor è la fonte reale,
+il valore dal hook è snapshot). html2canvas ~700ms × 2 viewport saltati
+se il codice non è cambiato (es. refine che tocca solo prompt).
+
+**Provider default stale**: `getValidatedProviderDefault(registry)` in
+`uiPrefs.ts`: se `aiProviderDefault` salvato in `pq_ui:v1` non esiste più
+nel registry, ritorna il default di registry e RIPULISCE la pref (il badge
+prima mostrava un ID morto, fallback silenzioso). Usato da AIProviderBadge,
+AppShell, CardEditorShell, WebsiteEditor. Test: uiPrefs (3 nuovi casi).
+
+**Save quota dedupe**: già risolto in §26.12 (handleSave filter
+`inlineImages` da `images[]` + `compressPayloadImages` esteso) — nessun
+codice nuovo qui.
+
+**Multi-pagina reale (2026-08-05, risolto)**: vedi §26.14.
+
+### 26.14 Multi-pagina reale + regole stile verify (2026-08-05)
+
+**Multi-pagina reale** (risolve il backlog "export ZIP generava pagine con
+lo stesso HTML"):
+- Schema website: nuovo campo `pagesHtml` (`Record<nomePagina, html>`),
+  index resta in `html`. Shape FLAT locale e envelope PROD passano dal
+  dataService senza modifiche (già `{...body}` / flat top-level).
+- Orchestrator: step `page:<nome>` DOPO l'HTML (prima di CSS/JS/Verify),
+  uno per pagina secondaria (da `pages` dell'AI, senza `index`). Prompt
+  `buildWebsitePagePrompt` (`promptRegistry` id `website-page`): la pagina
+  DEVE avere head+viewport+meta description, nav IDENTICA alla index
+  (estratta con `extractNavFromHtml`), footer con `.current-year`, divieti
+  logo/SVG/emoji/div decorativi, link relativi (`about.html`). `ensureSeoMeta`
+  applicato anche alle pagine secondarie. Pagina fallita → `error:page:<nome>`
+  in changes (le altre proseguono).
+- CSS/JS/Verify ora ricevono TUTTE le pagine concatenate
+  (`allPagesHtml`) → le classi di about/contact vengono stilizzate e
+  verificate davvero (prima il CSS vedeva solo la index).
+- Costo: `pagesCost` accumulato per pagina e sommato ad `aiCall.costUsd`.
+- Editor (`WebsiteEditor`): `pagesHtml` salvato, injection logo su ogni
+  pagina (gallery immagini solo su index), preview con page switcher
+  (`previewPage`, `srcDoc` = pagina corrente → i link `about.html` si
+  vedono in anteprima), code editor con switcher per pagina, save dedupe
+  immagini su TUTTE le pagine, vision cacheKey include le pagine.
+- Export ZIP (`websiteExport.ts`): `about.html` usa `pagesHtml['about']`
+  (fallback index se assente). Test aggiornati (mock jszip + roundtrip
+  JSZip reale: contenuto dedicato, no fallback al `#0000` di prima).
+- Refine: `pagesHtml` merge parziale (`{...site.pagesHtml, ...refine.pagesHtml}`),
+  blocco `### HTML <nome>` nel prompt per ogni pagina, change
+  `refine:pagesHtml:changed`.
+
+**Regole stile nel prompt verify (§26.13 + questa)**: check espliciti
+12-14: NESSUN `::before/::after` con content contenente testo/icone/emoji
+(`content: ""` obbligatorio, solo gradienti), NESSUN tag `<svg>`/SVG salvo
+richiesta esplicita del brief, nessuna emoji nel testo. Prompt HTML/CSS
+allineati (divieto SVG esplicito). NIENTE strip SVG nel sanitize: il brief
+può richiederli legittimamente (notes) — prompt + verify bastano (decisione).
+
+**Bug latente fixato**: `cleanupGhostDocuments` (documents.js:248) filtro
+esteso a `html != null || css != null` — prima un website FLAT senza
+`data/front/builder/content` sarebbe stato cancellato come fantasma
+(nota §26.12, oggi nessun chiamante attivo).
+
+**Fix lampeggio step indicator**: `onStepResult` NON resetta più
+`currentStep` (lampeggio a ogni step: reset → set → reset); ora reset
+esplicito a fine generate/refine (successo o errore).
+
+### 26.15 Verify determinismo — analyze_site + loop 2 pass (2026-08-05)
+
+**Causa radice issue "HTML/CSS/JS troncati" (bug segnalato 2026-08-05)**: NON
+era il sito rotto — era il PROMPT che troncava il codice!
+`buildWebsiteVerifyPrompt` faceva `html.slice(0, 2000)`, `css.slice(0, 2000)`,
+`js.slice(0, 1000)`. Con HTML 2306ch/CSS 2204ch/JS 1788ch il verify agent
+vedeva codice tagliato a metà paragrafo/regola/chiamata → segnalava
+"troncato" (false positive) e "fixava" roba non rotta.
+
+**Fix**:
+1. **Niente slice nel prompt verify**: il codice passato è COMPLETO e il
+   prompt lo dice esplicitamente ("mai troncato: se noti che termina a metà,
+   è un problema REALE del sito, non del prompt").
+2. **Tool deterministico `analyze_site`** (`src/utils/website/siteAnalyser.ts`,
+   definizione in `TOOL_DEFINITIONS`): controllo puro lato client — tag HTML
+   bilanciati (stack, void/self-closing), parentesi CSS (braces), JS
+   (paren/bracket/brace + stringhe non chiuse → troncamento REALE),
+   `::before/::after` con content non vuoto (regola stile), img senza alt,
+   iframe senza title, emoji nel testo visibile. I risultati (html/css/js)
+   vengono PRECOMPILATI nel messaggio come assistant toolCalls + tool
+   results (DeepSeek e Ollama li supportano; con provider senza tools si
+   salta e il loop resta valido). Con tool messages niente `responseFormat`
+   json_object (stesso pattern cardOrchestrator — Ollama può rompersi).
+3. **Loop verify max 2 pass**: pass 1 = analyze_site + issue + fixes
+   applicati; pass 2 (solo se issue) = recheck sul codice fixato. Recheck
+   pulito → `verify:ok` e `verifyIssues = undefined` (pannello solo per
+   problemi RESIDUI dopo i fix). Costo: `verifyCost` somma entrambi i pass.
+   Changes: `verify:recheck:Nissues`.
+4. **SEO meta fix** (`ensureSeoMeta`): (a) contenuto sanitizzato — niente
+   emoji, niente a capo letterali (il brief "🦐 Tre coni\n@gambero_rosso…"
+   produceva un og:description malformato e incoerente col title);
+   (b) OG inseriti DOPO charset/viewport (ordine head valido, prima
+   comparivano prima); (c) `og:description` coerente — usa la `meta
+   description` esistente se presente (mai contraddizioni brief/pagina).
+   `META_DESC_RE` + `sanitizeMetaText`.
+5. **Prompt verify check 15-16**: contenuti duplicati e ordine meta nel
+   head (charset → viewport → altri).
+
+### 26.16 Verify — fix AI rifiutati se il codice è integro (2026-08-05)
+
+**Bug reale osservato (log 16:50/16:53, seconda generazione)**: il modello
+continuava a segnalare "HTML/CSS/JS troncato" (false positive) anche con il
+codice completo nel prompt, e i suoi fixes RISCOSCRIVEVANO il sito buono —
+es. HTML 2114ch "fixato" perdendo mappa/contatti/form; canonical verso
+Instagram inventata; og:description con emoji del brief.
+
+**Fix (tool deterministico = fonte di verità, NON l'AI)**:
+1. **Fix applicati solo se il tool conferma il problema**: `analyze_site`
+   ricalcolato lato client (pass 0) → `toolOk {html,css,js}`. Il fix AI su
+   una parte che il tool dichiara INTEGRA viene RIFIUTATO (il codice buono
+   resta, niente sezioni perse). Solo le parti realmente rotte vengono
+   corrette. Changes: nessun `verify:html:fixed` se rifiutato.
+2. **Recheck deterministico nel pass 2**: dopo i fixes, `analyze_site`
+   ricalcolato sui codici fixati. Se le 3 parti sono integre →
+   `verify:recheck:ok`, issue del modello scartate, `verifyIssues =
+   undefined` (niente pannello allarmi). Solo se il tool trova ancora
+   problemi reali restano `verifyIssues` + `verify:recheck:Nissues`.
+3. **`stripSocialCanonical`** (seoMeta): rimuove `<link rel="canonical">`
+   verso domini social (instagram/facebook/tiktok/linkedin/x/twitter/
+   youtube) — l'AI la inventa dal social del brief e i motori
+   tratterebbero il profilo come sito ufficiale (SEO critico).
+4. **`ensureSeoMeta` sanitizza anche i meta GIÀ presenti**: emoji/a capo
+   nei content dei tag generati dall'AI (es. brief "🦐 Tre coni\n...")
+   puliti con la stessa `sanitizeMetaText` (era solo sui tag iniettati).
+5. **Niente troncamento**: il prompt verify riceve il codice COMPLETO
+   (§26.15). Gli step intermedi (log Prompt/Risposta per html/css/js/
+   verify) restano tutti visibili nel pannello AI — il log citato
+   (16:50) era la versione pre-fix: il "Prompt Verify" in quel log mostra
+   ancora il vecchio formato senza "COMPLETO e INTEGRALE".
+
+**Test**: `websiteOrchestrator.test.ts` (18 — fix rifiutato su parte valida,
+fix applicato solo su parte rotta, recheck deterministico ok/fallito,
+tool precompilati), `seoMeta.test.ts` (13 — canonical social rimossa/
+mantenuta, sanitize meta esistenti), `siteAnalyser.test.ts` (12). Gate:
+typecheck + 531 test impattati verdi.
+
+### 26.17 Verify — tools dichiarati + maxTokens (2026-08-05)
+
+**Bug reale (log 17:17, dopo §26.16)**: verify MORTO dopo "pass 1 (con
+analyze_site)" — nessuna "Risposta Verify", nessun "Sito generato", costo
+mai aggiornato. Causa: i tool_calls precompilati nel messaggio NON erano
+dichiarati in `tools` della richiesta → Ollama/DeepSeek li rifiutano
+(400 silenzioso, il verify fallisce senza log). Secondo bug nello stesso
+log: `Ollama (400): {"error": "Value looks like object, but can't find
+closing '}' symbol"}` sullo step HTML — generazione lunga (97s) troncata
+dal `maxTokens: 8192` → JSON incompleto → `format: json` lo rifiuta.
+(L'HTML riuscito usava 8207 tok: oltre il budget.)
+
+**Fix**:
+1. `tools: ANALYZE_SITE_TOOLS` dichiarato nella richiesta verify quando ci
+   sono tool results (senza → 400). `getToolDefinition('analyze_site')`
+   dalla registry esistente, niente definizione duplicata.
+2. **maxTokens 8192 → 16384** su TUTTI gli step website (html/css/js/
+   page/verify/refine): il sito completo (head SEO + hero + sezioni +
+   footer) supera 10k token; JSON troncato = 400 Ollama o fallback inutile.
+3. **Gestione tool-call del modello**: se il verify risponde con content
+   null + toolCalls (invoca analyze_site da solo), esegui il tool lato
+   client, appendi i risultati e fai una chiamata finale con
+   `responseFormat: json_object` senza tools. Prima `parseJsonResponse`
+   falliva su content null → verify morto.
+4. **Costo**: `verifyCost` ora include entrambe le chiamate (verify + 
+   eventuale follow-up tool). Con Ollama flat il badge mostra $0/`flat`
+   (corretto: `showCost = !isFlat` in AIProviderBadge) — per i provider
+   pay-per-token si aggiorna sempre.
+
+**Test**: `websiteOrchestrator.test.ts` (19 — tools dichiarati nella
+richiesta, tool-call del modello gestito con follow-up). Gate: typecheck +
+suite impattata verde.
+
+### 26.18 Verify — content '' per Ollama + retry senza tools + best-effort (2026-08-05)
+
+**Bug reale (log 18:04, dopo §26.17)**: la generazione MORIVA sul verify —
+`Ollama (400): {"error": "Value looks like object, but can't find closing
+'}' symbol"}` su `websiteOrchestrator.ts:275` (la `provider.chat` del verify
+pass 1). Causa: nei messaggi assistant con `tool_calls` precompilati usavo
+`content: null` — il body JSON risultante è malformato per il parser Ollama
+(400 su TUTTI i tool_calls, non solo quelli dichiarati). Il 400 propagava
+fino all'utente: **sito perso** (html/css/js validi buttati).
+
+**Fix**:
+1. **`content: ''` (stringa vuota) nei messaggi assistant con tool_calls**,
+   mai `null` — stesso pattern `cardOrchestrator`/`flyerOrchestrator` che
+   funzionano in prod (i log card/flyer non hanno mai avuto questo 400).
+   Vale sia per i tool_calls precompilati sia per il follow-up dei
+   tool-call del modello.
+2. **Retry senza tools**: se la chiamata con tools fallisce (400 o altro),
+   retry UNA volta con `baseVerifyMessages` senza tools e senza
+   responseFormat tool (stessa domanda, `json_object`). Changes:
+   `verify:tools-retry`. Ollama resta usable anche se i tool_calls
+   precompilati non passano.
+3. **Verify best-effort**: se anche il retry fallisce, il verify viene
+   SALTATO con `verify:error:<msg>` in changes e il sito generato viene
+   comunque restituito (html/css/js/pages integri). Prima l'eccezione
+   propagava e perdeva tutto. Il pannello issue resta pulito
+   (`verifyIssues` undefined) — meglio nessuna verifica che perdere il sito.
+4. **`ERR_INVALID_URL` da html2canvas**: data URL immagine gigante (>300KB,
+   foto EXIF da camera) troncato nel clone iframe (about:srcdoc) →
+   `GET data:image/... net::ERR_INVALID_URL` rumoroso. Fix: `onclone`
+   sostituisce nel clone le img data-URL >300KB con placeholder
+   trasparente (soglia abbassata da 800KB: il troncamento avviene anche
+   sotto 1MB). Il DOM reale non viene toccato. Rumore console eliminato,
+   cattura vision invariata (l'immagine gigante non serve alla preview).
+5. **`ERR_INVALID_URL` definitivo (2026-08-05)**: l'errore persisteva anche
+   con img PICCOLE — la causa è il data URL con **base64 wrapped**
+   (whitespace letterali nel payload, `\n`/spazi a ogni 76 char): Chrome
+   lo rifiuta in `about:srcdoc` e nel clone html2canvas. Fix:
+   `src/utils/website/imageNormalize.ts` (`normalizeInlineImages`):
+   (a) strip di TUTTI i whitespace dal payload base64 dei `src` img e dei
+   `background-image` inline; (b) img data-URL >50KB sostituite con
+   1px GIF (non servono al feedback vision e gonfiano il body proxy).
+   Applicata alla `srcDoc` dell'iframe vision (`WebsiteEditor`). Nel clone
+   html2canvas, `onclone` fa la stessa normalizzazione + rimozione
+   background-image inline con data: (il clone parte dal DOM reale, già
+   normalizzato, ma il `src` modificato via attribute setter non passa
+   dagli attrs HTML → doppia difesa). Test `imageNormalize.test.ts` (5).
+
+**Test**: `websiteOrchestrator.test.ts` (21 — retry senza tools su 400,
+verify best-effort con sito preservato, content '' nei tool_calls).
+Gate: typecheck + 193 test impattati verdi.
+
+### 26.19 Dev proxy tools + test 3 provider + flusso completo (2026-08-05)
+
+**Causa radice 400 finale (log 18:04, `POST /api/ai/chat 400`)**: il DEV
+proxy (`vite.config.js` `proxyOllamaChat`) NON propagava `tools` nel body
+upstream — `ollamaReq = { model, messages, stream: true }` e basta. I
+tool_calls precompilati (verify analyze_site) arrivavano a Ollama senza
+`tools` dichiarato → 400 "Value looks like object, but can't find closing
+'}' symbol". In PROD `api/index.ts:1373` i tools erano già propagati
+(§26.17) — il bug era solo dev. Fix: `if (Array.isArray(body.tools) &&
+body.tools.length > 0) ollamaReq.tools = body.tools;`.
+
+**⚠️ Regola §12**: modifiche a `vite.config.js` → **riavviare `npm run dev`**
+(il proxy è letto a startup). Senza riavvio i fix verify restano invisibili
+in locale.
+
+**Test per i 3 provider (richiesta utente)**:
+- `src/ai/providers/__tests__/verifyBody.test.ts` (3): serializzazione
+  body verify con `content: ''` + tool_calls precompilati + tools per
+  **ollama minimax-m3**, **ollama deepseek-v4-flash-0731**, **deepseek
+  v4-flash**. Verifica: content è STRINGA (mai null — il 400 Ollama),
+  tool_calls presenti (3), tool results presenti (3), tools dichiarati.
+- `src/ai/__tests__/websiteOrchestrator.providers.test.ts` (4): flusso
+  COMPLETO `generateSite` con provider reali (fetch mockato):
+  deepseek-v4-flash (chat), ollama-minimax-m3, ollama-deepseek-v4-flash-
+  0731 (verify con tools), e deepseek-v4-flash **con onStream** (step
+  HTML via SSE `/api/ai/chat/stream` o `api.deepseek.com`, resto via
+  chat). Assert: sito generato (html/css/js), `verify:ok`, tools
+  dichiarati nel verify pass 1.
+- `src/__tests__/viteDevProxy.test.ts` (5, +1): regressione dev proxy
+  che PROPAGA tools + tool_calls precompilati al body upstream (il 400
+  di prima non deve tornare).
+- Gate: typecheck + 533 test impattati verdi. La validazione LIVE
+  (generazione reale sul sito dell'utente) resta da fare a mano dopo
+  riavvio dev server — i mock coprono la serializzazione, non la rete.
+
+### 26.20 Timeout Ollama + step best-effort (2026-08-05)
+
+**Bug reale (log 18:40, dopo §26.19)**: `Ollama (502): Ollama error: This
+operation was aborted` (359808ms ≈ 6 min) sullo step CSS — il dev proxy
+`proxyOllamaChat` ha timeout `300_000ms` (5 min) e Ollama con thinking
+'max' + output 16k tok per CSS lunghi (100-130s reali nei log precedenti,
+ma con coda/concorrenza può sforare) → abort → 502 → **eccezione propagata
+→ sito perso** (HTML generato buttato).
+
+**Fix**:
+1. **Timeout dev proxy 300s → 600s** (`vite.config.js`): 10 min per
+   generazioni Ollama lunghe. In PROD `api/index.ts:1340` il timeout
+   Ollama è **60s** — per CSS da 100-130s fallirebbe SEMPRE: va alzato
+   alla prossima deploy (TODO prod, gotcha §1 regola vercel).
+2. **Step CSS/JS/pagine BEST-EFFORT**: un loro timeout/errore NON perde
+   più il sito — try/catch → changes `error:css:<msg>` /
+   `error:js:<msg>` / `error:page:<nome>:<msg>`, il campo resta vuoto
+   (sito usabile senza CSS/JS, sezione mancante). Solo HTML e Verify
+   restano critici: HTML fallito → fallbackResult, Verify fallito →
+   best-effort (§26.18). Costo: `trackUsage` saltato se response null.
+3. **`totalCost` null-safe**: `cssResponse`/`jsResponse` possono essere
+   null → guardie.
+
+**Test**: `websiteOrchestrator.test.ts` (24 — CSS/JS/pagina falliti →
+sito generato con changes error, verify error doppio best-effort). Gate:
+typecheck + suite impattata verde. ⚠️ Riavvio dev server obbligatorio
+(modifica vite.config.js).
+
+### 26.21 Matrice provider + ERR_INVALID_URL definitivo (2026-08-05)
+
+**Timeout per-step (risposta alla domanda)**: il timeout è GIÀ per-request
+— ogni step (html/css/js/page/verify/refine) è una fetch separata con il
+suo AbortController, quindi "si resetta" naturalmente tra step. Il valore
+era solo troppo basso: 300s (dev) / 60s (prod) con Ollama thinking 'max' +
+16k tok → abort → 502 → sito perso. Ora 600s in entrambi (vite.config.js
++ api/index.ts). In prod la durata massima Vercel Hobby per una funzione è
+60s **solo per funzioni sincrone** — con streaming/flush il limite si
+allunga; se dovesse restare il 502 in prod, il piano Hobby è il tetto
+(vedi to-be-done: valutare pro/streaming serverless).
+
+**Matrice test 3 provider (richiesta utente)** — `websiteOrchestrator.providers.test.ts`
+(6 test): flusso END-TO-END `generateSite` con provider REALI (fetch
+mockato) per **ollama-deepseek-v4-flash-0731**, **ollama-minimax-m3** e
+**deepseek-v4-flash**:
+1. Sito completo: HTML via SSE stream (body.stream=true → mock SSE;
+   discrimine `body.stream`, NON l'URL — DeepSeek chat va sullo stesso
+   `api.deepseek.com`), CSS/JS/Verify via chat JSON. Assert: html/css/js
+   corretti, `verify:ok`, tools dichiarati nel verify (3 tool_calls con
+   content STRINGA), streamed > 0.
+2. Verify con issue: css rotto (parentesi non chiuse) → fix CSS applicato
+   solo su css (`verifyFixesApplied = ['css']`), html integro preservato.
+- `verifyBody.test.ts` (3): serializzazione body verify per i 3 provider.
+- `viteDevProxy.test.ts` (5): dev proxy propaga tools upstream.
+- `websiteOrchestrator.test.ts` (24): fallimenti step best-effort ecc.
+
+**ERR_INVALID_URL — colpevole definitivo**: il log mostrava
+`about:srcdoc:1227` = l'iframe **PREVIEW principale** (tab Preview), non
+quello vision (già normalizzato). `fullDocument` (preview + "Nuova tab")
+usava `buildWebsiteFullDocument` NON normalizzato → data URL con base64
+wrapped (whitespace) rifiutato da Chrome in srcdoc. Fix: `fullDocument` e
+`handleOpenInNewTab` passano da `normalizeInlineImages(..., 200_000)` —
+strip whitespace SEMPRE (valido ovunque), sostituzione >200KB solo
+nell'iframe vision (50KB) per il body proxy. Le foto gallery (~60KB)
+restano visibili in preview. Test `imageNormalize.test.ts` (5).
+
+### 26.22 Velocità + verify senza tools + ERR_INVALID_URL hardening (2026-08-05)
+
+**Lentezza (16 min in locale — risposta a "8k per CSS/JS/verify")**:
+- **NON ridurre maxTokens a 8192**: il JSON `{"css":"..."}` troncato = 400
+  Ollama `format:json` o parse-fail → CSS/JS persi (il CSS reale misura
+  27K token di OUTPUT). maxTokens limita l'output, non il contesto.
+- **Causa reale = `reasoningEffort: 'max'` (think:max) su TUTTI gli step**:
+  CSS 180s/27K tok, JS 91s/15K tok, Verify 194s/20K tok (2 pass su prompt
+  da 50-60K token). Fix: **reasoningEffort per-step** —
+  `max` solo per HTML/pages/refine (struttura del sito), `high` per
+  CSS/JS/Verify (output lungo su prompt piccolo: 'high' basta, 'max' costa
+  il doppio). Il selettore globale (badge) resta per l'utente.
+- Timeout: già per-request (ogni step = fetch col suo AbortController).
+
+**Verify 400 "can't find closing '}'" — causa DEFINITIVA** (doc ufficiali
+webfetch: docs.ollama.com/capabilities/tool-calling e
+api-docs.deepseek.com/guides/tool_calls):
+- Ollama tool_calls in ingresso: `arguments` è un **OBJECT** (non stringa),
+  messaggio tool usa **`tool_name`** (non `name`), niente `id`/`tool_call_id`.
+- DeepSeek (OpenAI): `arguments` **stringa**, `id` obbligatorio,
+  `tool_call_id` nel tool result.
+- Il codice serializzava in formato DeepSeek per TUTTI → Ollama 400.
+  **Fix: eliminati i tool_calls precompilati dal verify** — i risultati
+  `analyze_site` sono passati come messaggio USER strutturato
+  ("RISULTATI ANALISI DETERMINISTICA: analyze_site(\"html\"): {...}").
+  Zero formato da validare, zero 400, niente retry (`verify:tools-retry`
+  rimosso), niente follow-up tool-call. Il tool `analyze_site` resta in
+  `TOOL_DEFINITIONS` per card/flyer (li il formato DeepSeek è corretto).
+
+**ERR_INVALID_URL — hardening finale**:
+- `normalizeInlineImages` copre ora: src con quote doppie/singole, **src
+  senza quote** (l'AI lo genera), whitespace nel **prefisso**
+  (`data:image/jpeg; base64,`), payload con apici interni; >maxChars →
+  placeholder GIF 1px. Limite noto: base64 wrapped SENZA quote è
+  irrecuperabile (l'HTML parser chiude l'attributo al primo spazio) — non
+  accade coi data URL generati dal codice (sempre quotati).
+- **Logo upload compresso a ≤140K** (`compressDataUrl(dataUri, 512,
+  140_000)`): sotto la soglia preview 200K (mai sostituito dal
+  placeholder) e lontano dal limite ~2MB dei data URL Chrome.
+- **onclone html2canvas**: img >50K → placeholder GIF 1px (non più
+  `display:none` che lasciava buchi nel layout).
+
+**Test**: `websiteOrchestrator.test.ts` (23 — risultati analyze nel prompt
+user, niente tools/tool_calls, fix solo su parte rotta, best-effort),
+`websiteOrchestrator.providers.test.ts` (6 — matrice 3 provider: verify
+SENZA tools dichiarati e con RISULTATI ANALISI nel prompt = garanzia
+anti-400), `imageNormalize.test.ts` (9 — src no-quote, prefisso sporco,
+apici singoli, placeholder), `verifyBody.test.ts` (3 — serializzazione
+card/flyer invariata). Gate: typecheck + 541 test impattati verdi.
+
+### 26.23 Verify — fix automatici di qualità + guardia anti-distruzione (2026-08-05)
+
+**Bug segnalato dall'utente**: il verify segnalava 5 problemi reali
+(iframe senza title, emoji nel CTA, aria-label mancante, id hero senza
+classe, indirizzo duplicato) ma NON li risolveva in automatico — il
+fix-guard §26.16 rifiutava i fixes perché il codice ORIGINALE era integro.
+
+**Fix — guardia basata sul FIXATO, non sull'originale**:
+1. Un fix viene ACCETTATO se: (a) il RISULTATO è deterministicamente
+   integro (`analyzeSiteCode(fix).ok`) — i fixes di qualità/accessibilità
+   (title iframe, aria-label, rimozione emoji) passano anche su codice
+   valido; (b) il fixato non perde sezioni: lunghezza ≥60% dell'originale
+   (una riscrittura che taglia mappa/contatti/form viene bloccata —
+   regressione §26.16: `<h1>PERSA LA MAPPA</h1>` è HTML valido ma corto).
+2. **Pass 2 applica i fixes ANCHE lui** (il primo fix può essere
+   parziale) e il pannello finale mostra le **issue DETERMINISTICHE
+   residue del recheck** (`recheck.flatMap(issues)`), non le inventate
+   dal modello → il pannello mostra problemi reali e veri, mai più
+   false-positive "troncato".
+3. Soglia lunghezza 0.5 → 0.6 (il caso `// perso` = 8/16 = 50% passava).
+
+**Test**: `websiteOrchestrator.test.ts` (23): fix di qualità ACCETTATO su
+codice valido (con fixato integro+lungo), fix distruttivo RIFIUTATO (corto),
+fix rotto rifiutato, recheck con issue deterministiche residue, matrice 3
+provider. Gate: typecheck + suite verde.
+
+**Test**: `siteAnalyser.test.ts` (12 — tag/parentesi/pseudo/alt/iframe/emoji/
+stringhe JS), `seoMeta.test.ts` (9 — sanitize, ordine, coerenza og:desc),
+`websiteOrchestrator.test.ts` (15 — tool precompilati, loop recheck
+pulito/residuo, fixes, costo), `websiteSystem.test.ts` (12 — prompt verify
+rules). Gate: typecheck + 524 test impattati verdi.

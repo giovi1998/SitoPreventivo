@@ -55,6 +55,8 @@ export const websiteSchema = z.object({
   framework: z.literal('vanilla').default('vanilla'),
   style: websiteStyleSchema.default('modern'),
   pages: z.array(z.string()).default(['index']),
+  /** HTML dedicato delle pagine secondarie (key = nome pagina, index = `html`). */
+  pagesHtml: z.record(z.string(), z.string()).optional(),
   source: z.enum(['ai', 'manual']).default('ai'),
   aiStats: aiStatsSchema.optional(),
   autoGeneratePending: z.boolean().optional(),

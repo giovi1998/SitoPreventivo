@@ -36,13 +36,17 @@ export interface UseAIWebsiteReturn {
     },
   ) => Promise<WebsiteProcessResult>;
   refine: (
-    site: { html: string; css: string; js: string; pages: string[] },
+    site: { html: string; css: string; js: string; pages: string[]; pagesHtml: Record<string, string> },
     instruction: string,
     options?: { modelId?: string; onProgress?: (msg: string) => void; visionPreviews?: string[] },
   ) => Promise<WebsiteRefineResult>;
   reset: () => void;
   logs: ReturnType<typeof useAILogs>['logs'];
   isProcessing: boolean;
+  /** Step corrente della generazione (html/css/js/verify/refine), null se idle. */
+  currentStep: string | null;
+  /** Cache dell'ultimo screenshot vision per riuso se il codice non cambia. */
+  lastVisionCache: { key: string; previews: string[] } | null;
   availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
   lastCostUsd: number;
 }
@@ -50,6 +54,8 @@ export interface UseAIWebsiteReturn {
 export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
   const orchestratorRef = useRef<WebsiteOrchestrator | null>(null);
   const [lastCostUsd, setLastCostUsd] = useState(0);
+  const [currentStep, setCurrentStep] = useState<string | null>(null);
+  const lastVisionCacheRef = useRef<{ key: string; previews: string[] } | null>(null);
   const {
     logs,
     isProcessing,
@@ -125,6 +131,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
             }
           },
           onStep: (step, promptText) => {
+            setCurrentStep(step);
             const preview = promptText.length > 300 ? promptText.slice(0, 300) + '…' : promptText;
             if (step === 'html') info('Prompt HTML', preview, { requestId });
             else if (step === 'css') info('Prompt CSS', preview, { requestId });
@@ -148,6 +155,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
           else if (change.startsWith('css:')) info('CSS generato', `${result.site.css.length} caratteri`, { requestId });
           else if (change.startsWith('js:')) info('JS generato', `${result.site.js.length} caratteri`, { requestId });
           else if (change.startsWith('verify:')) info('Verifica completata', change.replace('verify:', ''), { requestId });
+          else if (change.startsWith('seo:')) info('SEO', change.replace('seo:', ''), { requestId });
           else if (change.startsWith('error:')) error('Errore generazione', change.replace('error:', ''), { requestId });
         }
 
@@ -161,10 +169,12 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
         });
 
         success('Sito generato', `${result.site.pages.length} pagine, ${result.site.html.length} caratteri HTML`, { requestId });
+        setCurrentStep(null);
         return result;
       } catch (err) {
         const hint = mapAiError(err);
         finalizeStream(streamId, false, { errorMsg: hint });
+        setCurrentStep(null);
         throw new Error(hint);
       }
     },
@@ -173,7 +183,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
 
   const refine = useCallback(
     async (
-      site: { html: string; css: string; js: string; pages: string[] },
+      site: { html: string; css: string; js: string; pages: string[]; pagesHtml: Record<string, string> },
       instruction: string,
       options?: { modelId?: string; onProgress?: (msg: string) => void; visionPreviews?: string[] },
     ) => {
@@ -200,6 +210,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
             }
           },
           onStep: (step, promptText) => {
+            setCurrentStep(step);
             if (step === 'refine') {
               const preview = promptText.length > 300 ? promptText.slice(0, 300) + '…' : promptText;
               info('Prompt Raffina', preview, { requestId });
@@ -228,10 +239,12 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
         }
 
         success('Sito raffinato', instruction.slice(0, 80), { requestId });
+        setCurrentStep(null);
         return result;
       } catch (err) {
         const hint = mapAiError(err);
         finalizeStream(streamId, false, { errorMsg: hint });
+        setCurrentStep(null);
         throw new Error(hint);
       }
     },
@@ -241,7 +254,19 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
   const reset = useCallback(() => {
     getOrchestrator().resetSession();
     clear();
+    setCurrentStep(null);
+    lastVisionCacheRef.current = null;
   }, [clear]);
 
-  return { generate, refine, reset, logs, isProcessing, availableModels, lastCostUsd };
+  return {
+    generate,
+    refine,
+    reset,
+    logs,
+    isProcessing,
+    currentStep,
+    lastVisionCache: lastVisionCacheRef.current,
+    availableModels,
+    lastCostUsd,
+  };
 }

@@ -83,11 +83,7 @@ export async function exportWebsiteZip(
   }
 
   for (const page of pages) {
-    const pageHtml = page === 'index'
-      ? website.html
-      : website.html.replace(/<section[^>]*id="[^"]*"[^>]*>[\s\S]*?<\/section>/g, '')
-          .replace(/<header>[\s\S]*?<\/header>/, '')
-          .replace(/<footer>[\s\S]*?<\/footer>/, '');
+    const pageHtml = page === 'index' ? website.html : (website.pagesHtml || {})[page] || website.html;
     const doc = buildWebsiteFullDocument(replaceSrcs(pageHtml), website.css, website.js);
     folder.file(`${page}.html`, doc);
   }

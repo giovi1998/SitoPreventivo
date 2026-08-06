@@ -145,6 +145,7 @@ export function buildWebsiteHtmlPrompt(
   parts.push('🚫 LOGO: NON generare MAI tag <img>, <svg> logo, <span class="brand-mark">, né testo logo placeholder.');
   parts.push('Il logo reale viene iniettato automaticamente DOPO la generazione nel .brand o .nav-inner.');
   parts.push('Nella <div class="brand"> metti SOLO il testo del nome attività.');
+  parts.push('🚫 SVG: NON creare MAI tag <svg> né elementi SVG da nessuna parte, a meno che il brief non lo richieda esplicitamente. Niente icone SVG, niente decorazioni SVG. Usa solo testo e HTML.');
   parts.push('🚫 EMOJI NEL TESTO: NON usare emoji nel brand, nei titoli o nel testo visibile (es. 🍦 gelato). Usa solo testo pulito.');
   parts.push('🚫 DIV DECORATIVI: NON creare div vuoti o decorativi senza contenuto (es. <div class="shape">, <div class="hero-shapes">, <span class="dot">). Se serve un elemento visivo, usa SVG inline o CSS sul contenitore.');
   parts.push('🚫 PSEUDO-ELEMENTI CON EMOJI: NON usare ::before/::after con content: "🍦" o simili. Gli pseudo-elementi servono solo per gradienti/sfumature geometriche.');
@@ -162,6 +163,10 @@ export function buildWebsiteHtmlPrompt(
   parts.push('- Ogni sezione deve avere <div class="section-inner"> per contenuto centrato');
   parts.push('- Aggiungi classe .current-year nel footer per l\'anno automatico via JS');
   parts.push('- I link social devono avere target="_blank" rel="noopener"');
+  parts.push('\n⚠️ MULTI-PAGINA (se il brief richiede più di una pagina):');
+  parts.push('- Restituisci UN SOLO HTML, quello della pagina index. Le altre pagine (about, contact...) vengono generate in uno step successivo.');
+  parts.push('- Nella nav usa link relativi: href="about.html", href="contact.html". NON aggiungere hash o pagine che non esistono.');
+  parts.push('- Il <main> della index NON deve includere contenuto delle altre pagine (niente sezioni "chi siamo" doppie).');
   if (brief.socials && brief.socials.length > 0) {
     const socialLines = brief.socials.filter(s => s.platform || s.url).map(s => `  - ${s.platform}: ${s.url}`);
     if (socialLines.length > 0) {
@@ -189,6 +194,47 @@ export function buildWebsiteHtmlPrompt(
   }
   parts.push('\nRispondi SOLO con JSON: { "html": "...", "pages": ["index"] }');
   return parts.join('\n');
+}
+
+export function buildWebsitePagePrompt(
+  page: string,
+  brief: {
+    businessName: string;
+    description: string;
+    tone: string;
+    target: string;
+    cta: string;
+    contacts: string;
+    socials: { platform: string; url: string }[];
+  },
+  navHtml: string,
+): string {
+  return `# Generazione pagina "${page}" del sito web
+
+Nome attività: ${brief.businessName}
+Descrizione: ${brief.description}
+${brief.tone ? `Tono: ${brief.tone}` : ''}
+${brief.target ? `Target: ${brief.target}` : ''}
+${brief.cta ? `CTA principale: ${brief.cta}` : ''}
+${brief.contacts ? `Contatti: ${brief.contacts}` : ''}
+
+NAV DA USARE IDENTICA ALLE ALTRE PAGINE (stessi link, stessa struttura):
+${navHtml.slice(0, 1500)}
+
+Regole:
+- Genera SOLO la struttura HTML della pagina "${page}". Nessun CSS, nessun JavaScript.
+- La pagina DEVE avere: <head> con <meta name="viewport"> e <meta name="description">, la nav IDENTICA a quella sopra (stesso brand, stessi link, stesso menu-toggle), <main> con contenuti reali per "${page}", footer con classe .current-year.
+- Contenuti placeholder realistici in italiano coerenti col settore, MAI "Lorem ipsum".
+- Se "${page}" è "about" o simile: chi siamo, missione, valori, team, storia. Se è "contact" o "contatti": sezione contatti con indirizzo/telefono/email del brief e form semplice (senza server). Se è "services"/"servizi": elenco servizi/offerte. Adatta i contenuti al nome della pagina.
+- 🚫 LOGO: NON generare MAI tag <img> logo, <svg> logo, brand-mark né placeholder. La <div class="brand"> contiene SOLO il testo del nome attività.
+- 🚫 SVG: NON creare MAI tag <svg> né elementi SVG da nessuna parte, a meno che il brief non lo richieda esplicitamente.
+- 🚫 EMOJI: NON usare emoji nel testo visibile.
+- 🚫 DIV DECORATIVI: NON creare div vuoti o decorativi senza contenuto (shape, blob, dots).
+- Link nella nav relativi: index.html, about.html, contact.html (quelli già nella nav).
+- NON includere <style> né <script> nella pagina: CSS e JS sono condivisi e vengono aggiunti automaticamente.
+- La pagina NON deve contenere sezioni duplicate di index (gallery, hero) se non richieste dal nome.
+
+Rispondi SOLO con JSON: { "html": "...", "title": "..." }`;
 }
 
 /** Rimuove emoji/icone dall'indirizzo per Google Maps (es. "📍 Via Dante 5/A" → "Via Dante 5/A"). */
@@ -255,9 +301,11 @@ QUALITÀ PREMIUM:
 🚫 VIETATO:
 - NON usare ::before / ::after con content: "🍦" o altre emoji/icone decorative.
   Pseudo-elementi SOLO per gradienti/sfumature geometriche (mai emoji, mai testo).
+- NON usare MAI ::before / ::after con content contenente testo, icone o emoji: gli pseudo-elementi servono ESCLUSIVAMENTE per gradienti/sfumature geometriche (content: "" obbligatorio).
 - NON creare div vuoti o decorativi senza contenuto reale (es. <div class="shape">, <div class="hero-shapes">).
-  Se servono elementi visivi, usa SVG inline o gradienti sul contenitore.
+  Se servono elementi visivi, usa gradienti sul contenitore (MAI SVG, MAI ::before/::after con contenuto).
 - NON usare emoji nel testo visibile (titoli, bottoni, brand). Solo testo pulito.
+- NON stilizzare MAI tag <svg> (il sito non deve contenere SVG, salvo richiesta esplicita del brief).
 
 CARATTERE VISIVO PER STILE — applica le firme distintive di "${style}":
 ${styleVisualSignature(style)}
@@ -405,29 +453,52 @@ export function buildWebsiteVerifyPrompt(
 ): string {
   return `# Verifica coerenza sito web
 
-HTML:
+Il codice sotto è COMPLETO e INTEGRALE (mai troncato: se noti che termina a metà paragrafo/regola, segnalalo come problema REALE del sito, non del prompt).
+
+Nel prompt troverai anche i RISULTATI dell'analisi deterministica analyze_site (una per parte: html, css, js): controlla tag bilanciati, parentesi CSS/JS (troncamenti e sintassi rotta), ::before/::after con content non vuoto, img senza alt, iframe senza title, emoji nel testo. Usali come fonte di verità per le issue: se l'analisi segnala un problema, riportalo; se non segnala nulla su un punto, NON inventare problemi di troncamento.
+
+HTML (completo):
 \`\`\`html
-${html.slice(0, 2000)}
+${html}
 \`\`\`
 
-CSS:
+CSS (completo):
 \`\`\`css
-${css.slice(0, 2000)}
+${css}
 \`\`\`
 
-JS:
+JS (completo):
 \`\`\`js
-${js.slice(0, 1000)}
+${js}
 \`\`\`
 
 Controlla che HTML, CSS e JS siano coerenti:
 1. Ogni classe CSS usata nell'HTML esiste nel CSS?
 2. Ogni id usato nel JS esiste nell'HTML?
-3. Ci sono errori evidenti (tag non chiusi, sintassi CSS errata)?
+3. Ci sono errori evidenti (tag non chiusi, sintassi CSS/JS errata, codice troncato)?
 4. Il CSS copre tutte le sezioni dell'HTML?
 5. Il JS ha funzioni che referenziano elementi che non esistono nell'HTML?
 
-Se trovi problemi, fornisci le correzioni.
-Se non ci sono problemi, rispondi con issues vuoto.
+Controlla l'ACCESSIBILITÀ (WCAG AA):
+6. Ogni <img> ha l'attributo alt (mai vuoto se l'immagine è informativa)?
+7. Ogni <form> ha label associate (aria-label, aria-labelledby o <label>)?
+8. Icone/bottoni solo icona hanno aria-label o testo accessibile?
+9. Ogni <iframe> ha title?
+10. Il contrasto testo/sfondo rispetta 4.5:1 (testo normale) o 3:1 (grande)?
+11. Gli elementi interattivi sono raggiungibili da tastiera (link/button nativi, mai div con onClick senza role/tabindex)?
+
+Controlla le REGOLE DI STILE:
+12. NON deve esserci NESSUN ::before / ::after con content contenente testo, icone o emoji (content: "" obbligatorio, solo gradienti geometrici). Se c'è, rimuovilo.
+13. NON devono esserci tag <svg> né elementi SVG da nessuna parte, a meno che il brief non li richieda esplicitamente. Se ci sono SVG non richiesti, rimuovili e sostituiscili con testo/gradienti.
+14. NON devono esserci emoji nel testo visibile (titoli, bottoni, brand, footer).
+15. NON deve esserci nessun contenuto duplicato: se un paragrafo, un titolo o una sezione compare due volte, segnalalo.
+16. I meta tag nel <head> devono seguire l'ordine: charset, viewport, poi gli altri (og:*, description, canonical). I contenuti dei meta non devono contenere emoji né a capo.
+
+IMPORTANTE:
+- Se il codice è valido e rispetta tutto, rispondi con "issues": [].
+- Segnala SOLO problemi reali: NON inventare problemi di troncamento se il codice è integro.
+- Per ogni problema fornisci la correzione in "fixes" (html, css o js — solo le parti che cambiano).
+- Controlla che i tuoi fixes NON introducano nuovi problemi (tag rotti, parentesi non chiuse, duplicati).
+
 Rispondi SOLO con JSON: { "issues": ["..."], "fixes": { "html"?: "...", "css"?: "...", "js"?: "..." } }`;
 }

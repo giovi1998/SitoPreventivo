@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { providerRegistry } from '../../ai/providers/registry';
 import {
-  getAiProviderDefault,
+  getValidatedProviderDefault,
   setAiProviderDefault,
   getAiReasoningEffort,
   setAiReasoningEffort,
@@ -55,7 +55,7 @@ export default function AIProviderBadge({
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const tooltipTimer = useRef<number | null>(null);
   const [selectedId, setSelectedId] = useState<string>(
-    () => getAiProviderDefault() || providerRegistry.getDefaultId()
+    () => getValidatedProviderDefault(providerRegistry)
   );
   const [reasoningEffort, setReasoningEffort] = useState<'low' | 'high' | 'max'>(
     () => getAiReasoningEffort()

@@ -10,8 +10,9 @@ import { useAIWebsite } from '../hooks/useAIWebsite';
 import { withAiCall } from '../utils/aiStats';
 import { DocumentAiStats } from './DocumentAiStats';
 import AIProviderBadge from './ai/AIProviderBadge';
-import { getAiProviderDefault, setAiProviderDefault, getAiVisionEnabled } from '../utils/uiPrefs';
+import { getValidatedProviderDefault, setAiProviderDefault, getAiVisionEnabled } from '../utils/uiPrefs';
 import { providerSupportsVision } from '../utils/resolveProviderId';
+import { providerRegistry } from '../ai/providers/registry';
 import { captureElementAsBase64 } from '../utils/ai/captureElement';
 import html2canvas from 'html2canvas';
 import { compressDataUrl } from '../utils/card/imageCompress';
@@ -19,6 +20,7 @@ import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
 import { injectImagesIntoHtml } from '../utils/website/imageInjection';
 import { sanitizeGeneratedWebsite } from '../utils/website/sanitizeGenerated';
+import { normalizeInlineImages } from '../utils/website/imageNormalize';
 import AIConsole from './ai/AIConsole';
 import { buildWebsiteFullDocument, exportWebsiteZip } from '../utils/websiteExport';
 import './WebsiteEditor.css';
@@ -55,6 +57,20 @@ const VIEWPORT_OPTIONS = [
 
 type CodeTab = 'html' | 'css' | 'js';
 
+const STEP_LABELS: Record<string, string> = {
+  html: 'Generazione struttura HTML',
+  css: 'Generazione CSS',
+  js: 'Generazione JavaScript',
+  verify: 'Controllo qualità',
+  refine: 'Raffinamento',
+};
+
+function stepLabel(step: string): string {
+  if (STEP_LABELS[step]) return STEP_LABELS[step];
+  if (step.startsWith('page:')) return `Generazione pagina: ${step.slice(5)}`;
+  return 'Elaborazione…';
+}
+
 function websiteHasContent(w: Website): boolean {
   return !!(w.html || w.css || w.js);
 }
@@ -65,18 +81,21 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const [website, setWebsite] = useState<Website>(() => mergeWebsiteWithDefaults(initialWebsite));
   const [tab, setTab] = useState<'brief' | 'code' | 'preview'>('brief');
   const [codeTab, setCodeTab] = useState<CodeTab>('html');
+  const [previewPage, setPreviewPage] = useState('index');
+  const [codePage, setCodePage] = useState('index');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [viewport, setViewport] = useState('100%');
   const [refinePrompt, setRefinePrompt] = useState('');
   const [verifyIssues, setVerifyIssues] = useState<string[] | null>(null);
-  const [aiModel, setAiModel] = useState(() => getAiProviderDefault() || '');
+  const [aiModel, setAiModel] = useState(() => getValidatedProviderDefault(providerRegistry));
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isProcessingRef = useRef(false);
   const loadedIdRef = useRef<string | undefined>(initialWebsite?.id);
   const loadedUpdatedAtRef = useRef<string | undefined>(initialWebsite?.updatedAt);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visionPreviewRef = useRef<HTMLIFrameElement | null>(null);
+  const lastVisionCacheRef = useRef<{ key: string; previews: string[] } | null>(null);
   const { addToast } = useToast();
 
   const {
@@ -85,6 +104,8 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     reset: resetAI,
     logs,
     isProcessing,
+    currentStep,
+    lastVisionCache,
     availableModels,
     lastCostUsd,
   } = useAIWebsite(userEmail);
@@ -208,12 +229,19 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         visionPreviews: await captureVisionPreviews(),
       });
       const cleaned = sanitizeGeneratedWebsite(result.site.html, result.site.css);
+      const withLogo = (h: string) => injectImagesIntoHtml(injectLogoIntoHtml(h, website.logoUrl), website.images);
+      const pagesHtml: Record<string, string> = {};
+      for (const [name, pageHtml] of Object.entries(result.site.pagesHtml)) {
+        const cleanedPage = sanitizeGeneratedWebsite(pageHtml, result.site.css).html;
+        pagesHtml[name] = injectLogoIntoHtml(cleanedPage, website.logoUrl);
+      }
       const merged = {
         ...website,
-        html: injectImagesIntoHtml(injectLogoIntoHtml(cleaned.html, website.logoUrl), website.images),
+        html: withLogo(cleaned.html),
         css: cleaned.css,
         js: result.site.js,
         pages: result.site.pages,
+        pagesHtml,
         source: 'ai' as const,
         updatedAt: new Date().toISOString(),
       };
@@ -235,7 +263,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     }
     try {
       const result = await refine(
-        { html: website.html, css: website.css, js: website.js, pages: website.pages },
+        { html: website.html, css: website.css, js: website.js, pages: website.pages, pagesHtml: website.pagesHtml || {} },
         prompt,
         { modelId: aiModel || undefined, visionPreviews: await captureVisionPreviews() },
       );
@@ -245,6 +273,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         css: result.site.css,
         js: result.site.js,
         pages: result.site.pages,
+        pagesHtml: result.site.pagesHtml,
         updatedAt: new Date().toISOString(),
       }));
       setRefinePrompt('');
@@ -262,8 +291,9 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     // fallisce silenziosamente).
     const inlineImages: string[] = [];
     const imgRe = /src="(data:image\/[^"]+)"/gi;
+    const allHtml = [website.html, ...Object.values(website.pagesHtml || {})].join('\n');
     let imgM: RegExpExecArray | null;
-    while ((imgM = imgRe.exec(website.html)) !== null) {
+    while ((imgM = imgRe.exec(allHtml)) !== null) {
       inlineImages.push(imgM[1]);
     }
     const toSave: Website = {
@@ -324,11 +354,12 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   }, [website, addToast]);
 
   const handleOpenInNewTab = useCallback(() => {
-    const doc = buildWebsiteFullDocument(website.html, website.css, website.js);
+    const pageHtml = previewPage === 'index' ? website.html : (website.pagesHtml || {})[previewPage] || website.html;
+    const doc = normalizeInlineImages(buildWebsiteFullDocument(pageHtml, website.css, website.js), 200_000);
     const blob = new Blob([doc], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
-  }, [website]);
+  }, [website, previewPage]);
 
   const handleProviderChange = useCallback((providerId: string) => {
     setAiProviderDefault(providerId);
@@ -338,7 +369,12 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   // Vision: cattura preview desktop+mobile da un iframe srcdoc ISOLATO
   // (documento separato: il CSS del sito NON contamina il DOM principale).
   // Le preview vengono compresse a ~40KB per non superare il body proxy.
+  // Cache: se html/css/js sono invariati riusa gli screenshot precedenti
+  // (html2canvas ~700ms × 2 viewport per ogni generate/refine).
   const captureVisionPreviews = useCallback(async (): Promise<string[]> => {
+    const cacheKey = [website.html, website.css, website.js].join('|');
+    const cached = lastVisionCache?.key === cacheKey ? lastVisionCache.previews : null;
+    if (cached) return cached;
     const iframe = visionPreviewRef.current;
     if (!iframe) return [];
     const doc = iframe.contentDocument;
@@ -348,6 +384,34 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     if (!visionEnabled) return [];
     const shots: string[] = [];
     const widths = [1024, 375];
+    // html2canvas clona il DOM e ricarica OGNI <img>; i data URL con
+    // base64 wrapped (whitespace interni) o troppo grandi vengono
+    // rifiutati da Chrome nel clone iframe (about:srcdoc) →
+    // ERR_INVALID_URL rumoroso. Nel clone: normalizza il payload (strip
+    // whitespace) e rimuovi le foto >50KB (inutili per il feedback vision
+    // e gonfiano il body proxy). Il DOM reale non viene toccato.
+    const normalizeCloneImages = (clonedDoc: Document) => {
+      clonedDoc.querySelectorAll<HTMLImageElement>('img').forEach((img) => {
+        const src = img.getAttribute('src') ?? '';
+        if (!src.startsWith('data:')) return;
+        const comma = src.indexOf(',');
+        const clean = comma === -1 ? src : src.slice(0, comma + 1) + src.slice(comma + 1).replace(/\s+/g, '');
+        if (clean.length > 50_000) {
+          // Sostituisci con 1px GIF (placeholder): senza src il load salta
+          // comunque, ma display:none lasciava il buco nel layout.
+          img.setAttribute('src', 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+          img.style.width = img.style.height = '24px';
+          img.style.opacity = '0';
+          return;
+        }
+        if (clean !== src) img.setAttribute('src', clean);
+      });
+      // background-image con data: nei style inline (stesso problema)
+      clonedDoc.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
+        const bi = el.style.backgroundImage || '';
+        if (bi.includes('data:')) el.style.backgroundImage = 'none';
+      });
+    };
     for (const width of widths) {
       iframe.style.width = `${width}px`;
       // Attendi un frame per il reflow
@@ -360,6 +424,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
           useCORS: true,
           backgroundColor: '#ffffff',
           scale: Math.min(1, 640 / width),
+          onclone: normalizeCloneImages,
         });
         const raw = canvas.toDataURL('image/jpeg', 0.7);
         const compressed = raw ? await compressDataUrl(raw, 640, 40_000) : null;
@@ -371,8 +436,9 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         if (compressed && compressed.length > 500) shots.push(compressed);
       }
     }
+    lastVisionCacheRef.current = { key: cacheKey, previews: shots };
     return shots;
-  }, [website, aiModel]);
+  }, [website, aiModel, lastVisionCache]);
 
   const handleLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -380,7 +446,11 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     const reader = new FileReader();
     reader.onload = () => {
       const dataUri = String(reader.result || '');
-      compressDataUrl(dataUri).then((compressed) => {
+      // maxBytes 140_000: sotto la soglia 200K della preview (il logo non
+      // viene mai sostituito dal placeholder) e lontano dal limite ~2MB
+      // dei data URL Chrome. `compressDataUrl` ritorna l'originale se già
+      // piccolo — ok, è sotto soglia comunque.
+      compressDataUrl(dataUri, 512, 140_000).then((compressed) => {
         setWebsite((prev) => ({ ...prev, logoUrl: compressed || dataUri, updatedAt: new Date().toISOString() }));
       });
     };
@@ -417,10 +487,13 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     });
   }, []);
 
-  const fullDocument = useMemo(
-    () => buildWebsiteFullDocument(website.html, website.css, website.js),
-    [website.html, website.css, website.js],
-  );
+  const fullDocument = useMemo(() => {
+    const pageHtml = previewPage === 'index' ? website.html : (website.pagesHtml || {})[previewPage] || website.html;
+    // Normalizza i data URL (base64 wrapped → strip whitespace): Chrome
+    // rifiuta i payload con whitespace in about:srcdoc → ERR_INVALID_URL.
+    // Soglia alta (200KB): le foto gallery (~60KB) restano visibili.
+    return normalizeInlineImages(buildWebsiteFullDocument(pageHtml, website.css, website.js), 200_000);
+  }, [website, previewPage]);
 
   return (
     <div className="website-editor">
@@ -574,6 +647,19 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                     {opt.icon} {opt.label}
                   </button>
                 ))}
+                {website.pages.length > 1 && (
+                  <div className="page-switcher">
+                    {website.pages.map((p) => (
+                      <button
+                        key={p}
+                        className={`page-switch-btn${previewPage === p ? ' active' : ''}`}
+                        onClick={() => setPreviewPage(p)}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <button className="btn-open-tab" onClick={handleOpenInNewTab} title="Apri in nuova tab">↗ Nuova tab</button>
               </div>
               <div className="preview-wrapper" style={{ width: viewport }}>
@@ -596,9 +682,37 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                   </button>
                 ))}
               </div>
+              {codeTab === 'html' && website.pages.length > 1 && (
+                <div className="page-switcher code-page-switcher">
+                  {website.pages.map((p) => (
+                    <button
+                      key={p}
+                      className={`page-switch-btn${codePage === p ? ' active' : ''}`}
+                      onClick={() => setCodePage(p)}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="code-editor-container">
                 {codeTab === 'html' && (
-                  <textarea className="code-textarea" value={website.html} onChange={(e) => updateCode('html', e.target.value)} spellCheck={false} />
+                  <textarea
+                    className="code-textarea"
+                    value={codePage === 'index' ? website.html : (website.pagesHtml || {})[codePage] || ''}
+                    onChange={(e) => {
+                      if (codePage === 'index') {
+                        updateCode('html', e.target.value);
+                      } else {
+                        setWebsite((prev) => ({
+                          ...prev,
+                          pagesHtml: { ...(prev.pagesHtml || {}), [codePage]: e.target.value },
+                          updatedAt: new Date().toISOString(),
+                        }));
+                      }
+                    }}
+                    spellCheck={false}
+                  />
                 )}
                 {codeTab === 'css' && (
                   <textarea className="code-textarea" value={website.css} onChange={(e) => updateCode('css', e.target.value)} spellCheck={false} />
@@ -629,6 +743,12 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
             <button className="btn-generate" onClick={handleGenerate} disabled={isProcessing}>
               {isProcessing ? 'Generando…' : websiteHasContent(website) ? 'Rigenera Sito' : 'Genera sito con AI'}
             </button>
+            {isProcessing && currentStep && (
+              <div className="website-step-indicator" role="status">
+                <span className="website-step-indicator__spinner" aria-hidden="true" />
+                <span>{stepLabel(currentStep)}</span>
+              </div>
+            )}
             {websiteHasContent(website) && (
               <div className="refine-section">
                 <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder="Es. Rendi i colori più scuri, cambia il font in Inter..." rows={3} />
@@ -670,7 +790,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         className="website-vision-preview"
         aria-hidden="true"
         title="Preview vision"
-        srcDoc={websiteHasContent(website) ? buildWebsiteFullDocument(website.html, website.css, website.js) : ''}
+        srcDoc={websiteHasContent(website) ? normalizeInlineImages(buildWebsiteFullDocument(website.html, website.css, website.js), 50_000) : ''}
       />
     </div>
   );

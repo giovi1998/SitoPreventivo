@@ -77,11 +77,18 @@ export default defineConfig(({ mode }) => {
             const model = body.model || 'minimax-m3:cloud';
             const messages = Array.isArray(body.messages) ? body.messages : [];
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 300_000);
+            // Ollama con thinking 'max' + output 16k tok: le generazioni CSS
+            // lunghe superano i 300s (abort → 502 "This operation was
+            // aborted" → sito perso). Alzato a 600s.
+            const timeout = setTimeout(() => controller.abort(), 600_000);
             const ollamaReq = { model, messages, stream: true };
             if (body.format === 'json' || body.response_format?.type === 'json_object') ollamaReq.format = 'json';
             if (body.think || body.reasoning_effort) ollamaReq.think = body.think || body.reasoning_effort;
             if (body.max_tokens) ollamaReq.options = { ...(ollamaReq.options || {}), num_predict: body.max_tokens };
+            // Il dev proxy DEVE propagare i tools: i tool_calls precompilati
+            // nel body vengono rifiutati da Ollama (400) se tools non è
+            // dichiarato nella richiesta.
+            if (Array.isArray(body.tools) && body.tools.length > 0) ollamaReq.tools = body.tools;
             let streamStarted = false;
             try {
               const apiRes = await fetch('https://ollama.com/api/chat', {
