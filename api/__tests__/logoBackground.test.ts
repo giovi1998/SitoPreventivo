@@ -52,15 +52,25 @@ describe('POST /api/ai/logo-background', () => {
     expect(input[2]).toMatchObject({ type: 'image', data: 'prev', mime_type: 'image/jpeg' });
   });
 
-  it('uses image_size 512 + aspect_ratio 16:9 for panoramic logo background', async () => {
+  it('uses image_size 1K + aspect_ratio 16:9, no output options (rifiutate da Gemini)', async () => {
     mockGeminiOk('img');
     await callApiHandler(makeReq({ prompt: 'p' }));
-    const cfg = createInteraction.mock.calls[0][0].generation_config;
-    expect(cfg.image_config).toEqual({ image_size: '512', aspect_ratio: '16:9' });
+    const call = createInteraction.mock.calls[0][0];
+    expect(call.generation_config.image_config).toEqual({
+      image_size: '1K',
+      aspect_ratio: '16:9',
+    });
+    expect(createInteraction.mock.calls[0][1]).toEqual({ timeout: 45_000 });
   });
 
-  it('returns 413 when image exceeds 500KB', async () => {
-    mockGeminiOk('x'.repeat(700_000));
+  it('accepts a 900KB image (clamp 1MB)', async () => {
+    mockGeminiOk('x'.repeat(1_200_000)); // ~900KB raw
+    const res = await callApiHandler(makeReq({ prompt: 'p' }));
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('returns 413 when image exceeds 1MB', async () => {
+    mockGeminiOk('x'.repeat(1_400_000)); // ~1.05MB raw
     const res = await callApiHandler(makeReq({ prompt: 'p' }));
     expect(res.statusCode).toBe(413);
   });

@@ -13,6 +13,7 @@ vi.mock('../../utils/logger', () => ({
 
 vi.mock('../../ai/providerPricing', () => ({
   calculateCostUsd: vi.fn(() => 0.001),
+  geminiImagePricingId: vi.fn(() => 'gemini-nano-banana'),
 }));
 
 vi.mock('../../utils/resolveProviderId', () => ({
@@ -41,6 +42,7 @@ vi.mock('../../utils/card/imageCompress', async (importOriginal) => {
 
 const mocks = vi.hoisted(() => ({
   generateLogo: vi.fn(),
+  generateBackground: vi.fn(),
   processPrompt: vi.fn(),
   generateCopy: vi.fn(),
   providerSupportsVision: vi.fn(() => false),
@@ -52,7 +54,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../ai/logoOrchestrator', () => ({
   LogoAIOrchestrator: vi.fn().mockImplementation(function () {
-    return { generateLogo: mocks.generateLogo };
+    return { generateLogo: mocks.generateLogo, generateBackground: mocks.generateBackground };
   }),
 }));
 
@@ -108,6 +110,10 @@ beforeEach(() => {
     selected: -1,
     response: { content: '{}', usage },
     changes: ['logo:generated:concepts=3'],
+  });
+  mocks.generateBackground.mockResolvedValue({
+    applied: true,
+    logo: { builder: { backgroundImage: 'data:image/png;base64,QUJD' } },
   });
   mocks.processPrompt.mockResolvedValue({
     card: { front: { name: 'Mario AI' }, back: {}, style: {} },
@@ -219,6 +225,23 @@ describe('useAutoBuildGenerate', () => {
     expect(summary?.errors).toEqual({ flyer_1: 'AI down' });
   });
 
+  it('logo fallback placeholder (parse AI fallito) → error, non salvato', async () => {
+    const placeholder = { primaryText: 'Brand', tagline: 'Il tuo nuovo logo' };
+    mocks.generateLogo.mockResolvedValueOnce({
+      applied: true,
+      concepts: [placeholder, placeholder, placeholder],
+      selected: -1,
+      response: { content: 'non-json', usage },
+      changes: ['error:invalid_json', 'logo:fallback_concepts'],
+    });
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    await act(async () => {
+      await result.current.generateAll(makeDocs(), customer);
+    });
+    expect(result.current.state.statuses.logo_1).toBe('error');
+    expect(mockSave.mock.calls.some((c) => c[1].id === 'logo_1')).toBe(false);
+  });
+
   it('generateOne: errore in state.errors, cancellato al retry riuscito', async () => {
     const doc: AutoBuildDoc = { id: 'logo_1', documentType: 'logo', title: 'Logo', data: { briefContext: 'bar', builder: {} } };
     const { result } = renderHook(() => useAutoBuildGenerate());
@@ -297,7 +320,28 @@ describe('useAutoBuildGenerate', () => {
     expect(mocks.processPrompt).not.toHaveBeenCalled();
     expect(result.current.state.statuses.logo_1).toBe('done');
     const save = mockSave.mock.calls.find((c) => c[1].id === 'logo_1')!;
-    expect(save[1].data.builder).toEqual({ ...logoBuilder, backgroundImage: 'data:image/png;base64,QUJD' });
+    // Sfondo AI → textBackdrop 'pill' di default per la leggibilità del wordmark
+    expect(save[1].data.builder).toEqual({ ...logoBuilder, backgroundImage: 'data:image/png;base64,QUJD', textBackdrop: 'pill' });
+    // Background logo: persistenza 1400px/400KB (native-res 1K 16:9 = 1376)
+    expect(mocks.compressDataUrl).toHaveBeenCalledWith('data:image/png;base64,QUJD', 1400, 400_000);
+  });
+
+  it('logo: textBackdrop esplicito del concept non viene sovrascritto dal default', async () => {
+    mocks.generateLogo.mockResolvedValue({
+      applied: true,
+      concepts: [{ ...logoBuilder, textBackdrop: 'band' }, { ...logoBuilder }, { ...logoBuilder }],
+      selected: -1,
+      response: { content: '{}', usage },
+      changes: ['logo:generated:concepts=3'],
+    });
+    const doc: AutoBuildDoc = { id: 'logo_1', documentType: 'logo', title: 'Logo', data: { briefContext: 'bar', builder: {} } };
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    await act(async () => {
+      await result.current.generateOne(doc, customer);
+    });
+    const save = mockSave.mock.calls.find((c) => c[1].id === 'logo_1')!;
+    expect(save[1].data.builder.backgroundImage).toBe('data:image/png;base64,QUJD');
+    expect(save[1].data.builder.textBackdrop).toBe('band');
   });
 
   it('storage quota: NON strippa builder.backgroundImage, fallisce e logga errore', async () => {
@@ -431,7 +475,8 @@ describe('useAutoBuildGenerate', () => {
       });
       const flashCalls = mockFetch.mock.calls.filter((c) => c[0] === '/api/ai/image-flash');
       expect(flashCalls).toHaveLength(2);
-      expect(flashCalls[1][1].body).toContain('"size":"256"');
+      expect(flashCalls[0][1].body).toContain('"size":"1K"');
+      expect(flashCalls[1][1].body).toContain('"size":"512"');
     });
   });
 

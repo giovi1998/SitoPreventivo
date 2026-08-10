@@ -8,7 +8,7 @@ import { IMAGE_TOKEN_COST } from '../ai/costs';
 import { newRequestId } from '../utils/ai/requestId';
 import dataService from '../utils/dataService';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
-import { calculateCostUsd } from '../ai/providerPricing';
+import { calculateCostUsd, geminiImagePricingId } from '../ai/providerPricing';
 import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
 import { renderLogoPreviewImage } from '../utils/logo/logoPreviewImage';
 
@@ -161,7 +161,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
         const imageModel = options?.imageModel || getAiImageModelDefault();
         const result = await getOrchestrator().generateBackground(logo, context, { userEmail, imageModel });
         if (result.applied) {
-          const pricingId = imageModel === 'gemini-2.0-flash-preview-image-generation' ? 'gemini-flash-image' : 'gemini-nano-banana';
+          const pricingId = geminiImagePricingId(imageModel);
           const imageCost = calculateCostUsd(pricingId, undefined, 1);
           setLastCostUsd(imageCost);
           success(

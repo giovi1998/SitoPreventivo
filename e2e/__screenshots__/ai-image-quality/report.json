@@ -1,0 +1,56 @@
+{
+  "date": "2026-08-07T08:07:44.252Z",
+  "phaseA": {
+    "card-photo": {
+      "ok": true,
+      "mimeType": "image/jpeg",
+      "h": 1200,
+      "w": 896,
+      "bytes": 792942,
+      "minLongSide": 1024,
+      "elapsedS": 11.7
+    },
+    "card-cover": {
+      "ok": true,
+      "mimeType": "image/jpeg",
+      "h": 1024,
+      "w": 1024,
+      "bytes": 800607,
+      "minLongSide": 1024,
+      "elapsedS": 8.8
+    },
+    "flyer-hero": {
+      "ok": true,
+      "mimeType": "image/jpeg",
+      "h": 848,
+      "w": 1264,
+      "bytes": 915999,
+      "minLongSide": 1024,
+      "elapsedS": 10.8
+    },
+    "logo-background": {
+      "ok": true,
+      "mimeType": "image/jpeg",
+      "h": 768,
+      "w": 1376,
+      "bytes": 767781,
+      "minLongSide": 1024,
+      "elapsedS": 11
+    }
+  },
+  "phaseB": {
+    "docs": {},
+    "login": {
+      "ok": true,
+      "evidence": "url=http://localhost:8000/app"
+    },
+    "customer": {
+      "ok": false,
+      "evidence": "missing"
+    }
+  },
+  "notes": [
+    "customer \"La Chiccheria\" non trovato — esegui prima scripts/design-review-ai-gen.mjs --smoke"
+  ],
+  "consoleErrors": []
+}

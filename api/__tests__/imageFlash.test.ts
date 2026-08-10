@@ -41,4 +41,40 @@ describe('POST /api/ai/image-flash', () => {
     expect(res.statusCode).toBe(200);
     expect(createInteraction.mock.calls[0][0].model).toBe(CURRENT_MODEL);
   });
+
+  it('default size è 1K senza output options (rifiutate da Gemini)', async () => {
+    const res = await callApiHandler(makeReq({ prompt: 'icona foglia', kind: 'icon' }));
+    expect(res.statusCode).toBe(200);
+    const cfg = createInteraction.mock.calls[0][0].generation_config.image_config;
+    expect(cfg.image_size).toBe('1K');
+    expect(cfg.image_output_options).toBeUndefined();
+  });
+
+  it("size '256' → 400 (non è un image_size valido)", async () => {
+    const res = await callApiHandler(makeReq({ prompt: 'p', size: '256' }));
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("aspectRatio '3:1' → 400 (non supportato da Gemini 3.1)", async () => {
+    const res = await callApiHandler(makeReq({ prompt: 'p', aspectRatio: '3:1' }));
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('imageModel fuori enum → 400', async () => {
+    const res = await callApiHandler(makeReq({ prompt: 'p', imageModel: 'some-other-model' }));
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('Lite passa invariato e forza image_size 1K anche se richiesto 512', async () => {
+    const res = await callApiHandler(makeReq({
+      prompt: 'icona foglia',
+      kind: 'icon',
+      imageModel: 'gemini-3.1-flash-lite-image',
+      size: '512',
+    }));
+    expect(res.statusCode).toBe(200);
+    const call = createInteraction.mock.calls[0][0];
+    expect(call.model).toBe('gemini-3.1-flash-lite-image');
+    expect(call.generation_config.image_config.image_size).toBe('1K');
+  });
 });

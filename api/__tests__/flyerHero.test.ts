@@ -51,8 +51,34 @@ describe('POST /api/ai/flyer-hero', () => {
     expect(cfg.aspect_ratio).toBe('16:9');
   });
 
-  it('returns 413 when image exceeds 500KB', async () => {
-    mockGeminiOk('x'.repeat(700_000));
+  it('requests 2K JPEG q85 with 45s timeout (spec ai-image-quality)', async () => {
+    mockGeminiOk('hero');
+    await callApiHandler(makeReq({ prompt: 'p' }));
+    const call = createInteraction.mock.calls[0][0];
+    // 1K: 2K JPEG ≈3.2MB non passa il limite risposta Vercel 4.5MB (probe
+    // live 2026-08-07); nessun output control nelle interactions API.
+    expect(call.generation_config.image_config.image_size).toBe('1K');
+    expect(call.generation_config.image_config.image_output_options).toBeUndefined();
+    expect(createInteraction.mock.calls[0][1]).toEqual({ timeout: 45_000 });
+  });
+
+  it('Lite model is forced to 1K and passes through unmodified', async () => {
+    mockGeminiOk('hero');
+    const res = await callApiHandler(makeReq({ prompt: 'p', imageModel: 'gemini-3.1-flash-lite-image' }));
+    expect(res.statusCode).toBe(200);
+    const call = createInteraction.mock.calls[0][0];
+    expect(call.model).toBe('gemini-3.1-flash-lite-image');
+    expect(call.generation_config.image_config.image_size).toBe('1K');
+  });
+
+  it('accepts a 900KB image (clamp 1MB: 1K JPEG misurato ~850KB)', async () => {
+    mockGeminiOk('x'.repeat(1_200_000)); // ~900KB raw
+    const res = await callApiHandler(makeReq({ prompt: 'p' }));
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('returns 413 when image exceeds 1MB', async () => {
+    mockGeminiOk('x'.repeat(1_400_000)); // ~1.05MB raw
     const res = await callApiHandler(makeReq({ prompt: 'p' }));
     expect(res.statusCode).toBe(413);
   });

@@ -40,7 +40,17 @@ export const PRICING: Record<string, ProviderPricing> = {
   //   $0.02/immagine 512px. Verificare in dashboard.
   'gemini-nano-banana': { input: 0, output: 0, unit: 'per_image', perImage: 0.04 },
   'gemini-flash-image': { input: 0, output: 0, unit: 'per_image', perImage: 0.02 },
+  // Nano Banana 2 Lite (gemini-3.1-flash-lite-image): stima upper-bound
+  // $0.02/immagine 1K, metà di Nano Banana 2. Solo risoluzione 1K.
+  'gemini-nano-banana-lite': { input: 0, output: 0, unit: 'per_image', perImage: 0.02 },
 };
+
+/** Mapping modello Gemini → pricingId (unica fonte, usata dagli hook AI). */
+export function geminiImagePricingId(imageModel?: string): string {
+  if (imageModel === 'gemini-3.1-flash-lite-image') return 'gemini-nano-banana-lite';
+  if (imageModel === 'gemini-2.0-flash-preview-image-generation') return 'gemini-flash-image';
+  return 'gemini-nano-banana';
+}
 
 export const OLLAMA_PRO_FLAT_MONTHLY = 20;
 

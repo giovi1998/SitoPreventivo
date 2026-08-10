@@ -96,11 +96,12 @@ const DATA_URL_PREFIX_RE = /^data:([^;,]+)(?:;base64)?,/;
  * Compress a data-URL string (base64 image) for localStorage persistence.
  * Caps output to `maxDim` px on the longest side and `maxBytes` encoded chars.
  * If the image already fits, returns it unchanged. Returns `null` on failure.
+ * PNG resta PNG (alpha preservato): riduzione solo via downscale iterativo.
  */
 export async function compressDataUrl(
   dataUrl: string,
-  maxDim: number = 512,
-  maxBytes: number = 300_000,
+  maxDim: number = 1024,
+  maxBytes: number = 400_000,
 ): Promise<string | null> {
   if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
   // Payload troppo corto per essere un'immagine reale (es. stub nei test):
@@ -121,12 +122,24 @@ export async function compressDataUrl(
     if (!ctx) return dataUrl;
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     const isPng = dataUrl.includes('image/png');
-    const mime = isPng ? 'image/png' : 'image/jpeg';
     const maxChars = Math.floor(maxBytes * 1.37);
     if (isPng) {
-      return canvas.toDataURL('image/png').length > maxChars
-        ? canvas.toDataURL('image/jpeg', 0.75)
-        : canvas.toDataURL('image/png');
+      // Mai fallback JPEG: un PNG con alpha (icone trasparenti) perderebbe
+      // il canale. Downscale iterativo fino a rientrare in maxBytes; se
+      // anche al minDim supera, ritorna il PNG al minDim.
+      let out = canvas.toDataURL('image/png');
+      let curW = canvas.width;
+      let curH = canvas.height;
+      while (out.length > maxChars && Math.min(curW, curH) > 200) {
+        curW = Math.max(200, Math.floor(curW * 0.85));
+        curH = Math.max(200, Math.floor(curH * 0.85));
+        canvas.width = curW;
+        canvas.height = curH;
+        ctx.clearRect(0, 0, curW, curH);
+        ctx.drawImage(img, 0, 0, curW, curH);
+        out = canvas.toDataURL('image/png');
+      }
+      return out;
     }
     let quality = 0.75;
     let out = canvas.toDataURL('image/jpeg', quality);

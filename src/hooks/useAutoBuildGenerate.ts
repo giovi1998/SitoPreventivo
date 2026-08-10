@@ -8,7 +8,7 @@ import { builderToSvg, svgToPng } from '../utils/logoGenerator';
 import { buildCardPhotoBrief } from '../utils/card/photoBrief';
 import { compressDataUrl } from '../utils/card/imageCompress';
 import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
-import { calculateCostUsd } from '../ai/providerPricing';
+import { calculateCostUsd, geminiImagePricingId } from '../ai/providerPricing';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { incrementAiStats, type AiStats } from '../utils/aiStats';
 import { logger } from '../utils/logger';
@@ -133,7 +133,7 @@ async function saveDraft(doc: AutoBuildDoc, data: Record<string, unknown>): Prom
   // Retry con compressione più aggressiva se quota superata.
   if (res?.error && /spazio|quota/i.test(String(res.error))) {
     logger.warn('Auto-build: quota superata, riprovo con compressione più aggressiva', { route: 'useAutoBuildGenerate', docId: doc.id });
-    compressed = await compressDraftImages(data, 512, 100_000);
+    compressed = await compressDraftImages(data, 1024, 200_000);
     res = await dataService.saveDocument('admin@gmail.com', {
       id: basePayload.id,
       documentType: basePayload.documentType,
@@ -216,7 +216,7 @@ async function generateFlashImage(
   kind: 'icon' | 'hero',
   palette: { primaryColor?: string; secondaryColor?: string },
 ): Promise<FlashImageResult | null> {
-  const sizes = ['512', '256'] as const;
+  const sizes = ['1K', '512'] as const;
   for (const size of sizes) {
     try {
       const apiBase = import.meta.env?.VITE_API_BASE || '';
@@ -241,9 +241,7 @@ async function generateFlashImage(
         return null;
       }
       const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
-      const pricingId = imageModel === 'gemini-2.0-flash-preview-image-generation'
-        ? 'gemini-flash-image'
-        : 'gemini-nano-banana';
+      const pricingId = geminiImagePricingId(imageModel);
       return {
         dataUrl: `data:${data.mimeType};base64,${data.imageBase64}`,
         costUsd: calculateCostUsd(pricingId, undefined, 1),
@@ -266,6 +264,14 @@ async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: Aut
     });
     throw new Error('Logo AI: nessun concept valido');
   }
+  // Parse AI fallito → l'orchestratore ripiega su concept placeholder
+  // ("Brand"): mai salvarlo come successo, l'utente deve poter riprovare.
+  if (result.changes?.includes('logo:fallback_concepts')) {
+    logger.warn('Auto-build: logo AI fallback placeholder, output non valido', {
+      route: 'useAutoBuildGenerate', docId: doc.id, raw: result.rawResponse?.slice(0, 300),
+    });
+    throw new Error('Logo AI: output non valido (placeholder), riprova');
+  }
   let builder = selected;
   // Immagine AI di sfondo per il logo (Gemini). Mai fatale: se fallisce resta l'icona SVG.
   // Non c'è guard spazio qui: se il save supera quota, saveDraft farà strip del background.
@@ -277,9 +283,9 @@ async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: Aut
       { userEmail: 'admin@gmail.com', imageModel: getAiImageModelDefault() },
     );
     if (bgResult.applied && bgResult.logo.builder.backgroundImage) {
-      // Comprimi subito come per flyer hero: Gemini 1024px → ~1-2MB base64,
+      // Comprimi subito come per flyer hero: Gemini 2K → ~1-2MB base64,
       // supera quota localStorage e saveDraft falliva silenziosamente.
-      const compressed = await compressDataUrl(bgResult.logo.builder.backgroundImage, 512, 150_000);
+      const compressed = await compressDataUrl(bgResult.logo.builder.backgroundImage, 1400, 400_000);
       builder = { ...builder, backgroundImage: compressed ?? bgResult.logo.builder.backgroundImage };
       logger.info('Auto-build: background logo generato', { route: 'useAutoBuildGenerate', docId: doc.id });
     } else {
@@ -298,6 +304,11 @@ async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: Aut
       builder = { ...builder, backgroundImage: bg.dataUrl };
       logger.info('Auto-build: background logo generato via image-flash fallback', { route: 'useAutoBuildGenerate', docId: doc.id });
     }
+  }
+  // Wordmark bianco su sfondo AI: attiva lo scrim di default (design-criteria:
+  // contrasto su backgroundImage). Un textBackdrop esplicito del concept vince.
+  if (builder.backgroundImage && (!builder.textBackdrop || builder.textBackdrop === 'none')) {
+    builder = { ...builder, textBackdrop: 'pill' };
   }
   const data = {
     ...doc.data,
@@ -326,7 +337,7 @@ async function generateCardIcon(card: BusinessCard): Promise<{ dataUrl: string; 
   const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
   return {
     dataUrl: `data:${data.mimeType};base64,${data.imageBase64}`,
-    costUsd: calculateCostUsd('gemini-nano-banana', undefined, 1),
+    costUsd: calculateCostUsd(geminiImagePricingId(getAiImageModelDefault()), undefined, 1),
   };
 }
 

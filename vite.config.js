@@ -241,10 +241,10 @@ export default defineConfig(({ mode }) => {
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
                 const provider = new mod.GeminiImageProvider(apiKey);
                 try {
-                  const result = await provider.generateBackground(prompt, 30_000);
+                  const result = await provider.generateBackground(prompt, 45_000);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
-                  if (sizeBytes > 500_000) {
-                    return json(res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                  if (sizeBytes > 1_000_000) {
+                    return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
                   }
                   return json(res, 200, { data: result });
                 } catch (err) {
@@ -272,15 +272,15 @@ export default defineConfig(({ mode }) => {
                   ? `${grounding}\n\n${prompt}${context ? '\n\nCARD CONTEXT:\n' + context : ''}`
                   : `${prompt}${context ? '\n\nCARD CONTEXT:\n' + context : ''}`;
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
-                const provider = new mod.GeminiImageProvider(apiKey);
+                const provider = new mod.GeminiImageProvider(apiKey, typeof body.imageModel === 'string' ? body.imageModel : undefined);
                 try {
                   const images = [];
                   if (body.cardImage) images.push({ data: String(body.cardImage), mimeType: 'image/jpeg' });
                   if (body.logoImage) images.push({ data: String(body.logoImage), mimeType: 'image/png' });
                   const result = await provider.generateCardCover(finalPrompt, 30_000, images);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
-                  if (sizeBytes > 500_000) {
-                    return json(res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                  if (sizeBytes > 1_000_000) {
+                    return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
                   }
                   return json(res, 200, { data: result });
                 } catch (err) {
@@ -308,14 +308,14 @@ export default defineConfig(({ mode }) => {
                   ? `${grounding}\n\n${prompt}${context ? '\n\nFLYER CONTEXT:\n' + context : ''}`
                   : `${prompt}${context ? '\n\nFLYER CONTEXT:\n' + context : ''}`;
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
-                const provider = new mod.GeminiImageProvider(apiKey);
+                const provider = new mod.GeminiImageProvider(apiKey, typeof body.imageModel === 'string' ? body.imageModel : undefined);
                 try {
                   const images = body.flyerImage ? [{ data: String(body.flyerImage), mimeType: 'image/jpeg' }] : [];
-                  const imageConfig = { image_size: '512', aspect_ratio: body.aspectRatio || '3:2' };
-                  const result = await provider.generateImage(finalPrompt, imageConfig, 30_000, images);
+                  const imageConfig = { image_size: '1K', aspect_ratio: body.aspectRatio || '3:2' };
+                  const result = await provider.generateImage(finalPrompt, imageConfig, 45_000, images);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
-                  if (sizeBytes > 500_000) {
-                    return json(res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                  if (sizeBytes > 1_000_000) {
+                    return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
                   }
                   return json(res, 200, { data: result });
                 } catch (err) {
@@ -342,17 +342,17 @@ export default defineConfig(({ mode }) => {
                   ? `${prompt}\n\nCARD PHOTO CONTEXT:\n${context}`
                   : prompt;
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
-                const provider = new mod.GeminiImageProvider(apiKey);
+                const provider = new mod.GeminiImageProvider(apiKey, typeof body.imageModel === 'string' ? body.imageModel : undefined);
                 try {
                   const result = await provider.generateImage(
                     finalPrompt,
-                    { image_size: '512', aspect_ratio: '1:1' },
+                    { image_size: '1K', aspect_ratio: '3:4' },
                     30_000,
                     [],
                   );
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
-                  if (sizeBytes > 500_000) {
-                    return json(res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                  if (sizeBytes > 1_000_000) {
+                    return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
                   }
                   return json(res, 200, { data: result });
                 } catch (err) {
@@ -377,7 +377,7 @@ export default defineConfig(({ mode }) => {
                 }
                 const kind = typeof body.kind === 'string' ? body.kind : 'custom';
                 const aspectRatio = typeof body.aspectRatio === 'string' ? body.aspectRatio : (kind === 'hero' ? '16:9' : '1:1');
-                const size = typeof body.size === 'string' ? body.size : '512';
+                const size = typeof body.size === 'string' ? body.size : '1K';
                 const primaryColor = typeof body.primaryColor === 'string' ? body.primaryColor : undefined;
                 const secondaryColor = typeof body.secondaryColor === 'string' ? body.secondaryColor : undefined;
                 const style = typeof body.style === 'string' ? body.style : 'minimalist';
@@ -387,12 +387,12 @@ export default defineConfig(({ mode }) => {
                     ? `Stylized flat hero illustration of ${prompt}. Two colors only: ${primaryColor} and ${secondaryColor}. Transparent background. No text, no border. Simple geometric shapes, editorial style. 1024x576 px (16:9). Style: ${style}.`
                     : prompt;
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
-                const provider = new mod.GeminiImageProvider(apiKey);
+                const provider = new mod.GeminiImageProvider(apiKey, typeof body.imageModel === 'string' ? body.imageModel : undefined);
                 try {
                   const result = await provider.generateImage(finalPrompt, { image_size: size, aspect_ratio: aspectRatio }, 30_000, []);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
-                  if (sizeBytes > 500_000) {
-                    return json(res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' });
+                  if (sizeBytes > 1_000_000) {
+                    return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
                   }
                   return json(res, 200, { data: result });
                 } catch (err) {

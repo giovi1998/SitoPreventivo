@@ -11,7 +11,7 @@ import { saveGeneratedImage } from '../utils/saveGeneratedImage';
 import { newRequestId } from '../utils/ai/requestId';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
-import { calculateCostUsd } from '../ai/providerPricing';
+import { calculateCostUsd, geminiImagePricingId } from '../ai/providerPricing';
 import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
 import { renderFlyerPreviewImage } from '../utils/flyer/flyerPreviewImage';
 import type { AiCallKind } from '../utils/aiStats';
@@ -201,7 +201,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         const updated: Flyer = { ...flyer, content: { ...flyer.content, heroImage }, updatedAt: new Date().toISOString() };
 
         // TB-023: costo reale dell'immagine usando providerPricing
-        const pricingId = imageModel === 'gemini-2.0-flash-preview-image-generation' ? 'gemini-flash-image' : 'gemini-nano-banana';
+        const pricingId = geminiImagePricingId(imageModel);
         const imageCost = calculateCostUsd(pricingId, undefined, 1);
         if (userEmail && userEmail !== 'admin@gmail.com') {
           dataService.trackTokens(userEmail, IMAGE_TOKEN_COST, imageCost).catch(() => {});

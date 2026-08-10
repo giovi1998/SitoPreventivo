@@ -51,7 +51,8 @@ describe('GeminiFlashImageProvider (TB-023)', () => {
     expect(input).toMatch(/hand-drawn/);
     expect(input).toMatch(/Transparent background/);
     expect(input).toMatch(/No text/);
-    expect(call.generation_config.image_config).toEqual({ image_size: '512', aspect_ratio: '1:1' });
+    expect(call.generation_config.image_config.image_size).toBe('1K');
+    expect(call.generation_config.image_config.aspect_ratio).toBe('1:1');
   });
 
   it('generateIcon defaults style to minimalist', async () => {
