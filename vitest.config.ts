@@ -7,7 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test-setup.ts',
-    testTimeout: 15000, // 15s — API tests re-import modules via vi.resetModules(), can be slow on cold cache
+    testTimeout: 30000, // 30s — API tests re-import 6 server modules via vi.resetModules(); 15s too tight in parallel
     hookTimeout: 15000,
     exclude: ['node_modules/**', 'e2e/**', 'playwright.config.ts', 'dist/**', 'scripts/**'],
     coverage: {

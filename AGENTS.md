@@ -99,7 +99,8 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/hooks/useRouteView.ts` | Bridge `pathname ↔ view`, prefix-match `:docId` |
 | `src/hooks/useDocumentLoader.ts` | Hydration condivisa editor: `:docId` → fetch → context, redirect not-found |
 | `server.ts` | Unica Vercel function (server entrypoint): http server + body reader 4MB + statici `dist/` + SPA fallback |
-| `src/server/handler.ts` | Intera REST API (monolite intenzionale, ex `api/index.ts`) |
+| `src/server/handler.ts` | REST API: handler + routing (monolite intenzionale, ex `api/index.ts`) |
+| `src/server/{db,core,schemas,crm,types}.ts` | Split modulare: Drizzle schema/getDb, supporto (CORS/rate-limit/validate/admin), Zod schemas, CRM research/Firecrawl, tipi condivisi |
 | `src/utils/generatePDF.ts` | PDF preventivi (pdfmake, client-side) |
 | `src/utils/cardGenerator.ts` | Card PDF/PNG/SVG + `buildCardSvg` |
 | `src/utils/qrGenerator.ts` | QR SVG/PNG (`qrcode` lib) |
