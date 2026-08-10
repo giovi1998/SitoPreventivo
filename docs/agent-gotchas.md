@@ -131,12 +131,30 @@ ciclo; nessuno era nel provider Gemini in sé.
 4. **`interactions.create()` vuole `response_modalities` minuscolo**
    (`['text', 'image']`), non `['TEXT', 'IMAGE']` (vecchia REST
    `generateContent`). Maiuscolo → `400: value 'TEXT' is not supported`.
-5. **Dimensione immagine non enforced di default**: senza
-   `generation_config.image_config.image_size`, Gemini produce a `1K`
-   (~400KB-2MB) e il clamp server (500KB, `api/index.ts`
-   `/ai/logo-background`) scarta ~2/3 delle immagini con 413. Fix: chiedere
-   `image_size: '512'` (+ `aspect_ratio: '16:9'`) in richiesta. Valori:
-   `'512' | '1K' | '2K' | '4K'`.
+5. **Risoluzione per-endpoint + JPEG q85 (spec ai-image-quality, 2026-08-06)**:
+   la pipeline era bloccata a 512px → immagini pixelate su aree grandi
+   (card 1004×650, hero A4 2362×1358, logo export 2048). Ora:
+   card-cover/card-photo/image-flash `image_size: '1K'` (clamp 500KB),
+   flyer-hero/logo-background `'2K'` (clamp **1.5MB**, timeout 45s). Tutte
+   le chiamate impostano `image_output_options: { mime_type: 'image/jpeg',
+   compression_quality: 85 }` (PNG 2K = 2-4MB, oltre clamp).
+   - **`image_output_options` NON è nel tipo SDK 2.10** (`ImageConfig_2` =
+     solo `aspect_ratio`/`image_size`): serve cast
+     `as { image_size?: string; aspect_ratio?: string }`. Wire snake_case:
+     `interactions.create` passa il body invariato; il camelCase
+     `imageOutputOptions` esiste solo nel models API e l'SDK lo rifiuta
+     ("only supported in Gemini Enterprise Agent Platform").
+   - **Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`)**: solo 1K →
+     `resolveImageSize` (provider) / `resolveGeminiImageSize` (api) forzano
+     `'1K'` su qualunque endpoint. Pricing `gemini-nano-banana-lite` $0.02;
+     mapping centralizzato `geminiImagePricingId` in `providerPricing.ts`.
+   - `image-flash` zod: `size` enum `['512','1K']` default `'1K'` (`'256'`
+     non valido — il vecchio retry auto-build `['512','256']` falliva con
+     400 silenzioso; ora `['1K','512']`); `aspectRatio` enum senza `'3:1'`
+     (non supportato da Gemini 3.1).
+   - Persistenza path-aware: `compressDataUrl` default 1024px/400KB;
+     background/hero 1536px/400KB (`dataService/images.js`); PNG con alpha
+     resta PNG (downscale iterativo, mai fallback JPEG).
 6. **`await import('../src/...')` non risolto in prod Vercel**. L'import
    dinamico di un modulo sotto `src/` da `api/index.ts` fallisce in
    produzione (`Cannot find module '/var/task/src/...'`) anche se gli
@@ -1925,3 +1943,92 @@ stringhe JS), `seoMeta.test.ts` (9 — sanitize, ordine, coerenza og:desc),
 `websiteOrchestrator.test.ts` (15 — tool precompilati, loop recheck
 pulito/residuo, fixes, costo), `websiteSystem.test.ts` (12 — prompt verify
 rules). Gate: typecheck + 524 test impattati verdi.
+
+## 27. Design review tipografica card/logo/flyer (2026-08-06)
+
+Criteri di riferimento raccolti in `docs/design-criteria.md` (fonti online:
+min contatti card 7-9pt, safe area 4mm/5-10mm, gerarchia 3 livelli, body
+flyer ≥10pt, headline ≥24pt, tagline ≥40% wordmark). Baseline screenshot:
+`e2e/design-review.spec.ts` (env `DESIGN_REVIEW_OUT`, default
+`e2e/__screenshots__/design-review/prima`).
+
+### 27.1 Card — reference frame unificato 640×414
+
+- Export era calibrato su frame 340px-alto (font ~22% più grandi della
+  preview 640×414) e back su width-ref 512. Ora **una sola sorgente**:
+  `CARD_REF = {w:640, h:414}` in `gridConstants.ts`; tutti i denominatori
+  `/340` e `/512` derivano da lì. Mai reintrodurre costanti assolute.
+- Contatti retro: val 12.8→19px logici, key 10.88→16 (minimo stampa ~7pt,
+  criterio `design-criteria.md`). Floor shrink-to-fit ora **frazioni di
+  CARD_REF.h** (era px assoluti → ~2pt a 300dpi).
+- Front export: name/title/company con wrap (`wrapTextAtWhitespace`) +
+  clip-path cella (prima overflow silenzioso su nomi lunghi). Gerarchia
+  allargata 22/16/14. Preview grid-mode allineata in `cardBase.css`.
+- `layoutAudit.ts` FONT_RATIO_KEY cap 0.045 (realign completo deferred).
+- Residui noti: safe margin 16px<4mm, socials/services base sotto 7pt,
+  fallback no-grid con sizing legacy, thumbnail Collection front-only.
+
+### 27.2 Logo — tagline derivata dal wordmark fittato
+
+- Tagline = `~0.42×` wordmark fittato + `fitText` proprio (era costante
+  12/14 → ratio 37.5-38.9%, clipping tagline lunghe, inversione gerarchia
+  con wordmark lungo al floor).
+- `TEXT_AREA_EXTRA` era contato doppio (getViewBox + buildSvgForLayout) →
+  tenuto solo in buildSvgForLayout; image area invariante su textPosition.
+- Vertical/stacked: blocco icona+testo centrato (era ancorato top con
+  ~100u di dead space; top margin ≥16).
+- `buildTextBackdrop` sceglie il tono dalla **luminanza del colore testo
+  risolto** (non dal mode) — fix dark-on-dark in `auto` senza bgImage.
+- Export raster (PNG/JPG/ICO/favicon): `embedFontInSvg` (riusa
+  `card/fontEmbed.ts`) — prima fallback sans-serif perché SVG in `<img>`
+  non accede ai webfont. PDF via svg2pdf resta Helvetica (strutturale).
+- Thumbnail Collection: `mergeLogoWithDefaults` prima di `builderToSvg`
+  (doc parziali → SVG NaN → thumbnail vuota).
+
+### 27.3 Flyer — floor tipografici stampa + export body
+
+- `FONT_SIZE_BOUNDS` min alzati ai floor stampa TUTTI i formati
+  (headline 24pt/sub 12/body 10/cta 10); A6 max alzati (28/14/11/11).
+- `scaledFontBounds(size, fontScale)` in geometry.ts = unica sorgente:
+  scala per fontScale e clampa ai floor (fontScale 0.7 non scende più a
+  ~5pt). Usata da layoutEngine E budgets (budget coerente col layout).
+- Export PDF/PNG: `buildFlyerSvg(flyer, {renderBodyAsText:true})` — il
+  body in `foreignObject` spariva nel PDF (pdfmake non lo supporta) e in
+  PNG su Safari.
+- **Budget prompt vs hard limit**: `getFlyerCopyBudget` ora espone anche
+  `bodyPromptMaxChars` (calcolato a `bounds.body.max` × 0.85, assorbe gap
+  min/max + drift metrico Inter-vs-Arial). `flyerOrchestrator.generateCopy`
+  passa QUELLO al prompt; `bodyMaxChars` resta l'hard limit UI. Prima il
+  prompt diceva "max 1445" quando al font reale entravano ~1210 → body
+  clippato a metà glifo senza ellipsis (clip CSS foreignObject, wrap CSS
+  più largo delle metriche Arial stimate).
+
+### 27.4 Auto-build AI — contrasto testo su immagini AI
+
+- Logo: se `backgroundImage` AI presente e il concept non dichiara
+  `textBackdrop`, il flow applica `textBackdrop:'pill'` di default
+  (`useAutoBuildGenerate.generateLogoDraft`); backdrop esplicito del
+  concept preservato. System prompt logo: `imagePrompt` deve prevedere
+  una "text legibility zone" (centro più scuro/non affollato).
+- Card: `cardSystem.ts` ha la sezione "GERARCHIA TIPOGRAFICA E
+  LEGGIBILITÀ SU COVER" (nome>ruolo>azienda via placement.scale, testo su
+  zone quiete, mai testo piccolo su zone busy). Single source = system
+  prompt; il prompt hardcoded dell'auto-build non duplica regole.
+- Driver validazione live: `scripts/design-review-ai-gen.mjs` (login
+  admin → crea cliente → auto-build → Genera bozze AI → screenshot
+  preview in `e2e/__screenshots__/design-review/ai/` + report.json con
+  stato per-doc e classificazione immagini AI). Flag `--smoke` per login
+  + seed senza chiamate AI.
+
+### 27.5 Completamenti v2.19 (stessa sessione, sera)
+
+- **Socials/services retro sotto floor**: base socials 12.16→16/414
+  (preview CSS 0.62→1rem), services 13.6→16 (0.85→1rem), servicesLabel
+  11.2→13.6 (0.7→0.85rem), services--long 0.7→0.85rem. layoutAudit cap
+  FONT_RATIO_SOCIAL 0.04→0.045 (come KEY, realign completo pending).
+- **Logo placeholder salvato come successo**: se il parse AI fallisce,
+  `logoOrchestrator` ripiega su `fallbackConcept()` ("Brand") con
+  `applied:true` e flag `logo:fallback_concepts` in `changes`. Il CRM
+  salvava il placeholder come "done". Fix: `generateLogoDraft` lancia su
+  quel flag → badge errore + retry. Regression test
+  `useAutoBuildGenerate.test.ts` ("logo fallback placeholder → error").

@@ -6,20 +6,20 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ### 🎯 Sprint prossima settimana (priorità utente 2026-08-01)
 
-- [ ] **2. Immagini AI con background pixelato (verifica Playwright)**: le
-  immagini generate (logo background, card cover/icon) arrivano a **512px**
-  (`image_size: '512'`, clamp server 500KB) e scalate su aree grandi →
-  risultano pixelate. Da investigare e sistemare:
-  - Dove la qualità decade: generazione (chiedere `1024` dove il modello lo
-    supporta e il costo lo permette), storage (base64 compresso / JPEG vs
-    PNG), scaling d'uso (SVG viewBox upscale, cover image in card/flyer),
-    export (PNG 512/1024/2048, PDF, JPG, favicon).
+- [ ] **2. Immagini AI con background pixelato (residuo: verifica Playwright)**:
+  fix generazione+storage ✅ 2026-08-06 (spec `spec-ai-image-quality`):
+  risoluzione per-endpoint 1K/2K, output JPEG q85, clamp 1.5MB su
+  flyer-hero/logo-background, persistenza path-aware 1536/1024px, Nano
+  Banana 2 Lite registrato — vedi `docs/agent-gotchas.md` §2.5. **Residuo**:
   - **Test Playwright** (`.spec.ts` nuovo in `e2e/`): generare immagini AI
     (o caricare fixture), verificare la **risoluzione effettiva** dell'asset
     renderizzato in preview ed export (screenshot + pixel density), non solo
-    il src. Includere caso "immagine 512 su area 1024+ → deve essere
-    upscalata con filtro adeguato o rigenerata a 1024".
+    il src. Includere caso "immagine 1K su area 2K+ → deve essere
+    upscalata con filtro adeguato o rigenerata a 2K".
   - Guardia anti-regressione: soglia minima px/cm dell'asset nel render.
+  - Verifica live qualità (chiave Gemini reale, manuale): cover/photo 1K
+    nitide su export PDF 300dpi, hero/logo-background 2K su PNG 300dpi,
+    Lite a $0.02 loggato.
   - Nota: aggiungere test AI richiede mock provider (mai chiavi reali in CI).
 
 - [ ] **3. "Genera bozze AI" in PROD non funziona (debug)**: la sequenza

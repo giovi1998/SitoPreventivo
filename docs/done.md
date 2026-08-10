@@ -3,6 +3,57 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-06
+
+- **AI image quality — risoluzione per-uso 1K/2K, JPEG q85, Nano Banana 2
+  Lite (2026-08-06)** (spec `spec-ai-image-quality`, gotchas §2.5):
+  - Generazione per-endpoint: card-cover/card-photo/image-flash 1K (clamp
+    500KB), flyer-hero/logo-background 2K (clamp 1.5MB, timeout 45s);
+    `image_output_options` JPEG q85 su tutte le chiamate. Dev proxy
+    allineato (dev == prod).
+  - Deviazione dalla spec: `imageOutputOptions` camelCase NON esiste nel
+    tipo SDK 2.10 (`ImageConfig_2`, interactions API) e il models API lo
+    rifiuta lato Gemini API → usato snake_case `image_output_options`
+    (wire verbatim) + cast TS, come da esempio §9 della spec stessa.
+  - Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`): registrato in
+    `AI_IMAGE_MODELS` (default resta Nano Banana 2), pricing
+    `gemini-nano-banana-lite` $0.02, forzato a 1K ovunque
+    (`resolveImageSize` / `resolveGeminiImageSize`), mapping costi
+    centralizzato `geminiImagePricingId` (3 ternari duplicati rimossi +
+    costo hardcoded in `useAIIconHero`).
+  - Fix bug latenti: retry auto-build `['512','256']` → `['1K','512']`
+    (`'256'` non valido per zod → 400 silenzioso ad ogni retry);
+    `aspectRatio` `'3:1'` rimosso dall'enum (non supportato da Gemini 3.1).
+  - Persistenza path-aware: `compressDataUrl` default 1024px/400KB;
+    background/hero 1536px/400KB; PNG con alpha resta PNG (downscale
+    iterativo, mai fallback JPEG); website 1024/300KB.
+  - Residuo: verifica Playwright densità px + live Gemini (to-be-done #2).
+
+- **Design review tipografica card / logo / flyer + qualità output AI (2026-08-06)**
+  (gotchas §27, criteri in `docs/design-criteria.md`):
+  - **Card** (§27.1): reference frame unificato `CARD_REF 640×414`
+    (export era ~22% più grande della preview); contatti retro 12.8→19px
+    logici (≥7pt stampa); floor shrink frazionari DPI-independent; front
+    export con wrap+clip; gerarchia 22/16/14; v2.19 socials/services al
+    floor 16px logici.
+  - **Logo** (§27.2): tagline = 0.42× wordmark fittato (era <40% e mai
+    fittata → clipping/inversione); TEXT_AREA_EXTRA dedup; centramento
+    verticale; backdrop per luminanza testo; font embed in export raster;
+    thumbnail merge defaults.
+  - **Flyer** (§27.3): floor stampa tutti i formati (headline 24pt/body
+    10pt min, A6 max alzati); `scaledFontBounds` (fontScale non aggira i
+    minimi); budget coerente; body export PDF/PNG ripristinato
+    (`renderBodyAsText` — spariva nel PDF); `bodyPromptMaxChars` al font
+    max ×0.85 per il prompt AI (era al min → body clippato senza ellipsis).
+  - **Auto-build AI** (§27.4-27.5): textBackdrop 'pill' default su logo
+    con backgroundImage; "text legibility zone" nel prompt immagini logo;
+    sezione gerarchia/leggibilità cover in cardSystem; logo placeholder
+    ("Brand") mai più salvato come successo (throw + badge errore).
+  - Verifica: screenshot prima/dopo (`e2e/design-review.spec.ts`, browser
+    reale) + run live AI su cliente demo "La Chiccheria"
+    (`scripts/design-review-ai-gen.mjs`) + validazione template Giovanni
+    no-AI. Test: typecheck + suite verde.
+
 ## 2026-08-05
 
 - **Auto-build website PROD — timeout 60s sincrono → SSE (2026-08-05)**
