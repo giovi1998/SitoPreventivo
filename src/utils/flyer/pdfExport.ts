@@ -19,7 +19,7 @@ export interface FlyerExportOptions {
 
 export async function generateFlyerPdf(flyer: Flyer, options: FlyerExportOptions): Promise<Uint8Array> {
   const dims = getFlyerDimensions(flyer);
-  const svg = buildFlyerSvg(flyer);
+  const svg = buildFlyerSvg(flyer, { renderBodyAsText: true });
   const docDefinition: any = {
     pageSize: { width: mmToPt(dims.w), height: mmToPt(dims.h) },
     pageMargins: [mmToPt(FLYER_BLEED_MM), mmToPt(FLYER_BLEED_MM), mmToPt(FLYER_BLEED_MM), mmToPt(FLYER_BLEED_MM)],

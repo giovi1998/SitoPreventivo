@@ -28,8 +28,8 @@ describe('computeFlyerLayout stress fixtures', () => {
   it('wide CTA on A6 is shrunk to fit without overlap', () => {
     const plan = computeFlyerLayout(stressWideCta('A6', 'portrait', 'classic'));
     expect(plan.overflowFlags.layout_overflow).toBeFalsy();
-    // CTA font should be reduced to fit
-    expect(plan.text.cta.fontSizePt).toBeLessThanOrEqual(9);
+    // CTA font should be reduced to fit (min is 10pt per print floors)
+    expect(plan.text.cta.fontSizePt).toBeLessThanOrEqual(10);
   });
 
   it('tiny A6 classic with long copy does not overlap elements', () => {
@@ -61,7 +61,7 @@ describe('computeFlyerLayout stress fixtures', () => {
   it('A6 with extreme body overflow emits body_truncated at min font', () => {
     // Only A6 is small enough to still truncate at min font
     const plan = computeFlyerLayout(stressOverflowBody('A6', 'portrait', 'classic'));
-    // Body should either be truncated or very small font
-    expect(plan.text.body.fontSizePt).toBeLessThanOrEqual(9);
+    // Body should either be truncated or at the 10pt print floor
+    expect(plan.text.body.fontSizePt).toBeLessThanOrEqual(10);
   });
 });

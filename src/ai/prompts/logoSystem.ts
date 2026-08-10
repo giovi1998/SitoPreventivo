@@ -53,7 +53,7 @@ Output: SOLO JSON valido (array di 3 oggetti):
     "backgroundColor": "#RRGGBB" | null,
     "gradientFill": boolean,
     "decorativeElements": ["underline" | "dotRing" | "topAccent"],
-    "imagePrompt": "string (max 500 char): reasoning-driven prompt for Gemini image generation using Subject + Action + Context + Composition + Lighting + Style. NO keyword soup. NO readable text/letters/words."
+    "imagePrompt": "string (max 500 char): reasoning-driven prompt for Gemini image generation using Subject + Action + Context + Composition + Lighting + Style. NO keyword soup. NO readable text/letters/words. The composition MUST keep a text legibility zone: the central band (where the white wordmark is overlaid) must be darker and uncluttered, with detail and subjects pushed toward the edges."
   },
   ... // 2 e 3
 ]
@@ -121,6 +121,7 @@ ${safeSector ? `Settore: ${safeSector}` : ''}${contextSection}
 
 Ogni concept DEVE differire per almeno 2 campi tra nome, icona, layout, colori o decorazioni.
 Rispetta l'allowlist lucide se usi iconType=lucide.
+L'imagePrompt DEVE preservare una text legibility zone: la zona centrale dell'immagine resta più scura e priva di dettagli, perché sopra viene sovrapposto il wordmark bianco.
 Rispondi con SOLO il JSON array (nessun testo extra).`;
 }
 

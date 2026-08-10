@@ -7,10 +7,11 @@ import {
   GRID_TEXT_PAD_X_REF,
   GRID_TEXT_PAD_Y_REF,
   GRID_PHOTO_BORDER_REF,
+  CARD_REF,
 } from './gridConstants';
 import { renderDecorativePattern } from '../decorations/patterns';
 import { escapeXml } from '../xml';
-import { fs, svgFontFamily, buildGridDebugSvg, type BuildSvgOptions } from './svgShared';
+import { fs, svgFontFamily, wrapTextAtWhitespace, buildGridDebugSvg, type BuildSvgOptions } from './svgShared';
 
 export function buildFrontSvg(
   card: BusinessCard,
@@ -189,22 +190,20 @@ export function buildFrontSvg(
 
     const textKeys: Array<keyof CardGrid['elements'] & ('name' | 'title' | 'company')> = ['name', 'title', 'company'];
     // v2.14: font sizes proportional to CARD height (pxH), matching preview
-    // grid-mode rem sizes on a 340px-tall reference card.
-    //   name    1.15rem = 18.4px  → 18.4/340
-    //   title   0.9rem  = 14.4px  → 14.4/340
-    //   company 0.84rem = 13.44px → 13.44/340
-    // Before this fix, sizes were relative to CELL height (0.28/0.21/0.18 of
-    // cellH), which made export fonts ~50% larger than the preview at
-    // standard export DPI (1700×1100). Now they scale with the card, not
-    // the cell, so the relative proportions match the preview regardless
-    // of cell dimensions.
+    // grid-mode rem sizes on the unified 640×414 reference (CARD_REF).
+    // v2.18: widened hierarchy (nome ≫ ruolo > company):
+    //   name    1.375rem = 22px → 22/414
+    //   title   1rem     = 16px → 16/414
+    //   company 0.875rem = 14px → 14/414
+    // Sizes scale with the card, not the cell, so the relative proportions
+    // match the preview regardless of cell dimensions.
     const textValues: Record<
       'name' | 'title' | 'company',
       { text: string; weight: number; color: string; letterSpacing: number; sizePct: number; opacity?: number }
     > = {
-      name: { text: card.front.name.toUpperCase(), weight: 800, color: text, letterSpacing: 0.5, sizePct: 18.4 / 340 },
-      title: { text: card.front.title, weight: 600, color: accent, letterSpacing: 0, sizePct: 14.4 / 340 },
-      company: { text: card.front.company, weight: 400, color: text, letterSpacing: 0, sizePct: 13.44 / 340, opacity: 0.78 },
+      name: { text: card.front.name.toUpperCase(), weight: 800, color: text, letterSpacing: 0.5, sizePct: 22 / CARD_REF.h },
+      title: { text: card.front.title, weight: 600, color: accent, letterSpacing: 0, sizePct: 16 / CARD_REF.h },
+      company: { text: card.front.company, weight: 400, color: text, letterSpacing: 0, sizePct: 14 / CARD_REF.h, opacity: 0.78 },
     };
     for (const key of textKeys) {
       const el = grid.elements[key];
@@ -228,15 +227,28 @@ export function buildFrontSvg(
       const nudgeX = ((placement?.x ?? 0) * w) / 2;
       const nudgeY = ((placement?.y ?? 0) * h) / 2;
       const textX = (alignH === 'left' ? x + cellPadX : alignH === 'right' ? x + w - cellPadX : x + w / 2) + nudgeX;
-      const textY = (alignV === 'top'
-        ? y + cellPadY
-        : alignV === 'bottom'
-          ? y + h - fontSize - cellPadY
-          : y + (h - fontSize) / 2) + nudgeY;
       const anchor = alignH === 'left' ? 'start' : alignH === 'right' ? 'end' : 'middle';
       const opacityAttr = cfg.opacity !== undefined ? ` opacity="${cfg.opacity}"` : '';
       const letterAttr = cfg.letterSpacing ? ` letter-spacing="${cfg.letterSpacing}"` : '';
-      out += `<text x="${textX}" y="${textY}" font-family="${fontFamily}" font-size="${fontSize}" font-weight="${cfg.weight}" fill="${cfg.color}" text-anchor="${anchor}" dominant-baseline="text-before-edge"${letterAttr}${opacityAttr}>${escapeXml(cfg.text)}</text>`;
+      // v2.18: wrap long texts at whitespace (preview wraps via CSS) and hard
+      // clip to the cell — same rule as the back contacts cell (v2.13).
+      // Text must never paint outside its grid cell.
+      const maxTextW = Math.max(10, w - 2 * cellPadX);
+      const lines = wrapTextAtWhitespace(cfg.text, maxTextW, fontSize, fontFamily);
+      const lineH = fontSize * 1.15;
+      const blockH = lines.length * lineH;
+      const blockY = (alignV === 'top'
+        ? y + cellPadY
+        : alignV === 'bottom'
+          ? y + h - blockH - cellPadY
+          : y + (h - blockH) / 2) + nudgeY;
+      const clipId = `clipFront_${key}_${el.x}_${el.y}_${el.w}_${el.h}`;
+      out += `<defs><clipPath id="${clipId}"><rect x="${x}" y="${y}" width="${w}" height="${h}"/></clipPath></defs>`;
+      out += `<g clip-path="url(#${clipId})">`;
+      lines.forEach((line, idx) => {
+        out += `<text x="${textX}" y="${blockY + idx * lineH}" font-family="${fontFamily}" font-size="${fontSize}" font-weight="${cfg.weight}" fill="${cfg.color}" text-anchor="${anchor}" dominant-baseline="text-before-edge"${letterAttr}${opacityAttr}>${escapeXml(line)}</text>`;
+      });
+      out += '</g>';
     }
   }
 

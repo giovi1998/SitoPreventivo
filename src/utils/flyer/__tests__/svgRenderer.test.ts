@@ -48,4 +48,31 @@ describe('flyer svgRenderer (TB-007)', () => {
     expect(svg).toContain('viewBox=');
     expect(svg).toContain(sampleFlyer.style.fontFamily);
   });
+
+  it('renderBodyAsText renders the body as native <text> without foreignObject', () => {
+    const svg = buildFlyerSvg(sampleFlyer, { renderBodyAsText: true });
+    expect(svg).not.toContain('foreignObject');
+    expect(svg).toContain('<text');
+    expect(svg).toContain('Vieni a trovarci in negozio');
+  });
+
+  it('short sample body fits without truncation (regression: clipped preview body)', () => {
+    const flyer: Flyer = {
+      ...sampleFlyer,
+      content: {
+        ...sampleFlyer.content,
+        headline: 'Sagra del Paese',
+        subheadline: '15 Agosto - Ingresso Libero',
+        body: "Cibo tipico, musica dal vivo, attività per famiglie e fuochi d'artificio.",
+        cta: { label: 'Prenota Ora', url: 'https://example.com' },
+        qrPayload: 'https://example.com',
+        qrLabel: 'Scansiona per info',
+      },
+    };
+    const plan = computeFlyerLayout(flyer);
+    expect(plan.text.body.truncated).toBe(false);
+    expect(plan.text.body.hidden).toBe(false);
+    const svg = buildFlyerSvg(flyer);
+    expect(svg).toContain('famiglie e fuochi');
+  });
 });

@@ -84,7 +84,10 @@ export function auditExportSvg(side: 'front' | 'back', svg: string, card: Busine
     if (keyRatio < 0.015) {
       findings.push({ code: 'FONT_RATIO_KEY', severity: 'error', message: `TELEFONO font ratio ${keyRatio.toFixed(3)} too small`, metrics: { keyRatio } });
     }
-    if (keyRatio > 0.04) {
+    // v2.18: cap bumped 0.04 → 0.045 — the intended key size is now 16/414
+    // (print minimum ≥6pt), 0.0406 at the Giovanni fontScale 1.05. Full
+    // threshold realignment to the unified reference is still pending.
+    if (keyRatio > 0.045) {
       findings.push({ code: 'FONT_RATIO_KEY', severity: 'error', message: `TELEFONO font ratio ${keyRatio.toFixed(3)} too large`, metrics: { keyRatio } });
     }
   }
@@ -107,7 +110,9 @@ export function auditExportSvg(side: 'front' | 'back', svg: string, card: Busine
       if (socialRatio < 0.012) {
         findings.push({ code: 'FONT_RATIO_SOCIAL', severity: 'error', message: `Social font ratio ${socialRatio.toFixed(3)} too small`, metrics: { socialRatio } });
       }
-      if (socialRatio > 0.04) {
+      // v2.19: cap 0.04 → 0.045 — base socials ora 16/414 (0.0406 a
+      // fontScale 1.05), floor leggibilità ~6pt. Realign completo pending.
+      if (socialRatio > 0.045) {
         findings.push({ code: 'FONT_RATIO_SOCIAL', severity: 'error', message: `Social font ratio ${socialRatio.toFixed(3)} too large`, metrics: { socialRatio } });
       }
     }

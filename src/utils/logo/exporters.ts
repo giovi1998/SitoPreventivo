@@ -1,6 +1,24 @@
 import { applyWatermarkToCanvas, getMaxPngSideForTier, type Tier } from '../watermark';
+import { buildEmbeddedFontImport } from '../card/fontEmbed';
 import { svg2pdf } from 'svg2pdf.js';
 import { jsPDF } from 'jspdf';
+
+// ─── FONT EMBED PER EXPORT RASTER ─────────────────────────
+
+/**
+ * Embedde il font-family del logo come `@font-face` base64 dentro il SVG
+ * (helper condiviso con il modulo card, vedi card/fontEmbed). Senza questo
+ * il SVG caricato come blob in un `<img>` non accede ai webfont della
+ * pagina e il testo rasterizza con il sans-serif generico di sistema.
+ * No-op (SVG invariato) per font sconosciuti o se il fetch fallisce.
+ */
+export async function embedFontInSvg(svg: string): Promise<string> {
+  const m = svg.match(/font-family="([^",]+)/);
+  if (!m) return svg;
+  const style = await buildEmbeddedFontImport(m[1]);
+  if (!style) return svg;
+  return svg.replace(/(<svg[^>]*>)/, `$1${style}`);
+}
 
 // ─── SVG → PNG ──────────────────────────────────────────
 
@@ -60,7 +78,8 @@ export async function svgToPng(
   const SUPERSAMPLE = 2;
   const renderW = targetW * SUPERSAMPLE;
   const renderH = targetH * SUPERSAMPLE;
-  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const svgWithFont = await embedFontInSvg(svg);
+  const blob = new Blob([svgWithFont], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
   try {
     const img = new Image();
@@ -184,7 +203,8 @@ export async function svgToJpg(
   const SUPERSAMPLE = 2;
   const renderW = targetW * SUPERSAMPLE;
   const renderH = targetH * SUPERSAMPLE;
-  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const svgWithFont = await embedFontInSvg(svg);
+  const blob = new Blob([svgWithFont], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
   try {
     const img = new Image();

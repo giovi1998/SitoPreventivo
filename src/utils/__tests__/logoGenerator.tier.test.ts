@@ -20,6 +20,9 @@ function setupJsdomMocks() {
     get src() { return this._src; }
   }
   (global as any).Image = FakeImage;
+  // fetch stubbato: embedFontInSvg non deve fare chiamate di rete nei test
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (() => Promise.reject(new Error('offline in tests'))) as typeof fetch;
   const originalCreate = document.createElement.bind(document);
   (document as any).createElement = (tag: string) => {
     const el = originalCreate(tag);
@@ -51,6 +54,7 @@ function setupJsdomMocks() {
   };
   return () => {
     (global as any).Image = originalImage;
+    globalThis.fetch = originalFetch;
     (document as any).createElement = originalCreate;
   };
 }

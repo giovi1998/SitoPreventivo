@@ -72,11 +72,9 @@ export function fitText(text: string, maxWidth: number, startSize = 36, minSize 
   return lo;
 }
 
-function getViewBox(layout: LogoLayout, primaryText: string, tagline: string, textPosition?: 'overlay' | 'above' | 'below'): ViewBox {
+function getViewBox(layout: LogoLayout, primaryText: string, tagline: string): ViewBox {
   const min = MIN_VIEWBOX[layout];
   const max = MAX_VIEWBOX[layout];
-  const TEXT_AREA_EXTRA = 120;
-  const isTextOutside = textPosition === 'above' || textPosition === 'below';
   switch (layout) {
     case 'horizontal': {
       const iconSize = Math.min(min.W, min.H) * 0.4;
@@ -85,7 +83,7 @@ function getViewBox(layout: LogoLayout, primaryText: string, tagline: string, te
       const fontSize = fitText(primaryText, maxTextW, 36, 14);
       const textW = estimateTextWidth(primaryText, fontSize);
       const W = Math.max(min.W, Math.min(max.W, Math.round(textStartX + textW + 28)));
-      const H = min.H + (isTextOutside ? TEXT_AREA_EXTRA : 0);
+      const H = min.H;
       return { W, H };
     }
     case 'vertical':
@@ -96,7 +94,9 @@ function getViewBox(layout: LogoLayout, primaryText: string, tagline: string, te
       const W = Math.max(min.W, Math.min(max.W, Math.round(textW + 40)));
       const extraH = tagline ? 40 : 20;
       const baseH = layout === 'stacked' ? 320 : 300;
-      const H = Math.max(min.H, Math.min(max.H, baseH + extraH)) + (isTextOutside ? TEXT_AREA_EXTRA : 0);
+      // L'area testo extra per textPosition above/below (TEXT_AREA_H) viene
+      // aggiunta solo in buildSvgForLayout: qui no, altrimenti conta doppia.
+      const H = Math.max(min.H, Math.min(max.H, baseH + extraH));
       return { W, H };
     }
   }
@@ -292,24 +292,42 @@ function resolveTextColors(
 /**
  * Renders a semi-transparent backdrop (pill or full-width band) behind
  * the text block for readability against busy AI-generated photo
- * backgrounds. The backdrop tone is the inverse of textColorMode so
- * it always contrasts with the text drawn on top of it.
+ * backgrounds. The backdrop tone is the inverse of the RESOLVED text
+ * color (not textColorMode): with mode 'auto' and no backgroundImage
+ * the resolved text is dark (secondaryColor), so the backdrop must be
+ * light — keying on textColorMode produced a dark-on-dark backdrop.
  */
 function buildTextBackdrop(
   builder: LogoBuilder,
   box: { x: number; y: number; width: number; height: number },
   viewW: number,
+  resolvedTextColor: string,
 ): string {
   if (builder.textBackdrop === 'none') return '';
   const dark = 'rgba(15,23,42,0.55)';
   const light = 'rgba(255,255,255,0.72)';
-  const fill = builder.textColorMode === 'dark' ? light : dark;
+  const fill = isLightTextColor(resolvedTextColor)
+    ? dark
+    : isHexColor(resolvedTextColor)
+      ? light
+      : builder.textColorMode === 'dark'
+        ? light
+        : dark; // gradient/url: conserva il comportamento precedente
   if (builder.textBackdrop === 'band') {
     return `<rect x="0" y="${box.y.toFixed(2)}" width="${viewW}" height="${box.height.toFixed(2)}" fill="${fill}"/>`;
   }
   const pad = 10;
   const rx = Math.round(box.height / 2);
   return `<rect x="${(box.x - pad).toFixed(2)}" y="${box.y.toFixed(2)}" width="${(box.width + pad * 2).toFixed(2)}" height="${box.height.toFixed(2)}" rx="${rx}" ry="${rx}" fill="${fill}"/>`;
+}
+
+/** Luminanza relativa approssimata: true se il colore hex e chiaro. */
+function isLightTextColor(color: string): boolean {
+  if (!isHexColor(color)) return false;
+  const r = parseInt(color.slice(1, 3), 16) / 255;
+  const g = parseInt(color.slice(3, 5), 16) / 255;
+  const b = parseInt(color.slice(5, 7), 16) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5;
 }
 
 // ─── BUILDER → SVG ──────────────────────────────────────────
@@ -327,7 +345,7 @@ function buildSvgForLayout(builder: LogoBuilder): string {
   const isTextBelow = builder.textPosition === 'below' && hasBgImage;
   const isTextOutside = isTextAbove || isTextBelow;
   const TEXT_AREA_H = 120;
-  const { W, H: baseH } = getViewBox(builder.layout, builder.primaryText, builder.tagline, isTextAbove ? 'above' : isTextBelow ? 'below' : 'overlay');
+  const { W, H: baseH } = getViewBox(builder.layout, builder.primaryText, builder.tagline);
   const H = baseH + (isTextOutside ? TEXT_AREA_H : 0);
   const imageAreaH = isTextOutside ? H - TEXT_AREA_H : H;
   const imageY = isTextAbove ? TEXT_AREA_H : 0;
@@ -367,7 +385,9 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     const maxTextW = isTextOutside || hasBgImage ? W - 40 : W - baseTextX - 28;
     const baseFontSize = fitText(builder.primaryText, maxTextW, 36, 14);
     const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
-    const taglineFontSize = Math.max(8, Math.round(14 * scale));
+    // Tagline proporzionale al wordmark FITTATO (~42%, ratio >= 0.40) e
+    // fittata a sua volta nel maxTextW (no clipping per tagline lunghe).
+    const taglineFontSize = fitText(builder.tagline, maxTextW, Math.max(10, Math.round(baseFontSize * 0.42 * scale)), 8);
     const baseY = isTextOutside ? textAreaTop + TEXT_AREA_H / 2 : H / 2;
     const primaryX = baseTextX + offX;
     const primaryY = baseY + offY + (hasTagline ? -10 : 6);
@@ -382,20 +402,33 @@ function buildSvgForLayout(builder: LogoBuilder): string {
       { x: primaryX, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
       hasTagline ? { x: taglineX, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
     );
-    backdrop = buildTextBackdrop(builder, box, W);
+    backdrop = buildTextBackdrop(builder, box, W, primaryTextColor);
   } else {
-    iconCenter = { x: W / 2, y: isTextBelow ? imageAreaH / 2 : (isTextAbove ? imageY + iconSize / 2 + 10 : iconSize / 2 + 10) };
-    if (!suppressOverlay) icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
     const startFontSize = builder.layout === 'vertical' ? 32 : 36;
-    const baseTaglineFontSize = builder.layout === 'vertical' ? 12 : 14;
     const taglineGap = builder.layout === 'vertical' ? 22 : 26;
     const maxTextW = W - 40;
     const baseFontSize = fitText(builder.primaryText, maxTextW, startFontSize, 14);
     const primaryFontSize = Math.max(10, Math.round(baseFontSize * scale));
-    const taglineFontSize = Math.max(8, Math.round(baseTaglineFontSize * scale));
-    const baseY = isTextOutside
-      ? textAreaTop + TEXT_AREA_H / 2 - taglineGap / 2
-      : (hasBgImage ? H / 2 : iconCenter.y + iconSize / 2 + 30);
+    // Tagline proporzionale al wordmark FITTATO (~42%, ratio >= 0.40) e
+    // fittata a sua volta nel maxTextW (no clipping per tagline lunghe).
+    const taglineFontSize = fitText(builder.tagline, maxTextW, Math.max(10, Math.round(baseFontSize * 0.42 * scale)), 8);
+    let baseY: number;
+    if (!isTextOutside && !hasBgImage) {
+      // Blocco icona+testo centrato verticalmente nell'altezza disponibile,
+      // con clear space superiore minimo 16 (>= 1/2 glyph) e senza dead
+      // space in basso: prima il contenuto era ancorato al top con ~100
+      // unita vuote sotto.
+      const hasIcon = builder.iconType !== 'none';
+      const belowBase = hasTagline ? taglineGap + taglineFontSize * 0.25 : primaryFontSize * 0.25;
+      const blockH = hasIcon ? iconSize + 30 + belowBase : primaryFontSize * 0.85 + belowBase;
+      const blockTop = Math.max(16, (H - blockH) / 2);
+      iconCenter = { x: W / 2, y: blockTop + (hasIcon ? iconSize / 2 : 0) };
+      baseY = hasIcon ? blockTop + iconSize + 30 : blockTop + primaryFontSize * 0.85;
+    } else {
+      iconCenter = { x: W / 2, y: isTextBelow ? imageAreaH / 2 : imageY + iconSize / 2 + 10 };
+      baseY = isTextOutside ? textAreaTop + TEXT_AREA_H / 2 - taglineGap / 2 : H / 2;
+    }
+    if (!suppressOverlay) icon = renderIcon(builder, iconCenter.x, iconCenter.y, iconSize).svg;
     const baseCenterX = W / 2;
     const primaryCenterX = baseCenterX + offX;
     const primaryY = baseY + offY;
@@ -412,7 +445,7 @@ function buildSvgForLayout(builder: LogoBuilder): string {
       { x: primaryLeft, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
       hasTagline ? { x: taglineLeft, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
     );
-    backdrop = buildTextBackdrop(builder, box, W);
+    backdrop = buildTextBackdrop(builder, box, W, primaryTextColor);
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">${bgRect}${bgImage}${defs}${icon}${decorations}${backdrop}${primaryText}${taglineText}</svg>`;

@@ -1,0 +1,96 @@
+{
+  "customer": "La Chiccheria",
+  "smoke": false,
+  "steps": [
+    {
+      "step": 1,
+      "name": "Login admin",
+      "ok": true,
+      "evidence": "url=http://localhost:8000/app"
+    },
+    {
+      "step": 2,
+      "name": "Customer create/reuse",
+      "ok": true,
+      "evidence": "created new via UI form"
+    },
+    {
+      "step": 3,
+      "name": "Customer detail open",
+      "ok": true,
+      "evidence": "id=cust_195bf5d0-550c-4cef-b33d-38869201c36e"
+    },
+    {
+      "step": 3.5,
+      "name": "Brief fields set",
+      "ok": true,
+      "evidence": "persisted after reload"
+    },
+    {
+      "step": 4.1,
+      "name": "Auto-build draft",
+      "ok": false,
+      "evidence": "log tail: REGISTRO OPERAZIONI AI\nCopia\nCancella\n17:42:46\n▶\nAuto-build draft in corso…"
+    },
+    {
+      "step": 4.2,
+      "name": "Draft docs present (logo/card/flyer)",
+      "ok": true,
+      "evidence": "{\"logo\":\"logo_4745c1df-6b5f-4e76-b64a-e377060dfacd\",\"businessCard\":\"businessCard_784cc771-a05f-4e86-8523-3387920ca78b\",\"flyer\":\"flyer_ee690241-791f-40ef-843e-1f3493c1adca\",\"website\":\"website_e502c8b1-abee-4021-8913-e0fddd9e0f89\"}"
+    },
+    {
+      "step": 5,
+      "name": "Genera bozze AI",
+      "ok": true,
+      "evidence": "{\"logo\":\"done\",\"businessCard\":\"done\",\"flyer\":\"done\"}"
+    },
+    {
+      "step": 6.1,
+      "name": "Screenshot logo-ai.png",
+      "ok": true,
+      "evidence": "url=http://localhost:8000/app/logo/logo_4745c1df-6b5f-4e76-b64a-e377060dfacd"
+    },
+    {
+      "step": 6.2,
+      "name": "Screenshot card-ai-front/back.png",
+      "ok": true,
+      "evidence": "front=true back=true url=http://localhost:8000/app/card/businessCard_784cc771-a05f-4e86-8523-3387920ca78b"
+    },
+    {
+      "step": 6.3,
+      "name": "Screenshot flyer-ai.png",
+      "ok": true,
+      "evidence": "url=http://localhost:8000/app/flyer/flyer_ee690241-791f-40ef-843e-1f3493c1adca"
+    }
+  ],
+  "docs": {
+    "logo": {
+      "id": "logo_4745c1df-6b5f-4e76-b64a-e377060dfacd",
+      "status": "done",
+      "aiImages": {
+        "backgroundImage": "data-url"
+      }
+    },
+    "businessCard": {
+      "id": "businessCard_784cc771-a05f-4e86-8523-3387920ca78b",
+      "status": "done",
+      "aiImages": {
+        "photoUrl": "data-url",
+        "coverImageUrl": "data-url"
+      }
+    },
+    "flyer": {
+      "id": "flyer_ee690241-791f-40ef-843e-1f3493c1adca",
+      "status": "done",
+      "aiImages": {
+        "heroImage": "data-url"
+      }
+    }
+  },
+  "consoleErrors": [
+    "[ERROR] Auto-build draft AI fallito {route: useAutoBuildGenerate, docId: website_e502c8b1-abee-4021-8913-e0fddd9e0f89, err: Error: network error}"
+  ],
+  "notes": [
+    "ai-gen error lines: none"
+  ]
+}

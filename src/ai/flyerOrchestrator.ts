@@ -109,7 +109,7 @@ export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
       const ctx: FlyerCopyContext = {
         layout: flyer.style.layout,
         size: flyer.size,
-        bodyCharBudget: budget.bodyMaxChars,
+        bodyCharBudget: budget.bodyPromptMaxChars,
         headlineMaxChars: budget.headlineMaxChars,
         subheadlineMaxChars: budget.subheadlineMaxChars,
         ctaMaxChars: budget.ctaMaxChars,

@@ -55,6 +55,10 @@ function installCanvasMock(): { restore: () => void; sizes: { w: number; h: numb
     get src() { return this._src; }
   }
   (global as any).Image = FakeImage;
+  // fetch stubbato: embedFontInSvg proverebbe una chiamata reale a Google
+  // Fonts; il fallimento e gestito (SVG invariato) ma i test restano offline.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (() => Promise.reject(new Error('offline in tests'))) as typeof fetch;
   const originalCreate = document.createElement.bind(document);
   (document as any).createElement = (tag: string) => {
     const el = originalCreate(tag);
@@ -93,6 +97,7 @@ function installCanvasMock(): { restore: () => void; sizes: { w: number; h: numb
   return {
     restore: () => {
       (global as any).Image = originalImage;
+      globalThis.fetch = originalFetch;
       (document as any).createElement = originalCreate;
     },
     sizes,

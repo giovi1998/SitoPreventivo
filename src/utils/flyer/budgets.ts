@@ -1,5 +1,5 @@
 import type { Flyer } from '../documentSchemas';
-import { FONT_SIZE_BOUNDS, type MmRect } from './geometry';
+import { scaledFontBounds, type MmRect } from './geometry';
 import { computeFlyerLayout, magazineColumnCount } from './layoutEngine';
 import { charWidthMm, MM_PER_PT } from './geometry';
 
@@ -16,6 +16,11 @@ export interface FlyerCopyBudget {
   realHeadlineChars?: number;
   realSubheadlineChars?: number;
   realBodyChars?: number;
+  /** Budget conservativo per il prompt AI: capacità al font MASSIMO con
+   * margine di sicurezza. bodyMaxChars è calcolato al font minimo (hard
+   * limit UI) ma un copy di quella lunghezza non entra al font reale e
+   * viene clippato in anteprima (gotcha §7.6, design review auto-build). */
+  bodyPromptMaxChars: number;
   /** True se il testo corrente viene troncato dal layout engine. */
   headlineTruncated?: boolean;
   subheadlineTruncated?: boolean;
@@ -30,7 +35,7 @@ export interface FlyerCopyBudget {
  */
 export function getFlyerCopyBudget(flyer: Flyer): FlyerCopyBudget {
   const plan = computeFlyerLayout(flyer);
-  const bounds = FONT_SIZE_BOUNDS[flyer.size];
+  const bounds = scaledFontBounds(flyer.size, flyer.style.fontScale);
   const bodyBox = plan.boxes.body;
   const columnCount = flyer.style.layout === 'magazine' ? magazineColumnCount(flyer.size, bodyBox?.h ?? 0) : 1;
   const bodyWidth = columnCount > 1 && bodyBox
@@ -60,6 +65,18 @@ export function getFlyerCopyBudget(flyer: Flyer): FlyerCopyBudget {
     ? Math.max(1, Math.floor(bodyBox.h / (bodyFontPt * 1.3 * MM_PER_PT)))
     : 1;
   const bodyMaxChars = bodyCharsPerLine * Math.max(1, bodyMaxLines) * columnCount;
+
+  // Budget per il prompt AI: stessa formula ma al font MASSIMO (quello che
+  // il layout engine usa quando il copy ci sta) e con margine 0.85 per il
+  // drift delle metriche reali (fontFamily Inter vs calibrazione Arial:
+  // righe pre-wrapped più larghe del previsto → wrap CSS extra in
+  // foreignObject → clip a metà riga senza ellipsis).
+  const PROMPT_BUDGET_SAFETY = 0.85;
+  const promptCharsPerLine = Math.max(1, Math.floor(bodyWidth / charWidthMm(bounds.body.max, 'body')));
+  const promptMaxLines = bodyBox
+    ? Math.max(1, Math.floor(bodyBox.h / (bounds.body.max * 1.3 * MM_PER_PT)))
+    : 1;
+  const bodyPromptMaxChars = Math.floor(promptCharsPerLine * promptMaxLines * columnCount * PROMPT_BUDGET_SAFETY);
 
   // CTA
   const ctaBox = plan.boxes.cta;
@@ -100,6 +117,7 @@ export function getFlyerCopyBudget(flyer: Flyer): FlyerCopyBudget {
     headlineMaxChars,
     subheadlineMaxChars,
     bodyMaxChars,
+    bodyPromptMaxChars,
     bodyRecommendedParagraphs: bodyMaxChars < 200 ? 1 : bodyMaxChars < 500 ? 2 : 3,
     ctaMaxChars,
     qrLabelMaxChars,
