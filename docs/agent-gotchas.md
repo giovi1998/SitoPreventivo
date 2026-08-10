@@ -38,6 +38,10 @@ prima):
 
 Regression test: `src/__tests__/vercelConfig.test.ts` (presenza + ordine).
 
+⚠️ **2026-08-10**: il pattern alternativo "server entrypoint" (`server.ts`
+alla root, docs/functions/runtimes/node-js) è stato testato e NON funziona
+su questo account — vedi §1.3. Non riprovare senza test minimale prima.
+
 ### 1.1 Import cross-boundary `api/` → `src/`
 
 Import statici da `api/index.ts` verso `../src/...` non risolvono su
@@ -46,6 +50,31 @@ Vercel Lambda: il bundler traccia `api/` come entry point separato e
 find module '/var/task/src/ai/...'`. Fix: inlinare le costanti/funzioni
 necessarie direttamente in `api/index.ts` (es. `OLLAMA_PRO_FLAT_MONTHLY`).
 Non importare MAI da `../src/` in `api/index.ts` in produzione.
+
+### 1.3 Server entrypoint `server.ts` — TESTATO, NON FUNZIONA (2026-08-10)
+
+Tentativo di uscire dal monolite con il pattern documentato
+(`docs/functions/runtimes/node-js`: `server.ts` alla root con
+`server.listen()` = unica Vercel Function; root funzione = root progetto →
+import da `src/` risolvono). Implementato completo e testato:
+
+- `server.ts` alla root (http server + body reader 4MB + statici da `dist/`
+  + SPA fallback) + `src/server/handler.ts` (ex `api/index.ts` verbatim).
+- `vercel.json` senza rewrites. Test aggiornati (2946 verdi), build ok,
+  validazione locale `node server.ts` ok (API + SPA + 404 corretti).
+
+**Esito deploy preview: FAIL.** Il server entrypoint NON viene rilevato:
+`/api/config` → 404 NOT_FOUND, `/` → statici serviti dal CDN. Verificato
+con progetto minimale pulito (solo `server.ts`/`server.mjs` + package.json,
+framework null, outputDirectory null, buildCommand null): stesso risultato
+su 4 deploy. Il lambda risultante ha `entrypoint: "."` con `output: []`
+(bundle vuoto) — Vercel non esegue il rilevamento del server entrypoint su
+questo account/CLI (58.9.0).
+
+**Conclusione**: il monolite `api/index.ts` resta l'unica opzione sicura.
+Rollback completo eseguito (commit `1ec9ae7` ripristinato, working tree
+pulito). Se in futuro si vuole riprovare: testare prima su un progetto
+minimale (come fatto qui) PRIMA di toccare il codice reale.
 
 ### 1.2 Lazy `getDb()` — operator precedence (§1.2)
 

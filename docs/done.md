@@ -3,6 +3,23 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-10
+
+- **Server entrypoint Vercel — TESTATO e ROLLBACK (2026-08-10)** (gotchas
+  §1.3): tentativo di uscire dal monolite `api/index.ts` con il pattern
+  `server.ts` alla root (docs/functions/runtimes/node-js). Implementato
+  completo (server.ts + src/server/handler.ts + body reader 4MB + SPA
+  fallback + test aggiornati, 2946 verdi + build ok + validazione locale
+  `node server.ts` ok). **Deploy preview: FAIL** — il server entrypoint
+  NON viene rilevato: `/api/*` → 404 NOT_FOUND, root → statici. Verificato
+  con progetto minimale pulito (`server.ts` e `server.mjs`, framework
+  null, outputDirectory null, buildCommand null): stesso risultato.
+  Conclusione: su questo account/CLI il pattern non funziona → **rollback
+  completo a `1ec9ae7`** (monolite + rewrites ripristinati, working tree
+  pulito, typecheck + test verdi). Settings progetto Vercel ripristinate
+  (framework=vite, outputDirectory=dist). Progetti di test eliminati
+  (srvtest, srvtest-min). Il monolite resta l'unica opzione sicura.
+
 ## 2026-08-05
 
 - **Auto-build website PROD — timeout 60s sincrono → SSE (2026-08-05)**
