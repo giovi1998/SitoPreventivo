@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
-const migrationDir = path.resolve(__dirname, '..', '..', 'drizzle', '20260622000000_rename_quotes_to_documents');
+const migrationDir = path.resolve(__dirname, '..', '..', '..', 'drizzle', '20260622000000_rename_quotes_to_documents');
 const migrationSqlPath = path.join(migrationDir, 'migration.sql');
 
 describe('documents migration SQL (regression)', () => {

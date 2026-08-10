@@ -90,7 +90,7 @@ beforeEach(() => {
 });
 
 async function callHandler(req: any) {
-  const handler = (await import('../index')).default;
+  const handler = (await import('../handler')).default;
   const headers: Record<string, string | string[] | undefined> = { ...(req.headers || {}) };
   const res = {
     statusCode: 200,

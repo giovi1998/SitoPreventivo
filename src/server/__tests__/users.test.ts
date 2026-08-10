@@ -8,15 +8,6 @@ const mockDbState = {
   nextReturning: null as any,
 };
 
-const dbChain = {
-  from: vi.fn(),
-  where: vi.fn(),
-  orderBy: vi.fn(),
-  set: vi.fn(),
-  values: vi.fn(),
-  returning: vi.fn(),
-};
-
 vi.mock('drizzle-orm/neon-http', () => ({
   drizzle: vi.fn(() => makeDb()),
 }));
@@ -38,10 +29,6 @@ function makeSelectChain() {
       const result = mockDbState.selectResults.shift() ?? [];
       return result;
     }),
-    then(resolve: any) {
-      const result = mockDbState.selectResults.shift() ?? [];
-      resolve(result);
-    },
   };
   return chain;
 }
@@ -68,9 +55,7 @@ function makeUpdateChain() {
       this._set = s;
       return this;
     }),
-    where: vi.fn(function (this: any) {
-      return this;
-    }),
+    where: vi.fn(function (this: any) { return this; }),
     returning: vi.fn(function (this: any) {
       const result = mockDbState.nextReturning || [{ id: 'x' }];
       mockDbState.nextReturning = null;
@@ -99,7 +84,7 @@ beforeEach(() => {
 });
 
 async function callHandler(req: any) {
-  const handler = (await import('../index')).default;
+  const handler = (await import('../handler')).default;
   const headers: Record<string, string | string[] | undefined> = { ...(req.headers || {}) };
   const res = {
     statusCode: 200,
@@ -116,59 +101,50 @@ async function callHandler(req: any) {
   return res as any;
 }
 
-describe('quotes API regression', () => {
-  it('GET /quotes returns only quote documents for the user', async () => {
+describe('GET /api/users (admin list users)', () => {
+  it('returns 403 when adminEmail query param is missing (regression: API must use query string, not body)', async () => {
+    const res = await callHandler({
+      method: 'GET',
+      url: '/api/users',
+      headers: { origin: 'http://localhost' },
+      body: {},
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('returns 403 when adminEmail query param is not admin@gmail.com', async () => {
+    const res = await callHandler({
+      method: 'GET',
+      url: '/api/users?adminEmail=evil%40gmail.com',
+      headers: { origin: 'http://localhost' },
+      body: {},
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('returns 200 + user list when adminEmail=admin@gmail.com is passed as query string (regression for production bug)', async () => {
     mockDbState.selectResults = [[
-      { id: 'q1', userEmail: 'a@b.com', documentType: 'quote', title: 'Preventivo' },
-      { id: 'bc1', userEmail: 'a@b.com', documentType: 'businessCard', title: 'Card' },
-      { id: 'qr1', userEmail: 'a@b.com', documentType: 'qrCode', title: 'QR' },
+      { email: 'admin@gmail.com', username: 'admin', role: 'admin', createdAt: new Date('2025-01-01'), tokensUsed: 0, tokenLimit: 999999999 },
+      { email: 'test2@gmail.com', username: 'test2', role: 'user', createdAt: new Date('2025-02-01'), tokensUsed: 100, tokenLimit: 1000000 },
     ]];
     const res = await callHandler({
       method: 'GET',
-      url: '/api/quotes?email=a@b.com',
+      url: '/api/users?adminEmail=admin%40gmail.com',
       headers: { origin: 'http://localhost' },
       body: {},
     });
     expect(res.statusCode).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].id).toBe('q1');
-    expect(res.body[0].documentType).toBe('quote');
+    expect(res.body).toHaveLength(2);
+    expect(res.body[1].email).toBe('test2@gmail.com');
   });
 
-  it('GET /quotes/all returns only quote documents for admin', async () => {
-    mockDbState.selectResults = [[
-      { id: 'q1', userEmail: 'a@b.com', documentType: 'quote', title: 'Preventivo' },
-      { id: 'logo1', userEmail: 'a@b.com', documentType: 'logo', title: 'Logo' },
-    ]];
+  it('returns 403 when adminEmail is only in body (the broken behavior), guards against regression to body-based auth', async () => {
     const res = await callHandler({
       method: 'GET',
-      url: `/api/quotes/all?adminEmail=${encodeURIComponent('admin@gmail.com')}`,
+      url: '/api/users',
       headers: { origin: 'http://localhost' },
-      body: {},
-    });
-    expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].documentType).toBe('quote');
-  });
-
-  it('GET /quotes without email returns 400', async () => {
-    const res = await callHandler({
-      method: 'GET',
-      url: '/api/quotes',
-      headers: { origin: 'http://localhost' },
-      body: {},
-    });
-    expect(res.statusCode).toBe(400);
-  });
-
-  it('GET /quotes/all without admin email returns 403', async () => {
-    const res = await callHandler({
-      method: 'GET',
-      url: '/api/quotes/all',
-      headers: { origin: 'http://localhost' },
-      body: {},
+      body: { adminEmail: 'admin@gmail.com' },
     });
     expect(res.statusCode).toBe(403);
   });

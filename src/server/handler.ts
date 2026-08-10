@@ -3594,13 +3594,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return errorResponse(req, res, 500, err);
   }
 }
-
-export const config = {
-  api: {
-    bodyParser: {
-      // 4.5MB è il limite body Vercel Hobby; 4mb lascia margine per
-      // documenti website con HTML+CSS+JS+logo+immagini base64.
-      sizeLimit: '4mb',
-    },
-  },
-};

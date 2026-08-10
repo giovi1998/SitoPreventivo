@@ -80,7 +80,7 @@ export function resetApiTests(): void {
 }
 
 export async function callApiHandler(req: any) {
-  const handler = (await import('../../index')).default;
+  const handler = (await import('../../handler')).default;
   const res = {
     statusCode: 200,
     headers: {} as Record<string, string | number>,
