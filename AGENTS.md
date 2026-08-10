@@ -36,7 +36,7 @@ casi.
 
 ## Code Style (lean-code skill) — OBBLIGATORIO SEMPRE
 
-**Regola hard**: PRIMA di scrivere o modificare codice in `src/`, `api/`,
+**Regola hard**: PRIMA di scrivere o modificare codice in `src/`, `server.ts`,
 `db/` (nuovo codice, refactor, bug fix, PR review, scelta dipendenze, test),
 devi **invocare `skill("lean-code")`** via tool. Senza quella chiamata la
 skill non è attiva (opencode non auto-carica le skill legate solo a
@@ -67,16 +67,17 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 ## Architecture
 
 - **Frontend**: React 18 + Vite + React Router v6
-- **Backend**: single Vercel Serverless Function (`api/index.ts`), monolite
-  intenzionale, tutte le route in un file (vedi "Vercel Routing" sotto)
+- **Backend**: single Vercel Serverless Function via **Node server entrypoint**
+  (`server.ts` alla root, runtime `@vercel/backends`, preset framework `node`).
+  Route in `src/server/handler.ts` (monolite intenzionale; vedi "Vercel Routing" sotto)
 - **Database**: Drizzle ORM → Neon Postgres
 - **Storage split**: `localhost` = localStorage, production = API + Postgres.
   Detection automatica via `IS_LOCAL` in `src/utils/dataService.js`
 - **Auth**: bcrypt + localStorage (dev) / Drizzle + Neon (prod). Admin:
   `admin@gmail.com` validato contro `ADMIN_PASSWORD` env var, mai salvato a DB.
-- **Observability**: server logs via `console.*` in `api/index.ts` (JSON in
-  prod). Client logs via `src/utils/logger.ts` + `/api/logs` (Vercel logs).
-  Zero servizi esterni.
+- **Observability**: server logs via `console.*` in `src/server/handler.ts`
+  (JSON in prod). Client logs via `src/utils/logger.ts` + `/api/logs`
+  (Vercel logs). Zero servizi esterni.
 - **AI**: default **MiniMax M3** (Ollama Pro Cloud, `ollama-minimax-m3`,
   multimodale/vision, flat rate) per tutti gli orchestratori via proxy
   `/api/ai/chat`; DeepSeek fallback/selezionabile; Gemini Nano Banana
@@ -97,7 +98,8 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/AdminRoute.tsx` | Guard `user.role === 'admin'` |
 | `src/hooks/useRouteView.ts` | Bridge `pathname ↔ view`, prefix-match `:docId` |
 | `src/hooks/useDocumentLoader.ts` | Hydration condivisa editor: `:docId` → fetch → context, redirect not-found |
-| `api/index.ts` | Unica Vercel function, intera REST API (monolite intenzionale) |
+| `server.ts` | Unica Vercel function (server entrypoint): http server + body reader 4MB + statici `dist/` + SPA fallback |
+| `src/server/handler.ts` | Intera REST API (monolite intenzionale, ex `api/index.ts`) |
 | `src/utils/generatePDF.ts` | PDF preventivi (pdfmake, client-side) |
 | `src/utils/cardGenerator.ts` | Card PDF/PNG/SVG + `buildCardSvg` |
 | `src/utils/qrGenerator.ts` | QR SVG/PNG (`qrcode` lib) |
@@ -142,12 +144,12 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/logo/ConceptCard.tsx` | Card concept logo AI (preview+bg, badge "AI bg ✓", rigenera) estratta da LogoAiPanel |
 | `src/utils/logo/logoAiPersistence.ts` | Persistenza chat logo AI: `storageKeyFor(docId)`, TTL 24h, quota fallback senza bgImages |
 | `e2e/fixtures/` | Fixture e2e condivise: `testUser`/`adminUser`/`freeUser`/`unlockedUser`, `giovanniTemplate`, `sampleFlyer`, `sampleQuote` (usate da cardHarness + spec) |
-| `api/__tests__/setup.ts` | `createMockDrizzleDb`: mock Drizzle standardizzato per test API |
+| `src/server/__tests__/setup.ts` | `createMockDrizzleDb`: mock Drizzle standardizzato per test API |
 | `src/test-setup.ts` | Setup vitest globale: cleanup RTL + reset localStorage/sessionStorage in `beforeEach` |
 | `src/hooks/useMediaQuery.ts` | Breakpoint canonici `BP_SHELL=768`/`BP_WORKSPACE=1024` + hook mobile |
 | `src/utils/uiPrefs.ts` | `pq_ui:v1` (sidebarCollapsed, aiConsoleExpanded per editor, `aiProviderDefault`, `aiVisionEnabled`, `aiAutoFallback`, `aiReasoningEffort`) |
 | `vite.config.js` | Port 8000, SPA fallback, dev proxy `/api/ai/*`, `loadEnv()` esplicito |
-| `vercel.json` | Build: `db:migrate && build`; rewrites (ordine critico) |
+| `vercel.json` | Build: `db:migrate && build`; niente rewrites (server.ts gestisce tutto) |
 | `docs/agent-gotchas.md` | **Dettaglio completo gotchas + roadmap fasi** (leggere prima di toccare i moduli) |
 
 ## App Routes
@@ -242,19 +244,20 @@ Tutte le `/app/*` sono servite dalla catch-all SPA in `vercel.json`.
 Leggere la sezione pertinente di `docs/agent-gotchas.md` PRIMA di toccare
 il modulo corrispondente. Sintesi delle regole che non si possono violare:
 
-**Vercel monolith (§1)**: mai splittare `api/index.ts` (ogni `.ts` in `api/`
+**Vercel monolith (§1)**: mai splittare `src/server/handler.ts` (è l'unica
+REST API, monolite intenzionale). Mai ri-creare `api/` (ogni `.ts` in `api/`
 conta come funzione; `api/_lib/` è escluso dal bundle → `ERR_MODULE_NOT_FOUND`).
-Mai rimuovere le rewrite `/api/(.*) → /api` prima della catch-all SPA
-(senza → 405 su ogni POST `/api/*`). Mai importare da `../src/` in
-`api/index.ts` (cross-boundary non risolto → `ERR_MODULE_NOT_FOUND` su
-Vercel Lambda). OGNI chiamata DB deve avere `await` sulla catena query:
+Niente rewrites in `vercel.json` (il server entrypoint `server.ts` gestisce
+tutto: `/api/*` + statici + SPA fallback). **Project settings Vercel DEVE
+avere `framework: "node"`** (senza → static-only, 404 su `/api/*`, gotcha
+§1.3). OGNI chiamata DB deve avere `await` sulla catena query:
 `await (await getDb()).select()...` (§1.2 — operator precedence).
 Regression test: `src/__tests__/vercelConfig.test.ts`.
 
-**Gemini/`@google/genai` (§2-3)**: mai import statico in `api/index.ts`
-(ESM-only → `FUNCTION_INVOCATION_FAILED` su TUTTI gli endpoint); solo
-`await import('@google/genai')` dentro l'handler. Mai `await import('../src/...')`
-in prod Vercel (non risolto). `response_modalities` minuscolo. Chiedere
+**Gemini/`@google/genai` (§2-3)**: mai import statico in
+`src/server/handler.ts` (ESM-only → `FUNCTION_INVOCATION_FAILED` su TUTTI
+gli endpoint); solo `await import('@google/genai')` dentro l'handler.
+`response_modalities` minuscolo. Chiedere
 `image_size: '512'` in richiesta (clamp server 500KB). Prompt neutri, no
 metafore artistiche (filtro copyright/recitation). Path dev proxy = path
 client char-per-char. `loadEnv()` esplicito in `vite.config.js`.
@@ -415,17 +418,21 @@ server. Free-tier friendly.
 
 ## API Schema Duplication
 
-`api/index.ts` inlines lo schema Drizzle per compatibilità Vercel. Se
-modifichi `db/schema.ts`, aggiorna anche le tabelle corrispondenti in
-`api/index.ts` (linee 9-52).
+`src/server/handler.ts` inlines lo schema Drizzle per compatibilità Vercel.
+Se modifichi `db/schema.ts`, aggiorna anche le tabelle corrispondenti in
+`src/server/handler.ts` (linee 38-80).
 
 ## Vercel Routing, CRITICAL
 
-`api/index.ts` è l'**unica** serverless function. Monolite intenzionale —
-4 tentativi di split hanno rotto la produzione (cause in
-`docs/agent-gotchas.md` §1). Non aggiungere `.ts` in `api/`, non usare
-`api/_*`, non usare `includeFiles`, non aggiungere rewrite per-route.
-Condividi codice via `src/` (bundled correttamente per import statici).
+`server.ts` alla root è l'**unica** serverless function (Node server
+entrypoint, runtime `@vercel/backends`). La REST API vive in
+`src/server/handler.ts` — monolite intenzionale: 4 tentativi di split
+storici + il fallimento senza `framework: "node"` hanno rotto la
+produzione (cause in `docs/agent-gotchas.md` §1). Non aggiungere `.ts` in
+`api/` (cartella eliminata), non usare `api/_*`, non usare `includeFiles`,
+non aggiungere rewrite per-route (il server gestisce tutto: `/api/*` +
+statici `dist/` + SPA fallback). Import da `src/` nel server FUNZIONANO
+(la root della funzione è la root del progetto).
 
 ## Streaming AI
 
@@ -448,7 +455,8 @@ Condividi codice via `src/` (bundled correttamente per import statici).
 
 Posizione test: componenti → `src/components/__tests__/`, hook →
 `src/hooks/__tests__/`, utils → `src/utils/__tests__/`, API →
-`api/__tests__/` (mock DB). Framework: Vitest + RTL + jsdom. Test singolo:
+`src/server/__tests__/` (mock DB). Framework: Vitest + RTL + jsdom.
+Test singolo:
 `npx vitest run path/to/file.test.ts`. ~200+ file di test.
 
 **E2E AI logs (TB-023):** quando tocchi hook AI (`useAI*`) o `AILogPanel`,
@@ -512,9 +520,9 @@ Hook installati via `husky` 9 (`.husky/`), attivi dopo `npm install`
 
 | Hook | Quando | Cosa fa | Durata |
 |------|--------|---------|--------|
-| `pre-commit` | `git commit` | `scripts/check-api-imports.mjs` (serverless import safety, gotcha §1) + `lint-staged` (vitest related su file staged + check api/ su `api/**/*.ts`) | <30s |
+| `pre-commit` | `git commit` | `scripts/check-api-imports.mjs` (server entrypoint import safety, gotcha §1) + `lint-staged` (vitest related su file staged + check server su `server.ts`/`src/server/**/*.ts`) | <30s |
 | `pre-push` | `git push` | `npm run typecheck` + `npm run test` + `npm run build` (full gate, intercetta ERR_MODULE_NOT_FOUND pre-Vercel) + `scripts/spec-sync-check.mjs` (reminder non bloccante: ultimo step spec = cancellarla + nota done.md) | ~1-3min |
-| `post-commit` | dopo `git commit` | `scripts/docs-sync-check.mjs HEAD~1..HEAD` — reminder non bloccante se `src/`/`api/`/`db/` cambiati ma `docs/` (incl. `docs/spec/`)/`README.md`/`AGENTS.md` no | <1s |
+| `post-commit` | dopo `git commit` | `scripts/docs-sync-check.mjs HEAD~1..HEAD` — reminder non bloccante se `src/`/`server.ts`/`db/` cambiati ma `docs/` (incl. `docs/spec/`)/`README.md`/`AGENTS.md` no | <1s |
 
 E2E gate (manuale, non in pre-push perché lento ~5-10min):
 
@@ -550,18 +558,18 @@ skill** (`.agents/skills/<name>/SKILL.md`):
   "Output Style" sopra per regola hard di invocazione
   `skill("adhd-caveman")` ad ogni sessione)
 - `ai-prompt-engineering` — quando tocchi `src/ai/prompts/*` o `*Orchestrator.ts`
-- `vercel-serverless-monolith` — quando tocchi `api/index.ts` o `api/`
+- `vercel-serverless-monolith` — quando tocchi `server.ts` o `src/server/`
 - `pdf-client-side` — quando tocchi `*Generator.ts` o `watermark.ts`
 - `web-security` — quando tocchi auth/rate-limit/CORS/Zod-validation in
-  `api/index.ts` o `api/` (gotcha §13 OWASP A04/A06 🟡 TODO). Invoca
+  `src/server/handler.ts` (gotcha §13 OWASP A04/A06 🟡 TODO). Invoca
   `skill("web-security")` PRIMA di modificare `handleAuth`,
   `consumeRateLimit`, `bodyParser`, header CORS, o qualsiasi schema Zod
   su body/query dell'API.
-- `test-driven-development` — quando crei nuovo file in `src/`/`api/`/`db/`
+- `test-driven-development` — quando crei nuovo file in `src/`/`db/`
   o fixi un bug (vedi "Test, OBBLIGATORI" sopra: nuovo codice → nuovi test,
   bug fix → regression test). Invoca `skill("test-driven-development")`
   PRIMA di scrivere l'implementazione, non dopo.
-- `lean-code` — quando scrivi/modifichi codice in `src/`/`api/`/`db/`
+- `lean-code` — quando scrivi/modifichi codice in `src/`/`db/`
   (nuovo codice, refactor, PR review). Fusione lazy-YAGNI (ladder:
   esiste già? stdlib? nativo? deps già installate? una riga? solo poi il
   minimo) + Uncle Bob: naming intention-revealing, funzioni piccole (<20

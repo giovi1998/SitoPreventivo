@@ -1,4 +1,5 @@
 {
   "*.{ts,tsx}": "vitest related --run --no-coverage",
-  "api/**/*.ts": "node scripts/check-api-imports.mjs"
+  "server.ts": "node scripts/check-api-imports.mjs",
+  "src/server/**/*.ts": "node scripts/check-api-imports.mjs"
 }

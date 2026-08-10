@@ -8,8 +8,8 @@ Leggere la sezione pertinente prima di toccare il modulo corrispondente.
 
 ## 1. Vercel function bundling — lessons learned
 
-Quattro commit tentarono di refactorare la struttura API; tutti e quattro
-ruppero la produzione, ognuno per una causa diversa.
+Quattro tentativi storici di refactorare la struttura API ruppero la
+produzione; il quinto (server entrypoint, 2026-08-10) ha FUNZIONATO.
 
 1. `f004e5e` (split in `api/lib/` + `api/routes/`): superato il limite di 12
    funzioni Hobby. Vercel conta ogni `.ts` in `api/` come funzione.
@@ -25,56 +25,60 @@ ruppero la produzione, ognuno per una causa diversa.
    e rispondeva **405 Method Not Allowed** a ogni POST `/api/*` (index.html
    è uno static asset che non accetta POST).
 
-**Conclusione**: su piano Hobby, un singolo monolite è l'unica opzione
-sicura. Tenere SEMPRE in `vercel.json`, in quest'ordine (prima matcha
-prima):
+**Conclusione attuale (2026-08-10, commit `de7fd94`)**: il pattern
+"server entrypoint" (docs/functions/runtimes/node-js) è la via giusta:
+`server.ts` alla root + preset framework `node` nel project settings
+(runtime `@vercel/backends`) = UNA Vercel Function che riceve tutto, con
+import da `src/` risolti (la root della funzione è la root del progetto).
+Niente rewrites in `vercel.json` — il server gestisce `/api/*` + statici
+`dist/` + SPA fallback. Dettagli e setup in §1.3. Regression test:
+`src/__tests__/vercelConfig.test.ts`.
 
-```json
-{ "rewrites": [
-  { "source": "/api/(.*)", "destination": "/api" },
-  { "source": "/(.*)", "destination": "/index.html" }
-] }
-```
+### 1.1 Cross-boundary `api/` → `src/` — SUPERATO
 
-Regression test: `src/__tests__/vercelConfig.test.ts` (presenza + ordine).
+Il cross-boundary era specifico del vecchio setup `api/index.ts` (il
+bundler tracciava `api/` come entry point separato → `src/` fuori dal
+bundle, `ERR_MODULE_NOT_FOUND`). Con il server entrypoint (`server.ts` alla
+root) la root della funzione è la root del progetto: **gli import da
+`src/` funzionano**. `api/` è stata eliminata (commit `de7fd94`). La
+costante `OLLAMA_PRO_FLAT_MONTHLY` resta inlined in `src/server/handler.ts`
+per coerenza con i test che la importano.
 
-⚠️ **2026-08-10**: il pattern alternativo "server entrypoint" (`server.ts`
-alla root, docs/functions/runtimes/node-js) è stato testato e NON funziona
-su questo account — vedi §1.3. Non riprovare senza test minimale prima.
+### 1.3 Server entrypoint `server.ts` — RISOLTO (2026-08-10, framework=node)
 
-### 1.1 Import cross-boundary `api/` → `src/`
+Il pattern documentato (`docs/functions/runtimes/node-js`: `server.ts` alla
+root con `server.listen()` = unica Vercel Function; root funzione = root
+progetto → import da `src/` risolvono) FUNZIONA, ma richiede il preset
+framework **`node`** esplicito nel project settings.
 
-Import statici da `api/index.ts` verso `../src/...` non risolvono su
-Vercel Lambda: il bundler traccia `api/` come entry point separato e
-`src/` resta fuori dal bundle. Sintomo: `ERR_MODULE_NOT_FOUND: Cannot
-find module '/var/task/src/ai/...'`. Fix: inlinare le costanti/funzioni
-necessarie direttamente in `api/index.ts` (es. `OLLAMA_PRO_FLAT_MONTHLY`).
-Non importare MAI da `../src/` in `api/index.ts` in produzione.
+**Prima diagnosi (errata)**: deploy con `framework: null` → 404 su `/api/*`,
+lambda `entrypoint: "."` con `output: []` (bundle vuoto). Causa reale: la
+detection automatica del framework avviene SOLO alla creazione del progetto
+(dashboard/git import); al deploy CLI con progetto esistente Vercel usa le
+settings così come sono → `framework: null` = trattato come static-only.
 
-### 1.3 Server entrypoint `server.ts` — TESTATO, NON FUNZIONA (2026-08-10)
+**Fix**: `PATCH /v9/projects/<name>` con `{"framework": "node",
+"outputDirectory": null}` (il preset Node, `slug: 'node'` in
+`packages/frameworks/src/frameworks.ts`, usa il runtime `@vercel/backends`
+e rileva `server.ts`/`server.js`/`server.mjs` alla root o in `src/`).
+Build log conferma: `Build complete - Using server.ts as the root
+entrypoint.`
 
-Tentativo di uscire dal monolite con il pattern documentato
-(`docs/functions/runtimes/node-js`: `server.ts` alla root con
-`server.listen()` = unica Vercel Function; root funzione = root progetto →
-import da `src/` risolvono). Implementato completo e testato:
+**Setup attuale** (commit `de7fd94`):
+- `server.ts` alla root: http server + body reader 4MB + statici da `dist/`
+  + SPA fallback. `src/server/handler.ts`: ex `api/index.ts` verbatim.
+- `vercel.json`: SOLO `buildCommand` (niente rewrites, niente
+  outputDirectory — il server serve `dist/` a runtime).
+- Project settings: `framework: "node"`, `buildCommand:
+  "npm run db:migrate && npm run build"`, `outputDirectory: null`.
+- Test API in `src/server/__tests__/` (path import `../handler`).
+- Validato su preview: GET config/logo-config 200, POST users/login 401
+  (routing+body+DB ok), SSE chat/stream 200 streaming, SPA fallback 200,
+  404 JSON. Import da `src/` risolvono (cross-boundary §1.1 superato per
+  il server; `api/` non esiste più).
 
-- `server.ts` alla root (http server + body reader 4MB + statici da `dist/`
-  + SPA fallback) + `src/server/handler.ts` (ex `api/index.ts` verbatim).
-- `vercel.json` senza rewrites. Test aggiornati (2946 verdi), build ok,
-  validazione locale `node server.ts` ok (API + SPA + 404 corretti).
-
-**Esito deploy preview: FAIL.** Il server entrypoint NON viene rilevato:
-`/api/config` → 404 NOT_FOUND, `/` → statici serviti dal CDN. Verificato
-con progetto minimale pulito (solo `server.ts`/`server.mjs` + package.json,
-framework null, outputDirectory null, buildCommand null): stesso risultato
-su 4 deploy. Il lambda risultante ha `entrypoint: "."` con `output: []`
-(bundle vuoto) — Vercel non esegue il rilevamento del server entrypoint su
-questo account/CLI (58.9.0).
-
-**Conclusione**: il monolite `api/index.ts` resta l'unica opzione sicura.
-Rollback completo eseguito (commit `1ec9ae7` ripristinato, working tree
-pulito). Se in futuro si vuole riprovare: testare prima su un progetto
-minimale (come fatto qui) PRIMA di toccare il codice reale.
+⚠️ Se il progetto venisse ricreato da zero: `vercel link` + PATCH framework
+`node` (o import git che auto-detecta). Mai `framework: null`.
 
 ### 1.2 Lazy `getDb()` — operator precedence (§1.2)
 
@@ -97,7 +101,7 @@ cerca `Symbol.iterator` sulla chain, che non ha iteratore.
 const [row] = await (await getDb()).select().from(table).where(cond);
 ```
 
-**Regola**: OGNI chiamata DB in `api/index.ts` deve avere `await` prima
+**Regola**: OGNI chiamata DB in `src/server/handler.ts` deve avere `await` prima
 della catena query (select, insert.values().returning(),
 update.set().where().returning(), delete.where()). Anche le fire-and-forget
 (devono avere `await` per propagare errori). Pattern corretto:
@@ -143,7 +147,7 @@ Due bug distinti hanno bloccato la generazione background per un intero
 ciclo; nessuno era nel provider Gemini in sé.
 
 1. **Path proxy dev deve combaciare char-per-char col client/prod**. Client
-   (`LogoAiPanel.tsx`) e `api/index.ts` usano `/api/ai/logo-config` +
+   (`LogoAiPanel.tsx`) e `src/server/handler.ts` usano `/api/ai/logo-config` +
    `/api/ai/logo-background`. Il middleware dev in `vite.config.js`
    intercettava `/api/logo-config` (senza `/ai/`): fetch falliva
    silenziosamente, `config.provider` restava `'none'`, ramo background
@@ -162,19 +166,19 @@ ciclo; nessuno era nel provider Gemini in sé.
    `generateContent`). Maiuscolo → `400: value 'TEXT' is not supported`.
 5. **Dimensione immagine non enforced di default**: senza
    `generation_config.image_config.image_size`, Gemini produce a `1K`
-   (~400KB-2MB) e il clamp server (500KB, `api/index.ts`
+   (~400KB-2MB) e il clamp server (500KB, `src/server/handler.ts`
    `/ai/logo-background`) scarta ~2/3 delle immagini con 413. Fix: chiedere
    `image_size: '512'` (+ `aspect_ratio: '16:9'`) in richiesta. Valori:
    `'512' | '1K' | '2K' | '4K'`.
 6. **`await import('../src/...')` non risolto in prod Vercel**. L'import
-   dinamico di un modulo sotto `src/` da `api/index.ts` fallisce in
+   dinamico di un modulo sotto `src/` da `src/server/handler.ts` fallisce in
    produzione (`Cannot find module '/var/task/src/...'`) anche se gli
    import **statici** da `src/` funzionano. Sintomo: 404
    `{"error":"Endpoint AI non trovato"}` o 502. Fix:
    `await import('@google/genai')` diretto (node_modules sempre bundled) e
    logica provider inlinata.
 7. **Import statico di `@google/genai` crasha l'intera funzione**. Il
-   pacchetto v2.10.0 è ESM-only; l'import statico in cima a `api/index.ts`
+   pacchetto v2.10.0 è ESM-only; l'import statico in cima a `src/server/handler.ts`
    rompe il bundle Vercel: OGNI endpoint `/api/*` ritorna
    `FUNCTION_INVOCATION_FAILED` (anche `/api/ping`). Fix: solo import
    dinamico dentro l'handler della route.
@@ -196,7 +200,7 @@ ciclo; nessuno era nel provider Gemini in sé.
     `buildCardAIContext` (`src/ai/prompts/cardContext.ts`) strippa
     `coverImageUrl` insieme a `photoUrl` e `logoUrl`.
 11. **Context limit disallineato validatore vs builder**. Zod
-    `context: z.string().max(N)` in `api/index.ts` e `MAX_CONTEXT_LEN` in
+    `context: z.string().max(N)` in `src/server/handler.ts` e `MAX_CONTEXT_LEN` in
     `coverBrief.ts` devono coincidere (ora 2000). Verificare SEMPRE dopo
     modifiche a `buildCoverContext`.
 12. **`LogoAiPanel`: background AI perso cambiando tab AI → Builder → AI**.
@@ -691,7 +695,7 @@ Codice signup/onboarding **conservato** dietro feature flag
    placeId, placeData JSONB, customerPhotos JSONB, detectedLogoUrl,
    researchStatus JSONB, aiSuggestedFields JSONB, notes, assignedTo,
    timestamps). Colonna `documents.customerId` (FK nullable,
-   retrocompatibile). Mirror in `api/index.ts` (`customersTable`,
+   retrocompatibile). Mirror in `src/server/handler.ts` (`customersTable`,
    `documentsTable` aggiornata).
 2. **Endpoint** (tutti admin, guard `requireAdmin` helper):
    - `GET /api/customers?status=&adminEmail=` — lista filtrata.
@@ -772,7 +776,7 @@ Codice signup/onboarding **conservato** dietro feature flag
    `new|in_progress|done|rejected`, businessName, ownerName, sector,
    activity, mood, target, preferredColors, contacts JSONB, package,
    sourceRef UNIQUE nullable, notes, assignedTo, timestamps). Mirror in
-   `api/index.ts` (`intakesTable`).
+   `src/server/handler.ts` (`intakesTable`).
 2. **Endpoint**:
    - `POST /api/intake` (pubblico, rate limit 5/ora/IP via
      `consumeRateLimit(ip, 'intake', 5, 60*60*1000)`). Zod
@@ -802,7 +806,7 @@ Codice signup/onboarding **conservato** dietro feature flag
 ### Gotchas specifici
 
 - **z.record 2 args**: zod v3 richiede `z.record(z.string(), z.unknown())`
-  non `z.record(z.unknown())` (TS error in api/index.ts mirror).
+  non `z.record(z.unknown())` (TS error in src/server/handler.ts mirror).
 - **b&b come key object**: `b&b` non quotato in TS rompe il parser
   (`&` → TS1005). Quota: `'b&b': '...'`.
 - **mock DB select.where**: chain mock in test deve ritornare array con
@@ -898,7 +902,7 @@ Contesto cliente:
 - **Research dev reale**: branch LOCAL di `researchCustomer` usa
   `VITE_FIRECRAWL_API_KEY` (browser, dev-only come `VITE_GEMINI_API_KEY`)
   via `src/utils/firecrawlLocal.js` (chunkMarkdown DUPLICATO da
-  api/index.ts — boundary Vercel, annotato). Chunks →
+  src/server/handler.ts — boundary Vercel, annotato). Chunks →
   `pq_customer_knowledge:v1`. Logo detection solo da risposta Firecrawl
   (branding/metadata, URL remoto, niente fetch HTML cross-origin).
   Status: `no_key` senza key, `no_website` senza sito, `error` su
@@ -956,7 +960,7 @@ Contesto cliente:
 - **Locale (`src/utils/firecrawlLocal.js`)**: `scrapeFirecrawlLocal` mirror di
   `fetchFirecrawlPage` con fallback payload; parsing robusto screenshot /
   links / json / images.
-- **API (`api/index.ts`)**: `fetchFirecrawlPage` ritorna `FirecrawlResult`
+- **API (`src/server/handler.ts`)**: `fetchFirecrawlPage` ritorna `FirecrawlResult`
   arricchito; research endpoint salva tutto in `webData` e usa
   `branding.logo` o `json.logo` per `detectedLogoUrl`.
 - **UI layout**: sezione "Dati dal sito" su 2 colonne (main/side). Main:
@@ -1285,7 +1289,7 @@ non serve). Dettaglio per provider:
 - Mappatura per provider: DeepSeek accetta `low`/`high`/`max`; Ollama
   `low`/`medium`/`high`/`max` (`medium` solo Ollama — il selettore UI
   non lo espone, resta via options esplicite)
-- Server proxy (`api/index.ts`): `reasoning_effort` nel body è accettato
+- Server proxy (`src/server/handler.ts`): `reasoning_effort` nel body è accettato
   anche per provider `ollama` e mappato a `think` (`reasoning_effort ?? 'max'`)
 - Dev proxy (`vite.config.js`): propaga `think`/`format`/`num_predict` e
   `reasoningEffort` nelle options verso il provider Ollama
@@ -1429,7 +1433,7 @@ Dettagli per `src/ai/prompts/websiteSystem.ts` e `src/ai/websiteOrchestrator.ts`
 - `src/utils/websiteExport.ts` (`exportWebsiteZip`, `buildWebsiteFullDocument`)
   condiviso da editor + Collection: immagini/logo base64 → `assets/` con
   `src` relativi, `.html` per pagina. Test: `websiteExport.test.ts` (5).
-- `api/index.ts` bodyParser `1mb` → `4mb` (documenti website con immagini
+- `src/server/handler.ts` (ex api) bodyParser `1mb` → `4mb` (documenti website con immagini
   inline superavano 1MB → salvataggio 413).
 
 ### 26.10 Dev proxy: ERR_HTTP_HEADERS_SENT
@@ -1754,7 +1758,7 @@ proxy (`vite.config.js` `proxyOllamaChat`) NON propagava `tools` nel body
 upstream — `ollamaReq = { model, messages, stream: true }` e basta. I
 tool_calls precompilati (verify analyze_site) arrivavano a Ollama senza
 `tools` dichiarato → 400 "Value looks like object, but can't find closing
-'}' symbol". In PROD `api/index.ts:1373` i tools erano già propagati
+'}' symbol". In PROD `src/server/handler.ts:1373` i tools erano già propagati
 (§26.17) — il bug era solo dev. Fix: `if (Array.isArray(body.tools) &&
 body.tools.length > 0) ollamaReq.tools = body.tools;`.
 
@@ -1793,7 +1797,7 @@ ma con coda/concorrenza può sforare) → abort → 502 → **eccezione propagat
 
 **Fix**:
 1. **Timeout dev proxy 300s → 600s** (`vite.config.js`): 10 min per
-   generazioni Ollama lunghe. In PROD `api/index.ts:1340` il timeout
+   generazioni Ollama lunghe. In PROD `src/server/handler.ts:1340` il timeout
    Ollama è **60s** — per CSS da 100-130s fallirebbe SEMPRE: va alzato
    alla prossima deploy (TODO prod, gotcha §1 regola vercel).
 2. **Step CSS/JS/pagine BEST-EFFORT**: un loro timeout/errore NON perde
@@ -1817,7 +1821,7 @@ typecheck + suite impattata verde. ⚠️ Riavvio dev server obbligatorio
 suo AbortController, quindi "si resetta" naturalmente tra step. Il valore
 era solo troppo basso: 300s (dev) / 60s (prod) con Ollama thinking 'max' +
 16k tok → abort → 502 → sito perso. Ora 600s in entrambi (vite.config.js
-+ api/index.ts). In prod la durata massima Vercel Hobby per una funzione è
++ src/server/handler.ts). In prod la durata massima Vercel Hobby per una funzione è
 60s **solo per funzioni sincrone** — con streaming/flush il limite si
 allunga; se dovesse restare il 502 in prod, il piano Hobby è il tetto
 (vedi to-be-done: valutare pro/streaming serverless).

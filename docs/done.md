@@ -5,20 +5,20 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-10
 
-- **Server entrypoint Vercel — TESTATO e ROLLBACK (2026-08-10)** (gotchas
-  §1.3): tentativo di uscire dal monolite `api/index.ts` con il pattern
-  `server.ts` alla root (docs/functions/runtimes/node-js). Implementato
-  completo (server.ts + src/server/handler.ts + body reader 4MB + SPA
-  fallback + test aggiornati, 2946 verdi + build ok + validazione locale
-  `node server.ts` ok). **Deploy preview: FAIL** — il server entrypoint
-  NON viene rilevato: `/api/*` → 404 NOT_FOUND, root → statici. Verificato
-  con progetto minimale pulito (`server.ts` e `server.mjs`, framework
-  null, outputDirectory null, buildCommand null): stesso risultato.
-  Conclusione: su questo account/CLI il pattern non funziona → **rollback
-  completo a `1ec9ae7`** (monolite + rewrites ripristinati, working tree
-  pulito, typecheck + test verdi). Settings progetto Vercel ripristinate
-  (framework=vite, outputDirectory=dist). Progetti di test eliminati
-  (srvtest, srvtest-min). Il monolite resta l'unica opzione sicura.
+- **Server entrypoint Vercel — RISOLTO con framework=node (2026-08-10)**
+  (gotchas §1.3): uscita dal monolite `api/index.ts` con pattern
+  `server.ts` alla root. Prima diagnosi di fallimento (404 su `/api/*`,
+  lambda bundle vuoto) = `framework: null` → trattato static-only; la
+  detection automatica del framework avviene solo alla creazione progetto.
+  **Fix**: PATCH project settings `framework: "node"` (preset Node,
+  runtime `@vercel/backends`). Validato con progetto minimale poi su
+  preview reale: GET config/logo-config 200, POST users/login 401
+  (routing+body+DB ok), **SSE chat/stream 200 streaming**, SPA fallback
+  200, 404 JSON. Build log: "Using server.ts as the root entrypoint".
+  `server.ts` (http + body reader 4MB + statici dist/ + SPA fallback) +
+  `src/server/handler.ts` (ex api/index.ts). Test API in
+  `src/server/__tests__/`. 2947 test verdi + typecheck + build ok.
+  Commit `de7fd94`. Progetti di test eliminati (srvtest, srvtest2).
 
 ## 2026-08-05
 
