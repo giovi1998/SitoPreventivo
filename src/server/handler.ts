@@ -787,7 +787,7 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
       return json(req, res, 400, { error: 'Status non valido' });
     }
     const patch: Record<string, unknown> = { updatedAt: new Date() };
-    for (const k of ['businessName', 'ownerName', 'sector', 'activity', 'mood', 'target', 'preferredColors', 'contacts', 'package', 'status', 'logoUrl', 'notes', 'assignedTo', 'googleMapsUrl'] as const) {
+    for (const k of ['businessName', 'ownerName', 'sector', 'activity', 'mood', 'target', 'preferredColors', 'contacts', 'package', 'status', 'logoUrl', 'notes', 'assignedTo', 'googleMapsUrl', 'promptLabels'] as const) {
       if (d[k] !== undefined) patch[k] = d[k];
     }
     const [updated] = await (await getDb()).update(customersTable).set(patch).where(eq(customersTable.id, id)).returning();

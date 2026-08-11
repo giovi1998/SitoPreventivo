@@ -3,7 +3,134 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-11
+
+- **Langfuse — nomi trace specifici + tags strutturati + costi + sessioni + fix error:empty (2026-08-11)**
+  (spec §3-4-9-11):
+  - **Nomi trace verb-first specifici**: chat → `{kind}-ai-chat`
+    (card-ai-chat, quote-ai-chat, flyer-ai-chat...), immagini →
+    `card-cover`, `card-photo`, `logo-background`, `flyer-hero`,
+    `image-flash`, `design-review`, `flyer-copy` (server ai.ts + dev
+    proxy). Niente più `generate-response`/`generate-stream` generici.
+  - **Tags strutturati**: `feature:X`, `subfeature:chat|cover|photo|bg|
+    hero|icon|flash|review`, `provider:deepseek|ollama|gemini`,
+    `streaming:true|false` (buildLangfusePayload + tutti i trace point).
+  - **Costi reali**: `computeCostUsd` server-side (tabella inline
+    DeepSeek/Gemini, gotcha §1.1) → `cost_details` nelle trace; body
+    `costUsd` client come override opzionale. Ollama flat → 0.
+  - **Sessioni attive**: `sessionId=docId` propagato da editor
+    (CardEditorShell, FlyerEditorShell, LogoEditor/LogoAiPanel,
+    WebsiteEditor, AppShell quote) + auto-build (`doc.id`) → chat e
+    immagini dello stesso documento nella stessa sessione Langfuse.
+    `customerId` resta fallback + metadata.
+  - **Fix error:empty**: retry automatico con prompt semplificato in
+    `useAICard` (stesso pattern di useAI quote) — deepseek-v4-flash:cloud
+    che risponde vuoto ora riprova.
+  - Test: +2 API (nomi/tags/costi/session), fix 4 esistenti (tags nuovi,
+    options auto-build). **3006 test verdi**. Commit `—` (da fare).
+
+- **Langfuse — tracing completo dev proxy (5 endpoint Gemini + design-review) + PII content-string (2026-08-11)**
+  (spec §11):
+  - **Root cause cover/sfondo non tracciati in locale**: il dev proxy Vite
+    gestisce TUTTI gli endpoint AI in dev (il server handler di prod non
+    gira) ma tracciava solo la chat Ollama. Fix: `traceDev()` helper +
+    trace su `logo-background`, `card-cover`, `flyer-hero`, `card-photo`,
+    `image-flash` (success + errori, `generate-*` nome stabile, tag
+    feature, `imageBase64` → media token inline, `requestId` da header
+    `X-Request-Id` via `devReqId(req)`).
+  - **Design review in dev**: prima 404 (non in `handledPaths`) → ora ramo
+    Ollama `minimax-m3:cloud` vision con trace (`generate-design-review`,
+    screenshot → media).
+  - **PII content-string**: le anteprime vision passano come base64 raw nel
+    content string ("Anteprima card allegata (base64 JPEG): data:...") →
+    `resolveMediaRefs` ora sostituisce TUTTI i data URI inline nel content
+    con token media/placeholder (regex `DATA_URI_RE`, replace sincrono
+    dopo risoluzione Promise). Mai base64 raw in trace.
+  - **Cache media dedup per mime+contenuto** (stesso b64 con mime diverso =
+    media diverso).
+  - Fix `proxyOllamaChat(req, res, body, isStream)` (`req is not defined`).
+  - Test: +1 PII content-string, +1 flusso vision card completo (system +
+    prompt + anteprima→token + tool_calls + usage), viteDevProxy 5 verdi.
+    **3004 test verdi**. Commit `—` (da fare).
+
+- **Langfuse — fix tracing ESM + tags prompt + tracing dev proxy (2026-08-11)**
+  (spec §8-11):
+  - **Root cause zero-trace in locale**: `src/server/langfuse.ts` usava
+    `require('node:crypto')` dentro `cryptoMd5` → in ESM (vite dev/tsx)
+    `require is not defined` → `ingestLangfuse` crashava prima del fetch →
+    in locale zero trace (in prod, bundle CJS, passava). Fix: usa l'import
+    statico `crypto` già presente. Verificato end-to-end: trace reale
+    inviata da script tsx e presente in Langfuse (`generate-stream`,
+    userId=admin@gmail.com, usage 100/50).
+  - **Tags per prompt** (`scripts/sync-prompts.ts`): ogni prompt ora ha
+    `quickbrand` + `environment:<label>` (staging/production). All'inizio
+    identici tra ambienti, possono divergere in futuro. Upload reale:
+    staging v2, production v3, tutti e 8. Verifica CLI: labels
+    `production,latest`, tags `quickbrand,environment:production`.
+  - **Tracing dev proxy** (`vite.config.js` `proxyOllamaChat`): il dev proxy
+    sostituisce il server handler in locale → ora traccia anche lui
+    (stream/non-stream/errori, usage, kind, customerId, userEmail) via
+    `ssrLoadModule('/src/server/langfuse.ts')`. In locale le trace ci sono.
+  - Gate: typecheck + build + 3002 test verdi. Commit `—` (da fare).
+
+- **Langfuse — migrazione completa prompt (2026-08-11)** (spec §8, skill
+  prompt-migration): 5 nuovi system prompt migrati su Langfuse
+  (`logo-system`, `social-system`, `onboarding-system`, `website-system`,
+  `palette-system`) oltre ai 3 pilota (`card-system`, `quote-system`,
+  `flyer-system`) = **8 prompt gestiti** con label per ambiente
+  (production/staging). Upload reale su Langfuse cloud (staging v1) +
+  verifica roundtrip via CLI e `fetchRemotePrompt` (fallback:false).
+  **Esclusi deliberatamente**: i 5 user-prompt website
+  (`website-html/css/js/page/verify`) incorporano HTML/CSS/JS dinamico
+  5-50KB → variabili giganti ineditabili, restano hardcoded
+  (`website-system` migrato come riferimento). Test: +1 fallback locale
+  copre i 5 nuovi. Commit `—` (da fare).
+
 ## 2026-08-10
+
+- **Langfuse observability — tracing AI + costi per cliente (2026-08-10)**
+  (spec `docs/spec/spec-langfuse-observability.md`): ogni chiamata AI
+  (chat/stream/copy-flyer/design-review/5 endpoint Gemini) → trace OTLP
+  Langfuse v4 con usage, costi, errori, `user_id`, `session_id=customerId`,
+  tag feature, env. `src/server/langfuse.ts` (payload OTLP manuale, zero
+  dipendenze, fire-and-forget timeout 2s, no-op senza chiavi; fallback
+  `VITE_LANGFUSE_*` per dev locale). Identity client: `userEmail` auto dal
+  localStorage, `customerId` propagato via ChatOptions fino all'auto-build
+  CRM, `kind` per orchestratore. Env:
+  `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL`.
+  Test: 13 unit langfuse + 3 API integrazione + 4 wiring = 20 nuovi.
+- **Langfuse Prompt Management — Fase 2 (2026-08-10)** (spec §8):
+  prompt pilota (`card-system`, `quote-system`, `flyer-system`) versionati
+  su Langfuse con **label per ambiente**: `production` (Vercel) vs
+  `staging` (locale) → template diversi in prod e local.
+  `GET /api/ai/prompt` (cache 60s + fallback builder locali), dev proxy,
+  client `src/utils/ai/remotePrompt.ts` (prefetch in AppShell, override
+  `promptRegistry`, `compileClientPrompt` {{var}}), script
+  `scripts/sync-prompts.ts` (`npm run prompts:sync[:staging|:prod]`).
+  Test: 7 server + 8 client = 15 nuovi. Commit `—` (da fare).
+- **Langfuse — Fase 3 A/B per cliente + CRUD prompt + media (2026-08-10)**
+  (spec §9-11): `customers.promptLabels` jsonb + PATCH + override label in
+  `/api/ai/prompt?customerId=`; UI CRM selettore default/production/
+  experiment per prompt pilota; admin CRUD `POST/GET/DELETE /api/ai/prompts`;
+  media multi-modale (upload base64 → token `@@@langfuseMedia` con dedup,
+  placeholder se upload fallisce — mai raw base64 in trace); stream trace
+  ora include `tool_calls` (Ollama NDJSON + DeepSeek SSE fragmentata).
+  Migrazione `20260811143934_lyrical_misty_knight`. Test: +10 server
+  (media, tool_calls, roundtrip carica→servi→cancella, override label),
+  +1 UI CRM = 2997 verdi totali. Commit `—` (da fare).
+- **Langfuse — fix root cause prompt remoti mai applicati (2026-08-10)**
+  (spec §8): gli orchestratori card/quote/flyer usavano i builder diretti
+  (`buildCardSystemPrompt()` ecc.) invece di `promptRegistry` → il prefetch
+  remoto registrava gli override ma nessuno li leggeva, e le modifiche fatte
+  su Langfuse non arrivavano al sito. Fix: i 3 orchestratori pilota ora
+  passano da `promptRegistry.getPrompt('card-system'|'quote-system'|
+  'flyer-system')` (builder locali restano come fallback registrato nel
+  registry). Inoltre le immagini generate Gemini ora entrano nella trace:
+  output `{mimeType, sizeKB, imageBase64}` → upload media → token
+  `@@@langfuseMedia` renderizzato inline nella UI (placeholder se upload
+  fallisce, mai base64 raw). Test: +1 card orchestrator (system prompt dal
+  registry), +2 media output, +1 prefetch→registry roundtrip =
+  **3001 verdi**. Commit `—` (da fare).
 
 - **Server entrypoint Vercel — RISOLTO con framework=node (2026-08-10)**
   (gotchas §1.3): uscita dal monolite `api/index.ts` con pattern

@@ -59,6 +59,12 @@ export interface ChatOptions {
   stream?: boolean;
   /** Observability: client-generated request id propagated to the server. */
   requestId?: string;
+  /** TB-029: customerId per Langfuse (session grouping + metadata). */
+  customerId?: string;
+  /** TB-029: sessione Langfuse (docId: raggruppa chat+immagini del documento). */
+  sessionId?: string;
+  /** TB-029: feature orchestrator (quote/card/flyer/...) per tag Langfuse. */
+  kind?: string;
 }
 
 export interface AIStreamChunk {

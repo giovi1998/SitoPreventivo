@@ -333,9 +333,9 @@ describe('useAutoBuildGenerate', () => {
       await act(async () => {
         await result.current.generateAll(makeDocs(), customer, { providerId: 'deepseek-v4-flash' });
       });
-      expect(mocks.generateLogo.mock.calls[0][2]).toEqual({ modelId: 'deepseek-v4-flash' });
+      expect(mocks.generateLogo.mock.calls[0][2]).toEqual(expect.objectContaining({ modelId: 'deepseek-v4-flash' }));
       expect(mocks.processPrompt.mock.calls[0][2].modelId).toBe('deepseek-v4-flash');
-      expect(mocks.generateCopy.mock.calls[0][3]).toEqual({ modelId: 'deepseek-v4-flash' });
+      expect(mocks.generateCopy.mock.calls[0][3]).toEqual(expect.objectContaining({ modelId: 'deepseek-v4-flash' }));
     });
 
     it('generateOne passa providerId come modelId', async () => {
@@ -344,7 +344,7 @@ describe('useAutoBuildGenerate', () => {
       await act(async () => {
         await result.current.generateOne(doc, customer, { providerId: 'deepseek-v4-flash' });
       });
-      expect(mocks.generateLogo.mock.calls[0][2]).toEqual({ modelId: 'deepseek-v4-flash' });
+      expect(mocks.generateLogo.mock.calls[0][2]).toEqual(expect.objectContaining({ modelId: 'deepseek-v4-flash' }));
     });
 
     it('senza options gli orchestratori ricevono modelId undefined (default registry)', async () => {
@@ -352,9 +352,9 @@ describe('useAutoBuildGenerate', () => {
       await act(async () => {
         await result.current.generateAll(makeDocs(), customer);
       });
-      expect(mocks.generateLogo.mock.calls[0][2]).toEqual({ modelId: undefined });
+      expect(mocks.generateLogo.mock.calls[0][2]).toEqual(expect.objectContaining({ modelId: undefined }));
       expect(mocks.processPrompt.mock.calls[0][2].modelId).toBeUndefined();
-      expect(mocks.generateCopy.mock.calls[0][3]).toEqual({ modelId: undefined });
+      expect(mocks.generateCopy.mock.calls[0][3]).toEqual(expect.objectContaining({ modelId: undefined }));
     });
   });
 

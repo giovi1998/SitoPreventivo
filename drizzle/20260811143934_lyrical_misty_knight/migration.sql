@@ -1,0 +1,1 @@
+ALTER TABLE "customers" ADD COLUMN "prompt_labels" jsonb;

@@ -78,6 +78,8 @@ export const customersTable = pgTable('customers', {
   researchStatus: jsonb('research_status'),
   webData: jsonb('web_data'),
   aiSuggestedFields: jsonb('ai_suggested_fields'),
+  // TB-029 fase 3: A/B testing prompt per cliente {promptName: label}
+  promptLabels: jsonb('prompt_labels'),
   webAnswers: jsonb('web_answers'),
   notes: text(),
   assignedTo: varchar('assigned_to', { length: 255 }),

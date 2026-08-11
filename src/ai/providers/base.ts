@@ -43,6 +43,9 @@ export abstract class BaseAIProvider implements AIProvider {
       ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {}),
       ...(options?.responseFormat ? { response_format: options.responseFormat } : {}),
       ...(options?.stream ? { stream: true } : {}),
+      ...(options?.customerId ? { customerId: options.customerId } : {}),
+      ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
+      ...(options?.kind ? { kind: options.kind } : {}),
     };
   }
 

@@ -35,6 +35,8 @@ type AIUsage = NonNullable<AIResponse['usage']>;
 export abstract class BaseOrchestrator {
   protected activeSessionId: string | null = null;
   protected chatStore = chatStore;
+  /** TB-029: feature tag Langfuse per l'orchestratore (override nei subclass). */
+  protected aiKind = 'chat';
 
   getCurrentSessionId(): string | null {
     return this.activeSessionId;
@@ -155,6 +157,9 @@ export abstract class BaseOrchestrator {
       reasoningEffort?: 'low' | 'high' | 'max';
       responseFormat?: { type: 'json_object' };
       requestId?: string;
+      customerId?: string;
+      sessionId?: string;
+      kind?: string;
     } = {},
     callbacks: {
       onStream?: (chunk: AIStreamChunk) => void;
@@ -194,6 +199,13 @@ export abstract class BaseOrchestrator {
       reasoningEffort?: 'low' | 'high' | 'max';
       maxTokens?: number;
       responseFormat?: { type: 'json_object' };
+      requestId?: string;
+      /** TB-029: attribuzione Langfuse per-cliente. */
+      customerId?: string;
+      /** TB-029: sessione Langfuse (docId: raggruppa chat+immagini del documento). */
+      sessionId?: string;
+      /** TB-029: feature tag Langfuse (quote/card/flyer/...). */
+      kind?: string;
     } = {},
     callbacks: {
       onStream?: (chunk: AIStreamChunk) => void;
@@ -203,9 +215,10 @@ export abstract class BaseOrchestrator {
     let reasoningContent = '';
     const toolCalls = new Map<string, AIToolCall>();
     let usage: AIUsage | undefined;
+    const providerOptions = { ...options, kind: options.kind ?? this.aiKind } as Parameters<AIProvider['chat']>[1];
 
     if (callbacks.onStream && provider.supportsStreaming) {
-      for await (const chunk of provider.stream(messages, options as Parameters<AIProvider['stream']>[1])) {
+      for await (const chunk of provider.stream(messages, providerOptions)) {
         callbacks.onStream(chunk);
         if (chunk.type === 'content') {
           content += chunk.content || '';
@@ -227,7 +240,7 @@ export abstract class BaseOrchestrator {
       };
     }
 
-    return await provider.chat(messages, options as Parameters<AIProvider['chat']>[1]);
+    return await provider.chat(messages, providerOptions);
   }
 
   /**

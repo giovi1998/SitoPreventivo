@@ -38,6 +38,8 @@ export interface SocialProcessResult {
 }
 
 export class SocialAIOrchestrator extends BaseOrchestrator {
+  protected aiKind = 'social';
+
   async generatePosts(
     source: SocialSource,
     tone: SocialTone,

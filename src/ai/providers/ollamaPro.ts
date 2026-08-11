@@ -2,6 +2,7 @@ import { BaseAIProvider } from './base';
 import type { ChatMessage, ChatOptions, AIResponse, AIStreamChunk } from '../types';
 import { getAiReasoningEffort } from '../../utils/uiPrefs';
 import dataService from '../../utils/dataService';
+import { currentUserEmail } from '../../utils/dataService/core';
 
 /**
  * Ollama Pro Cloud provider (TB-023, spec-design-ai-harness-upgrade.md).
@@ -143,6 +144,9 @@ export class OllamaProProvider extends BaseAIProvider {
       ...(options?.jsonSchema ? { format: options.jsonSchema } : {}),
       ...(options?.responseFormat?.type === 'json_object' ? { format: 'json' } : {}),
       ...(options?.tools && this.supportsTools ? { tools: options.tools } : {}),
+      ...(options?.customerId ? { customerId: options.customerId } : {}),
+      ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
+      ...(options?.kind ? { kind: options.kind } : {}),
     };
     return body;
   }
@@ -167,7 +171,7 @@ export class OllamaProProvider extends BaseAIProvider {
         'X-Request-Id': requestId,
         'X-Provider': 'ollama',
       },
-      body: JSON.stringify({ ...body, provider: 'ollama', requestId }),
+      body: JSON.stringify({ ...body, provider: 'ollama', requestId, userEmail: currentUserEmail() }),
     });
 
     if (!res.ok) {
@@ -250,7 +254,7 @@ export class OllamaProProvider extends BaseAIProvider {
         'X-Request-Id': requestId,
         'X-Provider': 'ollama',
       },
-      body: JSON.stringify({ ...body, provider: 'ollama', requestId }),
+      body: JSON.stringify({ ...body, provider: 'ollama', requestId, userEmail: currentUserEmail() }),
     });
 
     if (!res.ok) {

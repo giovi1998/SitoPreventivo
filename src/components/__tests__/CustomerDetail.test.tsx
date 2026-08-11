@@ -39,6 +39,11 @@ vi.mock('../../utils/dataService', () => ({
   },
 }));
 
+vi.mock('../../utils/ai/remotePrompt', () => ({
+  prefetchRemotePrompts: vi.fn().mockResolvedValue(undefined),
+  REMOTE_PROMPT_PILOT: ['card-system', 'quote-system', 'flyer-system'],
+}));
+
 beforeEach(() => {
   cleanup();
   mocks.navigate.mockReset();
@@ -379,7 +384,7 @@ describe('TB-027 CustomerDetail', () => {
       expect(autoGenMocks.generateAll).toHaveBeenCalledTimes(1);
     });
     expect(autoGenMocks.generateAll.mock.calls[0][0]).toHaveLength(1);
-    expect(autoGenMocks.generateAll.mock.calls[0][2]).toEqual({ providerId: 'ollama-minimax-m3' });
+    expect(autoGenMocks.generateAll.mock.calls[0][2]).toEqual({ providerId: 'ollama-minimax-m3', customerId: 'cust_1' });
   });
 
   it('pulsante "Genera bozze AI" disabilitato senza draft pending', async () => {
@@ -436,7 +441,7 @@ describe('TB-027 CustomerDetail', () => {
       expect(autoGenMocks.generateOne).toHaveBeenCalledTimes(1);
     });
     expect(autoGenMocks.generateOne.mock.calls[0][0].id).toBe('card_1');
-    expect(autoGenMocks.generateOne.mock.calls[0][2]).toEqual({ providerId: 'ollama-minimax-m3' });
+    expect(autoGenMocks.generateOne.mock.calls[0][2]).toEqual({ providerId: 'ollama-minimax-m3', customerId: 'cust_1' });
   });
 
   it('mostra thumbnail SVG inline per draft logo', async () => {
@@ -517,8 +522,27 @@ describe('TB-027 CustomerDetail', () => {
       expect(screen.getByTestId('crm-log-detail')).toBeTruthy();
     });
     const detail = screen.getByTestId('crm-log-detail').textContent || '';
-    expect(detail).toContain('"researchStatus"');
-    expect(detail).toContain('"Firecrawl down"');
+    expect(detail).toContain('"logo"');
+  });
+
+  it('TB-029 fase 3: sezione A/B testing con label per prompt, salva promptLabels', async () => {
+    (dataService.getCustomer as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { ...baseCustomer, promptLabels: { 'card-system': 'experiment' } },
+    });
+    renderDetail();
+    await waitFor(() => {
+      expect(screen.getByTestId('crm-ab-testing-section')).toBeTruthy();
+    });
+    // Card parte da experiment (dato nel customer)
+    expect((screen.getByTestId('crm-ab-card-system') as HTMLSelectElement).value).toBe('experiment');
+    // Cambia flyer → production
+    fireEvent.change(screen.getByTestId('crm-ab-flyer-system'), { target: { value: 'production' } });
+    await waitFor(() => {
+      expect(dataService.updateCustomer).toHaveBeenCalledWith(
+        'cust_1',
+        expect.objectContaining({ promptLabels: expect.objectContaining({ 'flyer-system': 'production' }) })
+      );
+    });
   });
 
   it('log logo caricato: base64 troncato a 60 char + (N bytes)', async () => {

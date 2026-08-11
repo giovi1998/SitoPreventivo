@@ -48,6 +48,8 @@ export interface AutoBuildCustomer {
 export interface AutoBuildGenerateOptions {
   /** Provider testuale da usare per gli orchestratori (modelId). */
   providerId?: string;
+  /** TB-029: customerId per attribuzione Langfuse delle chiamate AI. */
+  customerId?: string;
 }
 
 const GENERATABLE_ORDER = ['logo', 'businessCard', 'flyer', 'website'] as const;
@@ -258,7 +260,7 @@ async function generateFlashImage(
 
 async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: AutoBuildGenerateOptions): Promise<LogoBuilder> {
   const orchestrator = new LogoAIOrchestrator();
-  const result = await orchestrator.generateLogo(doc.data as unknown as Logo, brief, { modelId: options?.providerId });
+  const result = await orchestrator.generateLogo(doc.data as unknown as Logo, brief, { modelId: options?.providerId, customerId: options?.customerId, sessionId: doc.id });
   const selected = result.selected >= 0 ? result.concepts[result.selected] : result.concepts[0];
   if (!result.applied || !selected) {
     logger.warn('Auto-build: logo AI nessun concept valido', {
@@ -358,6 +360,8 @@ async function generateCardDraft(
   const result = await new CardAIOrchestrator().processPrompt(base as unknown as BusinessCard, prompt, {
     imagePreviewBase64,
     modelId: options?.providerId,
+    customerId: options?.customerId,
+    sessionId: doc.id,
   });
   const cost = result.costUsd ?? textCost(result.response?.usage as TokenUsage | undefined);
   let aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'text', cost);
@@ -418,7 +422,7 @@ async function generateFlyerDraft(
     flyerInput,
     brief,
     tone,
-    { modelId: options?.providerId },
+    { modelId: options?.providerId, customerId: options?.customerId, sessionId: doc.id },
   );
   if (!result.applied) throw new Error('Flyer AI: copy non valido');
   let aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'flyerCopy', textCost(result.response?.usage));
@@ -473,6 +477,8 @@ async function generateWebsiteDraft(
       briefContext: briefOf(doc),
       modelId: options?.providerId,
       logoBase64,
+      customerId: options?.customerId,
+      sessionId: doc.id,
     },
   );
   const aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'websiteCode', result.aiCall?.costUsd ?? textCost(result.response?.usage));

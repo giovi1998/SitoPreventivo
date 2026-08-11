@@ -143,7 +143,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
   const [heroTone, setHeroTone] = React.useState<FlyerTone>('formale');
   const [showHeroPromptEditor, setShowHeroPromptEditor] = React.useState(false);
   const [heroLibrary, setHeroLibrary] = React.useState(() => loadPromptLibrary(PROMPT_LIBRARY_KEYS.flyerHero));
-  const ai = useAIFlyer(userEmail);
+  const ai = useAIFlyer(userEmail, loadedIdRef.current);
   const lastCostUsd = ai.lastCostUsd;
   const debouncedFlyer = useDebouncedValue(flyer, 300);
 

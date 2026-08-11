@@ -1,6 +1,6 @@
 // AI chat: stream, chiave DeepSeek condivisa, proxy chat.
 // `svc` è la facade dataService (riferimenti cross-modulo a call time).
-import { IS_LOCAL, lsGet, lsSet, api } from './core.js';
+import { IS_LOCAL, lsGet, lsSet, api, currentUserEmail } from './core.js';
 
 export function createAiMethods(svc) {
   return {
@@ -87,7 +87,11 @@ export function createAiMethods(svc) {
         }
       }
       // Production: use Vercel Serverless Function proxy (key stays server-side)
-      return await api('POST', '/ai/chat', { model, messages, response_format, temperature }, { timeoutMs: 30000, requestId });
+      return await api('POST', '/ai/chat', {
+        model, messages, response_format, temperature,
+        // TB-029: attribuzione Langfuse — email utente per user.id
+        userEmail: currentUserEmail(),
+      }, { timeoutMs: 30000, requestId });
     },
   };
 }

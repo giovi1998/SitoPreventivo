@@ -27,6 +27,10 @@ function makeSelectChain() {
     orderBy: vi.fn(function (this: any) {
       return mockDbState.selectResults.shift() ?? [];
     }),
+    // Drizzle è thenable: await (await db.select()...where()) risolve l'array.
+    then: (resolve: (v: any) => void) => {
+      resolve(mockDbState.selectResults.shift() ?? []);
+    },
   };
   return chain;
 }

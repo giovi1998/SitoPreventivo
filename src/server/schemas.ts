@@ -203,6 +203,8 @@ export const UpdateCustomerSchema = z.object({
   notes: z.string().optional(),
   assignedTo: z.string().max(255).optional(),
   googleMapsUrl: z.string().max(500).optional(),
+  // TB-029 fase 3: A/B testing prompt per cliente {promptName: label}
+  promptLabels: z.record(z.string(), z.string().min(1).max(50)).optional(),
 });
 
 export const AutoBuildSchema = z.object({

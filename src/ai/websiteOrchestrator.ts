@@ -48,6 +48,8 @@ export interface WebsiteRefineResult {
 }
 
 export class WebsiteOrchestrator extends BaseOrchestrator {
+  protected aiKind = 'website';
+
   async generateSite(
     brief: {
       businessName: string;
@@ -77,6 +79,10 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       logoBase64?: string;
       scrapedReference?: string;
       visionPreviews?: string[];
+      /** TB-029: attribuzione Langfuse per-cliente. */
+      customerId?: string;
+      /** TB-029: sessione Langfuse (docId). */
+      sessionId?: string;
     } = {},
   ): Promise<WebsiteProcessResult> {
     const changes: string[] = [];
@@ -122,6 +128,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       maxTokens: 16384,
       // Struttura del sito: ragionamento pieno ('max').
       reasoningEffort: 'max',
+      customerId: options.customerId,
     }, { onStream: streamSink });
     const htmlParsed = this.parseJsonResponse(htmlResponse.content ?? '', z.object({
       html: z.string().min(1),
@@ -175,6 +182,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
             responseFormat: { type: 'json_object' },
             maxTokens: 16384,
             reasoningEffort: 'max',
+            customerId: options.customerId,
           }, { onStream: streamSink });
           pagesCost += this.trackUsage(pageResponse.usage, options.userEmail, options.modelId) || 0;
           pageParsed = this.parseJsonResponse(pageResponse.content ?? '', z.object({
@@ -210,6 +218,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         // CSS = output lungo su prompt piccolo: 'high' basta, 'max' costa
         // il doppio del tempo (180s osservati).
         reasoningEffort: 'high',
+        customerId: options.customerId,
       }, { onStream: streamSink });
       cssParsed = this.parseJsonResponse(cssResponse.content ?? '', z.object({
         css: z.string().default(''),
@@ -238,8 +247,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       jsResponse = await this.handleStream(provider, jsMessages, {
         responseFormat: { type: 'json_object' },
         maxTokens: 16384,
-        // JS = output medio su prompt piccolo: 'high' basta (91s con 'max').
         reasoningEffort: 'high',
+        customerId: options.customerId,
       }, { onStream: streamSink });
       jsParsed = this.parseJsonResponse(jsResponse.content ?? '', z.object({
         js: z.string().default(''),
@@ -291,6 +300,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
           // reasoning 'high' (non 'max'): il verify lavora su prompt da
           // 50-60K token e con think:max impiegava 194s — 'high' basta.
           reasoningEffort: 'high',
+          customerId: options.customerId,
         }, { onStream: streamSink });
       } catch (err) {
         verifyError = err;
@@ -404,6 +414,8 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       onStepResult?: (step: string, responseText: string, meta: { durationMs: number; tokens?: number }) => void;
       userEmail?: string;
       visionPreviews?: string[];
+      /** TB-029: attribuzione Langfuse per-cliente. */
+      customerId?: string;
     } = {},
   ): Promise<WebsiteRefineResult> {
     const changes: string[] = [];
@@ -455,7 +467,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const response = await this.handleStream(
       provider,
       messages,
-      { responseFormat: { type: 'json_object' }, maxTokens: 16384, reasoningEffort: 'max' },
+      { responseFormat: { type: 'json_object' }, maxTokens: 16384, reasoningEffort: 'max', customerId: options.customerId },
       { onStream: options.onStream },
     );
     options.onStepResult?.('refine', response.content ?? '', {

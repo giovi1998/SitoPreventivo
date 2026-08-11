@@ -1,13 +1,67 @@
 // AI endpoints server-side (chat, streaming, immagini Gemini, tools).
 // Estratto da handler.ts: unico handler dedicato, ~1300 righe.
 import { z } from 'zod';
+import { eq } from 'drizzle-orm';
 import {
   json, getRequestId, logAI, jsonWithRequestId, getClientIp,
-  consumeRateLimit, validate, addCorsHeaders,
+  consumeRateLimit, validate, addCorsHeaders, requireAdmin,
   buildGeminiMultimodalInput, normalizeGeminiImageModel,
 } from './core.ts';
+import { getDb, customersTable } from './db.ts';
 import { fetchFirecrawlPage } from './crm.ts';
+import { ingestLangfuse } from './langfuse.ts';
+import { fetchRemotePrompt } from './langfusePrompts.ts';
 import type { RouteHandler } from './types.ts';
+
+const LF_ENV = process.env.VERCEL_ENV === 'production' ? 'production' : 'development';
+
+// TB-029: trace unifomata per tutti gli endpoint AI (best-effort, mai throw).
+function traceGeneration(input: Parameters<typeof ingestLangfuse>[0]) {
+  void ingestLangfuse({ ...input, environment: input.environment ?? LF_ENV });
+}
+
+// TB-029: nome trace verb-first specifico per feature (mai generico).
+// kind = feature orchestrator (quote/card/flyer/logo/social/onboarding/website).
+function chatTraceName(kind?: string): string {
+  const feature = kind && kind !== 'chat' ? kind : 'chat';
+  return `${feature}-ai-chat`;
+}
+
+// TB-029: tags strutturati filtrabili in Langfuse.
+function buildTags(feature: string, subfeature: string, provider: string, streaming: boolean): string[] {
+  return [`feature:${feature}`, `subfeature:${subfeature}`, `provider:${provider}`, `streaming:${streaming}`];
+}
+
+// TB-029: costo USD calcolato server-side (tabella inline, gotcha §1.1:
+// providerPricing.ts è client-side e non importabile qui). Il body costUsd
+// del client è un override opzionale (vince se presente).
+const DEEPSEEK_PRICES: Record<string, { input: number; output: number }> = {
+  'deepseek-v4-flash': { input: 0.14, output: 0.28 },
+  'deepseek-v4-pro': { input: 0.55, output: 2.19 },
+};
+const GEMINI_PER_IMAGE: Record<string, number> = {
+  'gemini-3.1-flash-image': 0.04,
+  'gemini-2.0-flash-preview-image-generation': 0.02,
+};
+
+function computeCostUsd(
+  provider: string,
+  model: string,
+  usage?: { promptTokens: number; completionTokens: number },
+  imageCount = 0
+): number {
+  if (provider === 'gemini') {
+    const perImage = GEMINI_PER_IMAGE[model] ?? GEMINI_PER_IMAGE['gemini-3.1-flash-image'];
+    return Math.round(imageCount * perImage * 1_000_000) / 1_000_000;
+  }
+  if (provider === 'deepseek' && usage) {
+    const p = DEEPSEEK_PRICES[model] ?? DEEPSEEK_PRICES['deepseek-v4-flash'];
+    const cost = (usage.promptTokens / 1_000_000) * p.input + (usage.completionTokens / 1_000_000) * p.output;
+    return Math.round(cost * 1_000_000) / 1_000_000;
+  }
+  // Ollama Pro flat $20/mo → 0 per chiamata
+  return 0;
+}
 
 export const handleAI: RouteHandler = async (path, method, req, res, body) => {
   if (path === '/ai/chat' && method === 'POST') {
@@ -49,6 +103,13 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
         reasoning_effort: z.enum(['low', 'high', 'max']).optional(),
         max_tokens: z.number().int().positive().max(8192).optional(),
         userEmail: z.string().email().optional(),
+        // TB-029: identità per Langfuse tracing (vista costi per cliente)
+        customerId: z.string().min(1).max(100).optional(),
+        sessionId: z.string().min(1).max(200).optional(),
+        // TB-029: feature orchestrator per tag Langfuse (quote/card/flyer/...)
+        kind: z.string().min(1).max(50).optional(),
+        // TB-029: costo USD calcolato dal client (providerPricing) per cost_details
+        costUsd: z.number().min(0).max(1000).optional(),
         // TB-023: provider routing (default deepseek)
         provider: z.enum(['deepseek', 'ollama']).optional(),
         // Ollama-only fields
@@ -75,6 +136,10 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
       return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
     const userEmail = v.data.userEmail;
+    const customerId = v.data.customerId;
+    const sessionId = v.data.sessionId;
+    const kind = v.data.kind;
+    const costUsd = v.data.costUsd;
     const provider = v.data.provider || 'deepseek';
 
     // ─── TB-023: Ollama Pro Cloud routing ─────────────────────────
@@ -203,6 +268,23 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
         tokens: normalized.usage.total_tokens || undefined,
         provider: 'ollama',
       });
+      traceGeneration({
+        name: chatTraceName(kind),
+        requestId,
+        model: ollamaModel,
+        provider: 'ollama',
+        userEmail,
+        customerId,
+        feature: kind ?? 'chat',
+        subfeature: 'chat',
+        streaming: false,
+        input: messages,
+        output: normalized,
+        usage: { promptTokens: normalized.usage.prompt_tokens, completionTokens: normalized.usage.completion_tokens },
+        costUsd: costUsd ?? computeCostUsd('ollama', ollamaModel),
+        startTime: startedAt,
+        sessionId,
+      });
       return json(req, res, 200, normalized);
     }
 
@@ -245,6 +327,21 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
       const errBody = await apiRes.text().catch(() => 'Unknown error');
       const errorKind = apiRes.status === 402 ? 'quota' : apiRes.status === 401 ? 'auth' : apiRes.status === 429 ? 'rate_limit' : 'upstream';
       logAI({ tag: 'ai_chat', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
+      traceGeneration({
+        name: chatTraceName(kind),
+        requestId,
+        model: model || 'deepseek-v4-flash',
+        provider: 'deepseek',
+        userEmail,
+        customerId,
+        feature: kind ?? 'chat',
+        subfeature: 'chat',
+        streaming: false,
+        input: messages,
+        error: { kind: errorKind, message: errBody.slice(0, 200) },
+        startTime: startedAt,
+        sessionId,
+      });
       if (apiRes.status === 402) return jsonWithRequestId(req, res, 402, { error: 'Credito DeepSeek esaurito. Ricarica su platform.deepseek.com' }, requestId);
       if (apiRes.status === 401) return jsonWithRequestId(req, res, 401, { error: 'Chiave API DeepSeek non valida' }, requestId);
       if (apiRes.status === 429) return jsonWithRequestId(req, res, 429, { error: 'Troppe richieste a DeepSeek. Attendi qualche secondo e riprova.' }, requestId);
@@ -261,6 +358,23 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
       outcome: 'ok',
       tokens: usage?.total_tokens,
       provider: 'deepseek',
+    });
+    traceGeneration({
+      name: chatTraceName(kind),
+      requestId,
+      model: model || 'deepseek-v4-flash',
+      provider: 'deepseek',
+      userEmail,
+      customerId,
+      feature: kind ?? 'chat',
+      subfeature: 'chat',
+      streaming: false,
+      input: messages,
+      output: data,
+      usage: usage ? { promptTokens: usage.prompt_tokens ?? 0, completionTokens: usage.completion_tokens ?? 0 } : undefined,
+      costUsd: costUsd ?? computeCostUsd('deepseek', model || 'deepseek-v4-flash', usage ? { promptTokens: usage.prompt_tokens ?? 0, completionTokens: usage.completion_tokens ?? 0 } : undefined),
+      startTime: startedAt,
+      sessionId,
     });
     return json(req, res, 200, { ...data, requestId });
   }
@@ -390,6 +504,18 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     }
     const usage = (data as { usage?: { total_tokens?: number } }).usage;
     logAI({ tag: 'ai_copy_flyer', requestId, model: model || 'deepseek-v4-flash', durationMs: Date.now() - startedAt, outcome: 'ok', tokens: usage?.total_tokens });
+    traceGeneration({
+      name: 'generate-flyer-copy',
+      requestId,
+      model: model || 'deepseek-v4-flash',
+      provider: 'deepseek',
+      userEmail: undefined,
+      feature: 'flyer',
+      input: { brief, tone, layout, size },
+      output: parsed,
+      usage: usage?.total_tokens ? { promptTokens: 0, completionTokens: usage.total_tokens } : undefined,
+      startTime: startedAt,
+    });
     return json(req, res, 200, { data: parsed, raw: content, requestId });
   }
 
@@ -457,6 +583,13 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         reasoning_effort: z.enum(['low', 'high', 'max']).optional(),
         max_tokens: z.number().int().positive().max(8192).optional(),
         userEmail: z.string().email().optional(),
+        // TB-029: identità per Langfuse tracing (vista costi per cliente)
+        customerId: z.string().min(1).max(100).optional(),
+        sessionId: z.string().min(1).max(200).optional(),
+        // TB-029: feature orchestrator per tag Langfuse (quote/card/flyer/...)
+        kind: z.string().min(1).max(50).optional(),
+        // TB-029: costo USD calcolato dal client (providerPricing) per cost_details
+        costUsd: z.number().min(0).max(1000).optional(),
         // TB-023: provider routing (default deepseek)
         provider: z.enum(['deepseek', 'ollama']).optional(),
         // Ollama-only options
@@ -470,6 +603,10 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
     const userEmail = v.data.userEmail;
+    const customerId = v.data.customerId;
+    const sessionId = v.data.sessionId;
+    const kind = v.data.kind;
+    const costUsd = v.data.costUsd;
     const provider = v.data.provider || 'deepseek';
     const startedAt = Date.now();
 
@@ -556,6 +693,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
 
       const decoder = new TextDecoder();
       let buffer = '';
+      let streamContent = '';
+      const streamToolCalls: Array<{ function: { name: string; arguments: string } }> = [];
       let finalUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined;
       try {
         while (true) {
@@ -570,6 +709,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
             try {
               const parsed = JSON.parse(trimmed);
               const content = parsed.message?.content || '';
+              if (content) streamContent += content;
               if (parsed.prompt_eval_count !== undefined || parsed.eval_count !== undefined) {
                 finalUsage = {
                   prompt_tokens: parsed.prompt_eval_count ?? finalUsage?.prompt_tokens ?? 0,
@@ -584,6 +724,18 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
                 (ssePayload.choices as any)[0].delta.reasoning_content = parsed.message.thinking;
               }
               if (parsed.message?.tool_calls) {
+                // TB-029: accumula per la trace (il client vede i tool_calls
+                // già nello stream SSE, ma Langfuse deve averli nell'output).
+                for (const tc of parsed.message.tool_calls as any[]) {
+                  if (tc?.function?.name) {
+                    streamToolCalls.push({
+                      function: {
+                        name: tc.function.name,
+                        arguments: typeof tc.function.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function.arguments ?? {}),
+                      },
+                    });
+                  }
+                }
                 (ssePayload.choices as any)[0].delta.tool_calls = parsed.message.tool_calls.map((tc: any, i: number) => ({
                   index: i,
                   function: { name: tc.function?.name, arguments: typeof tc.function?.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function?.arguments ?? {}) },
@@ -603,6 +755,26 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         console.error('[Stream Ollama] Errore durante lo streaming', { msg: (err as Error)?.message, requestId });
       } finally {
         clearTimeout(timeout);
+        traceGeneration({
+          name: chatTraceName(kind),
+          requestId,
+          model: ollamaModel,
+          provider: 'ollama',
+          userEmail,
+          customerId,
+          feature: kind ?? 'chat',
+          subfeature: 'chat',
+          streaming: true,
+          input: messages,
+          output: {
+            content: streamContent,
+            ...(streamToolCalls.length > 0 ? { toolCalls: streamToolCalls } : {}),
+          },
+          usage: finalUsage ? { promptTokens: finalUsage.prompt_tokens, completionTokens: finalUsage.completion_tokens } : undefined,
+          costUsd: costUsd ?? computeCostUsd('ollama', ollamaModel),
+          startTime: startedAt,
+          sessionId,
+        });
         if (!res.writableEnded) res.end();
       }
       return;
@@ -677,11 +849,40 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     }
     logAI({ tag: 'ai_chat_stream', requestId, email: userEmail, model, durationMs: Date.now() - startedAt, outcome: 'ok' });
     const decoder = new TextDecoder();
+    let streamContent = '';
+    let streamUsage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
+    const streamToolCalls: Array<{ function: { name: string; arguments: string } }> = [];
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
+        // TB-029: accumula contenuto+usage+tool_calls (SSE `data: {...}` lines)
+        // per la trace (il client consuma il pass-through, qui copiamo i dati).
+        for (const line of chunk.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const json = trimmed.slice(5).trim();
+          if (!json || json === '[DONE]') continue;
+          try {
+            const evt = JSON.parse(json);
+            const delta = evt.choices?.[0]?.delta;
+            if (delta?.content) streamContent += delta.content;
+            if (evt.usage) streamUsage = evt.usage;
+            // tool_calls arrivano frammentati (delta per delta): buffer per
+            // indice, ricostruisci alla fine.
+            if (Array.isArray(delta?.tool_calls)) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index ?? 0;
+                const entry = (streamToolCalls[idx] ??= { function: { name: '', arguments: '' } });
+                if (tc.function?.name) entry.function.name += tc.function.name;
+                if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
+              }
+            }
+          } catch {
+            // skip malformed SSE line
+          }
+        }
         res.write(chunk);
       }
     } catch (err) {
@@ -691,8 +892,140 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }
     } finally {
       clearTimeout(timeout);
+      traceGeneration({
+        name: chatTraceName(kind),
+        requestId,
+        model: model || 'deepseek-v4-flash',
+        provider: 'deepseek',
+        userEmail,
+        customerId,
+        feature: kind ?? 'chat',
+        subfeature: 'chat',
+        streaming: true,
+        input: messages,
+        output: {
+          content: streamContent,
+          ...(streamToolCalls.length > 0 ? { toolCalls: streamToolCalls } : {}),
+        },
+        usage: streamUsage ? { promptTokens: streamUsage.prompt_tokens ?? 0, completionTokens: streamUsage.completion_tokens ?? 0 } : undefined,
+        costUsd: costUsd ?? computeCostUsd('deepseek', model || 'deepseek-v4-flash', streamUsage ? { promptTokens: streamUsage.prompt_tokens ?? 0, completionTokens: streamUsage.completion_tokens ?? 0 } : undefined),
+        startTime: startedAt,
+        sessionId,
+      });
     }
     return res.end();
+  }
+
+  // TB-029 fase 2: Prompt Management — fetch prompt da Langfuse per label
+  // (production in prod, staging in locale). Fallback ai builder locali.
+  // TB-029 fase 3: customerId → promptLabels del cliente fa override label
+  // (A/B testing per cliente, es. {"card-system": "experiment"}).
+  if (path === '/ai/prompt' && method === 'GET') {
+    const url = new URL(req.url || '/', 'http://localhost');
+    const name = (url.searchParams.get('name') || '').trim();
+    const label = (url.searchParams.get('label') || '').trim() || 'production';
+    const customerId = (url.searchParams.get('customerId') || '').trim() || undefined;
+    if (!name) return json(req, res, 400, { error: 'Parametro name mancante' });
+    try {
+      let effectiveLabel = label;
+      if (customerId) {
+        // Best-effort: DB non raggiungibile → label richiesta, mai bloccare
+        // il prompt (il fallback builder locale resta l'ultimo muro).
+        try {
+          const [cust] = await (await getDb()).select().from(customersTable).where(eq(customersTable.id, customerId));
+          const labels = (cust?.promptLabels ?? {}) as Record<string, string> | null;
+          if (labels?.[name]) effectiveLabel = labels[name];
+        } catch {
+          // DB down → label default
+        }
+      }
+      const data = await fetchRemotePrompt(name, effectiveLabel);
+      return json(req, res, 200, { data });
+    } catch (err) {
+      return json(req, res, 404, { error: (err as Error)?.message || 'Prompt non trovato' });
+    }
+  }
+
+  // TB-029 fase 2: admin prompt CRUD — carica/cancella/lista prompt su
+  // Langfuse. Admin-only (adminEmail body per POST/DELETE, query GET).
+  if (path === '/ai/prompts' && method === 'POST') {
+    if (!requireAdmin(req, res, body)) return;
+    const pk = process.env.LANGFUSE_PUBLIC_KEY || process.env.VITE_LANGFUSE_PUBLIC_KEY;
+    const sk = process.env.LANGFUSE_SECRET_KEY || process.env.VITE_LANGFUSE_SECRET_KEY;
+    const base = process.env.LANGFUSE_BASE_URL || process.env.VITE_LANGFUSE_BASE_URL;
+    if (!pk || !sk || !base) return json(req, res, 503, { error: 'Langfuse non configurato' });
+    const v = validate(
+      z.object({
+        name: z.string().min(1).max(100),
+        prompt: z
+          .array(z.object({ role: z.string(), content: z.string() }))
+          .min(1)
+          .max(20),
+        label: z.string().min(1).max(50).optional(),
+      }),
+      body
+    );
+    if (v.error) return json(req, res, 400, { errors: v.errors });
+    try {
+      const up = await fetch(`${base}/api/public/v2/prompts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Basic ${Buffer.from(`${pk}:${sk}`).toString('base64')}` },
+        body: JSON.stringify({
+          name: v.data.name,
+          type: 'chat',
+          prompt: v.data.prompt,
+          ...(v.data.label ? { labels: [v.data.label] } : {}),
+        }),
+      });
+      if (!up.ok) return json(req, res, up.status, { error: `Langfuse ${up.status}` });
+      const data = await up.json();
+      return json(req, res, 200, { data });
+    } catch (err) {
+      return json(req, res, 502, { error: `Langfuse error: ${String((err as Error)?.message ?? err).slice(0, 200)}` });
+    }
+  }
+
+  if (path === '/ai/prompts' && method === 'GET') {
+    const url = new URL(req.url || '/', 'http://localhost');
+    if (url.searchParams.get('adminEmail') !== 'admin@gmail.com') {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    const pk = process.env.LANGFUSE_PUBLIC_KEY || process.env.VITE_LANGFUSE_PUBLIC_KEY;
+    const sk = process.env.LANGFUSE_SECRET_KEY || process.env.VITE_LANGFUSE_SECRET_KEY;
+    const base = process.env.LANGFUSE_BASE_URL || process.env.VITE_LANGFUSE_BASE_URL;
+    if (!pk || !sk || !base) return json(req, res, 503, { error: 'Langfuse non configurato' });
+    try {
+      const up = await fetch(`${base}/api/public/v2/prompts`, {
+        headers: { Authorization: `Basic ${Buffer.from(`${pk}:${sk}`).toString('base64')}` },
+      });
+      if (!up.ok) return json(req, res, up.status, { error: `Langfuse ${up.status}` });
+      const data = await up.json();
+      // Langfuse risponde paginato ({data: [...]}) → normalizza a array.
+      return json(req, res, 200, { data: Array.isArray((data as { data?: unknown }).data) ? (data as { data: unknown[] }).data : data });
+    } catch (err) {
+      return json(req, res, 502, { error: `Langfuse error: ${String((err as Error)?.message ?? err).slice(0, 200)}` });
+    }
+  }
+
+  if (path.startsWith('/ai/prompts/') && method === 'DELETE') {
+    if (!requireAdmin(req, res, body)) return;
+    const name = path.replace('/ai/prompts/', '');
+    if (!name || name.includes('/')) return json(req, res, 400, { error: 'Nome non valido' });
+    const pk = process.env.LANGFUSE_PUBLIC_KEY || process.env.VITE_LANGFUSE_PUBLIC_KEY;
+    const sk = process.env.LANGFUSE_SECRET_KEY || process.env.VITE_LANGFUSE_SECRET_KEY;
+    const base = process.env.LANGFUSE_BASE_URL || process.env.VITE_LANGFUSE_BASE_URL;
+    if (!pk || !sk || !base) return json(req, res, 503, { error: 'Langfuse non configurato' });
+    try {
+      const up = await fetch(`${base}/api/public/v2/prompts/${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Basic ${Buffer.from(`${pk}:${sk}`).toString('base64')}` },
+      });
+      if (!up.ok) return json(req, res, up.status, { error: `Langfuse ${up.status}` });
+      const data = await up.json();
+      return json(req, res, 200, { data });
+    } catch (err) {
+      return json(req, res, 502, { error: `Langfuse error: ${String((err as Error)?.message ?? err).slice(0, 200)}` });
+    }
   }
 
   // Spec 13: Onboarding AI suggest (rate-limit 5/min/IP, opt-in).
@@ -818,6 +1151,17 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      traceGeneration({
+        name: 'generate-card-cover',
+        requestId,
+        model: normalizeGeminiImageModel(v.data.imageModel),
+        provider: 'gemini',
+        userEmail,
+        feature: 'card',
+        input: { prompt: v.data.prompt },
+        output: { mimeType, sizeKB, imageBase64: `data:${mimeType};base64,${imageBase64}` },
+        startTime: startedAt,
+      });
       return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
@@ -901,6 +1245,17 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      traceGeneration({
+        name: 'generate-logo-background',
+        requestId,
+        model: 'gemini-3.1-flash-image',
+        provider: 'gemini',
+        userEmail,
+        feature: 'logo',
+        input: { prompt: v.data.prompt },
+        output: { mimeType, sizeKB, imageBase64: `data:${mimeType};base64,${imageBase64}` },
+        startTime: startedAt,
+      });
       return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
@@ -983,6 +1338,17 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      traceGeneration({
+        name: 'generate-flyer-hero',
+        requestId,
+        model: normalizeGeminiImageModel(v.data.imageModel),
+        provider: 'gemini',
+        userEmail,
+        feature: 'flyer',
+        input: { prompt: v.data.prompt },
+        output: { mimeType, sizeKB, imageBase64: `data:${mimeType};base64,${imageBase64}` },
+        startTime: startedAt,
+      });
       return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
@@ -1058,6 +1424,17 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
+      traceGeneration({
+        name: 'generate-card-photo',
+        requestId,
+        model: normalizeGeminiImageModel(v.data.imageModel),
+        provider: 'gemini',
+        userEmail,
+        feature: 'card',
+        input: { prompt: v.data.prompt },
+        output: { mimeType, sizeKB, imageBase64: `data:${mimeType};base64,${imageBase64}` },
+        startTime: startedAt,
+      });
       return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
@@ -1160,6 +1537,17 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB, provider: 'gemini-flash' });
+      traceGeneration({
+        name: 'generate-image-flash',
+        requestId,
+        model: modelId,
+        provider: 'gemini',
+        userEmail,
+        feature: kind === 'icon' ? 'card' : kind === 'hero' ? 'flyer' : 'image',
+        input: { prompt: v.data.prompt },
+        output: { mimeType, sizeKB, imageBase64: `data:${mimeType};base64,${imageBase64}` },
+        startTime: startedAt,
+      });
       return json(req, res, 200, { data: { imageBase64, mimeType }, requestId });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';
@@ -1248,6 +1636,19 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const content = raw.message?.content || '';
       const tokens = (raw.prompt_eval_count ?? 0) + (raw.eval_count ?? 0);
       logAI({ tag: 'ai_design_review', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', tokens: tokens || undefined, provider: 'ollama' });
+      traceGeneration({
+        name: 'generate-design-review',
+        requestId,
+        model: 'minimax-m3:cloud',
+        provider: 'ollama',
+        userEmail,
+        customerId: undefined,
+        feature: 'design-review',
+        input: { docType: v.data.docType },
+        output: { content },
+        usage: { promptTokens: raw.prompt_eval_count ?? 0, completionTokens: raw.eval_count ?? 0 },
+        startTime: startedAt,
+      });
       return json(req, res, 200, { data: { suggestions: content }, requestId });
     } catch (err) {
       const msg = (err as Error)?.message || 'unknown';

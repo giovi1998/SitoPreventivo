@@ -1,6 +1,7 @@
 import { BaseAIProvider } from './base';
 import type { ChatMessage, ChatOptions, AIResponse, AIStreamChunk } from '../types';
 import dataService from '../../utils/dataService';
+import { currentUserEmail } from '../../utils/dataService/core';
 
 const API_URL = 'https://api.deepseek.com/v1/chat/completions';
 function isLocalhost() {
@@ -69,7 +70,7 @@ export class DeepSeekProvider extends BaseAIProvider {
   }
 
   private async callProxy(body: Record<string, unknown>, requestId: string): Promise<AIResponse> {
-    const result = await dataService.chatWithAI({ ...(body as any), requestId });
+    const result = await dataService.chatWithAI({ ...(body as any), requestId, userEmail: currentUserEmail() });
     if (result.error) throw new Error(result.error);
     return this.parseResult(result);
   }
@@ -139,7 +140,7 @@ export class DeepSeekProvider extends BaseAIProvider {
     const res = await fetch('/api/ai/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, userEmail: currentUserEmail() }),
     });
 
     if (!res.ok) {

@@ -87,6 +87,27 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
   persistito in `pq_ui:v1` `aiReasoningEffort`), `temperature` rimosso
   ovunque. 7 provider registrati (3 DeepSeek pay-per-token,
   4 Ollama Pro flat $20/mo). Vedi `docs/agent-gotchas.md` §26.
+- **Observability (TB-029)**: ogni chiamata AI server-side tracciata su
+  Langfuse via OTLP (`src/server/langfuse.ts`, zero deps, fire-and-forget
+  timeout 2s, no-op senza chiavi). Nomi trace verb-first stabili
+  (`generate-response`, `generate-stream`, `generate-card-cover`, ...),
+  `session_id=customerId` (vista costi per cliente), `user_id=userEmail`,
+  tag feature, usage `{input,output,total}`, cost override solo se >0
+  (Ollama flat = pricing custom). Identity client: `userEmail` auto-iniettata
+  dai provider (localStorage), `customerId` propagato via `ChatOptions`
+  fino all'auto-build CRM, `kind` per orchestratore (`aiKind`). Spec:
+  `docs/spec/spec-langfuse-observability.md`. Env:
+  `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL`
+  (+ `VITE_*` fallback per dev locale).
+  **Prompt Management (fase 2)**: 8 prompt (`card-system`, `quote-system`,
+  `flyer-system`, `logo-system`, `social-system`, `onboarding-system`,
+  `website-system`, `palette-system`) in Langfuse con **label per ambiente**
+  (production prod / staging locale — template diversi in prod e local).
+  `GET /api/ai/prompt` (cache 60s + fallback builder locali),
+  `src/utils/ai/remotePrompt.ts` (prefetch AppShell → override
+  `promptRegistry`), sync script `npm run prompts:sync[:staging|:prod]`.
+  I 5 user-prompt website (website-html/css/js/page/verify) NON sono
+  migrabili: incorporano HTML/CSS/JS dinamico 5-50KB → restano hardcoded.
 
 ## Key Files
 
@@ -109,7 +130,10 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/utils/xml.ts` | `escapeXml` condiviso (input `unknown`, coerced) |
 | `src/utils/flyer/` | Flyer engine: `layoutEngine`, `svgRenderer`, `textFit`, `geometry`, `budgets`, `templateCatalog/Factory`, `qrRenderer`, `pdf/pngExport` |
 | `src/utils/watermark.ts` | Tier-aware watermark (free vs unlocked) |
+| `src/server/langfuse.ts` | TB-029: payload OTLP manuale + ingest fire-and-forget (zero deps, no-op senza chiavi, fallback `VITE_LANGFUSE_*` per dev). Hook: `traceGeneration` in `src/server/ai.ts` |
+| `src/server/langfusePrompts.ts` | TB-029 fase 2: fetch prompt remoti Langfuse per label (cache 60s, fallback builder locali) + `compilePrompt` {{var}} |
 | `src/utils/aiStats.ts` | TB-026: per-document AI cost tracker (aiStats: totalCostUsd + calls breakdown) + `withAiCall`, `incrementAiStats`, `formatAiStatsCompact` |
+| `src/utils/ai/remotePrompt.ts` | TB-029 fase 2: Prompt Management client — `prefetchRemotePrompts()` (AppShell), `compileClientPrompt` {{var}}, label per ambiente (staging locale / production prod), fallback builder locali |
 | `src/components/DocumentAiStats.tsx` | TB-026: widget riusabile "🤖 3 icone · 2 elaborazioni · $0.08" per editor e Collection |
 | `src/utils/documentSchemas.ts` | Facade sottile → `src/utils/schemas/` (split per tipo: `shared`, `qr`, `card` incl. cardGrid + grid preset, `logo`, `flyer`, `social`). Zod schemas + `createEmpty*` + `mergeWithDefaults` (+ opzionale `aiStats` per-document TB-026). API pubblica invariata |
 | `src/utils/gridUtils.ts` | Grid collision helpers (BLOCK su sovrapposizione) |
@@ -408,6 +432,7 @@ criteri tipografici card/logo/flyer con fonti, riferimento design review
 | `REPLICATE_API_TOKEN` | opzionale, deprecato | Fallback logo AI |
 | `REGISTRATION_ENABLED` | Vercel | TB-027: flag signup. Default `false` (CRM admin-only). `true` riattiva whitelabel |
 | `FIRECRAWL_API_KEY` | opzionale | TB-027: scraping sito cliente per research + RAG. Senza key, status `web: no_key`. Endpoint v2. Formati: markdown, screenshot, branding, images, json (oggetto con schema), links. Timeout 120s. `webData` persiste markdownFull/screenshot/links/json/branding/images |
+| `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL` | Vercel + .env | TB-029: tracing AI + costi per cliente (OTLP ingest manuale in `src/server/langfuse.ts`). Senza chiavi → no-op. Mai esporre secret al browser |
 
 **Mai esporre `DEEPSEEK_API_KEY`/`GEMINI_API_KEY`/`OLLAMA_API_KEY`/
 `FIRECRAWL_API_KEY` al browser.** Il frontend chiama solo il proxy serverless.

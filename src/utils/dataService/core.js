@@ -20,6 +20,19 @@ export function lsSet(key, val) {
   }
 }
 
+// TB-029: email utente loggato per attribuzione Langfuse (user.id).
+// Mai trust-boundary: server-side è solo metadata di osservabilità.
+export function currentUserEmail() {
+  const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('userEmail') : null;
+  if (!raw) return undefined;
+  try {
+    const v = JSON.parse(raw);
+    return typeof v === 'string' && v.includes('@') ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Metadata columns stored beside jsonb `data` on the server.
 export const DOC_META_KEYS = new Set([
   'id', 'documentType', 'title', 'userEmail', 'createdAt', 'updatedAt',

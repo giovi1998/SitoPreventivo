@@ -51,7 +51,7 @@ export interface UseAIWebsiteReturn {
   lastCostUsd: number;
 }
 
-export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
+export function useAIWebsite(userEmail?: string, sessionId?: string): UseAIWebsiteReturn {
   const orchestratorRef = useRef<WebsiteOrchestrator | null>(null);
   const [lastCostUsd, setLastCostUsd] = useState(0);
   const [currentStep, setCurrentStep] = useState<string | null>(null);
@@ -119,6 +119,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
           style: options?.style,
           briefContext: options?.briefContext,
           modelId: resolvedModelId,
+          sessionId,
           logoBase64: options?.logoBase64,
           scrapedReference: options?.scrapedReference,
           visionPreviews: options?.visionPreviews,

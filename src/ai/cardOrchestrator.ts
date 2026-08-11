@@ -2,7 +2,7 @@ import type { BusinessCard } from '../utils/documentSchemas';
 import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall } from './types';
 import { providerRegistry } from './providers/registry';
 import { chatStore } from './chat/store';
-import { buildCardSystemPrompt } from './prompts/cardSystem';
+import { promptRegistry } from './prompts/registry';
 import { buildCardAIContext } from './prompts/cardContext';
 import { aiCardInputSchema } from './aiCardInputSchema';
 import { mergeCardAIResponse } from './cardMerge';
@@ -34,6 +34,8 @@ const CARD_TOOLS = [
 ];
 
 export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
+  protected aiKind = 'card';
+
   protected applicableTools(): string[] {
     return CARD_TOOLS;
   }
@@ -55,6 +57,10 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       onToolStart?: (toolCallId: string, name: string) => void;
       onToolComplete?: (toolCallId: string, name: string, result: string) => void;
       requestId?: string;
+      /** TB-029: attribuzione Langfuse per-cliente. */
+      customerId?: string;
+      /** TB-029: sessione Langfuse (docId: raggruppa chat+immagini del documento). */
+      sessionId?: string;
       /** TB-023: anteprima base64 screenshot preview per vision/analysis. */
       imagePreviewBase64?: string;
     },
@@ -76,7 +82,9 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
     if (session.messages.length === 0) {
       session.messages.push({
         role: 'system',
-        content: buildCardSystemPrompt(),
+        // TB-029 fase 2: passa dal promptRegistry → override remoto Langfuse
+        // (prefetchRemotePrompts) possibile; builder locale = fallback.
+        content: promptRegistry.getPrompt('card-system'),
       });
     }
 
@@ -119,6 +127,8 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
         requestId: options?.requestId,
+        customerId: options?.customerId,
+        sessionId: options?.sessionId,
       },
       { onStream: options?.onStream }
     );

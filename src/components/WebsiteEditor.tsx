@@ -108,7 +108,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     lastVisionCache,
     availableModels,
     lastCostUsd,
-  } = useAIWebsite(userEmail);
+  } = useAIWebsite(userEmail, loadedIdRef.current);
 
   useEffect(() => { isProcessingRef.current = isProcessing; }, [isProcessing]);
 
