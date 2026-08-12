@@ -66,6 +66,11 @@ export const customersTable = pgTable('customers', {
   target: text(),
   preferredColors: text(),
   contacts: jsonb(),
+  // TB-030 sync CRM↔website: social del cliente {platform, url}[] — shape
+  // identica a website.brief.socials per il sync bidirezionale.
+  socials: jsonb(),
+  // TB-030 sync CRM↔website: font preferito del cliente (auto-build prefill).
+  font: varchar({ length: 50 }),
   package: varchar({ length: 50 }).default('apertura'),
   source: varchar({ length: 20 }).default('manual'),
   intakeId: varchar('intake_id', { length: 50 }),

@@ -171,6 +171,11 @@ export const MAX_LOG_MSG = 2000;
 export const VALID_CUSTOMER_STATUS = new Set(['new', 'researching', 'researched', 'building', 'done', 'rejected']);
 export const VALID_CUSTOMER_SOURCES = new Set(['manual', 'intake']);
 
+export const CustomerSocialSchema = z.object({
+  platform: z.string().max(50).default(''),
+  url: z.string().max(300).default(''),
+});
+
 export const CreateCustomerSchema = z.object({
   adminEmail: z.string().email(),
   businessName: z.string().min(1).max(255),
@@ -181,6 +186,8 @@ export const CreateCustomerSchema = z.object({
   target: z.string().optional(),
   preferredColors: z.string().optional(),
   contacts: z.record(z.string(), z.unknown()).optional(),
+  socials: z.array(CustomerSocialSchema).optional(),
+  font: z.string().max(50).optional(),
   package: z.string().max(50).optional(),
   notes: z.string().optional(),
   assignedTo: z.string().max(255).optional(),
@@ -197,6 +204,8 @@ export const UpdateCustomerSchema = z.object({
   target: z.string().optional(),
   preferredColors: z.string().optional(),
   contacts: z.record(z.string(), z.unknown()).optional(),
+  socials: z.array(CustomerSocialSchema).optional(),
+  font: z.string().max(50).optional(),
   package: z.string().max(50).optional(),
   status: z.string().max(30).optional(),
   logoUrl: z.string().optional(),
@@ -205,6 +214,9 @@ export const UpdateCustomerSchema = z.object({
   googleMapsUrl: z.string().max(500).optional(),
   // TB-029 fase 3: A/B testing prompt per cliente {promptName: label}
   promptLabels: z.record(z.string(), z.string().min(1).max(50)).optional(),
+  // TB-030 guard anti-loop: true = il PATCH viene dal sync (website→customer),
+  // non ri-triggerare il sync customer→website. Mai persistito.
+  skipSync: z.boolean().optional(),
 });
 
 export const AutoBuildSchema = z.object({
