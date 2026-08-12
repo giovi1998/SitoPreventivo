@@ -264,6 +264,28 @@ describe('useAutoBuildGenerate', () => {
     expect(result.current.state.errors.logo_1).toBeUndefined();
   });
 
+  it('generateOne: ritorna il messaggio errore (log non bugiardo), null se ok', async () => {
+    const doc: AutoBuildDoc = { id: 'logo_1', documentType: 'logo', title: 'Logo', data: { briefContext: 'bar', builder: {} } };
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    mocks.generateLogo.mockRejectedValueOnce(new Error('quota piena'));
+    let err: string | null = 'sentinel';
+    await act(async () => {
+      err = await result.current.generateOne(doc, customer);
+    });
+    expect(err).toBe('quota piena');
+    mocks.generateLogo.mockResolvedValueOnce({
+      applied: true,
+      concepts: [logoBuilder, { ...logoBuilder }, { ...logoBuilder }],
+      selected: -1,
+      response: { content: '{}', usage },
+      changes: ['logo:generated:concepts=3'],
+    });
+    await act(async () => {
+      err = await result.current.generateOne(doc, customer);
+    });
+    expect(err).toBeNull();
+  });
+
   it('T12: generateSite riceve SOLO logoBase64, mai la card/flyer (vision rule)', async () => {
     const { result } = renderHook(() => useAutoBuildGenerate());
     const docs: AutoBuildDoc[] = [

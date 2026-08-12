@@ -155,6 +155,7 @@ export abstract class BaseOrchestrator {
     options: {
       tools?: unknown;
       reasoningEffort?: 'low' | 'high' | 'max';
+      maxTokens?: number;
       responseFormat?: { type: 'json_object' };
       requestId?: string;
       customerId?: string;
@@ -169,7 +170,10 @@ export abstract class BaseOrchestrator {
     const autoFallback = getAiAutoFallback();
     const run = async (providerId: string) => {
       const provider = providerRegistry.getProvider(providerId);
-      const response = await this.handleStream(provider, messages, options, callbacks);
+      // Il fallback senza vision non può processare images: le rimuove.
+      const supportsVision = (provider as { supportsVision?: boolean }).supportsVision ?? false;
+      const msgs = supportsVision ? messages : messages.map((m) => (m.images ? { ...m, images: undefined } : m));
+      const response = await this.handleStream(provider, msgs, options, callbacks);
       return { response, providerId, didFallback: false };
     };
 
@@ -322,7 +326,11 @@ function isTransientAiError(msg: string): boolean {
   const m = msg.toLowerCase();
   return (
     m.includes('429') ||
+    m.includes('500') ||
+    m.includes('502') ||
+    m.includes('503') ||
     m.includes('504') ||
+    m.includes('internal server error') ||
     m.includes('timeout') ||
     m.includes('timed out') ||
     m.includes('errore di rete') ||

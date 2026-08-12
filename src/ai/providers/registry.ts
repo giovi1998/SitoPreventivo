@@ -18,6 +18,18 @@ export class AIProviderRegistry {
     this.register('ollama-deepseek-v4-flash-0731', new OllamaProProvider('deepseek-v4-flash:0731-cloud'));
     this.register('ollama-deepseek-v4-pro', new OllamaProProvider('deepseek-v4-pro:cloud'));
     this.register('ollama-qwen-3.5', new OllamaProProvider('qwen-3.5'));
+    // Modelli cloud aggiuntivi (verificati 2026-08-12: tutti rispondono,
+    // format json ok; vision solo dove marcato)
+    this.register('ollama-glm-5.2', new OllamaProProvider('glm-5.2:cloud'));
+    this.register('ollama-glm-5.1', new OllamaProProvider('glm-5.1:cloud'));
+    this.register('ollama-kimi-k3', new OllamaProProvider('kimi-k3:cloud'));
+    this.register('ollama-kimi-k2.7-code', new OllamaProProvider('kimi-k2.7-code:cloud'));
+    this.register('ollama-mistral-large-3', new OllamaProProvider('mistral-large-3:675b:cloud'));
+    this.register('ollama-gemma4-31b', new OllamaProProvider('gemma4:31b:cloud'));
+    this.register('ollama-gpt-oss-120b', new OllamaProProvider('gpt-oss:120b:cloud'));
+    this.register('ollama-nemotron-3-ultra', new OllamaProProvider('nemotron-3-ultra:cloud'));
+    this.register('ollama-minimax-m2.7', new OllamaProProvider('minimax-m2.7:cloud'));
+    this.register('ollama-qwen3.5-397b', new OllamaProProvider('qwen3.5:397b:cloud'));
   }
 
   register(id: string, provider: AIProvider): void {
@@ -56,17 +68,23 @@ export class AIProviderRegistry {
 
   /**
    * TB-023: ritorna il provider di fallback se quello primario fallisce.
-   * Se primario è Ollama, il fallback è DeepSeek; se è DeepSeek, il fallback è Ollama.
+   * Se primario è Ollama, il fallback è un altro modello Ollama (flat rate,
+   * stesso abbonamento — es. minimax-m3 rotto → deepseek-v4-flash-0731);
+   * se è DeepSeek, il fallback è Ollama.
    */
   getFallbackProvider(currentId?: string): { id: string; provider: AIProvider } | null {
     const primaryId = currentId || this.defaultId;
     if (primaryId.startsWith('ollama')) {
-      const fallback = this.providers.get('deepseek-v4-flash');
-      if (fallback) return { id: 'deepseek-v4-flash', provider: fallback };
+      const fallback = this.providers.get('ollama-deepseek-v4-flash-0731');
+      if (fallback && primaryId !== 'ollama-deepseek-v4-flash-0731') {
+        return { id: 'ollama-deepseek-v4-flash-0731', provider: fallback };
+      }
+      const deepseek = this.providers.get('deepseek-v4-flash');
+      if (deepseek) return { id: 'deepseek-v4-flash', provider: deepseek };
     }
-    const fallbackOllama = this.providers.get('ollama-minimax-m3');
-    if (fallbackOllama && primaryId !== 'ollama-minimax-m3') {
-      return { id: 'ollama-minimax-m3', provider: fallbackOllama };
+    const fallbackOllama = this.providers.get('ollama-deepseek-v4-flash-0731');
+    if (fallbackOllama && primaryId !== 'ollama-deepseek-v4-flash-0731') {
+      return { id: 'ollama-deepseek-v4-flash-0731', provider: fallbackOllama };
     }
     return null;
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteVerifyPrompt, buildWebsitePagePrompt } from '../websiteSystem';
+import { buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteVerifyPrompt, buildWebsitePagePrompt, sanitizeMapAddress } from '../websiteSystem';
 
 const baseBrief = {
   businessName: 'Gelateria Chiccheria',
@@ -28,6 +28,33 @@ describe('websiteSystem prompts (maps + socials)', () => {
     expect(prompt).not.toContain('%F0%9F%93%8D');
     expect(prompt).toContain('Via%20Dante%205%2FA%20Cagliari');
     expect(prompt).not.toContain('maps?q=%F0%9F%93%8D');
+  });
+
+  it('sanitizeMapAddress filtra telefono/email/URL dai contatti', () => {
+    expect(sanitizeMapAddress('Via Dante 5/A, Cagliari, 3405669008, x@y.it, https://site.it')).toBe('Via Dante 5/A Cagliari');
+    expect(sanitizeMapAddress('Via Dante 5/A, 3405669008')).toBe('Via Dante 5/A');
+  });
+
+  it('sanitizeMapAddress include città (3 segmenti, Italy opzionale)', () => {
+    // "Via Dante Alighieri, 5/A" spezza l'indirizzo in 2 segmenti → Cagliari
+    // è il 3° (Italy il 4°, tagliato). Cagliari presente = mappa corretta.
+    expect(sanitizeMapAddress('Via Dante Alighieri, 5/A, Cagliari, Italy, 3405669008, chiccheriacagliari@gmail.com')).toBe('Via Dante Alighieri 5/A Cagliari');
+    // Indirizzo in un solo segmento → Cagliari + Italy entrano nei 3.
+    expect(sanitizeMapAddress('Via Dante Alighieri 5/A, Cagliari, 09124, Italy')).toBe('Via Dante Alighieri 5/A Cagliari Italy');
+  });
+
+  it('mappa obbligatoria anche SENZA mapsUrl, se c\'è un indirizzo nei contatti', () => {
+    const noMaps = { ...baseBrief, mapsUrl: '' };
+    const prompt = buildWebsiteHtmlPrompt(noMaps, 'modern');
+    expect(prompt).toContain('MAPPA OBBLIGATORIA');
+    expect(prompt).toContain('https://www.google.com/maps?q=Via%20Dante%205%2FA%20Cagliari&output=embed');
+  });
+
+  it('senza mapsUrl e senza indirizzo → nessun iframe mappa', () => {
+    const noContact = { ...baseBrief, mapsUrl: '', contacts: '' };
+    const prompt = buildWebsiteHtmlPrompt(noContact, 'modern');
+    expect(prompt).not.toContain('MAPPA OBBLIGATORIA');
+    expect(prompt).not.toContain('google.com/maps');
   });
 
   it('includa TUTTI i social del brief come obbligatori', () => {

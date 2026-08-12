@@ -5,9 +5,9 @@ import { DeepSeekProvider } from '../deepseek';
 describe('AIProviderRegistry', () => {
   it('has default id', () => {
     const r = new AIProviderRegistry();
-    // Default: MiniMax M3 (vision); DeepSeek resta fallback.
+    // Default: MiniMax M3 (vision); fallback Ollama flat (deepseek-v4-flash-0731).
     expect(r.getDefaultId()).toBe('ollama-minimax-m3');
-    expect(r.getFallbackProvider()).toMatchObject({ id: 'deepseek-v4-flash' });
+    expect(r.getFallbackProvider()).toMatchObject({ id: 'ollama-deepseek-v4-flash-0731' });
   });
   it('returns provider by id', () => {
     const r = new AIProviderRegistry();
@@ -21,7 +21,7 @@ describe('AIProviderRegistry', () => {
   it('lists providers', () => {
     const r = new AIProviderRegistry();
     const list = r.listProviders();
-    expect(list.length).toBe(7);
+    expect(list.length).toBe(17);
     expect(list[0]).toHaveProperty('supportsStreaming');
     expect(list[0]).toHaveProperty('supportsTools');
   });

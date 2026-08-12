@@ -55,8 +55,10 @@ export class OllamaProProvider extends BaseAIProvider {
   constructor(model = 'minimax-m3:cloud') {
     super();
     this.model = model;
-    // MiniMax M3 e qwen-3.5 supportano vision; deepseek-v4-pro no.
-    this.supportsVision = /minimax-m3|qwen-3\.5|gemma4|qwen3-vl/i.test(model);
+    // Vision: verificato 2026-08-12 su Ollama Pro Cloud — kimi-k3,
+    // kimi-k2.7-code, gemma4:31b, mistral-large-3:675b, minimax-m3,
+    // qwen3.5 accettano immagini; glm/gpt-oss/nemotron/minimax-m2.7 no.
+    this.supportsVision = /minimax-m3|qwen-3\.5|qwen3\.5|gemma4|kimi-k3|kimi-k2\.7-code|mistral-large-3/i.test(model);
   }
 
   async chat(
