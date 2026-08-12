@@ -122,7 +122,7 @@ describe('AgentOrchestrator (T9)', () => {
 
     const agent = new AgentOrchestrator();
     const toolResults: any[] = [];
-    const { results } = await agent.run(brief, docs, {}, { onToolResult: (r) => toolResults.push(r) });
+    const { results } = await agent.run(brief, docs, {}, { onToolResult: async (r) => { toolResults.push(r); } });
 
     expect(mockGenerateLogo).toHaveBeenCalledTimes(1);
     expect(results).toHaveLength(1);

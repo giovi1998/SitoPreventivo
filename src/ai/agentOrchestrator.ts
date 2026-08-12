@@ -64,7 +64,7 @@ export interface AgentRunOptions {
   include?: Array<'logo' | 'card' | 'flyer' | 'website'>;
   onStream?: (chunk: AIStreamChunk) => void;
   /** Chiamato a ogni tool completato (il chiamante salva il doc). */
-  onToolResult?: (result: AgentToolResult) => void;
+  onToolResult?: (result: AgentToolResult) => void | Promise<void>;
 }
 
 const MAX_TOOL_ROUNDS = 6;
@@ -161,7 +161,7 @@ export class AgentOrchestrator extends BaseOrchestrator {
         results.push(result);
         messages.push({ role: 'assistant', content: response.content ?? '', toolCalls: [tc] });
         messages.push({ role: 'tool', content: JSON.stringify(result.summary), toolCallId: tc.id, name: tc.function.name });
-        options.onToolResult?.(result);
+        await options.onToolResult?.(result);
       }
     }
 

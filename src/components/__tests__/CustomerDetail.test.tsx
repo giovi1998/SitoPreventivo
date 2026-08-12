@@ -384,7 +384,7 @@ describe('TB-027 CustomerDetail', () => {
       expect(autoGenMocks.generateAll).toHaveBeenCalledTimes(1);
     });
     expect(autoGenMocks.generateAll.mock.calls[0][0]).toHaveLength(1);
-    expect(autoGenMocks.generateAll.mock.calls[0][2]).toEqual({ providerId: 'ollama-minimax-m3', customerId: 'cust_1' });
+    expect(autoGenMocks.generateAll.mock.calls[0][2]).toEqual({ providerId: 'ollama-minimax-m3', customerId: 'cust_1', agentMode: true });
   });
 
   it('pulsante "Genera bozze AI" disabilitato senza draft pending', async () => {

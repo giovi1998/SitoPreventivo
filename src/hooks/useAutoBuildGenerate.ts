@@ -15,6 +15,8 @@ import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
 import { newRunId, newSpanId } from '../ai/runTrace';
 import type { RunTraceOptions } from '../ai/types';
+import { AgentOrchestrator } from '../ai/agentOrchestrator';
+import { buildAgentBrief, agentResultData, docTypeOfTool } from '../ai/agentSave';
 import type { BusinessCard, Flyer, FlyerTone, Logo, LogoBuilder } from '../utils/documentSchemas';
 import { createEmptyFlyer } from '../utils/documentSchemas';
 
@@ -54,6 +56,8 @@ export interface AutoBuildGenerateOptions {
   customerId?: string;
   /** T7: trace gerarchica agente — se assenti, il hook genera runId/rootSpanId. */
   runTrace?: RunTraceOptions;
+  /** T11: usa l'agente orchestratore (harness tools) invece della sequenza fissa. */
+  agentMode?: boolean;
 }
 
 const GENERATABLE_ORDER = ['logo', 'businessCard', 'flyer', 'website'] as const;
@@ -557,6 +561,66 @@ export function useAutoBuildGenerate() {
       const statuses: Record<string, DraftGenStatus> = {};
       const errors: Record<string, string> = {};
       setState((prev) => ({ ...prev, running: true }));
+
+      // T11: modalità agente — l'AI pianifica e delega ai sub-orchestratori
+      // via tool; ogni tool result viene salvato sul doc corrispondente.
+      if (options?.agentMode && targets.length > 0) {
+        let toolCount = 0;
+        setState((prev) => ({ ...prev, currentStep: 'Agente: pianifico la generazione…' }));
+        try {
+          const agent = new AgentOrchestrator();
+          const runTrace: RunTraceOptions = { runId, runName: 'auto-build', startRun: true, rootSpanId };
+          await agent.run(
+            buildAgentBrief(docs, customer),
+            { logo: {} as any, card: {} as any, flyer: {} as any },
+            {
+              modelId: options.providerId,
+              customerId: options.customerId,
+              runTrace,
+            },
+            {
+              include: targets.map((t) => t.documentType) as any,
+              onToolResult: async (result) => {
+                toolCount++;
+                const docType = docTypeOfTool(result.name);
+                const doc = targets.find((d) => d.documentType === docType);
+                if (!doc) return;
+                setState((prev) => ({
+                  ...prev,
+                  currentStep: `Agente: ${result.ok ? '✓' : '✗'} ${result.name} (${toolCount} tools)`,
+                }));
+                if (result.ok) {
+                  const data = agentResultData(docType, result);
+                  if (data) {
+                    await saveDraft(doc, { ...(doc.data as Record<string, unknown>), ...data });
+                    statuses[doc.id] = 'done';
+                    setStatus(doc.id, 'done');
+                  }
+                } else {
+                  statuses[doc.id] = 'error';
+                  errors[doc.id] = result.summary;
+                  setStatus(doc.id, 'error');
+                  setDocError(doc.id, result.summary);
+                }
+              },
+            },
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error('Auto-build agente fallito', { route: 'useAutoBuildGenerate', err: msg });
+          for (const d of targets) {
+            if (statuses[d.id] !== 'done') {
+              statuses[d.id] = 'error';
+              errors[d.id] = msg;
+              setStatus(d.id, 'error');
+              setDocError(d.id, msg);
+            }
+          }
+        }
+        setState((prev) => ({ ...prev, running: false, currentStep: null }));
+        return { statuses, errors };
+      }
+
       for (let i = 0; i < targets.length; i++) {
         const doc = targets[i];
         setStatus(doc.id, 'running');

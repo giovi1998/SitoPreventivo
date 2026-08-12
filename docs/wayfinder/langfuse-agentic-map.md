@@ -38,6 +38,7 @@ LangChain/LangGraph e Next.js (migrare o no, con dati).
 - [T6 Fix trace flyer-copy + tag status](tickets/t06-fix-flyer-copy-trace.md) — usage flyer-copy spaccato reale, identità (userEmail/customerId/sessionId) nel body, tag `status:ok|error` nel payload. 62 test verdi.
 - [T7 Implementare threading runId → trace gerarchica agent](tickets/t07-threading-runid-trace-agente.md) — implementato: runId/rootSpanId/stepSpanId da `useAutoBuildGenerate` → body `/api/ai/chat` → payload OTLP con root `agent:auto-build` + step + generation parent-linked. 3026 test verdi, build zero-warning.
 - [T9 Sub-agente con harness + tool per ogni oggetto](tickets/t09-agente-harness-tool-per-oggetto.md) — `agentOrchestrator.ts`: tools generate_logo/card/flyer/website, loop plan→act 6 round, trace plan+tool span. **Bonus: fix prod website** — Zod max_tokens 8192→16384 (era il 400 su ogni step website in PROD).
+- [T11 Wiring agente nel flusso CRM "Genera bozze AI"](tickets/t11-wiring-agente-crm.md) — `agentMode: true` in CustomerDetail; `agentSave.ts` helper (brief + tool result → data); UI stato `Agente: ✓/✗ generate_<oggetto>`. Editor singoli senza agente (YAGNI).
 
 ## Ticket aperti
 

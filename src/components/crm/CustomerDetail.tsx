@@ -427,7 +427,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const handleGenerateAll = async () => {
     if (!customer) return;
     logger.appendLog('info', `Generazione bozze AI in corso (provider: ${aiProvider})…`, undefined, { docs: docs.length, provider: aiProvider });
-    const summary = await autoGen.generateAll(docs, customer, { providerId: aiProvider, customerId: customerId });
+    const summary = await autoGen.generateAll(docs, customer, { providerId: aiProvider, customerId: customerId, agentMode: true });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const perDoc = docs

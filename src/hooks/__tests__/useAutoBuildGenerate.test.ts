@@ -48,6 +48,22 @@ const mocks = vi.hoisted(() => ({
   svgToPng: vi.fn(),
   compressDataUrl: vi.fn(async (v: string) => v),
   saveDocument: vi.fn(),
+  agentRun: vi.fn(),
+  buildAgentBrief: vi.fn(() => ({ businessName: 'Bar' })),
+  agentResultData: vi.fn(() => ({ builder: {} })),
+  docTypeOfTool: vi.fn((name: unknown) => (name === 'generate_logo' ? 'logo' : 'businessCard')),
+}));
+
+vi.mock('../../ai/agentOrchestrator', () => ({
+  AgentOrchestrator: vi.fn().mockImplementation(function () {
+    return { run: mocks.agentRun };
+  }),
+}));
+
+vi.mock('../../ai/agentSave', () => ({
+  buildAgentBrief: mocks.buildAgentBrief,
+  agentResultData: mocks.agentResultData,
+  docTypeOfTool: mocks.docTypeOfTool,
 }));
 
 vi.mock('../../ai/logoOrchestrator', () => ({
@@ -243,6 +259,23 @@ describe('useAutoBuildGenerate', () => {
     for (const call of mockSave.mock.calls) {
       expect(call[1].data.autoGeneratePending).toBe(false);
     }
+  });
+
+  it('T11: agentMode delega all\'AgentOrchestrator e salva i tool result', async () => {
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    mocks.agentRun.mockImplementation(async (_brief: any, _docs: any, _ctx: any, opts: any) => {
+      await opts.onToolResult({ name: 'generate_logo', ok: true, summary: 'Logo generato', data: { concepts: [{}], selected: 0 } });
+      await opts.onToolResult({ name: 'generate_card', ok: false, summary: 'Card fallita' });
+    });
+    await act(async () => {
+      const summary = await result.current.generateAll(makeDocs(), customer, { agentMode: true });
+      expect(mocks.agentRun).toHaveBeenCalledTimes(1);
+      expect(summary.statuses.logo_1).toBe('done');
+      expect(summary.statuses.card_1).toBe('error');
+      expect(summary.errors.card_1).toBe('Card fallita');
+    });
+    // il result ok → saveDraft chiamato col data mappato
+    expect(mockSave.mock.calls.some((c) => String(c[1].id).includes('logo'))).toBe(true);
   });
 
   it('saveDocument preserva customerId del draft', async () => {
