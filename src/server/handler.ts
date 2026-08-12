@@ -22,7 +22,7 @@ import {
   CreateCustomerSchema, UpdateCustomerSchema, AutoBuildSchema, IntakeSchema,
   VALID_CUSTOMER_STATUS, VALID_CUSTOMER_SOURCES, VALID_INTAKE_STATUS,
 } from './schemas.ts';
-import { buildBriefContextApi, callDeepSeekAiFill, runCustomerResearch } from './crm.ts';
+import { buildBriefContextApi, callDeepSeekAiFill, runCustomerResearch, syncCustomerToWebsiteDocs } from './crm.ts';
 import { handleAI } from './ai.ts';
 import type { VercelRequest, VercelResponse, RouteHandler } from './types.ts';
 
@@ -787,11 +787,22 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
       return json(req, res, 400, { error: 'Status non valido' });
     }
     const patch: Record<string, unknown> = { updatedAt: new Date() };
-    for (const k of ['businessName', 'ownerName', 'sector', 'activity', 'mood', 'target', 'preferredColors', 'contacts', 'package', 'status', 'logoUrl', 'notes', 'assignedTo', 'googleMapsUrl', 'promptLabels'] as const) {
+    for (const k of ['businessName', 'ownerName', 'sector', 'activity', 'mood', 'target', 'preferredColors', 'contacts', 'socials', 'font', 'package', 'status', 'logoUrl', 'notes', 'assignedTo', 'googleMapsUrl', 'promptLabels'] as const) {
       if (d[k] !== undefined) patch[k] = d[k];
     }
     const [updated] = await (await getDb()).update(customersTable).set(patch).where(eq(customersTable.id, id)).returning();
     if (!updated) return json(req, res, 404, { error: 'Cliente non trovato' });
+    // TB-030 sync customer→website: se il PATCH non viene dal sync
+    // (skipSync), aggiorna i doc website del cliente con i campi brand
+    // (font/colori/contatti/social). Last-write-wins con confronto
+    // updatedAt: il doc vince se è più recente del customer.
+    if (!d.skipSync) {
+      try {
+        await syncCustomerToWebsiteDocs(id, updated);
+      } catch (err) {
+        console.warn('[sync] customer→website fallito', { customerId: id, err: String(err), stack: (err as Error)?.stack });
+      }
+    }
     return json(req, res, 200, { data: updated });
   }
 
@@ -903,6 +914,12 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
     if (!cust) return json(req, res, 404, { error: 'Cliente non trovato' });
     await db.update(customersTable).set({ status: 'building', updatedAt: new Date() }).where(eq(customersTable.id, id));
     const contacts = (cust.contacts || {}) as Record<string, unknown>;
+    // Indirizzo per la mappa: preferisce l'indirizzo completo dal research
+    // Firecrawl (webData.json.addresses, es. "Via Dante 5/A, Cagliari") —
+    // contacts.address è spesso solo via senza città → Google risolve male.
+    const webJson = (cust.webData?.json || {}) as Record<string, unknown>;
+    const webAddresses = Array.isArray(webJson.addresses) ? webJson.addresses.filter((a): a is string => typeof a === 'string') : [];
+    const mapAddress = webAddresses[0] || String(contacts.address || '');
     const created: string[] = [];
     const now = new Date().toISOString();
     const baseFields = {
@@ -1092,12 +1109,15 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
           target: String(cust.target || ''),
           pages: 'index',
           preferredColors: String(cust.preferredColors || ''),
-          font: '',
+          font: String(cust.font || ''),
           cta: '',
           sections: 'hero, chi_siamo, contatti',
           features: '',
-          contacts: [contacts.address, contacts.phone, contacts.email].filter(Boolean).join(', '),
-          socials: [],
+          contacts: [mapAddress, contacts.phone, contacts.email].filter(Boolean).join(', '),
+          address: mapAddress,
+          phone: String(contacts.phone || ''),
+          email: String(contacts.email || ''),
+          socials: Array.isArray(cust.socials) ? cust.socials : [],
           mapsUrl: '',
           notes: '',
         },

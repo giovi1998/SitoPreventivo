@@ -397,6 +397,47 @@ describe('TB-027 /api/customers', () => {
     });
     expect(res.statusCode).toBe(403);
   });
+
+  it('PATCH customer con font/socials → sync ai doc website del cliente', async () => {
+    const cust = {
+      id: 'cust_1', businessName: 'Bar', contacts: { address: 'Via Dante 5/A' },
+      webData: { json: { addresses: ['Via Dante Alighieri 5/A, Cagliari'] } },
+      updatedAt: new Date().toISOString(),
+    };
+    const websiteDoc = {
+      id: 'website_1', customerId: 'cust_1', documentType: 'website',
+      data: { brief: { font: '', preferredColors: '', address: '', phone: '', email: '', contacts: '', socials: [] } },
+      updatedAt: new Date(Date.now() - 60000).toISOString(),
+    };
+    mockDbState.selectResults.push([cust]); // PATCH select
+    mockDbState.selectResults.push([websiteDoc]); // sync select
+    // PATCH returning → il customer AGGIORNATO (con font/socials applicati)
+    mockDbState.nextReturning = [{ ...cust, font: 'Poppins', socials: [{ platform: 'Instagram', url: 'https://instagram.com/x' }] }];
+    const res = await callHandler({
+      method: 'PATCH', url: '/api/customers/cust_1',
+      body: { adminEmail: 'admin@gmail.com', font: 'Poppins', socials: [{ platform: 'Instagram', url: 'https://instagram.com/x' }] },
+    });
+    expect(res.statusCode).toBe(200);
+    // il sync ha aggiornato il doc website (update con data.brief.font)
+    const syncUpdate = mockDbState.updated.find((u: any) => u.data);
+    expect(syncUpdate).toBeDefined();
+    expect(syncUpdate.data.brief.font).toBe('Poppins');
+    expect(syncUpdate.data.brief.socials).toEqual([{ platform: 'Instagram', url: 'https://instagram.com/x' }]);
+    // indirizzo COMPLETO dal research (webData.json.addresses), non contacts.address
+    expect(syncUpdate.data.brief.address).toBe('Via Dante Alighieri 5/A, Cagliari');
+  });
+
+  it('PATCH customer con skipSync → nessun sync ai doc website', async () => {
+    const cust = { id: 'cust_1', businessName: 'Bar', contacts: {}, updatedAt: new Date().toISOString() };
+    mockDbState.selectResults.push([cust]);
+    const res = await callHandler({
+      method: 'PATCH', url: '/api/customers/cust_1',
+      body: { adminEmail: 'admin@gmail.com', font: 'Poppins', skipSync: true },
+    });
+    expect(res.statusCode).toBe(200);
+    // nessuna select per il sync (selectResults vuoto → sync non partito)
+    expect(mockDbState.updated.filter((u: any) => u.data)).toHaveLength(0);
+  });
 });
 
 describe('TB-027 REGISTRATION_ENABLED flag', () => {

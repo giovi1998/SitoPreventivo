@@ -1,11 +1,62 @@
 // TB-027 CRM server-side: research, Firecrawl, knowledge, ai-fill, logo detection.
 import crypto from 'node:crypto';
-import { eq } from 'drizzle-orm';
-import { getDb, customersTable, customerKnowledgeTable } from './db.ts';
+import { eq, and } from 'drizzle-orm';
+import { getDb, customersTable, customerKnowledgeTable, documentsTable } from './db.ts';
 import { clampDataUrl } from './core.ts';
 import type { FirecrawlResult } from './types.ts';
-export function buildBriefContextApi(cust: Record<string, unknown>): string {
-  const c = cust || {};
+// TB-030 sync customer→website: aggiorna i doc website del cliente con i
+// campi brand (font/colori/contatti/social). Last-write-wins con confronto
+// updatedAt: il doc vince se è più recente del customer. Best-effort: un
+// errore non deve rompere il PATCH customer.
+export async function syncCustomerToWebsiteDocs(customerId: string, cust: Record<string, unknown>): Promise<number> {
+  const db = await getDb();
+  const docs = await db.select().from(documentsTable).where(and(
+    eq(documentsTable.customerId, customerId),
+    eq(documentsTable.documentType, 'website'),
+  ));
+  if (docs.length === 0) return 0;
+  const contacts = (cust.contacts || {}) as Record<string, unknown>;
+  const socials = Array.isArray(cust.socials) ? cust.socials as Array<{ platform?: string; url?: string }> : [];
+  const font = typeof cust.font === 'string' ? cust.font : '';
+  const preferredColors = typeof cust.preferredColors === 'string' ? cust.preferredColors : '';
+  // Indirizzo per la mappa: preferisce l'indirizzo COMPLETO dal research
+  // Firecrawl (webData.json.addresses, es. "Via Dante 5/A, Cagliari") —
+  // contacts.address è spesso solo via senza città → Google risolve male.
+  const webData = (cust.webData || {}) as Record<string, unknown>;
+  const webJson = (webData.json || {}) as Record<string, unknown>;
+  const webAddresses = Array.isArray(webJson.addresses) ? webJson.addresses.filter((a): a is string => typeof a === 'string') : [];
+  const address = webAddresses[0] || String(contacts.address || '');
+  const phone = String(contacts.phone || '');
+  const email = String(contacts.email || '');
+  const custUpdated = cust.updatedAt ? new Date(cust.updatedAt as string).getTime() : Date.now();
+  let synced = 0;
+  for (const doc of docs) {
+    const docUpdated = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
+    // Last-write-wins: il doc personalizzato dopo l'ultima modifica del
+    // customer vince (l'utente ha modificato il website dopo).
+    if (docUpdated > custUpdated) continue;
+    const data = (doc.data as Record<string, unknown> | null) || {};
+    const brief = (data.brief as Record<string, unknown> | null) || {};
+    const nextBrief = {
+      ...brief,
+      font: font || brief.font,
+      preferredColors: preferredColors || brief.preferredColors,
+      address,
+      phone,
+      email,
+      contacts: [address, phone, email].filter(Boolean).join(', '),
+      socials: socials.length > 0 ? socials : brief.socials,
+    };
+    await db.update(documentsTable).set({
+      data: { ...data, brief: nextBrief } as never,
+      updatedAt: new Date(),
+    }).where(eq(documentsTable.id, doc.id));
+    synced++;
+  }
+  return synced;
+}
+
+export function buildBriefContextApi(cust: Record<string, unknown>): string {  const c = cust || {};
   const contacts = (c.contacts || {}) as Record<string, unknown>;
   const webData = (c.webData || {}) as Record<string, unknown>;
   const webJson = (webData.json || {}) as Record<string, unknown>;
@@ -279,15 +330,47 @@ export async function runCustomerResearch(cust: any): Promise<{
   // Logo manuale (upload admin) vince SEMPRE: status 'manual' e
   // detectedLogoUrl non viene sovrascritto.
   researchStatus.logo = cust.logoUrl ? 'manual' : detectedLogoUrl ? 'ok' : 'no_logo';
+  // TB-030 prefill: se il customer non ha social, popolali dai social_links
+  // Firecrawl (piattaforma dal dominio). Se non ha font, usa brandingFonts[0].
+  const webLinks = Array.isArray(webData.links) ? webData.links.filter((l): l is string => typeof l === 'string') : [];
+  const socials = Array.isArray(cust.socials) && cust.socials.length > 0
+    ? cust.socials
+    : webLinks.filter((l) => /instagram|facebook|linkedin|tiktok|youtube|twitter|x\.com|pinterest/i.test(l)).slice(0, 5).map((l) => ({ platform: socialPlatformFromUrl(l), url: l }));
+  const webFonts = Array.isArray(webData.brandingFonts) ? webData.brandingFonts.filter((f): f is string => typeof f === 'string') : [];
+  const font = typeof cust.font === 'string' && cust.font
+    ? cust.font
+    : (webFonts.length > 0 ? webFonts[0] : null);
   const db = await getDb();
   await db.update(customersTable).set({
     detectedLogoUrl: cust.logoUrl ? cust.detectedLogoUrl : (detectedLogoUrl || cust.detectedLogoUrl),
     researchStatus,
     webData,
     status: 'researched',
+    ...(socials.length > 0 ? { socials } : {}),
+    ...(font ? { font } : {}),
     updatedAt: new Date(),
   }).where(eq(customersTable.id, cust.id));
   return { researchStatus, knowledgeCount, webData };
+}
+
+/** Piattaforma social dal dominio URL (instagram.com → Instagram). */
+function socialPlatformFromUrl(url: string): string {
+  const m = url.match(/https?:\/\/(?:www\.)?([^/]+)/i);
+  const host = m ? m[1] : url;
+  const known: Record<string, string> = {
+    'instagram.com': 'Instagram',
+    'facebook.com': 'Facebook',
+    'linkedin.com': 'LinkedIn',
+    'tiktok.com': 'TikTok',
+    'youtube.com': 'YouTube',
+    'twitter.com': 'X',
+    'x.com': 'X',
+    'pinterest.com': 'Pinterest',
+  };
+  for (const [k, v] of Object.entries(known)) {
+    if (host === k || host.endsWith('.' + k)) return v;
+  }
+  return host.split('.')[0] || 'Social';
 }
 
 // TB-027 logo detection: fetch homepage, estrai favicon/img candidate.
