@@ -5,6 +5,37 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-12
 
+- **Langfuse follow-up round 2 — media upload funzionante + sessioni
+  complete + latency reale (2026-08-12)** (da `to-be-done.md` Langfuse
+  follow-up, verifiche empiriche su `cloud.langfuse.com`):
+  - **Media upload FIX (root cause 400 + 403, verificato end-to-end con
+    probe reale)**: `src/server/langfuse.ts` inviava `sha256Hash` hex (64
+    char) → 400 `invalid_format` (regex Langfuse `{44}` = base64 del digest
+    binario); PUT senza `x-amz-checksum-sha256` → 403 (media resta
+    pending); mancava PATCH `uploadHttpStatus` post-upload e
+    `contentLength` era arrotondato (ora = byte reali). traceId media ora
+    32-hex W3C (era base64 OTLP). Flusso completo verificato: POST 201 →
+    PUT 200 (checksum) → PATCH 200 → GET 200.
+  - **Sessioni vuote FIX**: root cause doppio — (1) server `ai.ts` non
+    accettava `sessionId` nei body dei 5 endpoint Gemini (zod lo
+    strippava) + design-review: aggiunto `sessionId` a card-cover,
+    card-photo, logo-background, flyer-hero, image-flash, design-review
+    (schema + trace); (2) closure stale client: `sessionId` mancante nelle
+    deps `useCallback` di useAICard/useAILogo/useAIFlyer/useAIWebsite →
+    chiamate dopo doc-switch usavano il docId precedente. `useAISocial`
+    non passava proprio sessionId all'orchestratore (aggiunto options +
+    handleStream). `useAIIconHero` ora accetta sessionId (wiring
+    CardEditorShell con `loadedIdRef.current`).
+  - **Latency reale**: `endTime` default = payload build time (era
+    `endTime ?? startTime` → tutte le trace a 0ms).
+  - **Design-review allineato**: nome trace `design-review` (era
+    `generate-design-review`) + subfeature `review` + sessionId.
+  - **Dead code**: rimosso `buildTags` duplicato in `ai.ts` (tags
+    definiti una volta sola in `buildLangfusePayload`).
+  - Test: aggiornati (media sha base64/PATCH/checksum/contentLength,
+    latency, sessionId server card-cover, sessionId useAIIconHero).
+    **3013 test verdi**, typecheck pulito.
+
 - **Langfuse follow-up — costi Gemini dev proxy + nomi trace server + tipi
   multimodali (2026-08-12)** (da `to-be-done.md` Langfuse follow-up):
   - **Costi Gemini nel dev proxy**: `vite.config.js` ora calcola il costo

@@ -144,7 +144,7 @@ export function useAIFlyer(userEmail?: string, sessionId?: string): UseAIFlyerRe
         trimmed,
       );
     },
-    [getOrchestrator, runWith]
+    [getOrchestrator, runWith, sessionId]
   );
 
   const refine = useCallback(
@@ -169,7 +169,7 @@ export function useAIFlyer(userEmail?: string, sessionId?: string): UseAIFlyerRe
         `Azione: ${action}`,
       );
     },
-    [getOrchestrator, runWith]
+    [getOrchestrator, runWith, sessionId]
   );
 
   const generateHero = useCallback(
@@ -219,7 +219,7 @@ export function useAIFlyer(userEmail?: string, sessionId?: string): UseAIFlyerRe
         return { flyer, applied: false, error: hint };
       }
     },
-    [info, success, error, userEmail]
+    [info, success, error, userEmail, sessionId]
   );
 
   const reset = useCallback(() => {

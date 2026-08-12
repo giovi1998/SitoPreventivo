@@ -98,6 +98,17 @@ describe('buildLangfusePayload (OTLP/HTTP JSON → Langfuse v4)', () => {
     expect(firstSpan(payload).traceId).toBe(Buffer.from('a'.repeat(32), 'hex').toString('base64'));
   });
 
+  it('reports real latency: endTime defaults to payload build time, not startTime', () => {
+    const start = Date.now() - 5_000;
+    const payload = buildLangfusePayload({ ...baseInput, startTime: start }) as any;
+    const span = firstSpan(payload);
+    const startNano = Number(span.startTimeUnixNano);
+    const endNano = Number(span.endTimeUnixNano);
+    // endTime >= startTime + ~5s (mai più uguale a startTime: latency reale)
+    expect(endNano - startNano).toBeGreaterThanOrEqual(5_000_000_000);
+    expect(endNano).toBeLessThanOrEqual(Date.now() * 1_000_000 + 1_000_000_000);
+  });
+
   it('does not leak PII: input images are stripped from observation input', () => {
     const inputWithImage = [
       { role: 'user', content: 'guarda', images: ['base64data'] },
@@ -187,15 +198,23 @@ describe('ingestLangfuse (OTLP HTTP/JSON ingestion)', () => {
 
   it('uploads base64 images to Langfuse media and embeds media token in input', async () => {
     const mediaBodies: any[] = [];
+    const putHeaders: any[] = [];
+    const patchBodies: any[] = [];
     const fetchMock = vi.fn(async (url: string, init: any) => {
       if (String(url).includes('/api/public/media')) {
+        if (init.method === 'PATCH') {
+          patchBodies.push(JSON.parse(init.body));
+          return { ok: true, status: 200 };
+        }
         mediaBodies.push(JSON.parse(init.body));
         return {
           ok: true,
+          status: 201,
           json: async () => ({ mediaId: 'media_123', uploadUrl: 'https://s3.example/presigned' }),
         };
       }
       if (String(url).startsWith('https://s3.example/')) {
+        putHeaders.push(init.headers);
         return { ok: true, status: 200 };
       }
       return { ok: true, status: 200 };
@@ -214,15 +233,20 @@ describe('ingestLangfuse (OTLP HTTP/JSON ingestion)', () => {
     expect(urls).toContain('https://cloud.langfuse.com/api/public/media');
     expect(urls.some((u) => u.startsWith('https://s3.example/'))).toBe(true);
 
-    // L'API media richiede sha256Hash + field + traceId (400 senza: l'upload
-    // fallisce e l'immagine resta placeholder).
+    // L'API media richiede sha256Hash (base64 digest, 44 char — hex 64
+    // char → 400 "invalid_format" verificato empiricamente), field, traceId.
     expect(mediaBodies.length).toBe(1);
     expect(mediaBodies[0].contentType).toBe('image/png');
     expect(mediaBodies[0].field).toBe('input');
-    expect(mediaBodies[0].sha256Hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(mediaBodies[0].traceId).toBe(
-      Buffer.from('9b1deb4d3b7d4bad9bdd2b0d7b3dcb6d', 'hex').toString('base64')
-    );
+    expect(mediaBodies[0].sha256Hash).toMatch(/^[A-Za-z0-9+/=]{44}$/);
+    expect(mediaBodies[0].contentLength).toBe(3); // byte reali di 'QUJD'
+    // traceId hex W3C 32 char (formato atteso dall'API media)
+    expect(mediaBodies[0].traceId).toMatch(/^[0-9a-f]{32}$/);
+
+    // PUT con checksum (senza → 403, media pending) + PATCH status post-upload
+    expect(putHeaders[0]['x-amz-checksum-sha256']).toBe(mediaBodies[0].sha256Hash);
+    expect(putHeaders[0]['Content-Type']).toBe('image/png');
+    expect(patchBodies[0]).toEqual({ uploadedAt: expect.any(String), uploadHttpStatus: 200 });
 
     const otlp = fetchMock.mock.calls.find((c) => String(c[0]).includes('/otel/v1/traces'));
     const span = JSON.parse(otlp![1].body).resourceSpans[0].scopeSpans[0].spans[0];

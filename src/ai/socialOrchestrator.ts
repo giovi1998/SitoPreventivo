@@ -48,6 +48,8 @@ export class SocialAIOrchestrator extends BaseOrchestrator {
       onStream?: (chunk: AIStreamChunk) => void;
       userEmail?: string;
       imagePreviewBase64?: string;
+      /** TB-029: sessione Langfuse (docId: raggruppa chat+immagini del documento). */
+      sessionId?: string;
     } = {},
   ): Promise<SocialProcessResult> {
     const changes: string[] = [];
@@ -68,7 +70,7 @@ export class SocialAIOrchestrator extends BaseOrchestrator {
     const response = await this.handleStream(
       provider,
       messages,
-      { reasoningEffort: 'max', responseFormat: { type: 'json_object' } },
+      { reasoningEffort: 'max', responseFormat: { type: 'json_object' }, sessionId: options.sessionId },
       { onStream: options.onStream },
     );
 

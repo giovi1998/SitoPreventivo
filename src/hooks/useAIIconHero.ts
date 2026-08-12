@@ -32,7 +32,7 @@ export interface UseAIIconHeroReturn {
   clear: () => void;
 }
 
-export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
+export function useAIIconHero(userEmail?: string, sessionId?: string): UseAIIconHeroReturn {
   const { logs, info, success, error, clear } = useAILogs('useAIIconHero');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -64,6 +64,7 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
             imageModel: options?.imageModel,
             background: options?.background === 'transparent' ? 'white' : options?.background,
             userEmail: userEmail || undefined,
+            ...(sessionId ? { sessionId } : {}),
           }),
         });
 
@@ -118,7 +119,7 @@ export function useAIIconHero(userEmail?: string): UseAIIconHeroReturn {
         setIsProcessing(false);
       }
     },
-    [userEmail, info, success, error],
+    [userEmail, info, success, error, sessionId],
   );
 
   return { generate, isProcessing, logs, clear };

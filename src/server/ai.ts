@@ -27,10 +27,8 @@ function chatTraceName(kind?: string): string {
   return `${feature}-ai-chat`;
 }
 
-// TB-029: tags strutturati filtrabili in Langfuse.
-function buildTags(feature: string, subfeature: string, provider: string, streaming: boolean): string[] {
-  return [`feature:${feature}`, `subfeature:${subfeature}`, `provider:${provider}`, `streaming:${streaming}`];
-}
+// TB-029: tags strutturati filtrabili in Langfuse (definiti in
+// langfuse.ts buildLangfusePayload — niente duplicazione client/server).
 
 // TB-029: costo USD calcolato server-side (tabella inline, gotcha §1.1:
 // providerPricing.ts è client-side e non importabile qui). Il body costUsd
@@ -1093,6 +1091,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         logoImage: z.string().max(150_000).optional(),
         side: z.enum(['front', 'back']).optional(),
         userEmail: z.string().email().optional(),
+        // TB-029: sessione Langfuse = docId (raggruppa chat+immagini del documento)
+        sessionId: z.string().min(1).max(200).optional(),
         // TB-023: modello immagine Gemini selezionabile
         imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
       }),
@@ -1103,6 +1103,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
     const userEmail = v.data.userEmail;
+    const sessionId = v.data.sessionId;
     const startedAt = Date.now();
     try {
       // Dynamic import of @google/genai (node_modules, always bundled).
@@ -1157,6 +1158,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         model: normalizeGeminiImageModel(v.data.imageModel),
         provider: 'gemini',
         userEmail,
+        sessionId,
         feature: 'card',
         subfeature: 'cover',
         costUsd: computeCostUsd('gemini', normalizeGeminiImageModel(v.data.imageModel), undefined, 1),
@@ -1196,6 +1198,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         logoImage: z.string().max(600_000).optional(),
         previousBackground: z.string().max(300_000).optional(),
         userEmail: z.string().email().optional(),
+        // TB-029: sessione Langfuse = docId
+        sessionId: z.string().min(1).max(200).optional(),
       }),
       body,
     );
@@ -1204,6 +1208,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
     const userEmail = v.data.userEmail;
+    const sessionId = v.data.sessionId;
     const startedAt = Date.now();
     try {
       // Dynamic import of @google/genai (node_modules, always bundled).
@@ -1253,6 +1258,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         model: 'gemini-3.1-flash-image',
         provider: 'gemini',
         userEmail,
+        sessionId,
         feature: 'logo',
         subfeature: 'background',
         costUsd: computeCostUsd('gemini', 'gemini-3.1-flash-image', undefined, 1),
@@ -1293,6 +1299,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         flyerImage: z.string().max(600_000).optional(),
         aspectRatio: z.enum(['16:9', '1:1', '3:2', '2:3', '3:4']).optional(),
         userEmail: z.string().email().optional(),
+        // TB-029: sessione Langfuse = docId
+        sessionId: z.string().min(1).max(200).optional(),
         // TB-023: modello immagine Gemini selezionabile
         imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
       }),
@@ -1303,6 +1311,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
     const userEmail = v.data.userEmail;
+    const sessionId = v.data.sessionId;
     const startedAt = Date.now();
     try {
       const { GoogleGenAI } = await import('@google/genai');
@@ -1348,6 +1357,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         model: normalizeGeminiImageModel(v.data.imageModel),
         provider: 'gemini',
         userEmail,
+        sessionId,
         feature: 'flyer',
         subfeature: 'hero',
         costUsd: computeCostUsd('gemini', normalizeGeminiImageModel(v.data.imageModel), undefined, 1),
@@ -1388,6 +1398,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         prompt: z.string().max(1000),
         context: z.string().max(1500).optional(),
         userEmail: z.string().email().optional(),
+        // TB-029: sessione Langfuse = docId
+        sessionId: z.string().min(1).max(200).optional(),
         // TB-023: modello immagine Gemini selezionabile
         imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
       }),
@@ -1398,6 +1410,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
     const userEmail = v.data.userEmail;
+    const sessionId = v.data.sessionId;
     const startedAt = Date.now();
     try {
       const { GoogleGenAI } = await import('@google/genai');
@@ -1436,6 +1449,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         model: normalizeGeminiImageModel(v.data.imageModel),
         provider: 'gemini',
         userEmail,
+        sessionId,
         feature: 'card',
         subfeature: 'photo',
         costUsd: computeCostUsd('gemini', normalizeGeminiImageModel(v.data.imageModel), undefined, 1),
@@ -1485,6 +1499,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         imageModel: z.string().max(80).optional(),
         background: z.enum(['white', 'card', 'accent']).optional(),
         userEmail: z.string().email().optional(),
+        // TB-029: sessione Langfuse = docId
+        sessionId: z.string().min(1).max(200).optional(),
       }),
       body,
     );
@@ -1493,6 +1509,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
     const userEmail = v.data.userEmail;
+    const sessionId = v.data.sessionId;
     const startedAt = Date.now();
     try {
       const { GoogleGenAI } = await import('@google/genai');
@@ -1551,6 +1568,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         model: modelId,
         provider: 'gemini',
         userEmail,
+        sessionId,
         feature: kind === 'icon' ? 'card' : kind === 'hero' ? 'flyer' : 'image',
         subfeature: kind === 'icon' ? 'icon' : kind === 'hero' ? 'hero' : 'flash',
         costUsd: computeCostUsd('gemini', modelId, undefined, 1),
@@ -1593,6 +1611,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         docJson: z.string().max(50_000),
         screenshotBase64: z.string().max(600_000),
         userEmail: z.string().email().optional(),
+        // TB-029: sessione Langfuse = docId
+        sessionId: z.string().min(1).max(200).optional(),
       }),
       body,
     );
@@ -1601,6 +1621,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       return jsonWithRequestId(req, res, 400, { error: 'Invalid body', details: v.errors }, requestId);
     }
     const userEmail = v.data.userEmail;
+    const sessionId = v.data.sessionId;
     const startedAt = Date.now();
     try {
       // Strip data URL prefix if present
@@ -1647,13 +1668,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const tokens = (raw.prompt_eval_count ?? 0) + (raw.eval_count ?? 0);
       logAI({ tag: 'ai_design_review', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', tokens: tokens || undefined, provider: 'ollama' });
       traceGeneration({
-        name: 'generate-design-review',
+        name: 'design-review',
         requestId,
         model: 'minimax-m3:cloud',
         provider: 'ollama',
         userEmail,
-        customerId: undefined,
+        sessionId,
         feature: 'design-review',
+        subfeature: 'review',
         input: { docType: v.data.docType },
         output: { content },
         usage: { promptTokens: raw.prompt_eval_count ?? 0, completionTokens: raw.eval_count ?? 0 },

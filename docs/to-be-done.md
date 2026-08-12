@@ -20,11 +20,11 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   handler `src/server/ai.ts` non è stato aggiornato (solo il dev proxy
   vite.config.js lo era). Fix: rinominare in `image-flash` + subfeature
   corretta in `ai.ts` (stesso mapping del dev proxy).
-- [ ] **Media ancora placeholder**: `image: "[immagine allegata]"` nelle
+- [x] **Media ancora placeholder**: `image: "[immagine allegata]"` nelle
   trace Gemini — l'upload media fallisce ancora (400?). Verificare il
   payload `POST /api/public/media` (sha256Hash+field+traceId) con
   credenziali reali e il formato `traceId` (base64 OTLP vs hex atteso).
-- [ ] **Sessioni vuote**: le trace chat/cover non hanno `sessionId` — il
+- [x] **Sessioni vuote**: le trace chat/cover non hanno `sessionId` — il
   wiring `sessionId=docId` è stato aggiunto ma il CSV mostra sessioni
   vuote (trace del 21:19, dopo il fix?). Verificare che `loadedIdRef.current`
   sia valorizzato al momento della chiamata e che il body arrivi al server.

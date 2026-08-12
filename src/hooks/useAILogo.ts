@@ -147,7 +147,7 @@ export function useAILogo(userEmail?: string, sessionId?: string): UseAILogoRetu
         throw new Error(hint);
       }
     },
-    [info, startStream, appendStream, finalizeStream, success, error, userEmail]
+    [info, startStream, appendStream, finalizeStream, success, error, userEmail, sessionId]
   );
 
   const generateBackground = useCallback(
@@ -186,7 +186,7 @@ export function useAILogo(userEmail?: string, sessionId?: string): UseAILogoRetu
         setIsGeneratingBg(false);
       }
     },
-    [info, success, error, trackImage, userEmail]
+    [info, success, error, trackImage, userEmail, sessionId]
   );
 
   const reset = useCallback(() => {

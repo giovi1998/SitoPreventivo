@@ -90,7 +90,7 @@ export default function CardEditorShell({ userEmail, initialCard, tier, onReset,
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
   const { processCardPrompt, generateCover, generatePhoto, resetCardChat, cardAiLogs, isCardProcessing, availableModels, totalCostUsd, lastCostUsd } = useAICard(userEmail, loadedIdRef.current);
-  const { generate: generateIconHero, isProcessing: isIconHeroProcessing, logs: iconHeroLogs, clear: clearIconHeroLogs } = useAIIconHero(userEmail);
+  const { generate: generateIconHero, isProcessing: isIconHeroProcessing, logs: iconHeroLogs, clear: clearIconHeroLogs } = useAIIconHero(userEmail, loadedIdRef.current);
 
   const gridEditor = useCardGridEditor({ card, setCard, addToast });
   const backContent = useCardBackContent({ card, setCard });

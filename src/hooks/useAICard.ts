@@ -228,7 +228,7 @@ export function useAICard(userEmail?: string, sessionId?: string): UseAICardRetu
         throw new Error(hint);
       }
     },
-    [userEmail, ensureTokenBudget, info, startStream, appendStream, finalizeStream, success, error, getOrchestrator]
+    [userEmail, ensureTokenBudget, info, startStream, appendStream, finalizeStream, success, error, getOrchestrator, sessionId]
   );
 
   const resetCardChat = useCallback(() => {
@@ -284,7 +284,7 @@ export function useAICard(userEmail?: string, sessionId?: string): UseAICardRetu
         throw new Error(hint);
       }
     },
-    [userEmail, ensureTokenBudget, trackImageTokens, info, success, error]
+    [userEmail, ensureTokenBudget, trackImageTokens, info, success, error, sessionId]
   );
 
   const generatePhoto = useCallback(
@@ -334,7 +334,7 @@ export function useAICard(userEmail?: string, sessionId?: string): UseAICardRetu
         throw new Error(hint);
       }
     },
-    [userEmail, ensureTokenBudget, trackImageTokens, info, success, error]
+    [userEmail, ensureTokenBudget, trackImageTokens, info, success, error, sessionId]
   );
 
   return {

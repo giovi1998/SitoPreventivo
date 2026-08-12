@@ -27,7 +27,7 @@ export interface UseAISocialReturn {
   lastCostUsd: number;
 }
 
-export function useAISocial(userEmail?: string): UseAISocialReturn {
+export function useAISocial(userEmail?: string, sessionId?: string): UseAISocialReturn {
   const orchestratorRef = useRef<SocialAIOrchestrator | null>(null);
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [lastCostUsd, setLastCostUsd] = useState(0);
@@ -56,6 +56,7 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
         const imagePreviewBase64 = visionEnabled ? await captureSocialPreview(source) : undefined;
         const result = await getOrchestrator().generatePosts(source, tone, {
           modelId: resolvedModelId,
+          sessionId,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -98,7 +99,7 @@ export function useAISocial(userEmail?: string): UseAISocialReturn {
         throw err;
       }
     },
-    [info, startStream, appendStream, finalizeStream, success, error, userEmail]
+    [info, startStream, appendStream, finalizeStream, success, error, userEmail, sessionId]
   );
 
   const reset = useCallback(() => {

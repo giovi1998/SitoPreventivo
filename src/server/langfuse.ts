@@ -51,9 +51,15 @@ export type LangfuseGenerationInput = {
 // requestId è già un uuid → hex senza trattini → 32 char. Se non è uuid
 // (es. 32-hex già), si usa tale e quale; altrimenti hash md5 (16 byte).
 function toTraceId(requestId: string): string {
+  return Buffer.from(toTraceHexId(requestId), 'hex').toString('base64');
+}
+
+// 32-hex W3C: formato atteso dall'API media (link media→trace). Da uuid
+// o hash md5 del requestId.
+function toTraceHexId(requestId: string): string {
   const clean = requestId.replace(/-/g, '');
-  if (/^[0-9a-fA-F]{32}$/.test(clean)) return Buffer.from(clean, 'hex').toString('base64');
-  return Buffer.from(cryptoMd5(requestId), 'hex').toString('base64');
+  if (/^[0-9a-fA-F]{32}$/.test(clean)) return clean.toLowerCase();
+  return cryptoMd5(requestId);
 }
 
 function cryptoMd5(input: string): string {
@@ -114,8 +120,12 @@ const DATA_URI_RE = /data:([^;,]+);base64,([A-Za-z0-9+/=]+)/g;
 const mediaIdCache = new Map<string, string>();
 
 // Upload singola immagine base64 → token Langfuse (o placeholder).
-// L'API media richiede: contentType, contentLength, sha256Hash, traceId,
-// field (400 senza — l'immagine resterebbe placeholder).
+// Contratto API media (verificato empiricamente, gotcha §26.26):
+// - sha256Hash = base64 del digest binario (44 char, regex `{44}` — hex
+//   64 char → 400 "invalid_format")
+// - PUT sull'uploadUrl con header `x-amz-checksum-sha256` (senza → 403,
+//   media resta pending e la UI non lo renderizza)
+// - PATCH /media/:id con uploadHttpStatus per chiudere il record
 async function resolveImageToToken(
   dataUrl: string,
   baseUrl: string,
@@ -129,29 +139,33 @@ async function resolveImageToToken(
   let mediaId = mediaIdCache.get(cacheKey);
   if (!mediaId) {
     try {
-      const sha256Hash = crypto.createHash('sha256').update(b64, 'utf8').digest('hex');
+      const bytes = Buffer.from(b64, 'base64');
+      const sha256Hash = crypto.createHash('sha256').update(bytes).digest('base64');
       const res = await fetch(`${baseUrl}/api/public/media`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Basic ${auth}` },
         body: JSON.stringify({
           contentType: mime,
-          contentLength: Math.ceil(b64.length * 0.75),
+          contentLength: bytes.length,
           sha256Hash,
           field,
+          // L'API media accetta anche l'OTLP base64, ma il formato atteso
+          // dalla UI è l'hex W3C — qui arriva già toTraceHexId (32-hex).
           traceId,
         }),
       });
       if (res.ok) {
         const body = (await res.json()) as { mediaId?: string; uploadUrl?: string };
+        const uploadStatus = body.uploadUrl ? await putMedia(body.uploadUrl, mime, bytes, sha256Hash) : 200;
         if (body.uploadUrl) {
-          await fetch(body.uploadUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': mime },
-            body: Buffer.from(b64, 'base64'),
-          });
+          await fetch(`${baseUrl}/api/public/media/${body.mediaId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Basic ${auth}` },
+            body: JSON.stringify({ uploadedAt: new Date().toISOString(), uploadHttpStatus: uploadStatus }),
+          }).catch(() => {});
         }
         mediaId = body.mediaId;
-        if (mediaId) mediaIdCache.set(cacheKey, mediaId);
+        if (mediaId && uploadStatus === 200) mediaIdCache.set(cacheKey, mediaId);
       }
     } catch {
       // fallback placeholder
@@ -160,6 +174,19 @@ async function resolveImageToToken(
   return mediaId
     ? `@@@langfuseMedia:type=${mime}|id=${mediaId}|source=base64_data_uri@@@`
     : `[immagine allegata (${mime})]`;
+}
+
+async function putMedia(uploadUrl: string, mime: string, bytes: Buffer, sha256Hash: string): Promise<number> {
+  try {
+    const put = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': mime, 'x-amz-checksum-sha256': sha256Hash },
+      body: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as BodyInit,
+    });
+    return put.status;
+  } catch {
+    return 0;
+  }
 }
 
 // Upload immagini base64 → Langfuse media, sostituite con token
@@ -242,7 +269,9 @@ function jsonAttr(key: string, value: unknown) {
 export function buildLangfusePayload(input: LangfuseGenerationInput) {
   const { name, requestId, model, userEmail, customerId, feature, environment } = input;
   const startTime = input.startTime ?? Date.now();
-  const endTime = input.endTime ?? startTime;
+  // Durata reale: i chiamanti passano solo startTime; senza endTime la
+  // latency in Langfuse restava 0. Default = ora di costruzione payload.
+  const endTime = input.endTime ?? Date.now();
   const isError = !!input.error;
 
   // TB-029: tags strutturati filtrabili (feature/subfeature/provider/streaming).
@@ -331,10 +360,11 @@ export async function ingestLangfuse(input: LangfuseGenerationInput): Promise<vo
 
   const auth = Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
   // Media: upload base64 → token Langfuse (placeholder se fallisce).
-  // traceId (base64, formato OTLP) serve all'API media per linkare il file.
-  const traceId = toTraceId(input.requestId);
-  const resolvedInput = await resolveMediaRefs(input.input, baseUrl, auth, traceId);
-  const resolvedOutput = await resolveMediaOutput(input.output, baseUrl, auth, traceId);
+  // traceId per l'API media = 32-hex W3C (formato atteso dalla UI); lo
+  // span OTLP usa lo stesso valore codificato in base64.
+  const traceHex = toTraceHexId(input.requestId);
+  const resolvedInput = await resolveMediaRefs(input.input, baseUrl, auth, traceHex);
+  const resolvedOutput = await resolveMediaOutput(input.output, baseUrl, auth, traceHex);
   const payload = buildLangfusePayload({ ...input, input: resolvedInput, output: resolvedOutput });
 
   try {

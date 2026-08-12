@@ -285,7 +285,7 @@ describe('TB-029: Langfuse trace ingestion from /ai/chat', () => {
       method: 'POST',
       url: '/api/ai/card-cover',
       headers: { origin: 'http://localhost', 'x-forwarded-for': '1.1.1.1' },
-      body: { prompt: 'sfondo astratto', userEmail: 'user@example.com', imageModel: 'gemini-3.1-flash-image' },
+      body: { prompt: 'sfondo astratto', userEmail: 'user@example.com', imageModel: 'gemini-3.1-flash-image', sessionId: 'doc-123' },
     });
     expect(res.statusCode).toBe(200);
     await vi.waitFor(() => expect(otlpCalls.length).toBe(1));
@@ -298,6 +298,8 @@ describe('TB-029: Langfuse trace ingestion from /ai/chat', () => {
     expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:cover', 'provider:gemini', 'streaming:false']);
     // Costo Gemini per immagine (0.04) — non più 0
     expect(JSON.parse(attrs['langfuse.observation.cost_details'])).toEqual({ total: 0.04 });
+    // TB-029: sessione Langfuse = docId propagata fino alla trace
+    expect(attrs['langfuse.session.id']).toBe('doc-123');
   });
 
   it('TB-029 fix: /ai/image-flash usa nome image-flash e subfeature icon', async () => {

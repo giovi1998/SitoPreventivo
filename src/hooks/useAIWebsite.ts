@@ -179,7 +179,7 @@ export function useAIWebsite(userEmail?: string, sessionId?: string): UseAIWebsi
         throw new Error(hint);
       }
     },
-    [info, startStream, appendStream, finalizeStream, success, error, userEmail],
+    [info, startStream, appendStream, finalizeStream, success, error, userEmail, sessionId],
   );
 
   const refine = useCallback(
@@ -249,7 +249,7 @@ export function useAIWebsite(userEmail?: string, sessionId?: string): UseAIWebsi
         throw new Error(hint);
       }
     },
-    [info, startStream, appendStream, finalizeStream, success, error, userEmail],
+    [info, startStream, appendStream, finalizeStream, success, error, userEmail, sessionId],
   );
 
   const reset = useCallback(() => {
