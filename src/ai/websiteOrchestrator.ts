@@ -30,6 +30,18 @@ export const websiteAIRefineSchema = z.object({
 });
 export type WebsiteAIRefine = z.infer<typeof websiteAIRefineSchema>;
 
+// TB-031 refine puntuale: il modello propone edit find&replace, l'orchestratore
+// li applica deterministicamente. Mai riscrittura del documento completo.
+export const websiteAIRefineEditSchema = z.object({
+  edits: z.array(z.object({
+    part: z.enum(['html', 'css', 'js', 'pagesHtml']),
+    page: z.string().optional(),
+    find: z.string().min(3, 'find troppo corto'),
+    replace: z.string(),
+  })).min(1).max(10),
+});
+export type WebsiteAIRefineEdit = z.infer<typeof websiteAIRefineEditSchema>;
+
 export interface WebsiteProcessResult {
   site: { html: string; css: string; js: string; pages: string[]; pagesHtml: Record<string, string> };
   response: AIResponse;
@@ -536,9 +548,13 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       '',
       `Istruzione di modifica: ${instruction}`,
       '',
-      'Rispondi SOLO con un oggetto JSON. Includi SOLO i campi che devono cambiare (html, css, js, pages, pagesHtml).',
-      'pagesHtml è un oggetto { nomePagina: htmlCompleto } per le pagine secondarie (NON la index).',
-      'Se un campo non cambia, omettilo.',
+      'Rispondi SOLO con un oggetto JSON con UN SOLO campo "edits": un array di modifiche PUNTUALI.',
+      'Ogni edit: { "part": "html"|"css"|"js"|"pagesHtml", "page": "nome pagina (solo per pagesHtml)", "find": "stringa ESATTA da cercare nel codice (min 3 caratteri)", "replace": "stringa sostitutiva" }.',
+      'REGOLE:',
+      '- MAI riscrivere il documento completo: solo frammenti piccoli (find e replace brevi).',
+      '- find DEVE essere una stringa esatta presente nel codice (copia-incolla dal codice sopra).',
+      '- Se la modifica è solo testuale (es. rinomina brand), find = testo vecchio, replace = testo nuovo.',
+      '- Max 10 edit. Se un edit non serve, omettilo.',
     ].join('\n');
     options.onStep?.('refine', currentCode);
 
@@ -578,35 +594,57 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     });
 
     const content = response.content ?? '';
-    const parsed = this.parseJsonResponse(content, websiteAIRefineSchema);
+    const parsed = this.parseJsonResponse(content, websiteAIRefineEditSchema);
     if (!parsed.ok) {
       changes.push(`error:${parsed.error}`);
       return { site, changes, response };
     }
 
-    const refine = parsed.data;
-    // Guardia anti-distruzione: il refine deve essere una MODIFICA PUNTUALE,
-    // non una riscrittura. Se l'HTML rifinito è drasticamente più corto
-    // (<50% dell'originale), il modello ha riscritto il sito perdendo
-    // sezioni/mappa/contatti → scarta e mantieni l'originale.
-    if (refine.html && refine.html.length < site.html.length * 0.5) {
-      changes.push(`refine:html:rejected:${site.html.length}->${refine.html.length}chars (riscrittura distruttiva)`);
-      delete refine.html;
-    }
+    // Applica gli edit puntuali find&replace deterministicamente. Ogni edit
+    // è validato: find deve esistere (una sola occorrenza), replace non deve
+    // essere una riscrittura (≤20x la lunghezza di find). Un edit invalido
+    // viene scartato, gli altri restano applicati.
     const merged = {
-      html: refine.html ?? site.html,
-      css: refine.css ?? site.css,
-      js: refine.js ?? site.js,
-      pages: refine.pages ?? site.pages,
-      pagesHtml: refine.pagesHtml ? { ...site.pagesHtml, ...refine.pagesHtml } : site.pagesHtml,
+      html: site.html,
+      css: site.css,
+      js: site.js,
+      pages: site.pages,
+      pagesHtml: { ...site.pagesHtml },
     };
-
-    // Detect quali parti sono cambiate
-    if (merged.html !== site.html) changes.push(`refine:html:changed:${site.html.length}->${merged.html.length}chars`);
-    if (merged.css !== site.css) changes.push(`refine:css:changed:${site.css.length}->${merged.css.length}chars`);
-    if (merged.js !== site.js) changes.push(`refine:js:changed:${site.js.length}->${merged.js.length}chars`);
-    if (merged.pages.join(',') !== site.pages.join(',')) changes.push(`refine:pages:changed`);
-    if (JSON.stringify(merged.pagesHtml) !== JSON.stringify(site.pagesHtml)) changes.push(`refine:pagesHtml:changed`);
+    let applied = 0;
+    for (const edit of parsed.data.edits) {
+      const target = edit.part === 'pagesHtml'
+        ? (edit.page ? merged.pagesHtml[edit.page] : undefined)
+        : merged[edit.part];
+      if (typeof target !== 'string') {
+        changes.push(`refine:${edit.part}:skipped:pagina "${edit.page ?? '?'}" non trovata`);
+        continue;
+      }
+      const idx = target.indexOf(edit.find);
+      if (idx === -1) {
+        changes.push(`refine:${edit.part}:skipped:find non trovato (${edit.find.slice(0, 40)}…)`);
+        continue;
+      }
+      if (target.indexOf(edit.find, idx + 1) !== -1) {
+        changes.push(`refine:${edit.part}:skipped:find ambiguo (${edit.find.slice(0, 40)}…)`);
+        continue;
+      }
+      if (edit.replace.length > edit.find.length * 20) {
+        changes.push(`refine:${edit.part}:skipped:replace troppo grande (riscrittura)`);
+        continue;
+      }
+      const next = target.slice(0, idx) + edit.replace + target.slice(idx + edit.find.length);
+      if (edit.part === 'pagesHtml' && edit.page) merged.pagesHtml[edit.page] = next;
+      else if (edit.part === 'html') merged.html = next;
+      else if (edit.part === 'css') merged.css = next;
+      else if (edit.part === 'js') merged.js = next;
+      applied++;
+      changes.push(`refine:${edit.part}:applied:${edit.find.length}->${edit.replace.length}chars`);
+    }
+    if (applied === 0) {
+      changes.push('refine:no-edits-applied');
+      return { site, changes, response };
+    }
 
     this.trackUsage(response.usage, options.userEmail, options.modelId);
     changes.push('website:refined');

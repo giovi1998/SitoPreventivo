@@ -576,26 +576,45 @@ describe('WebsiteOrchestrator.refineSite', () => {
 
   const site = { html: '<h1>X</h1>', css: 'body{}', js: '// x', pages: ['index'], pagesHtml: {} };
 
-  it('merge parziale: solo i campi presenti cambiano', async () => {
-    chatResponses.push({ content: JSON.stringify({ css: 'body { color: blue; }' }), usage: usage() });
-    const result = await orch.refineSite(site, 'cambia colore', { modelId: 'mock' });
-    expect(result.site.css).toBe('body { color: blue; }');
-    expect(result.site.html).toBe('<h1>X</h1>');
+  it('edit puntuale: find&replace applicato, resto invariato', async () => {
+    chatResponses.push({ content: JSON.stringify({ edits: [{ part: 'html', find: '<h1>X</h1>', replace: '<h1>Chiccheria</h1>' }] }), usage: usage() });
+    const result = await orch.refineSite(site, 'rinomina brand', { modelId: 'mock' });
+    expect(result.site.html).toBe('<h1>Chiccheria</h1>');
+    expect(result.site.css).toBe('body{}');
     expect(result.site.js).toBe('// x');
-    expect(result.changes.some((c) => c.startsWith('refine:css:changed'))).toBe(true);
-    expect(result.changes.some((c) => c.startsWith('refine:html:'))).toBe(false);
+    expect(result.changes.some((c) => c.startsWith('refine:html:applied'))).toBe(true);
   });
 
-  it('refine: pagesHtml merge parziale con le pagine secondarie nel prompt', async () => {
+  it('edit puntuale: find non trovato → skipped, resto applicato', async () => {
+    chatResponses.push({ content: JSON.stringify({ edits: [
+      { part: 'html', find: '<h1>X</h1>', replace: '<h1>Y</h1>' },
+      { part: 'css', find: 'body{}', replace: 'body{color:red}' },
+    ] }), usage: usage() });
+    const result = await orch.refineSite(site, 'cambia', { modelId: 'mock' });
+    expect(result.site.html).toBe('<h1>Y</h1>');
+    expect(result.site.css).toBe('body{color:red}');
+    expect(result.changes.some((c) => c.startsWith('refine:html:applied'))).toBe(true);
+    expect(result.changes.some((c) => c.startsWith('refine:css:applied'))).toBe(true);
+  });
+
+  it('edit puntuale: replace gigante (riscrittura) → skipped', async () => {
+    const bigSite = { html: '<h1>X</h1>', css: 'body{}', js: '// x', pages: ['index'], pagesHtml: {} };
+    chatResponses.push({ content: JSON.stringify({ edits: [{ part: 'html', find: '<h1>X</h1>', replace: '<h1>X</h1>'.repeat(500) }] }), usage: usage() });
+    const result = await orch.refineSite(bigSite, 'riscrivi', { modelId: 'mock' });
+    expect(result.site.html).toBe(bigSite.html);
+    expect(result.changes.some((c) => c.startsWith('refine:html:skipped'))).toBe(true);
+  });
+
+  it('edit puntuale: pagesHtml con page specifica', async () => {
     const multiSite = { html: '<h1>X</h1>', css: 'body{}', js: '// x', pages: ['index', 'about'], pagesHtml: { about: '<h1>Chi siamo</h1>' } };
     let promptText = '';
-    chatResponses.push({ content: JSON.stringify({ pagesHtml: { about: '<h1>Chi siamo aggiornato</h1>' } }), usage: usage() });
+    chatResponses.push({ content: JSON.stringify({ edits: [{ part: 'pagesHtml', page: 'about', find: 'Chi siamo', replace: 'Chi siamo aggiornato' }] }), usage: usage() });
     const result = await orch.refineSite(multiSite, 'aggiorna about', { modelId: 'mock', onStep: (_s, t) => { promptText = t; } });
     expect(result.site.pagesHtml['about']).toBe('<h1>Chi siamo aggiornato</h1>');
     expect(result.site.html).toBe('<h1>X</h1>');
     expect(promptText).toContain('### HTML about');
-    expect(promptText).toContain('pagesHtml');
-    expect(result.changes.some((c) => c.startsWith('refine:pagesHtml:changed'))).toBe(true);
+    expect(promptText).toContain('edits');
+    expect(result.changes.some((c) => c.startsWith('refine:pagesHtml:applied'))).toBe(true);
   });
 
   it('JSON invalido → sito invariato + changes error', async () => {
@@ -612,17 +631,16 @@ describe('WebsiteOrchestrator.refineSite', () => {
   });
 
   it('onStep refine chiamato', async () => {
-    chatResponses.push({ content: JSON.stringify({}), usage: usage() });
+    chatResponses.push({ content: JSON.stringify({ edits: [] }), usage: usage() });
     const steps: string[] = [];
     await orch.refineSite(site, 'cambia', { modelId: 'mock', onStep: (s) => steps.push(s) });
     expect(steps).toEqual(['refine']);
   });
 
-  it('refine: HTML riscritto drasticamente più corto → rifiutato, originale mantenuto', async () => {
-    const bigSite = { html: '<h1>X</h1>'.repeat(1000), css: 'body{}', js: '// x', pages: ['index'], pagesHtml: {} };
-    chatResponses.push({ content: JSON.stringify({ html: '<h1>X</h1>' }), usage: usage() });
-    const result = await orch.refineSite(bigSite, 'rinomina brand', { modelId: 'mock' });
-    expect(result.site.html).toBe(bigSite.html);
-    expect(result.changes.some((c) => c.startsWith('refine:html:rejected'))).toBe(true);
+  it('edits vuoto → parse error (schema min 1), sito invariato', async () => {
+    chatResponses.push({ content: JSON.stringify({ edits: [] }), usage: usage() });
+    const result = await orch.refineSite(site, 'cambia', { modelId: 'mock' });
+    expect(result.site).toEqual(site);
+    expect(result.changes.some((c) => c.startsWith('error:'))).toBe(true);
   });
 });
