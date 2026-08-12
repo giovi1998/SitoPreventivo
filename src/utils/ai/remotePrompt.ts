@@ -64,11 +64,16 @@ export const REMOTE_PROMPT_PILOT: string[] = [
   'logo-system', 'social-system', 'onboarding-system', 'website-system', 'palette-system',
 ];
 
+// Id già applicati dal remoto: il prefetch gira all'avvio app E all'apertura
+// di ogni cliente → senza questo Set, register() spammeria "id sovrascritto".
+const appliedRemote = new Set<string>();
+
 // Prefetch dei prompt pilota: chiamato all'avvio app e quando si apre un
 // cliente (customerId → override label A/B). Fallimento = silenzioso.
 export async function prefetchRemotePrompts(customerId?: string): Promise<void> {
   await Promise.all(
     REMOTE_PROMPT_PILOT.map(async (id) => {
+      if (appliedRemote.has(id)) return;
       try {
         const remote = await getRemoteSystemPrompt(id, {}, customerId);
         if (remote == null) return;
@@ -79,6 +84,7 @@ export async function prefetchRemotePrompts(customerId?: string): Promise<void> 
             : remote,
           `Prompt remoto Langfuse (label ${RESOLVED_LABEL}${customerId ? `, cliente ${customerId}` : ''})`
         );
+        appliedRemote.add(id);
       } catch {
         // Builder locale già registrato: nessun crash.
       }
