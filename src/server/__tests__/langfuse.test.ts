@@ -118,6 +118,29 @@ describe('buildLangfusePayload (OTLP/HTTP JSON → Langfuse v4)', () => {
     expect(rawInput[0].images).toBeUndefined();
     expect(rawInput[0].content).toContain('[immagine');
   });
+
+  it('TB-029: content array di parti OpenAI-style (text+image_url) → image_url sostituito con placeholder, mai base64 raw', () => {
+    const payload = buildLangfusePayload({
+      ...baseInput,
+      input: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Cosa vedi?' },
+            { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,QUJD' } },
+          ],
+        },
+      ],
+    }) as any;
+    const rawInput = JSON.parse(attrValue(firstSpan(payload), 'langfuse.observation.input'));
+    const parts = rawInput[0].content;
+    expect(Array.isArray(parts)).toBe(true);
+    expect(parts[0]).toEqual({ type: 'text', text: 'Cosa vedi?' });
+    expect(parts[1].type).toBe('text');
+    expect(parts[1].text).toContain('[immagine allegata (image/jpeg)]');
+    expect(JSON.stringify(rawInput)).not.toContain('QUJD');
+    expect(JSON.stringify(rawInput)).not.toContain('image_url');
+  });
 });
 
 describe('ingestLangfuse (OTLP HTTP/JSON ingestion)', () => {
@@ -277,6 +300,42 @@ describe('ingestLangfuse (OTLP HTTP/JSON ingestion)', () => {
     expect(rawOutput.imageBase64).toBeUndefined();
     expect(rawOutput.image).toContain('@@@langfuseMedia:type=image/png|id=media_img_1');
     expect(rawOutput.mimeType).toBe('image/png');
+  });
+
+  it('TB-029: content array di parti con image_url base64 → token media (mai raw)', async () => {
+    const fetchMock = vi.fn(async (url: string, init: any) => {
+      if (String(url).includes('/api/public/media')) {
+        return { ok: true, json: async () => ({ mediaId: 'media_parts', uploadUrl: 'https://s3.example/u' }) };
+      }
+      if (String(url).startsWith('https://s3.example/')) return { ok: true, status: 200 };
+      return { ok: true, status: 200 };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await ingestLangfuse({
+      ...baseInput,
+      input: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Analizza' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,UVVJRA==' } },
+          ],
+        },
+      ],
+    });
+
+    const otlp = fetchMock.mock.calls.find((c) => String(c[0]).includes('/otel/v1/traces'));
+    const span = JSON.parse(otlp![1].body).resourceSpans[0].scopeSpans[0].spans[0];
+    const rawInput = JSON.parse(
+      span.attributes.find((a: any) => a.key === 'langfuse.observation.input').value.stringValue
+    );
+    const parts = rawInput[0].content;
+    expect(Array.isArray(parts)).toBe(true);
+    expect(parts[0]).toEqual({ type: 'text', text: 'Analizza' });
+    expect(parts[1].type).toBe('text');
+    expect(parts[1].text).toContain('@@@langfuseMedia:type=image/png|id=media_parts');
+    expect(JSON.stringify(rawInput)).not.toContain('QUJD');
   });
 
   it('output imageBase64 senza upload → placeholder (mai base64 raw)', async () => {

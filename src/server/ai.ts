@@ -1152,12 +1152,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
       traceGeneration({
-        name: 'generate-card-cover',
+        name: 'card-cover',
         requestId,
         model: normalizeGeminiImageModel(v.data.imageModel),
         provider: 'gemini',
         userEmail,
         feature: 'card',
+        subfeature: 'cover',
+        costUsd: computeCostUsd('gemini', normalizeGeminiImageModel(v.data.imageModel), undefined, 1),
         input: { prompt: v.data.prompt },
         output: { mimeType, sizeKB, imageBase64: `data:${mimeType};base64,${imageBase64}` },
         startTime: startedAt,
@@ -1246,12 +1248,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
       traceGeneration({
-        name: 'generate-logo-background',
+        name: 'logo-background',
         requestId,
         model: 'gemini-3.1-flash-image',
         provider: 'gemini',
         userEmail,
         feature: 'logo',
+        subfeature: 'background',
+        costUsd: computeCostUsd('gemini', 'gemini-3.1-flash-image', undefined, 1),
         input: { prompt: v.data.prompt },
         output: { mimeType, sizeKB, imageBase64: `data:${mimeType};base64,${imageBase64}` },
         startTime: startedAt,
@@ -1339,12 +1343,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
       traceGeneration({
-        name: 'generate-flyer-hero',
+        name: 'flyer-hero',
         requestId,
         model: normalizeGeminiImageModel(v.data.imageModel),
         provider: 'gemini',
         userEmail,
         feature: 'flyer',
+        subfeature: 'hero',
+        costUsd: computeCostUsd('gemini', normalizeGeminiImageModel(v.data.imageModel), undefined, 1),
         input: { prompt: v.data.prompt },
         output: { mimeType, sizeKB, imageBase64: `data:${mimeType};base64,${imageBase64}` },
         startTime: startedAt,
@@ -1425,12 +1431,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
       traceGeneration({
-        name: 'generate-card-photo',
+        name: 'card-photo',
         requestId,
         model: normalizeGeminiImageModel(v.data.imageModel),
         provider: 'gemini',
         userEmail,
         feature: 'card',
+        subfeature: 'photo',
+        costUsd: computeCostUsd('gemini', normalizeGeminiImageModel(v.data.imageModel), undefined, 1),
         input: { prompt: v.data.prompt },
         output: { mimeType, sizeKB, imageBase64: `data:${mimeType};base64,${imageBase64}` },
         startTime: startedAt,
@@ -1538,12 +1546,14 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB, provider: 'gemini-flash' });
       traceGeneration({
-        name: 'generate-image-flash',
+        name: 'image-flash',
         requestId,
         model: modelId,
         provider: 'gemini',
         userEmail,
         feature: kind === 'icon' ? 'card' : kind === 'hero' ? 'flyer' : 'image',
+        subfeature: kind === 'icon' ? 'icon' : kind === 'hero' ? 'hero' : 'flash',
+        costUsd: computeCostUsd('gemini', modelId, undefined, 1),
         input: { prompt: v.data.prompt },
         output: { mimeType, sizeKB, imageBase64: `data:${mimeType};base64,${imageBase64}` },
         startTime: startedAt,

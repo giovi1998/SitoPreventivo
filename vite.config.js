@@ -252,6 +252,14 @@ export default defineConfig(({ mode }) => {
             const h = req.headers?.['x-request-id'];
             return typeof h === 'string' && h ? h : crypto.randomUUID();
           };
+          // TB-029 fix: costo Gemini per immagine (stessa tabella del server
+          // handler ai.ts — il client non invia costUsd, quindi il proxy lo
+          // calcola da solo, altrimenti Gemini risulta gratis in locale).
+          const GEMINI_PER_IMAGE = { 'gemini-3.1-flash-image': 0.04, 'gemini-2.0-flash-preview-image-generation': 0.02 };
+          const geminiCost = (model) => {
+            const perImage = GEMINI_PER_IMAGE[model] ?? GEMINI_PER_IMAGE['gemini-3.1-flash-image'];
+            return Math.round(perImage * 1_000_000) / 1_000_000;
+          };
           server.middlewares.use(async (req, res, next) => {
             const url = (req.url || '').split('?')[0];
             const handledPaths = [
@@ -328,7 +336,7 @@ export default defineConfig(({ mode }) => {
                     sessionId: body.sessionId,
                     feature: 'logo',
                     subfeature: 'background',
-                    costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined,
+                    costUsd: geminiCost('gemini-3.1-flash-image'),
                     input: { prompt },
                     output: { mimeType: result.mimeType, sizeKB: sizeBytes / 1024, imageBase64: `data:${result.mimeType};base64,${result.imageBase64}` },
                     startTime: t0,
@@ -337,7 +345,7 @@ export default defineConfig(({ mode }) => {
                 } catch (err) {
                   const msg = err?.message || 'unknown';
                   const errorKind = msg.startsWith('GEMINI_401') || msg.startsWith('GEMINI_INVALID_KEY') ? 'auth' : msg.startsWith('GEMINI_429') || msg.startsWith('GEMINI_QUOTA_EXCEEDED') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : 'upstream';
-                  await traceDev({ name: 'logo-background', requestId: devReqId(req), model: 'gemini-3.1-flash-image', provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'logo', subfeature: 'background', costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined, input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
+                  await traceDev({ name: 'logo-background', requestId: devReqId(req), model: 'gemini-3.1-flash-image', provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'logo', subfeature: 'background', costUsd: geminiCost('gemini-3.1-flash-image'), input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
@@ -383,7 +391,7 @@ export default defineConfig(({ mode }) => {
                     sessionId: body.sessionId,
                     feature: 'card',
                     subfeature: 'cover',
-                    costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined,
+                    costUsd: geminiCost(imageModel),
                     input: { prompt, context: context || undefined, side: body.side },
                     output: { mimeType: result.mimeType, sizeKB: sizeBytes / 1024, imageBase64: `data:${result.mimeType};base64,${result.imageBase64}` },
                     startTime: t0,
@@ -392,7 +400,7 @@ export default defineConfig(({ mode }) => {
                 } catch (err) {
                   const msg = err?.message || 'unknown';
                   const errorKind = msg.startsWith('GEMINI_401') || msg.startsWith('GEMINI_INVALID_KEY') ? 'auth' : msg.startsWith('GEMINI_429') || msg.startsWith('GEMINI_QUOTA_EXCEEDED') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : 'upstream';
-                  await traceDev({ name: 'card-cover', requestId: devReqId(req), model: imageModel, provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'card', subfeature: 'cover', costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined, input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
+                  await traceDev({ name: 'card-cover', requestId: devReqId(req), model: imageModel, provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'card', subfeature: 'cover', costUsd: geminiCost(imageModel), input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
@@ -437,7 +445,7 @@ export default defineConfig(({ mode }) => {
                     sessionId: body.sessionId,
                     feature: 'flyer',
                     subfeature: 'hero',
-                    costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined,
+                    costUsd: geminiCost(imageModel),
                     input: { prompt, context: context || undefined },
                     output: { mimeType: result.mimeType, sizeKB: sizeBytes / 1024, imageBase64: `data:${result.mimeType};base64,${result.imageBase64}` },
                     startTime: t0,
@@ -446,7 +454,7 @@ export default defineConfig(({ mode }) => {
                 } catch (err) {
                   const msg = err?.message || 'unknown';
                   const errorKind = msg.startsWith('GEMINI_401') || msg.startsWith('GEMINI_INVALID_KEY') ? 'auth' : msg.startsWith('GEMINI_429') || msg.startsWith('GEMINI_QUOTA_EXCEEDED') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : 'upstream';
-                  await traceDev({ name: 'flyer-hero', requestId: devReqId(req), model: imageModel, provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'flyer', subfeature: 'hero', costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined, input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
+                  await traceDev({ name: 'flyer-hero', requestId: devReqId(req), model: imageModel, provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'flyer', subfeature: 'hero', costUsd: geminiCost(imageModel), input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
@@ -493,7 +501,7 @@ export default defineConfig(({ mode }) => {
                     sessionId: body.sessionId,
                     feature: 'card',
                     subfeature: 'photo',
-                    costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined,
+                    costUsd: geminiCost(imageModel),
                     input: { prompt, context: context || undefined },
                     output: { mimeType: result.mimeType, sizeKB: sizeBytes / 1024, imageBase64: `data:${result.mimeType};base64,${result.imageBase64}` },
                     startTime: t0,
@@ -502,7 +510,7 @@ export default defineConfig(({ mode }) => {
                 } catch (err) {
                   const msg = err?.message || 'unknown';
                   const errorKind = msg.startsWith('GEMINI_401') || msg.startsWith('GEMINI_INVALID_KEY') ? 'auth' : msg.startsWith('GEMINI_429') || msg.startsWith('GEMINI_QUOTA_EXCEEDED') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : 'upstream';
-                  await traceDev({ name: 'card-photo', requestId: devReqId(req), model: imageModel, provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'card', subfeature: 'photo', costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined, input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
+                  await traceDev({ name: 'card-photo', requestId: devReqId(req), model: imageModel, provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'card', subfeature: 'photo', costUsd: geminiCost(imageModel), input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
@@ -551,7 +559,7 @@ export default defineConfig(({ mode }) => {
                     sessionId: body.sessionId,
                     feature: kind === 'icon' ? 'card' : kind === 'hero' ? 'flyer' : 'image',
                     subfeature: kind === 'icon' ? 'icon' : kind === 'hero' ? 'hero' : 'flash',
-                    costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined,
+                    costUsd: geminiCost(typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image'),
                     input: { prompt, kind, aspectRatio },
                     output: { mimeType: result.mimeType, sizeKB: sizeBytes / 1024, imageBase64: `data:${result.mimeType};base64,${result.imageBase64}` },
                     startTime: t0,
@@ -560,7 +568,7 @@ export default defineConfig(({ mode }) => {
                 } catch (err) {
                   const msg = err?.message || 'unknown';
                   const errorKind = msg.startsWith('GEMINI_401') || msg.startsWith('GEMINI_INVALID_KEY') ? 'auth' : msg.startsWith('GEMINI_429') || msg.startsWith('GEMINI_QUOTA_EXCEEDED') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : 'upstream';
-                  await traceDev({ name: 'image-flash', requestId: devReqId(req), model: typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image', provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: kind === 'icon' ? 'card' : kind === 'hero' ? 'flyer' : 'image', subfeature: kind === 'icon' ? 'icon' : kind === 'hero' ? 'hero' : 'flash', costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined, input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
+                  await traceDev({ name: 'image-flash', requestId: devReqId(req), model: typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image', provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: kind === 'icon' ? 'card' : kind === 'hero' ? 'flyer' : 'image', subfeature: kind === 'icon' ? 'icon' : kind === 'hero' ? 'hero' : 'flash', costUsd: geminiCost(typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image'), input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });

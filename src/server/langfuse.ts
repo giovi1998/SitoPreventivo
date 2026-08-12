@@ -4,9 +4,16 @@
 // mandiamo via fetch fire-and-forget. Fallimento = silenzioso: Langfuse
 // non deve mai rallentare o rompere le chiamate AI.
 
+// Messaggi OpenAI-style: content può essere stringa (testo) o array di
+// parti multimodali (text / image_url) — formato documentato Langfuse per
+// generazioni text+image (docs/observability multi-modality).
+export type LangfuseContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export type LangfuseMessage = {
   role: string;
-  content: string;
+  content: string | LangfuseContentPart[];
   images?: string[];
 };
 
@@ -62,18 +69,37 @@ function toIso(ms?: number): string {
 }
 
 // PII guard: le immagini base64 dei messaggi non devono finire raw in
-// Langfuse. Senza upload → placeholder leggibile nel content.
+// Langfuse. Senza upload → placeholder leggibile nel content. Copre sia
+// `images[]` sia le parti OpenAI-style `{type:'image_url'}` nel content.
 function sanitizeInput(input: unknown): unknown {
   if (!Array.isArray(input)) return input;
   return input.map((m: unknown) => {
-    if (!m || typeof m !== 'object' || !('images' in m)) return m;
-    const { images, ...rest } = m as Record<string, unknown>;
-    const first = Array.isArray(images) ? String(images[0] ?? '') : '';
+    if (!m || typeof m !== 'object') return m;
+    const msg = m as Record<string, unknown>;
+    const { images, ...rest } = msg;
+    const hasImages = Array.isArray(images) && images.length > 0;
+    const content = msg.content;
+    if (Array.isArray(content)) {
+      return {
+        ...rest,
+        content: content.map((part: unknown) => {
+          if (!part || typeof part !== 'object') return part;
+          const p = part as { type?: string; image_url?: { url?: string } };
+          if (p.type === 'image_url' && p.image_url?.url) {
+            const partMime = p.image_url.url.match(/^data:([^;]+);base64,/)?.[1] ?? 'image/png';
+            return { type: 'text', text: `[immagine allegata (${partMime})]` };
+          }
+          return part;
+        }),
+      };
+    }
+    if (!hasImages) return m;
+    const first = String(images[0] ?? '');
     const mime = first.match(/^data:([^;]+);base64,/)?.[1] ?? 'image/png';
-    const content = String(rest.content ?? '');
+    const text = String(content ?? '');
     return {
       ...rest,
-      content: content ? `${content}\n[immagine allegata (${mime})]` : `[immagine allegata (${mime})]`,
+      content: text ? `${text}\n[immagine allegata (${mime})]` : `[immagine allegata (${mime})]`,
     };
   });
 }
@@ -147,7 +173,7 @@ async function resolveMediaRefs(input: unknown, baseUrl: string, auth: string, t
   return Promise.all(
     input.map(async (m: unknown) => {
       if (!m || typeof m !== 'object') return m;
-      const msg = m as { images?: string[]; content?: string };
+      const msg = m as { images?: string[]; content?: string | LangfuseContentPart[] };
       let content = String(msg.content ?? '');
       // 1. immagini in `images[]` → token, appesi al content
       const imageTokens: string[] = [];
@@ -156,6 +182,20 @@ async function resolveMediaRefs(input: unknown, baseUrl: string, auth: string, t
       }
       if (imageTokens.length > 0) {
         content = content ? `${content}\n${imageTokens.join('\n')}` : imageTokens.join('\n');
+      }
+      // 1b. parti OpenAI-style `{type:'image_url'}` nel content array →
+      //     token media (rendering inline nella UI Langfuse)
+      if (Array.isArray(msg.content)) {
+        const parts = await Promise.all(
+          msg.content.map(async (part) => {
+            if (part.type === 'image_url' && part.image_url?.url) {
+              const token = await resolveImageToToken(part.image_url.url, baseUrl, auth, 'input', traceId);
+              return { type: 'text', text: token };
+            }
+            return part;
+          })
+        );
+        return { ...msg, content: parts };
       }
       // 2. data URI base64 inline nel content string (anteprime vision):
       //    raccogli i data URI, risolvi i token, replace sincrono

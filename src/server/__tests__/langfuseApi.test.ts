@@ -265,4 +265,71 @@ describe('TB-029: Langfuse trace ingestion from /ai/chat', () => {
     expect(JSON.parse(attrs['langfuse.observation.usage_details'])).toEqual({ input: 120, output: 40, total: 160 });
     expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:chat', 'provider:deepseek', 'streaming:false']);
   });
+
+  it('TB-029 fix: /ai/card-cover usa nome card-cover, subfeature cover e costDetails Gemini', async () => {
+    const otlpCalls: any[] = [];
+    globalAny.fetch = vi.fn(async (url: string, init: any) => {
+      if (String(url).includes('/api/public/media')) return { ok: false, status: 500 };
+      if (String(url).includes('/api/public/otel/v1/traces')) {
+        otlpCalls.push(init);
+        return { ok: true, status: 200 };
+      }
+      return { ok: true, status: 200 };
+    });
+    const { createInteraction } = await import('./helpers/apiTest');
+    createInteraction.mockResolvedValue({
+      output_image: { data: 'QUJD', mime_type: 'image/jpeg' },
+    });
+
+    const res: any = await callApiHandler({
+      method: 'POST',
+      url: '/api/ai/card-cover',
+      headers: { origin: 'http://localhost', 'x-forwarded-for': '1.1.1.1' },
+      body: { prompt: 'sfondo astratto', userEmail: 'user@example.com', imageModel: 'gemini-3.1-flash-image' },
+    });
+    expect(res.statusCode).toBe(200);
+    await vi.waitFor(() => expect(otlpCalls.length).toBe(1));
+
+    const span = JSON.parse(otlpCalls[0].body).resourceSpans[0].scopeSpans[0].spans[0];
+    const attrs = Object.fromEntries(
+      span.attributes.map((a: any) => [a.key, a.value.stringValue ?? a.value.stringArrayValue ?? JSON.parse(a.value.stringValue ?? 'null')])
+    );
+    expect(span.name).toBe('card-cover');
+    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:cover', 'provider:gemini', 'streaming:false']);
+    // Costo Gemini per immagine (0.04) — non più 0
+    expect(JSON.parse(attrs['langfuse.observation.cost_details'])).toEqual({ total: 0.04 });
+  });
+
+  it('TB-029 fix: /ai/image-flash usa nome image-flash e subfeature icon', async () => {
+    const otlpCalls: any[] = [];
+    globalAny.fetch = vi.fn(async (url: string, init: any) => {
+      if (String(url).includes('/api/public/media')) return { ok: false, status: 500 };
+      if (String(url).includes('/api/public/otel/v1/traces')) {
+        otlpCalls.push(init);
+        return { ok: true, status: 200 };
+      }
+      return { ok: true, status: 200 };
+    });
+    const { createInteraction } = await import('./helpers/apiTest');
+    createInteraction.mockResolvedValue({
+      output_image: { data: 'QUJD', mime_type: 'image/png' },
+    });
+
+    const res: any = await callApiHandler({
+      method: 'POST',
+      url: '/api/ai/image-flash',
+      headers: { origin: 'http://localhost', 'x-forwarded-for': '1.1.1.1' },
+      body: { prompt: 'icona foglia', kind: 'icon', primaryColor: '#01696F', secondaryColor: '#FFFFFF', userEmail: 'user@example.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    await vi.waitFor(() => expect(otlpCalls.length).toBe(1));
+
+    const span = JSON.parse(otlpCalls[0].body).resourceSpans[0].scopeSpans[0].spans[0];
+    const attrs = Object.fromEntries(
+      span.attributes.map((a: any) => [a.key, a.value.stringValue ?? a.value.stringArrayValue ?? JSON.parse(a.value.stringValue ?? 'null')])
+    );
+    expect(span.name).toBe('image-flash');
+    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:icon', 'provider:gemini', 'streaming:false']);
+    expect(JSON.parse(attrs['langfuse.observation.cost_details'])).toEqual({ total: 0.04 });
+  });
 });

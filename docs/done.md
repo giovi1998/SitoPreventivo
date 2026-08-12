@@ -3,6 +3,31 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-12
+
+- **Langfuse follow-up — costi Gemini dev proxy + nomi trace server + tipi
+  multimodali (2026-08-12)** (da `to-be-done.md` Langfuse follow-up):
+  - **Costi Gemini nel dev proxy**: `vite.config.js` ora calcola il costo
+    per immagine inline (`GEMINI_PER_IMAGE` 0.04/0.02, `geminiCost(model)`)
+    nei 5 endpoint Gemini (logo-background, card-cover, flyer-hero,
+    card-photo, image-flash) — prima `body.costUsd` (mai inviato dal
+    client) → Gemini risultava gratis in locale. Stessa tabella del server
+    handler.
+  - **Nomi trace server allineati**: `src/server/ai.ts` — `flyer-hero`,
+    `card-photo`, `image-flash` (era `generate-*` + `subfeature:chat`
+    errato) + `costUsd` Gemini su tutti e 3. Ora server handler e dev
+    proxy hanno nomi/subfeature/costi identici.
+  - **Tipi multimodali Langfuse**: `LangfuseMessage.content` ora è
+    `string | LangfuseContentPart[]` (parti OpenAI-style `{type:'text'}`
+    / `{type:'image_url'}` — formato documentato Langfuse per generazioni
+    text+image). `sanitizeInput` e `resolveMediaRefs` gestiscono le parti
+    image_url: placeholder senza upload, token `@@@langfuseMedia@@@` con
+    upload (mai base64 raw). Fix bug sanitize: placeholder solo su
+    messaggi con `images[]` (prima appeso anche ai messaggi senza).
+  - Test: +3 (dev proxy costUsd 0.04, parti image_url placeholder, parti
+    image_url → token media), fix 1 (sanitize PII). **3011 test verdi**,
+    typecheck pulito. Commit `—` (da fare).
+
 ## 2026-08-11
 
 - **Langfuse — nomi trace specifici + tags strutturati + costi + sessioni + fix error:empty (2026-08-11)**

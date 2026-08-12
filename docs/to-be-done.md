@@ -6,7 +6,7 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ### 🎯 Langfuse follow-up (2026-08-11, da CSV export)
 
-- [ ] **Costi Gemini = 0 in Langfuse**: le trace `card-cover`/`image-flash`
+- [x] **Costi Gemini = 0 in Langfuse**: le trace `card-cover`/`image-flash`
   hanno `costDetails: {}` e `totalCost: 0` — Gemini sembra gratis. Il
   `computeCostUsd` server-side calcola il costo ma il dev proxy Gemini
   (vite.config.js) non lo passa: `traceDev` per i 5 endpoint Gemini non
@@ -14,7 +14,7 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   dal client). Fix: calcolare `computeCostUsd('gemini', model, undefined, 1)`
   nel dev proxy (come fa il server handler) e passarlo a `traceDev`.
   Verificare anche che il server handler prod lo faccia (sì, ma testare).
-- [ ] **`generate-image-flash` nome vecchio + `subfeature:chat` errato**:
+- [x] **`generate-image-flash` nome vecchio + `subfeature:chat` errato**:
   la trace `generate-image-flash` (21:09) ha ancora il nome vecchio e
   `subfeature:chat` invece di `subfeature:icon|hero|flash`. Il server
   handler `src/server/ai.ts` non è stato aggiornato (solo il dev proxy

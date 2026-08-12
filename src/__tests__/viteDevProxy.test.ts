@@ -191,4 +191,35 @@ describe('vite dev API proxy (vite.config.js)', () => {
     expect(withToolCalls[0].content).toBe('');
     expect(withToolCalls[0].tool_calls[0].function.name).toBe('analyze_site');
   });
+
+  it('TB-029 fix: /api/ai/card-cover passa costUsd Gemini (0.04) a ingestLangfuse', async () => {
+    process.env.GEMINI_API_KEY = 'test-gemini';
+    const traceCalls: any[] = [];
+    const api = await loadApiMiddleware(async (id: string) => {
+      if (id === '/src/server/langfuse.ts') {
+        return { ingestLangfuse: async (input: any) => { traceCalls.push(input); } };
+      }
+      if (id === '/src/ai/providers/gemini.ts') {
+        return {
+          GeminiImageProvider: class {
+            async generateCardCover() {
+              return { imageBase64: 'QUJD', mimeType: 'image/jpeg' };
+            }
+          },
+        };
+      }
+      return null;
+    });
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/ai/card-cover', { prompt: 'sfondo', userEmail: 'u@x.com' }),
+      res,
+      () => {},
+    );
+    expect(res.statusCode).toBe(200);
+    expect(traceCalls.length).toBe(1);
+    expect(traceCalls[0].name).toBe('card-cover');
+    expect(traceCalls[0].costUsd).toBe(0.04);
+    expect(traceCalls[0].subfeature).toBe('cover');
+  });
 });
