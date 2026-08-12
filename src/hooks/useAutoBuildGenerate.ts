@@ -13,6 +13,8 @@ import { resolveProviderId, providerSupportsVision } from '../utils/resolveProvi
 import { incrementAiStats, type AiStats } from '../utils/aiStats';
 import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
+import { newRunId, newSpanId } from '../ai/runTrace';
+import type { RunTraceOptions } from '../ai/types';
 import type { BusinessCard, Flyer, FlyerTone, Logo, LogoBuilder } from '../utils/documentSchemas';
 import { createEmptyFlyer } from '../utils/documentSchemas';
 
@@ -50,6 +52,8 @@ export interface AutoBuildGenerateOptions {
   providerId?: string;
   /** TB-029: customerId per attribuzione Langfuse delle chiamate AI. */
   customerId?: string;
+  /** T7: trace gerarchica agente — se assenti, il hook genera runId/rootSpanId. */
+  runTrace?: RunTraceOptions;
 }
 
 const GENERATABLE_ORDER = ['logo', 'businessCard', 'flyer', 'website'] as const;
@@ -260,7 +264,12 @@ async function generateFlashImage(
 
 async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: AutoBuildGenerateOptions): Promise<LogoBuilder> {
   const orchestrator = new LogoAIOrchestrator();
-  const result = await orchestrator.generateLogo(doc.data as unknown as Logo, brief, { modelId: options?.providerId, customerId: options?.customerId, sessionId: doc.id });
+  const result = await orchestrator.generateLogo(doc.data as unknown as Logo, brief, {
+    modelId: options?.providerId,
+    customerId: options?.customerId,
+    sessionId: doc.id,
+    ...options?.runTrace,
+  });
   const selected = result.selected >= 0 ? result.concepts[result.selected] : result.concepts[0];
   if (!result.applied || !selected) {
     logger.warn('Auto-build: logo AI nessun concept valido', {
@@ -362,6 +371,7 @@ async function generateCardDraft(
     modelId: options?.providerId,
     customerId: options?.customerId,
     sessionId: doc.id,
+    ...options?.runTrace,
   });
   const cost = result.costUsd ?? textCost(result.response?.usage as TokenUsage | undefined);
   let aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'text', cost);
@@ -422,7 +432,7 @@ async function generateFlyerDraft(
     flyerInput,
     brief,
     tone,
-    { modelId: options?.providerId, customerId: options?.customerId, sessionId: doc.id },
+    { modelId: options?.providerId, customerId: options?.customerId, sessionId: doc.id, ...options?.runTrace },
   );
   if (!result.applied) throw new Error('Flyer AI: copy non valido');
   let aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'flyerCopy', textCost(result.response?.usage));
@@ -479,6 +489,7 @@ async function generateWebsiteDraft(
       logoBase64,
       customerId: options?.customerId,
       sessionId: doc.id,
+      ...options?.runTrace,
     },
   );
   const aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'websiteCode', result.aiCall?.costUsd ?? textCost(result.response?.usage));
@@ -539,6 +550,10 @@ export function useAutoBuildGenerate() {
       );
       logoBuilderRef.current = null;
       cardDataRef.current = null;
+      // T7: un run agente = una trace Langfuse (runId condiviso). Il primo
+      // step emette lo span root; ogni step ha stepSpanId nuovo.
+      const runId = options?.runTrace?.runId ?? newRunId();
+      const rootSpanId = options?.runTrace?.rootSpanId ?? newSpanId();
       const statuses: Record<string, DraftGenStatus> = {};
       const errors: Record<string, string> = {};
       setState((prev) => ({ ...prev, running: true }));
@@ -550,8 +565,16 @@ export function useAutoBuildGenerate() {
           ...prev,
           currentStep: `Genero ${STEP_LABEL[doc.documentType] ?? doc.documentType}… (${i + 1}/${targets.length})`,
         }));
+        const runTrace: RunTraceOptions = {
+          runId,
+          runName: 'auto-build',
+          startRun: i === 0,
+          rootSpanId,
+          stepName: doc.documentType,
+          stepSpanId: newSpanId(),
+        };
         try {
-          await runDoc(doc, customer, docs, options);
+          await runDoc(doc, customer, docs, { ...options, runTrace });
           statuses[doc.id] = 'done';
           setStatus(doc.id, 'done');
         } catch (err) {
@@ -574,8 +597,16 @@ export function useAutoBuildGenerate() {
       setStatus(doc.id, 'running');
       setDocError(doc.id, null);
       setState((prev) => ({ ...prev, running: true, currentStep: `Genero ${STEP_LABEL[doc.documentType] ?? doc.documentType}…` }));
+      const runTrace: RunTraceOptions = {
+        runId: options?.runTrace?.runId ?? newRunId(),
+        runName: 'auto-build',
+        startRun: true,
+        rootSpanId: options?.runTrace?.rootSpanId ?? newSpanId(),
+        stepName: doc.documentType,
+        stepSpanId: newSpanId(),
+      };
       try {
-        await runDoc(doc, customer, undefined, options);
+        await runDoc(doc, customer, undefined, { ...options, runTrace });
         setStatus(doc.id, 'done');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

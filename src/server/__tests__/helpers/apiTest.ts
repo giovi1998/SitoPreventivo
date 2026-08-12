@@ -76,6 +76,15 @@ export function resetApiTests(): void {
   process.env.DATABASE_URL = 'postgres://test';
   process.env.ADMIN_PASSWORD = 'test-admin-pass';
   process.env.GEMINI_API_KEY = 'test-gemini';
+  // Le trace Langfuse dei test NON devono uscire verso il cloud: le
+  // credenziali reali (LANGFUSE_* o VITE_LANGFUSE_* da .env locale) qui
+  // vengono azzerate, altrimenti ingestLangfuse fa fallback VITE_* e
+  // ogni test endpoint manda trace finte (es. prompt:"p") a Langfuse.
+  // I test che vogliono verificare l'ingest impostano le proprie env +
+  // stub del fetch DOPO resetApiTests (es. langfuseApi.test.ts).
+  for (const key of ['LANGFUSE_PUBLIC_KEY', 'LANGFUSE_SECRET_KEY', 'LANGFUSE_BASE_URL', 'VITE_LANGFUSE_PUBLIC_KEY', 'VITE_LANGFUSE_SECRET_KEY', 'VITE_LANGFUSE_BASE_URL']) {
+    delete process.env[key];
+  }
   mockDbState.selectResults = [];
   mockDbState.inserted = [];
   mockDbState.updated = [];

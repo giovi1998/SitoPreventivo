@@ -84,7 +84,7 @@ describe('TB-029: Langfuse trace ingestion from /ai/chat', () => {
     // Nome verb-first specifico, non generico generate-response
     expect(span.name).toBe('card-ai-chat');
     // Tags strutturati (chat non-stream → streaming:false)
-    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:chat', 'provider:deepseek', 'streaming:false']);
+    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:chat', 'provider:deepseek', 'streaming:false', 'status:ok']);
     // sessionId=docId (sessione documento)
     expect(attrs['langfuse.session.id']).toBe('doc_123');
     // Costo esplicito dal client
@@ -99,7 +99,7 @@ describe('TB-029: Langfuse trace ingestion from /ai/chat', () => {
     const span = JSON.parse(otlpCalls[0].init.body).resourceSpans[0].scopeSpans[0].spans[0];
     expect(span.name).toBe('quote-ai-chat');
     const attrs = Object.fromEntries(span.attributes.map((a: any) => [a.key, a.value.stringArrayValue ?? a.value.stringValue]));
-    expect(attrs['langfuse.trace.tags']).toEqual(['feature:quote', 'subfeature:chat', 'provider:deepseek', 'streaming:false']);
+    expect(attrs['langfuse.trace.tags']).toEqual(['feature:quote', 'subfeature:chat', 'provider:deepseek', 'streaming:false', 'status:ok']);
   });
 
   it('is a no-op (no OTLP call) when LANGFUSE env vars are missing', async () => {
@@ -198,7 +198,7 @@ describe('TB-029: Langfuse trace ingestion from /ai/chat', () => {
 
     // Usage + tag feature
     expect(JSON.parse(attrs['langfuse.observation.usage_details'])).toEqual({ input: 90, output: 30, total: 120 });
-    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:chat', 'provider:deepseek', 'streaming:false']);
+    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:chat', 'provider:deepseek', 'streaming:false', 'status:ok']);
   });
 
   it('TB-029 vision card: system+prompt+anteprima inline→token media+tool_calls (flusso completo)', async () => {
@@ -263,7 +263,7 @@ describe('TB-029: Langfuse trace ingestion from /ai/chat', () => {
     const output = JSON.parse(attrs['langfuse.observation.output']);
     expect(output.choices[0].message.tool_calls[0].function.name).toBe('card_apply_palette');
     expect(JSON.parse(attrs['langfuse.observation.usage_details'])).toEqual({ input: 120, output: 40, total: 160 });
-    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:chat', 'provider:deepseek', 'streaming:false']);
+    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:chat', 'provider:deepseek', 'streaming:false', 'status:ok']);
   });
 
   it('TB-029 fix: /ai/card-cover usa nome card-cover, subfeature cover e costDetails Gemini', async () => {
@@ -295,7 +295,7 @@ describe('TB-029: Langfuse trace ingestion from /ai/chat', () => {
       span.attributes.map((a: any) => [a.key, a.value.stringValue ?? a.value.stringArrayValue ?? JSON.parse(a.value.stringValue ?? 'null')])
     );
     expect(span.name).toBe('card-cover');
-    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:cover', 'provider:gemini', 'streaming:false']);
+    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:cover', 'provider:gemini', 'streaming:false', 'status:ok']);
     // Costo Gemini per immagine (0.04) — non più 0
     expect(JSON.parse(attrs['langfuse.observation.cost_details'])).toEqual({ total: 0.04 });
     // TB-029: sessione Langfuse = docId propagata fino alla trace
@@ -331,7 +331,7 @@ describe('TB-029: Langfuse trace ingestion from /ai/chat', () => {
       span.attributes.map((a: any) => [a.key, a.value.stringValue ?? a.value.stringArrayValue ?? JSON.parse(a.value.stringValue ?? 'null')])
     );
     expect(span.name).toBe('image-flash');
-    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:icon', 'provider:gemini', 'streaming:false']);
+    expect(attrs['langfuse.trace.tags']).toEqual(['feature:card', 'subfeature:icon', 'provider:gemini', 'streaming:false', 'status:ok']);
     expect(JSON.parse(attrs['langfuse.observation.cost_details'])).toEqual({ total: 0.04 });
   });
 });

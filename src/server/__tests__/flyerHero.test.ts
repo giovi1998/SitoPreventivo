@@ -72,4 +72,16 @@ describe('POST /api/ai/flyer-hero', () => {
     const res = await callApiHandler(makeReq({ prompt: 'p' }));
     expect(res.statusCode).toBe(504);
   });
+
+  it('T9: non invia trace Langfuse al cloud nei test (credenziali azzerate da resetApiTests)', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: any) => Promise.resolve({ ok: true, status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    mockGeminiOk('hero');
+    const res = await callApiHandler(makeReq({ prompt: 'p' }));
+    expect(res.statusCode).toBe(200);
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes('/api/public/otel/v1/traces'))).toBe(false);
+    expect(urls.some((u) => u.includes('/api/public/media'))).toBe(false);
+    vi.unstubAllGlobals();
+  });
 });

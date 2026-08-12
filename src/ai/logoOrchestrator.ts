@@ -4,7 +4,7 @@ import { promptRegistry } from './prompts/registry';
 import { buildLogoGeneratePrompt, sanitizeLogoBrief } from './prompts/logoSystem';
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { isValidLucideIcon } from '../utils/logoGenerator';
-import type { AIStreamChunk, AIResponse } from './types';
+import type { AIStreamChunk, AIResponse, RunTraceOptions } from './types';
 import { providerRegistry } from './providers/registry';
 
 /**
@@ -72,7 +72,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       /** TB-029: sessione Langfuse (docId). */
       sessionId?: string;
       imagePreviewBase64?: string;
-    } = {},
+    } & RunTraceOptions = {},
   ): Promise<LogoProcessResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
@@ -110,7 +110,17 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
     const response = await this.handleStream(
       provider,
       messages,
-      { reasoningEffort: 'max', responseFormat: { type: 'json_object' }, sessionId: options.sessionId },
+      {
+        reasoningEffort: 'max',
+        responseFormat: { type: 'json_object' },
+        sessionId: options.sessionId,
+        runId: options.runId,
+        runName: options.runName,
+        startRun: options.startRun,
+        rootSpanId: options.rootSpanId,
+        stepName: options.stepName,
+        stepSpanId: options.stepSpanId,
+      },
       { onStream: options.onStream },
     );
 

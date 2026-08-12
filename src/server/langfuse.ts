@@ -45,6 +45,20 @@ export type LangfuseGenerationInput = {
   promptVersion?: number;
   startTime?: number;
   endTime?: number;
+  /** T7: parent span (16-hex) — la generation diventa figlia di uno span step. */
+  parentSpanId?: string;
+  /** T7: trace gerarchica agente — runId 32-hex (traceId condiviso). */
+  runId?: string;
+  /** T7: nome stabile del task agente → trace `agent:<runName>`. */
+  runName?: string;
+  /** T7: true solo sulla prima chiamata del run → emette lo span root. */
+  startRun?: boolean;
+  /** T7: 16-hex stabile per tutto il run (parent di ogni step span). */
+  rootSpanId?: string;
+  /** T7: sub-agente corrente (es. logo|card|flyer|website). */
+  stepName?: string;
+  /** T7: 16-hex NUOVO per ogni chiamata (parent della generation). */
+  stepSpanId?: string;
 };
 
 // Il trace ID Langfuse segue W3C: 16 byte hex → in OTLP/JSON è base64.
@@ -68,6 +82,12 @@ function cryptoMd5(input: string): string {
 
 function toSpanId(): string {
   return Buffer.from(crypto.randomBytes(8)).toString('base64');
+}
+
+// 16-hex (8 byte) → base64 OTLP: spanId stabile passato dal client
+// (rootSpanId/stepSpanId del run agente).
+function toSpanIdFromHex(hex16: string): string {
+  return Buffer.from(hex16, 'hex').toString('base64');
 }
 
 function toIso(ms?: number): string {
@@ -280,6 +300,7 @@ export function buildLangfusePayload(input: LangfuseGenerationInput) {
     `subfeature:${input.subfeature ?? 'chat'}`,
     `provider:${input.provider}`,
     `streaming:${input.streaming === true}`,
+    `status:${isError ? 'error' : 'ok'}`,
   ];
 
   const attributes: Array<{ key: string; value: any }> = [
@@ -317,9 +338,60 @@ export function buildLangfusePayload(input: LangfuseGenerationInput) {
     if (input.error?.kind) attributes.push(strAttr('langfuse.trace.metadata.errorKind', input.error.kind));
   }
 
+  // T7: trace gerarchica agente. traceId = runId (32-hex) se presente,
+  // altrimenti requestId (backward-compat). Span emessi:
+  // 1. root `agent:<runName>` (solo se startRun)
+  // 2. step `agent:<runName>:<stepName>` (parent = rootSpanId)
+  // 3. generation (parent = stepSpanId)
+  const traceHex = input.runId ?? toTraceHexId(requestId);
+  const traceId = Buffer.from(traceHex, 'hex').toString('base64');
+  const spans: any[] = [];
+
+  if (input.startRun && input.runName && input.rootSpanId) {
+    spans.push({
+      traceId,
+      spanId: toSpanIdFromHex(input.rootSpanId),
+      name: `agent:${input.runName}`,
+      kind: 1,
+      startTimeUnixNano: String(startTime * 1_000_000),
+      endTimeUnixNano: String(endTime * 1_000_000),
+      attributes: [
+        strAttr('langfuse.observation.type', 'span'),
+        strAttr('langfuse.trace.name', `agent:${input.runName}`),
+        { key: 'langfuse.trace.tags', value: { stringArrayValue: [`feature:autobuild`, `status:${isError ? 'error' : 'ok'}`] } },
+        ...(session ? [strAttr('langfuse.session.id', session)] : []),
+        ...(userEmail ? [strAttr('langfuse.user.id', userEmail)] : []),
+        ...(customerId ? [strAttr('langfuse.trace.metadata.customerId', customerId)] : []),
+      ],
+      status: { code: 1 },
+    });
+  }
+
+  if (input.runName && input.stepName && input.stepSpanId) {
+    spans.push({
+      traceId,
+      spanId: toSpanIdFromHex(input.stepSpanId),
+      parentSpanId: input.rootSpanId ? toSpanIdFromHex(input.rootSpanId) : undefined,
+      name: `agent:${input.runName}:${input.stepName}`,
+      kind: 1,
+      startTimeUnixNano: String(startTime * 1_000_000),
+      endTimeUnixNano: String(endTime * 1_000_000),
+      attributes: [
+        strAttr('langfuse.observation.type', 'span'),
+        strAttr('langfuse.trace.name', `agent:${input.runName}:${input.stepName}`),
+        { key: 'langfuse.trace.tags', value: { stringArrayValue: [`feature:autobuild`, `status:${isError ? 'error' : 'ok'}`] } },
+        ...(session ? [strAttr('langfuse.session.id', session)] : []),
+        ...(userEmail ? [strAttr('langfuse.user.id', userEmail)] : []),
+        ...(customerId ? [strAttr('langfuse.trace.metadata.customerId', customerId)] : []),
+      ],
+      status: isError ? { code: 2, message: input.error?.message || 'error' } : { code: 1 },
+    });
+  }
+
   const span = {
-    traceId: toTraceId(requestId),
+    traceId,
     spanId: toSpanId(),
+    ...(input.parentSpanId ? { parentSpanId: toSpanIdFromHex(input.parentSpanId) } : {}),
     name,
     kind: 1,
     startTimeUnixNano: String(startTime * 1_000_000),
@@ -329,6 +401,7 @@ export function buildLangfusePayload(input: LangfuseGenerationInput) {
       ? { code: 2, message: input.error?.message || 'error' }
       : { code: 1 },
   };
+  spans.push(span);
 
   return {
     resourceSpans: [
@@ -339,7 +412,7 @@ export function buildLangfusePayload(input: LangfuseGenerationInput) {
         scopeSpans: [
           {
             scope: { name: 'precisionquote' },
-            spans: [span],
+            spans,
           },
         ],
       },
@@ -361,8 +434,9 @@ export async function ingestLangfuse(input: LangfuseGenerationInput): Promise<vo
   const auth = Buffer.from(`${publicKey}:${secretKey}`).toString('base64');
   // Media: upload base64 → token Langfuse (placeholder se fallisce).
   // traceId per l'API media = 32-hex W3C (formato atteso dalla UI); lo
-  // span OTLP usa lo stesso valore codificato in base64.
-  const traceHex = toTraceHexId(input.requestId);
+  // span OTLP usa lo stesso valore codificato in base64. Con runId
+  // (T7) i media del run agente condividono il traceId del run.
+  const traceHex = input.runId ?? toTraceHexId(input.requestId);
   const resolvedInput = await resolveMediaRefs(input.input, baseUrl, auth, traceHex);
   const resolvedOutput = await resolveMediaOutput(input.output, baseUrl, auth, traceHex);
   const payload = buildLangfusePayload({ ...input, input: resolvedInput, output: resolvedOutput });

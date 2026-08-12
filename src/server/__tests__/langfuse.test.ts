@@ -39,7 +39,7 @@ describe('buildLangfusePayload (OTLP/HTTP JSON → Langfuse v4)', () => {
     expect(attrValue(span, 'langfuse.session.id')).toBe('cust_123');
     expect(attrValue(span, 'langfuse.environment')).toBe('development');
     expect(attrValue(span, 'langfuse.trace.name')).toBe('generate-card');
-    expect(attrValue(span, 'langfuse.trace.tags')).toEqual(['feature:card', 'subfeature:chat', 'provider:ollama', 'streaming:false']);
+    expect(attrValue(span, 'langfuse.trace.tags')).toEqual(['feature:card', 'subfeature:chat', 'provider:ollama', 'streaming:false', 'status:ok']);
     expect(attrValue(span, 'langfuse.trace.metadata.customerId')).toBe('cust_123');
     expect(attrValue(span, 'langfuse.trace.metadata.requestId')).toBe('9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d');
     expect(span.status.code).toBe(1);
@@ -84,6 +84,74 @@ describe('buildLangfusePayload (OTLP/HTTP JSON → Langfuse v4)', () => {
     expect(span.status.code).toBe(2);
     expect(span.status.message).toBe('upstream timeout');
     expect(attrValue(span, 'langfuse.observation.level')).toBe('ERROR');
+  });
+
+  it('T6: adds status:error tag when error is present, status:ok otherwise', () => {
+    const errorPayload = buildLangfusePayload({
+      ...baseInput,
+      error: { kind: 'quota', message: 'credito esaurito' },
+    }) as any;
+    expect(attrValue(firstSpan(errorPayload), 'langfuse.trace.tags')).toContain('status:error');
+    expect(attrValue(firstSpan(errorPayload), 'langfuse.trace.tags')).not.toContain('status:ok');
+
+    const okPayload = buildLangfusePayload(baseInput) as any;
+    expect(attrValue(firstSpan(okPayload), 'langfuse.trace.tags')).toContain('status:ok');
+  });
+
+  it('T7: emits root + step spans with shared runId and parent links', () => {
+    const payload = buildLangfusePayload({
+      ...baseInput,
+      runId: 'a'.repeat(32),
+      runName: 'auto-build',
+      startRun: true,
+      rootSpanId: 'b'.repeat(16),
+      stepName: 'card',
+      stepSpanId: 'c'.repeat(16),
+      parentSpanId: 'c'.repeat(16),
+    }) as any;
+    const spans = payload.resourceSpans[0].scopeSpans[0].spans;
+    expect(spans).toHaveLength(3);
+
+    const [root, step, gen] = spans;
+    const traceId = Buffer.from('a'.repeat(32), 'hex').toString('base64');
+    expect(root.traceId).toBe(traceId);
+    expect(step.traceId).toBe(traceId);
+    expect(gen.traceId).toBe(traceId);
+
+    expect(root.name).toBe('agent:auto-build');
+    expect(root.spanId).toBe(Buffer.from('b'.repeat(16), 'hex').toString('base64'));
+    expect(attrValue(root, 'langfuse.observation.type')).toBe('span');
+    expect(attrValue(root, 'langfuse.trace.tags')).toContain('feature:autobuild');
+
+    expect(step.name).toBe('agent:auto-build:card');
+    expect(step.parentSpanId).toBe(Buffer.from('b'.repeat(16), 'hex').toString('base64'));
+    expect(step.spanId).toBe(Buffer.from('c'.repeat(16), 'hex').toString('base64'));
+
+    expect(gen.name).toBe('generate-card');
+    expect(gen.parentSpanId).toBe(Buffer.from('c'.repeat(16), 'hex').toString('base64'));
+  });
+
+  it('T7: no root span when startRun is false, no step span without stepName', () => {
+    const payload = buildLangfusePayload({
+      ...baseInput,
+      runId: 'a'.repeat(32),
+      runName: 'auto-build',
+      startRun: false,
+      rootSpanId: 'b'.repeat(16),
+      stepName: 'logo',
+      stepSpanId: 'c'.repeat(16),
+    }) as any;
+    const spans = payload.resourceSpans[0].scopeSpans[0].spans;
+    expect(spans).toHaveLength(2);
+    expect(spans[0].name).toBe('agent:auto-build:logo');
+    expect(spans[1].name).toBe('generate-card');
+  });
+
+  it('T7: backward-compat — senza campi run emette solo la generation', () => {
+    const payload = buildLangfusePayload(baseInput) as any;
+    const spans = payload.resourceSpans[0].scopeSpans[0].spans;
+    expect(spans).toHaveLength(1);
+    expect(spans[0].parentSpanId).toBeUndefined();
   });
 
   it('links prompt name and version when provided', () => {

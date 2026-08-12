@@ -121,6 +121,6 @@ describe('POST /api/ai/chat/stream Ollama routing', () => {
     expect(output.toolCalls[0].function.name).toBe('card_apply_palette');
     expect(output.toolCalls[0].function.arguments).toContain('premium');
     const tags = span.attributes.find((a: any) => a.key === 'langfuse.trace.tags').value.stringArrayValue;
-    expect(tags).toEqual(['feature:card', 'subfeature:chat', 'provider:ollama', 'streaming:true']);
+    expect(tags).toEqual(['feature:card', 'subfeature:chat', 'provider:ollama', 'streaming:true', 'status:ok']);
   });
 });

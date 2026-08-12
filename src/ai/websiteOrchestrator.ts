@@ -5,7 +5,8 @@ import { buildWebsiteGeneratePrompt, buildWebsiteHtmlPrompt, buildWebsiteCssProm
 import { ensureSeoMeta, stripSocialCanonical } from '../utils/website/seoMeta';
 import { analyzeSiteCode } from '../utils/website/siteAnalyser';
 import { providerRegistry } from './providers/registry';
-import type { AIStreamChunk, AIResponse, ChatMessage } from './types';
+import type { AIStreamChunk, AIResponse, ChatMessage, RunTraceOptions } from './types';
+import { newSpanId } from './runTrace';
 
 export const websiteAIOutputSchema = z.object({
   html: z.string().min(1, 'HTML richiesto'),
@@ -83,7 +84,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       customerId?: string;
       /** TB-029: sessione Langfuse (docId). */
       sessionId?: string;
-    } = {},
+    } & RunTraceOptions = {},
   ): Promise<WebsiteProcessResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
@@ -95,6 +96,23 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       durationMs: Date.now() - start,
       tokens: response.usage?.totalTokens,
     });
+
+    // T7: ogni chiamata interna del website è un sub-step del run agente
+    // (stepSpanId nuovo per chiamata, parent = rootSpanId). startRun solo
+    // sulla prima chiamata del run (html).
+    let firstCall = true;
+    const runTrace = (step: string) => {
+      const trace = {
+        runId: options.runId,
+        runName: options.runName,
+        startRun: firstCall ? options.startRun : false,
+        rootSpanId: options.rootSpanId,
+        stepName: step,
+        stepSpanId: options.stepSpanId ?? newSpanId(),
+      };
+      firstCall = false;
+      return trace;
+    };
 
     // ─── Step 1: HTML ───────────────────────────────────────────
     const htmlPrompt = buildWebsiteHtmlPrompt(brief, style, options.briefContext);
@@ -129,6 +147,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       // Struttura del sito: ragionamento pieno ('max').
       reasoningEffort: 'max',
       customerId: options.customerId,
+      ...runTrace('html'),
     }, { onStream: streamSink });
     const htmlParsed = this.parseJsonResponse(htmlResponse.content ?? '', z.object({
       html: z.string().min(1),
@@ -183,6 +202,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
             maxTokens: 16384,
             reasoningEffort: 'max',
             customerId: options.customerId,
+            ...runTrace(`page:${page}`),
           }, { onStream: streamSink });
           pagesCost += this.trackUsage(pageResponse.usage, options.userEmail, options.modelId) || 0;
           pageParsed = this.parseJsonResponse(pageResponse.content ?? '', z.object({
@@ -219,6 +239,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         // il doppio del tempo (180s osservati).
         reasoningEffort: 'high',
         customerId: options.customerId,
+        ...runTrace('css'),
       }, { onStream: streamSink });
       cssParsed = this.parseJsonResponse(cssResponse.content ?? '', z.object({
         css: z.string().default(''),
@@ -249,6 +270,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         maxTokens: 16384,
         reasoningEffort: 'high',
         customerId: options.customerId,
+        ...runTrace('js'),
       }, { onStream: streamSink });
       jsParsed = this.parseJsonResponse(jsResponse.content ?? '', z.object({
         js: z.string().default(''),
@@ -301,6 +323,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
           // 50-60K token e con think:max impiegava 194s — 'high' basta.
           reasoningEffort: 'high',
           customerId: options.customerId,
+          ...runTrace(`verify:pass${pass + 1}`),
         }, { onStream: streamSink });
       } catch (err) {
         verifyError = err;
@@ -416,7 +439,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       visionPreviews?: string[];
       /** TB-029: attribuzione Langfuse per-cliente. */
       customerId?: string;
-    } = {},
+    } & RunTraceOptions = {},
   ): Promise<WebsiteRefineResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
@@ -467,7 +490,18 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const response = await this.handleStream(
       provider,
       messages,
-      { responseFormat: { type: 'json_object' }, maxTokens: 16384, reasoningEffort: 'max', customerId: options.customerId },
+      {
+        responseFormat: { type: 'json_object' },
+        maxTokens: 16384,
+        reasoningEffort: 'max',
+        customerId: options.customerId,
+        runId: options.runId,
+        runName: options.runName,
+        startRun: options.startRun,
+        rootSpanId: options.rootSpanId,
+        stepName: options.stepName ?? 'refine',
+        stepSpanId: options.stepSpanId ?? newSpanId(),
+      },
       { onStream: options.onStream },
     );
     options.onStepResult?.('refine', response.content ?? '', {

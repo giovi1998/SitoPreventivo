@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { Flyer, FlyerTone, FlyerLayout, FlyerSize } from '../utils/documentSchemas';
 import { FLYER_HEADLINE_MAX, FLYER_SUBHEADLINE_MAX, FLYER_BODY_MAX, FLYER_CTA_LABEL_MAX } from '../utils/documentSchemas';
 import { getFlyerCopyBudget } from '../utils/flyer';
-import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall } from './types';
+import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall, RunTraceOptions } from './types';
 import { providerRegistry } from './providers/registry';
 import { chatStore } from './chat/store';
 import { promptRegistry } from './prompts/registry';
@@ -105,7 +105,7 @@ export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
     flyer: Flyer,
     brief: string,
     tone: FlyerTone,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string }
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string } & RunTraceOptions
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
       const budget = getFlyerCopyBudget(flyer);
@@ -133,7 +133,7 @@ Usa TUTTE le informazioni del brief (attività, settore, servizi, colori e stile
   async refineCopy(
     flyer: Flyer,
     action: FlyerRefineAction,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string }
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string } & RunTraceOptions
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
       const currentJson = JSON.stringify({
@@ -159,7 +159,7 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
   private async runPrompt(
     flyer: Flyer,
     buildPrompt: () => string,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string },
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string } & RunTraceOptions,
     changeLabel?: string
   ): Promise<FlyerProcessResult> {
     const primaryProviderId = options?.modelId || providerRegistry.getDefaultId();
@@ -200,6 +200,12 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
         requestId: options?.requestId,
         customerId: options?.customerId,
         sessionId: options?.sessionId,
+        runId: options?.runId,
+        runName: options?.runName,
+        startRun: options?.startRun,
+        rootSpanId: options?.rootSpanId,
+        stepName: options?.stepName,
+        stepSpanId: options?.stepSpanId,
       },
       { onStream: options?.onStream }
     );

@@ -106,6 +106,13 @@ export default defineConfig(({ mode }) => {
               costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined,
               input: messages,
               startTime: startedAt,
+              // T7: trace gerarchica agente (opzionali, backward-compatible)
+              runId: body.runId,
+              runName: body.runName,
+              startRun: body.startRun,
+              rootSpanId: body.rootSpanId,
+              stepName: body.stepName,
+              stepSpanId: body.stepSpanId,
             };
             const chatName = `${body.kind && body.kind !== 'chat' ? body.kind : 'chat'}-ai-chat`;
             const ollamaReq = { model, messages, stream: true };

@@ -21,7 +21,7 @@ const aiChatSchema = z.object({
     .max(50),
   response_format: z.object({ type: z.literal('json_object') }).optional(),
   reasoning_effort: z.enum(['low', 'high', 'max']).optional(),
-  max_tokens: z.number().int().positive().max(8192).optional(),
+  max_tokens: z.number().int().positive().max(16384).optional(),
   userEmail: z.string().email().optional(),
 });
 
@@ -103,10 +103,18 @@ describe('AI endpoint Zod schemas (spec 7)', () => {
       expect(result.success).toBe(false);
     });
 
-    it('rejects max_tokens > 8192', () => {
+    it('T9: accepts max_tokens 16384 (website orchestration needs it)', () => {
       const result = aiChatSchema.safeParse({
         messages: [{ role: 'user', content: 'x' }],
-        max_tokens: 9000,
+        max_tokens: 16384,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects max_tokens > 16384', () => {
+      const result = aiChatSchema.safeParse({
+        messages: [{ role: 'user', content: 'x' }],
+        max_tokens: 20000,
       });
       expect(result.success).toBe(false);
     });
@@ -180,7 +188,7 @@ const aiChatSchemaTB023 = z.object({
     .max(50),
   response_format: z.object({ type: z.literal('json_object') }).optional(),
   reasoning_effort: z.enum(['low', 'high', 'max']).optional(),
-  max_tokens: z.number().int().positive().max(8192).optional(),
+  max_tokens: z.number().int().positive().max(16384).optional(),
   userEmail: z.string().email().optional(),
   provider: z.enum(['deepseek', 'ollama']).optional(),
   tools: z
@@ -364,5 +372,97 @@ describe('TB-023: /ai/design-review schema', () => {
       screenshotBase64: 'x'.repeat(600_001),
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('T6: /ai/flyer-copy schema (TB-029 identity fields)', () => {
+  const flyerCopySchema = z.object({
+    brief: z.string().max(1000),
+    tone: z.enum(['formale', 'giovanile', 'tecnico']),
+    layout: z.enum(['classic', 'centered', 'split', 'magazine']).optional(),
+    size: z.enum(['A6', 'A5', 'A4', 'Letter', 'Square']).optional(),
+    model: z.string().optional(),
+    userEmail: z.string().email().optional(),
+    customerId: z.string().min(1).max(100).optional(),
+    sessionId: z.string().min(1).max(200).optional(),
+  });
+
+  it('accepts a minimal valid body', () => {
+    const result = flyerCopySchema.safeParse({ brief: 'Pizzeria aperta', tone: 'formale' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts Langfuse identity fields (userEmail/customerId/sessionId)', () => {
+    const result = flyerCopySchema.safeParse({
+      brief: 'Pizzeria aperta',
+      tone: 'giovanile',
+      layout: 'split',
+      size: 'A5',
+      userEmail: 'user@example.com',
+      customerId: 'cust_1',
+      sessionId: 'doc_1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid email', () => {
+    const result = flyerCopySchema.safeParse({ brief: 'x', tone: 'formale', userEmail: 'not-an-email' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing brief', () => {
+    const result = flyerCopySchema.safeParse({ tone: 'formale' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid tone', () => {
+    const result = flyerCopySchema.safeParse({ brief: 'x', tone: 'scherzoso' });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('T7: /ai/chat run trace fields (trace gerarchica agente)', () => {
+  const runTraceSchema = z.object({
+    messages: z.array(z.object({ role: z.string(), content: z.string() })).min(1),
+    runId: z.string().regex(/^[0-9a-f]{32}$/).optional(),
+    runName: z.string().min(1).max(50).optional(),
+    startRun: z.boolean().optional(),
+    rootSpanId: z.string().regex(/^[0-9a-f]{16}$/).optional(),
+    stepName: z.string().min(1).max(50).optional(),
+    stepSpanId: z.string().regex(/^[0-9a-f]{16}$/).optional(),
+  });
+
+  it('accepts a full run trace body', () => {
+    const result = runTraceSchema.safeParse({
+      messages: [{ role: 'user', content: 'x' }],
+      runId: 'a'.repeat(32),
+      runName: 'auto-build',
+      startRun: true,
+      rootSpanId: 'b'.repeat(16),
+      stepName: 'card',
+      stepSpanId: 'c'.repeat(16),
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects runId not 32-hex', () => {
+    const result = runTraceSchema.safeParse({
+      messages: [{ role: 'user', content: 'x' }],
+      runId: 'not-hex',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects rootSpanId not 16-hex', () => {
+    const result = runTraceSchema.safeParse({
+      messages: [{ role: 'user', content: 'x' }],
+      rootSpanId: 'zz',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts body without run fields (backward-compat)', () => {
+    const result = runTraceSchema.safeParse({ messages: [{ role: 'user', content: 'x' }] });
+    expect(result.success).toBe(true);
   });
 });

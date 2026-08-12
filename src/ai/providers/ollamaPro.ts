@@ -147,6 +147,12 @@ export class OllamaProProvider extends BaseAIProvider {
       ...(options?.customerId ? { customerId: options.customerId } : {}),
       ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
       ...(options?.kind ? { kind: options.kind } : {}),
+      ...(options?.runId ? { runId: options.runId } : {}),
+      ...(options?.runName ? { runName: options.runName } : {}),
+      ...(options?.startRun ? { startRun: true } : {}),
+      ...(options?.rootSpanId ? { rootSpanId: options.rootSpanId } : {}),
+      ...(options?.stepName ? { stepName: options.stepName } : {}),
+      ...(options?.stepSpanId ? { stepSpanId: options.stepSpanId } : {}),
     };
     return body;
   }

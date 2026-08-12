@@ -5,6 +5,31 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-12
 
+- **Wayfinder Langfuse agenti — trace gerarchica agente→sub-agente
+  (2026-08-12)** (mappa `docs/wayfinder/langfuse-agentic-map.md`, ticket
+  T1-T7 chiusi):
+  - **Decisioni research**: LangChain/LangGraph **DON'T ADOPT** (nested
+    span = solo `parentSpanId` OTLP, ~15-25 LOC; LangGraph 12MB/AI SDK
+    7MB/OTel 1-2MB contro §25; SDK v5 richiede flush pre-exit peggiore
+    della fire-and-forget 2s). Next.js **DON'T MIGRATE** (~90-140h, SPA
+    pura, monolite §1 load-bearing, Langfuse non Next-gated).
+  - **T6 fix trace**: `generate-flyer-copy` usage spaccato
+    prompt/completion reale (era tutto in completion), identità
+    userEmail/customerId/sessionId nel body (era `undefined`), tag
+    `status:ok|error` nel payload Langfuse.
+  - **T7 trace gerarchica implementata**: `src/ai/runTrace.ts`
+    (newRunId/newSpanId hex); `useAutoBuildGenerate` genera runId/
+    rootSpanId per run + stepSpanId per step e propaga via
+    `RunTraceOptions` (types.ts) → orchestratori → `ChatOptions` → body
+    `/api/ai/chat`; server Zod (runId 32-hex, spanId 16-hex) su chat e
+    chat/stream + dev proxy; `buildLangfusePayload` emette root
+    `agent:auto-build` + step `agent:auto-build:<step>` + generation
+    parent-linked, traceId=runId (media inclusi), backward-compat senza
+    campi run. Website: ogni chiamata interna (html/pages/css/js/verify)
+    è un sub-step con stepSpanId nuovo.
+  - Test: 3 payload gerarchico + 4 Zod run fields + 7 expected tags
+    aggiornati. **3026 test verdi**, typecheck 0, build zero-warning.
+
 - **Langfuse follow-up round 2 — media upload funzionante + sessioni
   complete + latency reale (2026-08-12)** (da `to-be-done.md` Langfuse
   follow-up, verifiche empiriche su `cloud.langfuse.com`):

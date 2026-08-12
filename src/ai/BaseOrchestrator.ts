@@ -5,7 +5,7 @@ import { ToolRegistry } from './tools/registry';
 import dataService from '../utils/dataService';
 import { calculateCostUsd } from './providerPricing';
 import { getAiAutoFallback } from '../utils/uiPrefs';
-import type { ChatMessage, AIResponse, AIStreamChunk, AIProvider, AIToolCall, ToolExecutor, ToolResult } from './types';
+import type { ChatMessage, AIResponse, AIStreamChunk, AIProvider, AIToolCall, ToolExecutor, ToolResult, RunTraceOptions } from './types';
 
 type AIUsage = NonNullable<AIResponse['usage']>;
 
@@ -160,7 +160,7 @@ export abstract class BaseOrchestrator {
       customerId?: string;
       sessionId?: string;
       kind?: string;
-    } = {},
+    } & RunTraceOptions = {},
     callbacks: {
       onStream?: (chunk: AIStreamChunk) => void;
       onFallback?: (fallbackId: string, reason: string) => void;
@@ -206,7 +206,7 @@ export abstract class BaseOrchestrator {
       sessionId?: string;
       /** TB-029: feature tag Langfuse (quote/card/flyer/...). */
       kind?: string;
-    } = {},
+    } & RunTraceOptions = {},
     callbacks: {
       onStream?: (chunk: AIStreamChunk) => void;
     } = {}

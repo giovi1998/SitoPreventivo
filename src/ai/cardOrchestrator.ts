@@ -1,5 +1,5 @@
 import type { BusinessCard } from '../utils/documentSchemas';
-import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall } from './types';
+import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall, RunTraceOptions } from './types';
 import { providerRegistry } from './providers/registry';
 import { chatStore } from './chat/store';
 import { promptRegistry } from './prompts/registry';
@@ -63,7 +63,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       sessionId?: string;
       /** TB-023: anteprima base64 screenshot preview per vision/analysis. */
       imagePreviewBase64?: string;
-    },
+    } & RunTraceOptions,
   ): Promise<CardProcessResult> {
     const primaryProviderId = options?.modelId || providerRegistry.getDefaultId();
     const provider = providerRegistry.getProvider(primaryProviderId);
@@ -129,6 +129,12 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         requestId: options?.requestId,
         customerId: options?.customerId,
         sessionId: options?.sessionId,
+        runId: options?.runId,
+        runName: options?.runName,
+        startRun: options?.startRun,
+        rootSpanId: options?.rootSpanId,
+        stepName: options?.stepName,
+        stepSpanId: options?.stepSpanId,
       },
       { onStream: options?.onStream }
     );

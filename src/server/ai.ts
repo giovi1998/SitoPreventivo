@@ -99,13 +99,20 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
           .max(50),
         response_format: z.object({ type: z.literal('json_object') }).optional(),
         reasoning_effort: z.enum(['low', 'high', 'max']).optional(),
-        max_tokens: z.number().int().positive().max(8192).optional(),
+        max_tokens: z.number().int().positive().max(16384).optional(),
         userEmail: z.string().email().optional(),
         // TB-029: identità per Langfuse tracing (vista costi per cliente)
         customerId: z.string().min(1).max(100).optional(),
         sessionId: z.string().min(1).max(200).optional(),
         // TB-029: feature orchestrator per tag Langfuse (quote/card/flyer/...)
         kind: z.string().min(1).max(50).optional(),
+        // T7: trace gerarchica agente (runId 32-hex, rootSpanId/stepSpanId 16-hex)
+        runId: z.string().regex(/^[0-9a-f]{32}$/).optional(),
+        runName: z.string().min(1).max(50).optional(),
+        startRun: z.boolean().optional(),
+        rootSpanId: z.string().regex(/^[0-9a-f]{16}$/).optional(),
+        stepName: z.string().min(1).max(50).optional(),
+        stepSpanId: z.string().regex(/^[0-9a-f]{16}$/).optional(),
         // TB-029: costo USD calcolato dal client (providerPricing) per cost_details
         costUsd: z.number().min(0).max(1000).optional(),
         // TB-023: provider routing (default deepseek)
@@ -139,6 +146,13 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
     const kind = v.data.kind;
     const costUsd = v.data.costUsd;
     const provider = v.data.provider || 'deepseek';
+    // T7: trace gerarchica agente (opzionali, backward-compatible)
+    const runId = v.data.runId;
+    const runName = v.data.runName;
+    const startRun = v.data.startRun;
+    const rootSpanId = v.data.rootSpanId;
+    const stepName = v.data.stepName;
+    const stepSpanId = v.data.stepSpanId;
 
     // ─── TB-023: Ollama Pro Cloud routing ─────────────────────────
     if (provider === 'ollama') {
@@ -282,6 +296,12 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
         costUsd: costUsd ?? computeCostUsd('ollama', ollamaModel),
         startTime: startedAt,
         sessionId,
+        runId,
+        runName,
+        startRun,
+        rootSpanId,
+        stepName,
+        stepSpanId,
       });
       return json(req, res, 200, normalized);
     }
@@ -339,6 +359,12 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
         error: { kind: errorKind, message: errBody.slice(0, 200) },
         startTime: startedAt,
         sessionId,
+        runId,
+        runName,
+        startRun,
+        rootSpanId,
+        stepName,
+        stepSpanId,
       });
       if (apiRes.status === 402) return jsonWithRequestId(req, res, 402, { error: 'Credito DeepSeek esaurito. Ricarica su platform.deepseek.com' }, requestId);
       if (apiRes.status === 401) return jsonWithRequestId(req, res, 401, { error: 'Chiave API DeepSeek non valida' }, requestId);
@@ -373,6 +399,12 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
       costUsd: costUsd ?? computeCostUsd('deepseek', model || 'deepseek-v4-flash', usage ? { promptTokens: usage.prompt_tokens ?? 0, completionTokens: usage.completion_tokens ?? 0 } : undefined),
       startTime: startedAt,
       sessionId,
+      runId,
+      runName,
+      startRun,
+      rootSpanId,
+      stepName,
+      stepSpanId,
     });
     return json(req, res, 200, { ...data, requestId });
   }
@@ -405,6 +437,10 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
         layout: z.enum(['classic', 'centered', 'split', 'magazine']).optional(),
         size: z.enum(['A6', 'A5', 'A4', 'Letter', 'Square']).optional(),
         model: z.string().optional(),
+        // TB-029: identità per Langfuse tracing (vista costi per cliente)
+        userEmail: z.string().email().optional(),
+        customerId: z.string().min(1).max(100).optional(),
+        sessionId: z.string().min(1).max(200).optional(),
       }),
       body
     );
@@ -412,7 +448,7 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
       logAI({ tag: 'ai_copy_flyer', requestId, outcome: 'error', durationMs: 0, errorKind: 'validation' });
       return jsonWithRequestId(req, res, 400, { errors: v.errors }, requestId);
     }
-    const { brief, tone, layout, size, model } = v.data;
+    const { brief, tone, layout, size, model, userEmail, customerId, sessionId } = v.data;
     const startedAt = Date.now();
     // Brief is sanitized server-side: strip HTML tags and control
     // characters before it hits the LLM prompt. This is a defense in
@@ -500,18 +536,26 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       logAI({ tag: 'ai_copy_flyer', requestId, model, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'not_json' });
       return jsonWithRequestId(req, res, 502, { error: 'AI non ha restituito JSON valido', raw: content.slice(0, 500) }, requestId);
     }
-    const usage = (data as { usage?: { total_tokens?: number } }).usage;
+    const usage = (data as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }).usage;
     logAI({ tag: 'ai_copy_flyer', requestId, model: model || 'deepseek-v4-flash', durationMs: Date.now() - startedAt, outcome: 'ok', tokens: usage?.total_tokens });
     traceGeneration({
       name: 'generate-flyer-copy',
       requestId,
       model: model || 'deepseek-v4-flash',
       provider: 'deepseek',
-      userEmail: undefined,
+      userEmail,
+      customerId,
+      sessionId,
       feature: 'flyer',
       input: { brief, tone, layout, size },
       output: parsed,
-      usage: usage?.total_tokens ? { promptTokens: 0, completionTokens: usage.total_tokens } : undefined,
+      usage:
+        usage?.prompt_tokens != null || usage?.completion_tokens != null
+          ? {
+              promptTokens: usage.prompt_tokens ?? 0,
+              completionTokens: usage.completion_tokens ?? 0,
+            }
+          : undefined,
       startTime: startedAt,
     });
     return json(req, res, 200, { data: parsed, raw: content, requestId });
@@ -579,13 +623,20 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
           .max(50),
         tools: z.array(z.any()).optional(),
         reasoning_effort: z.enum(['low', 'high', 'max']).optional(),
-        max_tokens: z.number().int().positive().max(8192).optional(),
+        max_tokens: z.number().int().positive().max(16384).optional(),
         userEmail: z.string().email().optional(),
         // TB-029: identità per Langfuse tracing (vista costi per cliente)
         customerId: z.string().min(1).max(100).optional(),
         sessionId: z.string().min(1).max(200).optional(),
         // TB-029: feature orchestrator per tag Langfuse (quote/card/flyer/...)
         kind: z.string().min(1).max(50).optional(),
+        // T7: trace gerarchica agente (runId 32-hex, rootSpanId/stepSpanId 16-hex)
+        runId: z.string().regex(/^[0-9a-f]{32}$/).optional(),
+        runName: z.string().min(1).max(50).optional(),
+        startRun: z.boolean().optional(),
+        rootSpanId: z.string().regex(/^[0-9a-f]{16}$/).optional(),
+        stepName: z.string().min(1).max(50).optional(),
+        stepSpanId: z.string().regex(/^[0-9a-f]{16}$/).optional(),
         // TB-029: costo USD calcolato dal client (providerPricing) per cost_details
         costUsd: z.number().min(0).max(1000).optional(),
         // TB-023: provider routing (default deepseek)
@@ -606,6 +657,13 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     const kind = v.data.kind;
     const costUsd = v.data.costUsd;
     const provider = v.data.provider || 'deepseek';
+    // T7: trace gerarchica agente (opzionali, backward-compatible)
+    const runId = v.data.runId;
+    const runName = v.data.runName;
+    const startRun = v.data.startRun;
+    const rootSpanId = v.data.rootSpanId;
+    const stepName = v.data.stepName;
+    const stepSpanId = v.data.stepSpanId;
     const startedAt = Date.now();
 
     // ─── TB-023: Ollama Pro Cloud streaming ─────────────────────────
@@ -772,6 +830,12 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
           costUsd: costUsd ?? computeCostUsd('ollama', ollamaModel),
           startTime: startedAt,
           sessionId,
+          runId,
+          runName,
+          startRun,
+          rootSpanId,
+          stepName,
+          stepSpanId,
         });
         if (!res.writableEnded) res.end();
       }
@@ -909,6 +973,12 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         costUsd: costUsd ?? computeCostUsd('deepseek', model || 'deepseek-v4-flash', streamUsage ? { promptTokens: streamUsage.prompt_tokens ?? 0, completionTokens: streamUsage.completion_tokens ?? 0 } : undefined),
         startTime: startedAt,
         sessionId,
+        runId,
+        runName,
+        startRun,
+        rootSpanId,
+        stepName,
+        stepSpanId,
       });
     }
     return res.end();
