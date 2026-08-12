@@ -59,6 +59,13 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   va. Non è ancora mai stato validato live E2E (vedi **TB-027h follow-up**
   più sotto).
   **Fix parziali fatti (non ancora validati live in prod)**:
+  - **2026-08-12 (root cause website confermato + fix deployato)**: il
+    website falliva con 400 su OGNI step in PROD — `max_tokens` Zod
+    server max 8192 vs `maxTokens: 16384` mandati dal websiteOrchestrator
+    (in locale il dev proxy Vite non valida il body → sembrava solo prod).
+    Fix: max 16384 in entrambi gli schemi `/ai/chat` (commit faacc42,
+    gotcha §26.27). **⚠️ Da validare live**: riprovare "Genera bozze AI"
+    con 1 cliente reale dopo il deploy.
   - 2026-08-01: icona card falliva con `TypeError: Cannot destructure
     property 'accentColor' of '...style'` — `photoBrief.ts` usa
     `card.style ?? createEmptyCard().style` (fallback difensivo) e

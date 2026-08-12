@@ -145,12 +145,14 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/ai/PaletteOrchestrator.ts` | TB-027 B5: 3 palette AI suggerite (DeepSeek JSON, paletteConceptsSchema) |
 | `src/hooks/useAIPalette.ts` | TB-027 B5: hook palette generation |
 | `src/utils/palettePreview.ts` | TB-027 B5: SVG swatch card preview palette (zero costo AI) |
-| `src/hooks/useAutoBuildGenerate.ts` | TB-027c/g: sequenza "Genera bozze AI" logo→card→flyer (orchestratori + briefContext, providerId opzionale, cover/hero AI, compressione immagini pre-save, save per-doc, status per-doc) |
+| `src/hooks/useAutoBuildGenerate.ts` | TB-027c/g: sequenza "Genera bozze AI" logo→card→flyer (orchestratori + briefContext, providerId opzionale, cover/hero AI, compressione immagini pre-save, save per-doc, status per-doc). **T7**: genera runId/rootSpanId/stepSpanId per la trace gerarchica Langfuse |
 | `src/utils/docPreviewSvg.ts` | Preview SVG inline logo/card/flyer/quote (condiviso CollectionView + CustomerDetail) |
 | `src/pages/app/CustomersPage.tsx` | TB-027 route `/app/customers` (admin guard) |
 | `src/ai/BaseOrchestrator.ts` | Abstract condivisa (sanitize, parseJson, handleStream, trackUsage) |
 | `src/ai/quoteOrchestrator.ts` | Orchestratore quote (ex `ai/index.ts`): `AIOrchestrator`, `needsTools`, tool registry quote |
 | `src/ai/*Orchestrator.ts` | card / flyer / logo / social / onboarding / website |
+| `src/ai/agentOrchestrator.ts` | T9: agente orchestratore con harness — 4 tools `generate_logo/card/flyer/website`, loop plan→act max 6 round su `BaseOrchestrator`, `onToolResult` per save client. **Non ancora collegato alla UI** (wiring CRM = prossimo step) |
+| `src/ai/runTrace.ts` | T7: helper trace gerarchica — `newRunId()` (32-hex) / `newSpanId()` (16-hex); campi run propagati via `RunTraceOptions` → `ChatOptions` → body `/api/ai/chat` |
 | `src/ai/prompts/registry.ts` | promptRegistry: lookup centralizzato 8 prompt (incl. website-system) |
 | `src/ai/providers/gemini.ts` | `GeminiImageProvider` (Nano Banana, SDK `@google/genai`) |
 | `src/ai/cardMerge.ts` | Merge risposta AI → card (grid, style, photo-preserve) |

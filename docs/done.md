@@ -30,6 +30,26 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
   - Test: 3 payload gerarchico + 4 Zod run fields + 7 expected tags
     aggiornati. **3026 test verdi**, typecheck 0, build zero-warning.
 
+- **Wayfinder Langfuse agenti round 2 — agente con harness tools +
+  bug prod website + trace test no-cloud (2026-08-12)** (ticket T9/T10,
+  dettaglio gotcha §26.27):
+  - **T9 agente orchestratore** (`src/ai/agentOrchestrator.ts`): 4 tools
+    `generate_logo/card/flyer/website`, loop plan→act max 6 round su
+    `BaseOrchestrator` (zero LangGraph), tool fail → `{ok:false}` senza
+    crash, `onToolResult` per save client, trace `stepName:'plan'` +
+    step per tool. **Non ancora collegato alla UI** (wiring CRM =
+    prossimo step).
+  - **Bug PROD website sbloccato**: Zod server `max_tokens` max 8192 vs
+    16384 mandati dal websiteOrchestrator → 400 su OGNI step website in
+    prod (dev proxy locale non valida → solo prod). Fix: max 16384 in
+    entrambi gli schemi `/ai/chat` + test. **Deployato faacc42**.
+  - **T10 trace test no-cloud**: `resetApiTests` azzera le 6 env
+    Langfuse → le trace `prompt:"p"`/`sizeKB:0.0029` su cloud erano
+    test unitari che uscivano (fallback VITE_*). Regression test in
+    `flyerHero.test.ts`.
+  - Test: +5 agente, +4 Zod max_tokens, +1 regression no-cloud.
+    **3033 test verdi**, typecheck 0, build zero-warning. Push faacc42.
+
 - **Langfuse follow-up round 2 — media upload funzionante + sessioni
   complete + latency reale (2026-08-12)** (da `to-be-done.md` Langfuse
   follow-up, verifiche empiriche su `cloud.langfuse.com`):

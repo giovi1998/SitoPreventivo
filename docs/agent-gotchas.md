@@ -2035,3 +2035,71 @@ contentLength/latency), `langfuseApi.test.ts` (sessionId card-cover),
 `useAIIconHero.test.tsx` (sessionId body). Gate: typecheck + 3013 test
 verdi.
 
+### 26.27 Langfuse agenti — trace gerarchica agente→sub-agente + agente con harness (2026-08-12)
+
+Effort wayfinder (mappa `docs/wayfinder/langfuse-agentic-map.md`, 10
+ticket T1-T10, decisioni+risoluzioni nei singoli ticket).
+
+**Decisioni research** (ticket T1/T2):
+- **LangChain/LangGraph: DON'T ADOPT**. Nested span = solo
+  `parentSpanId` OTLP (~5 LOC); il vero gap era il traceId (ogni chiamata
+  un requestId → trace separate). LangGraph ~12MB / AI SDK ~7MB / OTel
+  1-2MB contro §25; SDK v5 richiede `forceFlush()` pre-exit (peggio della
+  fire-and-forget 2s). Provider layer custom → AI SDK = rewrite out of
+  scope.
+- **Next.js: DON'T MIGRATE** (~90-140h, SPA pura client-state, monolite
+  §1 load-bearing, Langfuse non Next-gated).
+
+**Trace gerarchica (T7)** — una trace per run, 3 livelli:
+1. **Client** (`src/ai/runTrace.ts`): `newRunId()` (32-hex) +
+   `newSpanId()` (16-hex). `useAutoBuildGenerate` genera runId/
+   rootSpanId per run, stepSpanId per step, propaga via `RunTraceOptions`
+   (in `types.ts`, esteso `ChatOptions`) → orchestratori (logo/card/
+   flyer/website) → body `/api/ai/chat`.
+2. **Server** (`ai.ts`): Zod `runId` (regex 32-hex), `runName`,
+   `startRun` (boolean), `rootSpanId`/`stepSpanId` (regex 16-hex) su
+   `/ai/chat` e `/ai/chat/stream`; destructure + passaggio ai 5
+   `traceGeneration` chat; dev proxy `vite.config.js` propagato.
+3. **Payload** (`langfuse.ts`): `parentSpanId` + campi run; traceId =
+   runId (media upload inclusi, `ingestLangfuse` usa `input.runId ??
+   toTraceHexId(requestId)`); emette root `agent:<runName>` (solo
+   `startRun`) + step `agent:<runName>:<stepName>` + generation con
+   parent link. **Backward-compat**: senza campi run = identico a prima.
+
+**Website**: ogni chiamata interna (html/pages/css/js/verify) è un
+sub-step con stepSpanId nuovo (`runTrace(step)` helper in
+`websiteOrchestrator`, `startRun` solo sulla prima chiamata).
+
+**Agente con harness (T9)** — `src/ai/agentOrchestrator.ts`:
+- 4 tools `generate_logo/card/flyer/website` (filtro `include`),
+  loop plan→act max 6 round su `BaseOrchestrator` (niente LangGraph);
+  tool fail → `{ok:false, summary}` senza crash; `onToolResult` per
+  salvataggio dal chiamante. **NON ancora collegato alla UI** (nessun
+  componente lo usa) — wiring CRM = prossimo step.
+- Trace: l'agente emette `stepName:'plan'` (root su round 0) + ogni
+  tool usa `stepName = oggetto` + stepSpanId nuovo.
+
+**⚠️ Bug PROD sbloccato — website mai generato con auto-generate**:
+`websiteOrchestrator` manda `maxTokens: 16384` (7 call site) ma Zod
+server aveva `max_tokens.max(8192)` → **400 validation su OGNI step
+website in PROD** (il dev proxy Vite non valida il body → in locale
+funzionava). Fix: max 16384 in entrambi gli schemi `/ai/chat` +
+spec test. **Deployato con faacc42** — riprovare "Genera bozze AI"
+in prod con cliente reale.
+
+**⚠️ Trace finte su Langfuse da test unitari (T10)** — le trace con
+`prompt:"p"` e `sizeKB: 0.0029` (3 byte, `image: PNG/JPEG`) erano
+**trace dei test endpoint**: `resetApiTests` (helpers/apiTest.ts) non
+azzerava `LANGFUSE_*`/`VITE_LANGFUSE_*` → `ingestLangfuse` fallback
+VITE_* → env reali da .env locale → ogni test (flyerHero, imageFlash,
+cardCover, ...) mandava OTLP reale con dati mock al cloud. Fix:
+`resetApiTests` azzera le 6 env; regression test in `flyerHero.test.ts`
+(nessuna chiamata `/otel/v1/traces` o `/media`). I test di ingest che
+verificano OTLP impostano le proprie env DOPO resetApiTests (già così).
+
+**Test**: +3 payload gerarchico (root+step+gen, no-root, backward-compat),
++4 Zod run fields, +4 Zod max_tokens 16384, +5 agente (tool exec,
+runTrace propagation, tool fail, no-tool stop, include filter), +1
+regression test no-cloud, +7 expected tags aggiornati con `status:ok`.
+Gate: typecheck 0 + **3033 test verdi** + build zero-warning.
+
