@@ -606,6 +606,13 @@ skill** (`.agents/skills/<name>/SKILL.md`):
   test. Invoca `skill("lean-code")` PRIMA di scrivere codice nuovo o
   refactor (sempre, vedi "Code Style (lean-code skill)" sopra per
   regola hard di invocazione `skill("lean-code")` ad ogni sessione).
+- `langfuse` — quando tocchi tracing/prompt management (TB-029) o devi
+  verificare il comportamento AI in prod. Invoca `skill("langfuse")` e
+  PRIMA di concludere un task AI verifica l'ultima trace/sessionId su
+  Langfuse (CLI: `npx langfuse-cli api traces list` / `sessions get`),
+  controllando: nome trace verb-first, `session_id=customerId`,
+  `user_id=userEmail`, tag feature, usage e costi. Mai chiudere un task
+  AI senza aver verificato che le trace arrivino.
 
 On-demand (solo se il task lo richiede): `deploy-to-vercel`,
 `vercel-cli-with-tokens`, `vercel-optimize`, `gpt-taste` /
