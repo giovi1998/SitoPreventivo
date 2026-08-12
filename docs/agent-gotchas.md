@@ -1958,3 +1958,35 @@ stringhe JS), `seoMeta.test.ts` (9 — sanitize, ordine, coerenza og:desc),
 `websiteOrchestrator.test.ts` (15 — tool precompilati, loop recheck
 pulito/residuo, fixes, costo), `websiteSystem.test.ts` (12 — prompt verify
 rules). Gate: typecheck + 524 test impattati verdi.
+
+### 26.25 Langfuse — costi Gemini dev proxy + nomi trace + tipi multimodali (2026-08-12)
+
+**Bug (to-be-done Langfuse follow-up, da CSV export)**: in locale Gemini
+risultava gratis (`costDetails: {}`) e le trace immagini avevano nomi
+vecchi (`generate-image-flash`) + `subfeature:chat` errato.
+
+**Fix**:
+1. **Costi Gemini nel dev proxy**: `vite.config.js` — `GEMINI_PER_IMAGE`
+   (`gemini-3.1-flash-image` 0.04, `gemini-2.0-flash-preview-image-generation`
+   0.02) + `geminiCost(model)` (round 6 decimali). I 5 endpoint Gemini
+   (logo-background, card-cover, flyer-hero, card-photo, image-flash)
+   passano `costUsd: geminiCost(...)` a `traceDev` — prima solo
+   `body.costUsd` (mai inviato dal client → 0). Stessa tabella del server
+   handler `ai.ts` (`computeCostUsd('gemini', model, undefined, 1)`).
+2. **Nomi trace server allineati**: `src/server/ai.ts` — `flyer-hero`,
+   `card-photo`, `image-flash` (era `generate-*`) + `subfeature` corretta
+   (`hero`/`photo`/`icon|hero|flash` per kind) + `costUsd` Gemini. Ora
+   server handler e dev proxy hanno nomi/subfeature/costi identici.
+3. **Tipi multimodali**: `LangfuseMessage.content` = `string |
+   LangfuseContentPart[]` (parti OpenAI-style `{type:'text'}` /
+   `{type:'image_url', image_url:{url}}` — formato documentato Langfuse
+   per generazioni text+image). `sanitizeInput` e `resolveMediaRefs`
+   gestiscono le parti image_url: placeholder senza upload, token
+   `@@@langfuseMedia@@@` con upload (mai base64 raw). **Attenzione**:
+   `sanitizeInput` appende il placeholder `[immagine allegata]` SOLO ai
+   messaggi con `images[]` non vuoto (prima lo appendeva anche ai
+   messaggi senza → test PII rotti).
+
+**Test**: +3 (dev proxy costUsd 0.04, parti image_url placeholder, parti
+image_url → token media), fix 1 (sanitize PII). Gate: typecheck + 3011
+test verdi.
