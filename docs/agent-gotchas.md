@@ -1990,3 +1990,48 @@ vecchi (`generate-image-flash`) + `subfeature:chat` errato.
 **Test**: +3 (dev proxy costUsd 0.04, parti image_url placeholder, parti
 image_url → token media), fix 1 (sanitize PII). Gate: typecheck + 3011
 test verdi.
+
+### 26.26 Langfuse — media upload end-to-end + sessioni complete + latency reale (2026-08-12)
+
+**Bug (to-be-done Langfuse follow-up, da CSV export)**: le trace immagini
+mostravano ancora `[immagine allegata]` (placeholder), le sessioni
+Langfuse restavano vuote anche per documenti con `sessionId=docId`, e tutte
+le trace avevano `latencyMs=0`.
+
+**Fix**:
+1. **Media upload funzionante** (`src/server/langfuse.ts`):
+   - `sha256Hash` = base64 del digest binario (44 char). Prima era hex
+     (64 char) → 400 `invalid_format` dalla regex Langfuse.
+   - PUT presigned con header `x-amz-checksum-sha256` (senza → 403 S3).
+   - PATCH `/api/public/media/{mediaId}` con `{uploadedAt, uploadHttpStatus}`
+     post-PUT (senza → GET 404 "Media upload failed" → placeholder).
+   - `contentLength` = byte reali (`Buffer.from(b64,'base64').length`), non
+     arrotondato.
+   - `traceId` media = 32-hex W3C (formato atteso dalla UI), non base64
+     OTLP.
+2. **Sessioni complete**:
+   - Server: `sessionId` aggiunto agli zod di `card-cover`, `card-photo`,
+     `logo-background`, `flyer-hero`, `image-flash`, `design-review` e
+     passato a `traceGeneration` (prima Zod lo strippava).
+   - Client: `sessionId` aggiunto alle deps di `useCallback` in
+     `useAICard`/`useAILogo`/`useAIFlyer`/`useAIWebsite` (closure stale su
+     doc-switch); `useAISocial` ora passa `sessionId` all'orchestratore;
+     `useAIIconHero` accetta `sessionId` e lo manda nel body (wiring
+     `CardEditorShell` con `loadedIdRef.current`).
+3. **Latency reale**: `buildLangfusePayload` usava `endTime ?? startTime`
+   (i chiamanti passano solo `startTime` → 0ms). Ora default `endTime`
+   = payload build time.
+4. **Design-review allineato**: nome trace `design-review` (era
+   `generate-design-review`) + subfeature `review` + sessionId.
+5. **Dead code**: rimosso `buildTags` duplicato in `src/server/ai.ts`.
+
+**Verifica end-to-end**: avviato `npm run dev`, chiamate reali a
+`card-cover`/`image-flash`/`card-ai-chat` con `sessionId` — su Langfuse
+cloud risultano raggruppate nella stessa sessione, output immagini con
+token `@@@langfuseMedia@@@`, latenze 10,76s / 8,72s / 1,48s.
+
+**Test**: aggiornati `langfuse.test.ts` (sha base64/PATCH/checksum/
+contentLength/latency), `langfuseApi.test.ts` (sessionId card-cover),
+`useAIIconHero.test.tsx` (sessionId body). Gate: typecheck + 3013 test
+verdi.
+
