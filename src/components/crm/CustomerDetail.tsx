@@ -30,6 +30,8 @@ type Customer = Record<string, unknown> & {
   mood?: string | null;
   target?: string | null;
   preferredColors?: string | null;
+  font?: string | null;
+  socials?: Array<{ platform?: string; url?: string }> | null;
   contacts?: Record<string, unknown> | null;
   package?: string | null;
   status?: string;
@@ -163,6 +165,26 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     flashSaved(`contact_${key}`);
     await load();
     onRefresh();
+  };
+
+  const addSocial = () => {
+    if (!customer) return;
+    const socials = [...(Array.isArray(customer.socials) ? customer.socials : []), { platform: '', url: '' }];
+    void dataService.updateCustomer(customer.id, { socials }).then(() => { void load(); onRefresh(); });
+  };
+
+  const updateSocial = (index: number, field: 'platform' | 'url', value: string) => {
+    if (!customer) return;
+    const socials = [...(Array.isArray(customer.socials) ? customer.socials : [])];
+    if (socials[index]) socials[index] = { ...socials[index], [field]: value };
+    void dataService.updateCustomer(customer.id, { socials }).then(() => { void load(); onRefresh(); });
+  };
+
+  const removeSocial = (index: number) => {
+    if (!customer) return;
+    const socials = [...(Array.isArray(customer.socials) ? customer.socials : [])];
+    socials.splice(index, 1);
+    void dataService.updateCustomer(customer.id, { socials }).then(() => { void load(); onRefresh(); });
   };
 
   const startEdit = (field: string, current: string) => {
@@ -460,13 +482,12 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const handleGenerateOne = async (doc: Doc) => {
     if (!customer) return;
     logger.appendLog('info', `Rigenero bozza ${doc.documentType} (provider: ${aiProvider})…`, undefined, { docId: doc.id, provider: aiProvider });
-    await autoGen.generateOne(doc, customer, { providerId: aiProvider, customerId: customerId });
+    const genError = await autoGen.generateOne(doc, customer, { providerId: aiProvider, customerId: customerId });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const freshDoc = freshDocs.find((x) => x.id === doc.id);
     const aiStats = (freshDoc?.data as Record<string, unknown> | undefined)?.aiStats as { totalCostUsd?: string } | undefined;
     const costUsd = parseFloat(String(aiStats?.totalCostUsd ?? '0')) || 0;
-    const genError = autoGen.state.errors?.[doc.id] ?? null;
     logger.appendLog(
       genError ? 'error' : 'success',
       genError ? `Rigenerazione ${doc.documentType} fallita: ${genError}` : `Bozza ${doc.documentType} rigenerata`,
@@ -605,6 +626,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         {renderField('mood', 'Mood', customer.mood)}
         {renderField('target', 'Target', customer.target, true)}
         {renderField('preferredColors', 'Colori preferiti', customer.preferredColors)}
+        {renderField('font', 'Font preferito', customer.font)}
       </section>
 
       <section className="crm-section">
@@ -614,6 +636,17 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         {renderContact('address', 'Indirizzo')}
         {renderContact('website', 'Sito')}
         {renderField('googleMapsUrl', 'Google Maps', customer.googleMapsUrl)}
+        <div className="crm-field">
+          <span className="crm-field-label">Social</span>
+          {customer.socials?.map((s, i) => (
+            <div key={i} className="social-row">
+              <input type="text" value={s.platform || ''} onChange={(e) => updateSocial(i, 'platform', e.target.value)} placeholder="Piattaforma (es. Instagram)" maxLength={50} />
+              <input type="text" value={s.url || ''} onChange={(e) => updateSocial(i, 'url', e.target.value)} placeholder="URL o @username" maxLength={300} />
+              <button type="button" className="social-remove" onClick={() => removeSocial(i)} title="Rimuovi">✕</button>
+            </div>
+          ))}
+          <button type="button" className="social-add" onClick={addSocial}>+ Aggiungi social</button>
+        </div>
       </section>
 
       <section className="crm-section">
