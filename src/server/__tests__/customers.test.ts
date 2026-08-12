@@ -283,14 +283,15 @@ describe('TB-027 /api/customers', () => {
     expect(res.body.data.costUsd).toBe(0);
   });
 
-  it('POST /customers/:id/auto-build crea 3 draft (no social v1)', async () => {
+  it('POST /customers/:id/auto-build crea 4 draft (logo/card/flyer/website)', async () => {
     mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', sector: 'bar', contacts: {}, customerPhotos: [] }]);
     const res = await callHandler({
       method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
     });
     expect(res.statusCode).toBe(201);
-    expect(res.body.data.createdDocuments.length).toBe(3);
-    expect(mockDbState.inserted.length).toBe(3);
+    expect(res.body.data.createdDocuments.length).toBe(4);
+    expect(mockDbState.inserted.length).toBe(4);
+    expect(mockDbState.inserted.map((d: any) => d.documentType).sort()).toEqual(['businessCard', 'flyer', 'logo', 'website']);
   });
 
   it('POST /customers/:id/auto-build rerun → delete BOZZE esistenti prima di inserire (no duplicati)', async () => {
@@ -300,16 +301,16 @@ describe('TB-027 /api/customers', () => {
       method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
     });
     expect(mockDbState.deleteCalls).toBe(1);
-    expect(mockDbState.inserted.length).toBe(3);
+    expect(mockDbState.inserted.length).toBe(4);
     mockDbState.selectResults.push([cust]);
     const res = await callHandler({
       method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
     });
     expect(res.statusCode).toBe(201);
-    expect(res.body.data.createdDocuments.length).toBe(3);
-    // replace semantics: una delete BOZZE per giro, insert restano 3 per giro
+    expect(res.body.data.createdDocuments.length).toBe(4);
+    // replace semantics: una delete BOZZE per giro, insert restano 4 per giro
     expect(mockDbState.deleteCalls).toBe(2);
-    expect(mockDbState.inserted.length).toBe(6);
+    expect(mockDbState.inserted.length).toBe(8);
   });
 
   it('POST /customers/:id/auto-build draft completi: QR card da website, subheadline flyer da mood', async () => {
@@ -370,15 +371,16 @@ describe('TB-027 /api/customers', () => {
     expect(brief).toContain('Palette preferita cliente (secondaria): #112233');
   });
 
-  it('POST /customers/:id/auto-build skip logo se detectedLogoUrl presente', async () => {
+  it('POST /customers/:id/auto-build skip logo se detectedLogoUrl presente → 3 draft (card/flyer/website)', async () => {
     mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', sector: 'bar', contacts: {}, detectedLogoUrl: 'data:image/x-icon;base64,x' }]);
     const res = await callHandler({
       method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
     });
     expect(res.statusCode).toBe(201);
-    expect(res.body.data.createdDocuments.length).toBe(2);
-    expect(mockDbState.inserted.length).toBe(2);
+    expect(res.body.data.createdDocuments.length).toBe(3);
+    expect(mockDbState.inserted.length).toBe(3);
     expect(mockDbState.inserted.find((d: any) => d.documentType === 'logo')).toBeUndefined();
+    expect(mockDbState.inserted.map((d: any) => d.documentType).sort()).toEqual(['businessCard', 'flyer', 'website']);
   });
 
   it('DELETE /customers/:id admin → 200', async () => {

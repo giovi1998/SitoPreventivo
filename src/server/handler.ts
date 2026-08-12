@@ -921,7 +921,7 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
     const briefContext = buildBriefContextApi(cust);
     // Replace semantics: un rerun sostituisce le BOZZE esistenti degli stessi
     // tipi per questo cliente (i documenti non-BOZZA non vengono toccati).
-    const typesToCreate = hasManualLogo ? ['businessCard', 'flyer'] : ['logo', 'businessCard', 'flyer'];
+    const typesToCreate = hasManualLogo ? ['businessCard', 'flyer', 'website'] : ['logo', 'businessCard', 'flyer', 'website'];
     await db.delete(documentsTable).where(and(
       eq(documentsTable.customerId, id),
       eq(documentsTable.status, 'BOZZA'),
@@ -1073,6 +1073,45 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
       createdAt: now, updatedAt: now,
     } as Record<string, unknown>);
     created.push(flyerId);
+    // website draft — brief precompilato dai dati cliente (createEmptyWebsite)
+    const websiteId = 'website_' + crypto.randomUUID();
+    await db.insert(documentsTable).values({
+      ...baseFields,
+      id: websiteId,
+      documentType: 'website',
+      title: `Sito ${cust.businessName}`,
+      data: {
+        documentType: 'website',
+        id: websiteId,
+        title: `Sito ${cust.businessName}`,
+        brief: {
+          businessName: cust.businessName || '',
+          sector: String(cust.sector || ''),
+          description: String(cust.activity || ''),
+          tone: String(cust.mood || ''),
+          target: String(cust.target || ''),
+          pages: 'index',
+          preferredColors: String(cust.preferredColors || ''),
+          font: '',
+          cta: '',
+          sections: 'hero, chi_siamo, contatti',
+          features: '',
+          contacts: [contacts.address, contacts.phone, contacts.email].filter(Boolean).join(', '),
+          socials: [],
+          mapsUrl: '',
+          notes: '',
+        },
+        briefContext,
+        html: '', css: '', js: '',
+        framework: 'vanilla', style: 'modern', pages: ['index'],
+        source: 'ai',
+        aiStats: { totalCostUsd: '0', calls: {} },
+        autoGeneratePending,
+        createdAt: now, updatedAt: now,
+      },
+      createdAt: now, updatedAt: now,
+    } as Record<string, unknown>);
+    created.push(websiteId);
     // autoGenerate deferred: AI generation è responsabilità editor (CON-001
     // quality check). Qui creiamo solo draft. lean-code: non lanciamo AI qui,
     // l'admin attiva generazione manualmente nell'editor.

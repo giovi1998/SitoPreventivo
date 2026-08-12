@@ -178,7 +178,9 @@ export function saveKnowledgeChunks(customerId, chunks, source = 'firecrawl:home
     store[customerId] = chunks.map((chunk) => ({ chunk, source, createdAt }));
     localStorage.setItem(KNOWLEDGE_KEY, JSON.stringify(store));
     return chunks.length;
-  } catch {
+  } catch (err) {
+    const reason = err?.name === 'QuotaExceededError' ? 'quota localStorage esaurita' : (err?.message || String(err));
+    console.warn(`[knowledge] salvataggio chunk fallito per ${customerId} (${chunks.length} chunk persi): ${reason}`);
     return 0;
   }
 }

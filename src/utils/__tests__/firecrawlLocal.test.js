@@ -84,4 +84,26 @@ describe('firecrawlLocal', () => {
     expect(getKnowledgeChunks('c1')).toHaveLength(2);
     expect(getKnowledgeChunks('c2')).toHaveLength(0);
   });
+
+  it('saveKnowledgeChunks quota esaurita → 0 con warn esplicito (mai silenzioso)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+    expect(saveKnowledgeChunks('c1', ['a', 'b'])).toBe(0);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('quota localStorage esaurita'));
+    setItem.mockRestore();
+  });
+
+  it('getKnowledgeChunks con chiave corrotta → [] senza crash', () => {
+    localStorage.setItem('pq_customer_knowledge:v1', '{corrotto');
+    expect(getKnowledgeChunks('c1')).toEqual([]);
+  });
+
+  it('saveKnowledgeChunks con store esistente corrotto → 0 con warn', () => {
+    localStorage.setItem('pq_customer_knowledge:v1', '{corrotto');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(saveKnowledgeChunks('c1', ['a'])).toBe(0);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('salvataggio chunk fallito'));
+  });
 });
