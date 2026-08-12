@@ -121,7 +121,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       changes.push(`scraped:${options.scrapedReference.length}chars`);
     }
     const htmlMessages = this.buildMessages(
-      promptRegistry.getPrompt('website-html'),
+      promptRegistry.getPrompt('website-system'),
       htmlPrompt,
     );
     if (hasVision && options.logoBase64) {
@@ -187,7 +187,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         }, navHtml);
         options.onStep?.(`page:${page}`, pagePrompt);
         const pageMessages: ChatMessage[] = [
-          { role: 'system', content: promptRegistry.getPrompt('website-page') },
+          { role: 'system', content: promptRegistry.getPrompt('website-system') },
           { role: 'user', content: pagePrompt },
         ];
         const pageStart = Date.now();
@@ -224,7 +224,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const cssPrompt = buildWebsiteCssPrompt(allPagesHtml, style, brief);
     options.onStep?.('css', cssPrompt);
     const cssMessages: ChatMessage[] = [
-      { role: 'system', content: promptRegistry.getPrompt('website-css') },
+      { role: 'system', content: promptRegistry.getPrompt('website-system') },
       { role: 'user', content: cssPrompt },
     ];
     const cssStart = Date.now();
@@ -257,7 +257,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const jsPrompt = buildWebsiteJsPrompt(allPagesHtml);
     options.onStep?.('js', jsPrompt);
     const jsMessages: ChatMessage[] = [
-      { role: 'system', content: promptRegistry.getPrompt('website-js') },
+      { role: 'system', content: promptRegistry.getPrompt('website-system') },
       { role: 'user', content: jsPrompt },
     ];
     const jsStart = Date.now();
@@ -308,7 +308,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         .map((tr) => `analyze_site("${tr.part}"): ${JSON.stringify(tr.result)}`)
         .join('\n');
       const verifyMessages: ChatMessage[] = [
-        { role: 'system', content: promptRegistry.getPrompt('website-verify') },
+        { role: 'system', content: promptRegistry.getPrompt('website-system') },
         { role: 'user', content: `${buildWebsiteVerifyPrompt(allPagesHtml, currentCss, currentJs)}\n\nRISULTATI ANALISI DETERMINISTICA (fonte di verità, calcolati lato client):\n${analyzeSummary}` },
       ];
       options.onStep?.('verify', `pass ${pass + 1} (con analyze_site)`);

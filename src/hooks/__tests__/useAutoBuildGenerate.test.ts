@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => ({
   generateLogo: vi.fn(),
   processPrompt: vi.fn(),
   generateCopy: vi.fn(),
+  generateSite: vi.fn(),
   providerSupportsVision: vi.fn(() => false),
   getAiVisionEnabled: vi.fn(() => false),
   svgToPng: vi.fn(),
@@ -81,6 +82,12 @@ vi.mock('../../ai/cardOrchestrator', () => ({
 vi.mock('../../ai/flyerOrchestrator', () => ({
   FlyerAIOrchestrator: vi.fn().mockImplementation(function () {
     return { generateCopy: mocks.generateCopy };
+  }),
+}));
+
+vi.mock('../../ai/websiteOrchestrator', () => ({
+  WebsiteOrchestrator: vi.fn().mockImplementation(function () {
+    return { generateSite: mocks.generateSite };
   }),
 }));
 
@@ -134,8 +141,14 @@ beforeEach(() => {
   mocks.generateCopy.mockResolvedValue({
     flyer: { content: { headline: 'H', subheadline: 'S', body: 'B', cta: { label: 'C' } } },
     response: { content: '{}', usage },
-    changes: ['copy_generated'],
     applied: true,
+    changes: ['copy:generated'],
+  });
+  mocks.generateSite.mockResolvedValue({
+    site: { html: '<h1>x</h1>', css: 'body{}', js: '//', pages: ['index'], pagesHtml: {} },
+    response: { content: '{}', usage },
+    changes: ['html:generated'],
+    aiCall: { costUsd: 0 },
   });
 });
 
@@ -249,6 +262,38 @@ describe('useAutoBuildGenerate', () => {
     });
     expect(result.current.state.statuses.logo_1).toBe('done');
     expect(result.current.state.errors.logo_1).toBeUndefined();
+  });
+
+  it('T12: generateSite riceve SOLO logoBase64, mai la card/flyer (vision rule)', async () => {
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    const docs: AutoBuildDoc[] = [
+      { id: 'card_1', documentType: 'businessCard', title: 'Card', data: { briefContext: 'bar', front: { name: 'Mario', photoUrl: 'data:image/png;base64,CARD' }, autoGeneratePending: true } },
+      { id: 'flyer_1', documentType: 'flyer', title: 'Flyer', data: { briefContext: 'bar', content: { heroImage: 'data:image/png;base64,FLYER' }, autoGeneratePending: true } },
+      { id: 'website_1', documentType: 'website', title: 'Sito', data: { briefContext: 'bar', autoGeneratePending: true } },
+    ];
+    await act(async () => {
+      await result.current.generateAll(docs, customer);
+    });
+    const siteOpts = mocks.generateSite.mock.calls[0][1];
+    // logoBase64 è l'UNICO input visivo accettato (regola T12: card/flyer MAI al website)
+    const html = String(siteOpts.logoBase64 ?? '');
+    expect(html).not.toContain('CARD');
+    expect(html).not.toContain('FLYER');
+    // il websiteOrchestrator non riceve mai immagini card/flyer nelle options
+    expect(siteOpts.visionPreviews ?? []).toHaveLength(0);
+    expect(mocks.generateSite).toHaveBeenCalledTimes(1);
+  });
+
+  it('T12: vision card/flyer non viene MAI passata nemmeno in agentMode', async () => {
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    mocks.agentRun.mockImplementation(async (_brief: any, _docs: any, _ctx: any, opts: any) => {
+      await opts.onToolResult({ name: 'generate_website', ok: true, summary: 'Sito', data: { site: { html: 'x', css: '', js: '', pages: ['index'], pagesHtml: {} } } });
+    });
+    await act(async () => {
+      await result.current.generateAll(makeDocs(), customer, { agentMode: true });
+    });
+    // generateSite (sub-orchestratore) mai chiamato → card/flyer mai arrivate
+    expect(mocks.generateSite).not.toHaveBeenCalled();
   });
 
   it('autoGeneratePending azzerato nei dati salvati', async () => {
