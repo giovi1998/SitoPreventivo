@@ -48,6 +48,9 @@ function makeWebsite(overrides: Partial<Website> = {}): Partial<Website> {
       cta: '',
       sections: 'hero',
       features: '',
+      address: '',
+      phone: '',
+      email: '',
       contacts: '',
       socials: [],
       mapsUrl: '',
@@ -75,6 +78,16 @@ describe('buildWebsiteFullDocument', () => {
     expect(doc).toContain('<style>h1{color:red}</style>');
     expect(doc).toContain('<h1>Ciao</h1>');
     expect(doc).toContain('<script>console.log(1)</script>');
+  });
+
+  it('inietta link Google Fonts se fontFamily è un font Google', () => {
+    const doc = buildWebsiteFullDocument('<h1>X</h1>', 'h1{}', '', 'Poppins');
+    expect(doc).toContain('fonts.googleapis.com/css2?family=Poppins');
+  });
+
+  it('nessun link font per system fonts o vuoto', () => {
+    expect(buildWebsiteFullDocument('<h1>X</h1>', '', '', 'Georgia')).not.toContain('fonts.googleapis.com');
+    expect(buildWebsiteFullDocument('<h1>X</h1>', '', '', '')).not.toContain('fonts.googleapis.com');
   });
 });
 

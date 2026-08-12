@@ -3,13 +3,26 @@ import { saveAs } from 'file-saver';
 import type { Website } from './schemas/website';
 import { mergeWebsiteWithDefaults } from './schemas/website';
 
-export function buildWebsiteFullDocument(html: string, css: string, js: string): string {
+/** Font Google caricabili via link (system fonts esclusi). */
+const GOOGLE_FONT_FAMILIES = new Set([
+  'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins',
+  'Source Sans 3', 'DM Sans', 'Figtree', 'Plus Jakarta Sans', 'Oswald',
+  'Raleway', 'Playfair Display', 'Merriweather', 'Outfit', 'Source Serif 4',
+]);
+
+function googleFontsLink(fontFamily: string): string {
+  const name = fontFamily.split(',')[0]?.trim() || fontFamily;
+  if (!GOOGLE_FONT_FAMILIES.has(name)) return '';
+  return `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${name.replace(/ /g, '+')}:wght@400;600;700&display=swap">`;
+}
+
+export function buildWebsiteFullDocument(html: string, css: string, js: string, fontFamily?: string): string {
   return `<!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>${css}</style>
+${fontFamily ? googleFontsLink(fontFamily) : ''}<style>${css}</style>
 </head>
 <body>
 ${html}
@@ -84,7 +97,7 @@ export async function exportWebsiteZip(
 
   for (const page of pages) {
     const pageHtml = page === 'index' ? website.html : (website.pagesHtml || {})[page] || website.html;
-    const doc = buildWebsiteFullDocument(replaceSrcs(pageHtml), website.css, website.js);
+    const doc = buildWebsiteFullDocument(replaceSrcs(pageHtml), website.css, website.js, website.brief.font);
     folder.file(`${page}.html`, doc);
   }
 

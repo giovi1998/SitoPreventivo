@@ -13,6 +13,7 @@ import { resolveProviderId, providerSupportsVision } from '../utils/resolveProvi
 import { incrementAiStats, type AiStats } from '../utils/aiStats';
 import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
+import { enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss } from '../utils/website/sanitizeGenerated';
 import { newRunId, newSpanId } from '../ai/runTrace';
 import type { RunTraceOptions } from '../ai/types';
 import { AgentOrchestrator } from '../ai/agentOrchestrator';
@@ -493,15 +494,20 @@ async function generateWebsiteDraft(
       logoBase64,
       customerId: options?.customerId,
       sessionId: doc.id,
+      generateHeroImages: async (prompt) => {
+        const hero = await generateFlashImage(prompt, 'hero', {});
+        return hero?.dataUrl ?? null;
+      },
       ...options?.runTrace,
     },
   );
   const aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'websiteCode', result.aiCall?.costUsd ?? textCost(result.response?.usage));
+  const contacts = String(briefData.contacts || '');
   await saveDraft(doc, {
     ...(doc.data as Record<string, unknown>),
-    html: injectLogoIntoHtml(result.site.html, logoBase64 || null),
-    css: result.site.css,
-    js: result.site.js,
+    html: enforceMapIframe(injectLogoIntoHtml(result.site.html, logoBase64 || null), contacts),
+    css: ensureHamburgerCss(result.site.css),
+    js: sanitizeGeneratedJs(result.site.js),
     pages: result.site.pages,
     pagesHtml: result.site.pagesHtml,
     source: 'ai',
@@ -657,7 +663,7 @@ export function useAutoBuildGenerate() {
   );
 
   const generateOne = useCallback(
-    async (doc: AutoBuildDoc, customer: AutoBuildCustomer, options?: AutoBuildGenerateOptions): Promise<void> => {
+    async (doc: AutoBuildDoc, customer: AutoBuildCustomer, options?: AutoBuildGenerateOptions): Promise<string | null> => {
       setStatus(doc.id, 'running');
       setDocError(doc.id, null);
       setState((prev) => ({ ...prev, running: true, currentStep: `Genero ${STEP_LABEL[doc.documentType] ?? doc.documentType}…` }));
@@ -669,16 +675,18 @@ export function useAutoBuildGenerate() {
         stepName: doc.documentType,
         stepSpanId: newSpanId(),
       };
+      let genError: string | null = null;
       try {
         await runDoc(doc, customer, undefined, { ...options, runTrace });
         setStatus(doc.id, 'done');
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error('Auto-build draft AI fallito', { route: 'useAutoBuildGenerate', docId: doc.id, err: String(err) });
+        genError = err instanceof Error ? err.message : String(err);
+        logger.error('Auto-build draft AI fallito', { route: 'useAutoBuildGenerate', docId: doc.id, err: genError });
         setStatus(doc.id, 'error');
-        setDocError(doc.id, msg);
+        setDocError(doc.id, genError);
       }
       setState((prev) => ({ ...prev, running: false, currentStep: null }));
+      return genError;
     },
     [runDoc, setStatus, setDocError],
   );

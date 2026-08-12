@@ -33,6 +33,7 @@ export interface UseAIWebsiteReturn {
       logoBase64?: string;
       scrapedReference?: string;
       visionPreviews?: string[];
+      generateHeroImages?: (prompt: string) => Promise<string | null>;
     },
   ) => Promise<WebsiteProcessResult>;
   refine: (
@@ -102,6 +103,7 @@ export function useAIWebsite(userEmail?: string, sessionId?: string): UseAIWebsi
         logoBase64?: string;
         scrapedReference?: string;
         visionPreviews?: string[];
+        generateHeroImages?: (prompt: string) => Promise<string | null>;
       },
     ) => {
       const requestId = newRequestId();
@@ -123,6 +125,7 @@ export function useAIWebsite(userEmail?: string, sessionId?: string): UseAIWebsi
           logoBase64: options?.logoBase64,
           scrapedReference: options?.scrapedReference,
           visionPreviews: options?.visionPreviews,
+          generateHeroImages: options?.generateHeroImages,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
