@@ -5,6 +5,7 @@
 // `svc` è la facade dataService (riferimenti cross-modulo a call time).
 import { IS_LOCAL, lsGet, lsSet, api, cryptoRandomId, buildBriefContext, buildAiFillPrompt, extractJsonObject } from './core.js';
 import { chunkMarkdown, scrapeFirecrawlLocal, extractLogoFromFirecrawl, extractWebImages, saveKnowledgeChunks, getKnowledgeChunks } from '../firecrawlLocal.js';
+import { topKChunks } from '../knowledgeTopK.js';
 
 // TB-030 sync customer→website (locale): aggiorna i doc website del cliente
 // con i campi brand. Last-write-wins con confronto updatedAt: il doc vince
@@ -248,7 +249,6 @@ export function createCrmMethods(svc) {
     },
 
     async generateEmbedding(text) {
-      if (IS_LOCAL) return { error: 'Embedding non disponibile in modalità locale' };
       return api('POST', '/ai/embeddings', { input: text });
     },
 
@@ -277,7 +277,13 @@ export function createCrmMethods(svc) {
             ]);
             const providerId = resolveProviderId();
             const provider = providerRegistry.getProvider(providerId);
-            const chunk = getKnowledgeChunks(id)[0]?.chunk || '';
+            const knowledge = getKnowledgeChunks(id);
+            // RAG locale: embedding via dev proxy (chiave server-side), poi
+            // top-k cosine (modulo condiviso server/client). Senza embedding
+            // → fallback ordine di inserimento.
+            const queryText = [c.sector, c.activity].filter(Boolean).join(' ');
+            const queryEmbedding = queryText ? await this.generateEmbedding(queryText) : null;
+            const chunk = topKChunks(knowledge, queryEmbedding?.data?.embedding ?? null, 1)[0]?.chunk || '';
             const response = await provider.chat([
               { role: 'system', content: 'Sei un consulente di branding. Rispondi SOLO con un oggetto JSON valido, senza testo extra.' },
               { role: 'user', content: buildAiFillPrompt(c, missing, chunk) },
@@ -327,6 +333,15 @@ export function createCrmMethods(svc) {
         const autoGeneratePending = autoGenerate ? true : false;
         // Brief context stringa per AI (passato ai draft come briefContext)
         const briefContext = buildBriefContext(cust);
+        // RAG: top-k chunk knowledge del sito cliente iniettati nel briefContext
+        // di TUTTI i draft (logo/card/flyer/website usano lo stesso contesto).
+        const knowledge = getKnowledgeChunks(id);
+        const queryText = [cust.sector, cust.activity].filter(Boolean).join(' ');
+        const queryEmbedding = queryText ? await this.generateEmbedding(queryText) : null;
+        const topChunks = topKChunks(knowledge, queryEmbedding?.data?.embedding ?? null, 3);
+        const briefContextWithKnowledge = topChunks.length > 0
+          ? `${briefContext}\nContenuto sito web:\n${topChunks.map((c) => c.chunk).join('\n')}`
+          : briefContext;
         // Shape allineate a createEmpty*() factories (documentSchemas.ts).
         // Deve rimanere identico al path PROD api/index.ts auto-build.
         const drafts = [
@@ -347,7 +362,7 @@ export function createCrmMethods(svc) {
                 textColorMode: 'auto', textOffsetX: 0, textOffsetY: 0, textScale: 1,
                 taglineOffsetX: 0, taglineOffsetY: 0, textPosition: 'overlay',
               },
-              brief: cust.activity || '', briefContext, concepts: [], selected: -1,
+              brief: cust.activity || '', briefContext: briefContextWithKnowledge, concepts: [], selected: -1,
               edits: { primaryText: cust.businessName, primaryColor: '#01696F', secondaryColor: '#1a1a2e' },
               aiStats: { totalCostUsd: '0', calls: {} },
               autoGeneratePending: !detectedLogo,
@@ -380,7 +395,7 @@ export function createCrmMethods(svc) {
               grid: {}, backGrid: {},
               aiStats: { totalCostUsd: '0', calls: {} },
               autoGeneratePending,
-              briefContext: buildBriefContext(cust),
+              briefContext: briefContextWithKnowledge,
               createdAt: now, updatedAt: now,
             },
           },
@@ -404,7 +419,7 @@ export function createCrmMethods(svc) {
               sector: cust.sector || 'generico',
               aiStats: { totalCostUsd: '0', calls: {} },
               autoGeneratePending,
-              briefContext: buildBriefContext(cust),
+              briefContext: briefContextWithKnowledge,
               createdAt: now, updatedAt: now,
             },
           },
@@ -434,7 +449,7 @@ export function createCrmMethods(svc) {
                 mapsUrl: '',
                 notes: '',
               },
-              briefContext: buildBriefContext(cust),
+              briefContext: briefContextWithKnowledge,
               html: '', css: '', js: '',
               framework: 'vanilla', style: 'modern', pages: ['index'],
               source: 'ai',

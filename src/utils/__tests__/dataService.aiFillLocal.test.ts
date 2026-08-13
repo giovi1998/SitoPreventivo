@@ -30,9 +30,14 @@ describe('TB-027 aiFillCustomer LOCAL: AI reale via dev proxy + fallback lookup'
     localStorage.setItem('pq_customer_knowledge:v1', JSON.stringify({
       cust_1: [{ chunk: 'Cocktail bar in centro a Cagliari, aperto tutti i giorni.', source: 'firecrawl:homepage', createdAt: '2026-07-29' }],
     }));
-    const fetchSpy = vi.fn().mockResolvedValue(aiChatResponse(
-      '{"mood":"caldo familiare","target":"famiglie del quartiere","preferredColors":"bordeaux e crema","activity":"Trattoria tipica sarda"}',
-    ));
+    const fetchSpy = vi.fn().mockImplementation(async (url, opts) => {
+      if (url === '/api/ai/embeddings') {
+        return { ok: true, json: async () => ({ data: { embedding: [1, 0] } }) };
+      }
+      return aiChatResponse(
+        '{"mood":"caldo familiare","target":"famiglie del quartiere","preferredColors":"bordeaux e crema","activity":"Trattoria tipica sarda"}',
+      );
+    });
     vi.stubGlobal('fetch', fetchSpy);
     const ds = (await import('../dataService')).default;
     const res = await ds.aiFillCustomer('cust_1');
@@ -44,10 +49,11 @@ describe('TB-027 aiFillCustomer LOCAL: AI reale via dev proxy + fallback lookup'
       activity: 'Trattoria tipica sarda',
     });
     expect(typeof res.data.costUsd).toBe('number');
-    // chiamata al dev proxy /api/ai/chat (provider default ollama)
-    const [url, opts] = fetchSpy.mock.calls[0];
-    expect(url).toBe('/api/ai/chat');
-    expect(String(opts.body)).toContain('Cocktail bar in centro a Cagliari');
+    // prima la query embedding al dev proxy, poi la chat AI
+    expect(fetchSpy.mock.calls[0][0]).toBe('/api/ai/embeddings');
+    expect(String(fetchSpy.mock.calls[0][1].body)).toContain('bar');
+    const [, chatOpts] = fetchSpy.mock.calls[1];
+    expect(String(chatOpts.body)).toContain('Cocktail bar in centro a Cagliari');
     // persistito sul customer
     const cust = JSON.parse(localStorage.getItem('pq_customers:v1') || '[]')[0];
     expect(cust.mood).toBe('caldo familiare');
