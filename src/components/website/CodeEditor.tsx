@@ -19,8 +19,9 @@ export default function CodeEditor({ value, onChange, language }: CodeEditorProp
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [{ EditorView, basicSetup }, { html }, { css }, { javascript }] = await Promise.all([
+      const [{ EditorView, basicSetup }, { oneDark }, { html }, { css }, { javascript }] = await Promise.all([
         import('codemirror'),
+        import('@codemirror/theme-one-dark'),
         import('@codemirror/lang-html'),
         import('@codemirror/lang-css'),
         import('@codemirror/lang-javascript'),
@@ -32,6 +33,7 @@ export default function CodeEditor({ value, onChange, language }: CodeEditorProp
         doc: value,
         extensions: [
           basicSetup,
+          oneDark,
           lang,
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChange(update.state.doc.toString());
