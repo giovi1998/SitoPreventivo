@@ -34,6 +34,7 @@ vi.mock('../../utils/dataService', () => ({
     autoBuildCustomer: vi.fn().mockResolvedValue({ data: {} }),
     updateCustomer: vi.fn().mockResolvedValue({ data: {} }),
     saveDocument: vi.fn().mockResolvedValue({ data: {} }),
+    getCustomerKnowledge: vi.fn().mockResolvedValue({ data: [] }),
     getUserSettings: vi.fn().mockResolvedValue({ userEmail: 'admin@gmail.com' }),
     saveUserSettings: vi.fn().mockResolvedValue({ success: true }),
   },
@@ -57,6 +58,7 @@ beforeEach(() => {
   (dataService.researchCustomer as unknown as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue({ data: {} });
   (dataService.aiFillCustomer as unknown as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue({ data: {} });
   (dataService.autoBuildCustomer as unknown as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue({ data: {} });
+  (dataService.getCustomerKnowledge as unknown as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue({ data: [] });
 });
 
 function renderDetail() {
@@ -738,5 +740,39 @@ describe('TB-027 CustomerDetail', () => {
     expect(detail).toContain('"logo"');
     expect(detail).toContain('"businessCard"');
     expect(detail).toContain('"replaced": 1');
+  });
+
+  it('RAG: pannello knowledge mostra chunk dopo research, con conteggio', async () => {
+    const customer = {
+      ...baseCustomer,
+      researchStatus: { web: 'ok', logo: 'no_logo' },
+      webData: { title: 'Bar Da Mario', markdownPreview: 'preview' },
+    };
+    (dataService.getCustomer as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ data: customer });
+    (dataService.getCustomerKnowledge as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: [
+        { chunk: 'Cocktail bar in centro a Cagliari.', source: 'firecrawl:homepage', embedding: [1, 0] },
+        { chunk: 'Aperto tutti i giorni fino a tardi.', source: 'firecrawl:homepage', embedding: null },
+      ],
+    });
+    renderDetail();
+    await waitFor(() => {
+      expect(screen.getByTestId('crm-knowledge-section')).toBeTruthy();
+    });
+    expect(screen.getByText(/2 chunk/)).toBeTruthy();
+    expect(screen.getByText(/Cocktail bar in centro a Cagliari\./)).toBeTruthy();
+    expect(screen.getByText(/Aperto tutti i giorni/)).toBeTruthy();
+    expect((dataService.getCustomerKnowledge as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith('cust_1');
+  });
+
+  it('RAG: senza chunk knowledge il pannello non appare', async () => {
+    (dataService.getCustomer as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { ...baseCustomer, researchStatus: { web: 'ok', logo: 'no_logo' } },
+    });
+    renderDetail();
+    await waitFor(() => {
+      expect(screen.getByTestId('crm-research-section')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('crm-knowledge-section')).toBeNull();
   });
 });

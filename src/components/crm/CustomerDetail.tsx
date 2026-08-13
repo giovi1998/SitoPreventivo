@@ -13,6 +13,7 @@ import { useCustomerLogger } from '../../hooks/useCustomerLogger';
 import CustomerAiLogPanel from './CustomerAiLogPanel';
 import CustomerResearchSection from './CustomerResearchSection';
 import CustomerWebDataPanel from './CustomerWebDataPanel';
+import CustomerKnowledgePanel from './CustomerKnowledgePanel';
 import { prefetchRemotePrompts, REMOTE_PROMPT_PILOT } from '../../utils/ai/remotePrompt';
 
 const AB_TEST_PROMPTS = [
@@ -693,6 +694,8 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       {hasWebData && (
         <CustomerWebDataPanel webData={webData} />
       )}
+
+      <CustomerKnowledgePanel customerId={customerId} reloadKey={customer?.updatedAt ?? ''} />
 
       {hasWebAnswers && (
         <section className="crm-section" data-testid="crm-web-answers-section">
