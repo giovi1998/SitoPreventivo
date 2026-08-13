@@ -3,6 +3,31 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-13
+
+- **RAG pipeline completa — chunking/embedding/retrieval + tracing Langfuse
+  + UI (2026-08-13)** (da `to-be-done.md` "RAG avanzato"):
+  - **Embedding server-side**: `saveCustomerKnowledge` embedda ogni chunk
+    con `gemini-embedding-2` (`embedText` in `crm.ts`, chiave mai nel
+    browser, best-effort [] su errore). Colonna `embedding` jsonb
+    finalmente popolata.
+  - **Retrieval cosine top-k**: nuovo modulo condiviso
+    `src/utils/knowledgeTopK.js` (cosine + top-k + `mergeKnowledgeIntoBrief`,
+    fallback ordine di inserimento). Server: `getBestKnowledgeChunks`
+    sostituisce `chunks[0]` in ai-fill e auto-build. Locale: stesso modulo
+    in `crm.js`.
+  - **Chunk nel briefContext di TUTTI i draft**: auto-build (server
+    `handler.ts` + locale `crm.js`) inietta top-k chunk in logo/card/flyer/
+    website. WebsiteEditor carica chunk live al mount (idempotente).
+  - **Tracing Langfuse**: ai-fill tracciato (`crm-ai-fill`, feature crm,
+    usage+costUsd); embedding tracciato con observation type `embedding`
+    (nuovo campo `observationType` in `langfuse.ts`, docs v4); dev proxy
+    `/api/ai/embeddings` aggiunto alla allowlist con trace.
+  - **UI**: `CustomerKnowledgePanel` in CustomerDetail (lista chunk +
+    badge conteggio + dimensione embedding). Fix route mancante
+    `GET /customers/:id/knowledge` (prima 404 in prod).
+  - Test: 3086 verdi, typecheck 0, build zero-warning.
+
 ## 2026-08-12
 
 - **Wayfinder Langfuse agenti — trace gerarchica agente→sub-agente

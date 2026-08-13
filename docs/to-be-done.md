@@ -169,8 +169,6 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   card/flyer → generazione AI con background persistente (no strip quota).
 - [ ] **Creazione oggetti senza clienti**: flusso standalone (Collection →
   Nuovo) deve restare invariato e funzionante dopo le modifiche CRM.
-- [ ] **RAG avanzato**: usare `customer_knowledge` (chunk Firecrawl) con
-  embedding `gemini-embedding-2` per retrieval contestuale negli orchestratori.
 - [ ] **Miglioria caricamento immagine logo in clienti**: preview persistente
   anche dopo navigazione, compressione ottimale, opzione "usa questo logo
   ovunque" (card/flyer/logo).
