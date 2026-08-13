@@ -677,7 +677,11 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const { model, messages, max_tokens, tools, options: ollamaOptions, format } = v.data;
       const ollamaModel = model || 'minimax-m3:cloud';
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60000);
+      // Ollama con thinking 'max' + output 16k tok: le generazioni website
+      // (CSS/JS lunghi) superano i 60s — timeout allineato al path non-stream
+      // (600s, gotcha §26.20). A 60s l'abort troncava lo stream → JSON
+      // incompleto → not_json → sito fallback (regressione prod 2026-08-13).
+      const timeout = setTimeout(() => controller.abort(), 600000);
       let apiRes: Response;
       try {
         const ollamaBody: Record<string, unknown> = {
@@ -1219,7 +1223,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > GEMINI_IMG_CLAMP_BYTES) {
         logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
-        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' }, requestId);
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' }, requestId);
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
@@ -1319,7 +1323,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > GEMINI_IMG_CLAMP_BYTES) {
         logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
-        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' }, requestId);
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' }, requestId);
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
@@ -1422,7 +1426,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > GEMINI_IMG_CLAMP_BYTES) {
         logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
-        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' }, requestId);
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' }, requestId);
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
@@ -1514,7 +1518,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > GEMINI_IMG_CLAMP_BYTES) {
         logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
-        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' }, requestId);
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' }, requestId);
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
@@ -1636,7 +1640,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
       if (sizeBytes > GEMINI_IMG_CLAMP_BYTES) {
         logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
-        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' }, requestId);
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' }, requestId);
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB, provider: 'gemini-flash' });
