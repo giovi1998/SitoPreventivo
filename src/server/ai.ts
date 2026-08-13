@@ -676,7 +676,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const { model, messages, max_tokens, tools, options: ollamaOptions, format } = v.data;
       const ollamaModel = model || 'minimax-m3:cloud';
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60000);
+      const timeout = setTimeout(() => controller.abort(), 600000); // stream troncato a 60s → not_json → sito fallback (regressione 2026-08-13, gotcha §26.20)
       let apiRes: Response;
       try {
         const ollamaBody: Record<string, unknown> = {
