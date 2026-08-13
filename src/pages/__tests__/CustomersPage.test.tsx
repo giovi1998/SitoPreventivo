@@ -31,6 +31,7 @@ vi.mock('../../utils/dataService', () => ({
     autoBuildCustomer: vi.fn().mockResolvedValue({ data: {} }),
     updateCustomer: vi.fn().mockResolvedValue({ data: {} }),
     saveDocument: vi.fn().mockResolvedValue({ data: {} }),
+    getCustomerKnowledge: vi.fn().mockResolvedValue({ data: [] }),
     getUserSettings: vi.fn().mockResolvedValue({ userEmail: 'admin@gmail.com' }),
     saveUserSettings: vi.fn().mockResolvedValue({ success: true }),
   },
