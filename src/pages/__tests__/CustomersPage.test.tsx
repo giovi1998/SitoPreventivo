@@ -108,4 +108,33 @@ describe('CustomersPage routing per URL', () => {
       expect(screen.getByTestId('crm-card-cust_1')).toBeTruthy();
     }, { timeout: LAZY_TIMEOUT });
   });
+
+  it('refresh dopo azione NON smonta CustomerDetail (no splash ricarica)', async () => {
+    // getCustomers sospeso: simula latenza rete durante la generazione AI.
+    // Con il dettaglio aperto lo splash esterno non deve MAI apparire
+    // (il dettaglio ha il proprio loading interno).
+    let resolveList!: (v: unknown) => void;
+    getCustomersMock.mockReturnValue(new Promise((r) => { resolveList = r; }));
+    renderPage('/app/customers/cust_1');
+    expect(screen.queryByText('Caricamento clienti…')).toBeNull();
+    resolveList({ data: [baseCustomer] });
+    await waitFor(() => {
+      expect(screen.getByTestId('crm-research-btn')).toBeTruthy();
+    }, { timeout: LAZY_TIMEOUT });
+
+    // research → runAction → onRefresh → load() → getCustomers DI NUOVO pending
+    getCustomersMock.mockReturnValue(new Promise((r) => { resolveList = r; }));
+    const callsBefore = getCustomersMock.mock.calls.length;
+    fireEvent.click(screen.getByTestId('crm-research-btn'));
+    await waitFor(() => {
+      expect(getCustomersMock.mock.calls.length).toBeGreaterThan(callsBefore);
+    }, { timeout: LAZY_TIMEOUT });
+    // Il dettaglio DEVE restare montato mentre il refresh è in sospeso
+    expect(screen.queryByText('Caricamento clienti…')).toBeNull();
+    expect(screen.getByTestId('crm-detail-title').textContent).toBe('Bar Da Mario');
+    resolveList({ data: [baseCustomer] });
+    await waitFor(() => {
+      expect(screen.getByTestId('crm-detail-title').textContent).toBe('Bar Da Mario');
+    }, { timeout: LAZY_TIMEOUT });
+  });
 });
