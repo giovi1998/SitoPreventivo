@@ -280,6 +280,7 @@ export default defineConfig(({ mode }) => {
               '/api/ai/chat',
               '/api/ai/chat/stream',
               '/api/ai/prompt',
+              '/api/ai/embeddings',
               '/api/logs',
             ];
             if (!handledPaths.includes(url)) return next();
@@ -683,6 +684,47 @@ export default defineConfig(({ mode }) => {
                 }
               }
 
+              // ─── /api/ai/embeddings (RAG, gemini-embedding-2) ──────
+              if (url === '/api/ai/embeddings' && req.method === 'POST') {
+                if (!apiKey) {
+                  return json(res, 503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                }
+                const input = typeof body.input === 'string' ? body.input : '';
+                if (!input || input.length > 8000) {
+                  return json(res, 400, { error: 'input mancante o troppo lungo' });
+                }
+                const t0 = Date.now();
+                try {
+                  const { GoogleGenAI } = await import('@google/genai');
+                  const ai = new GoogleGenAI({ apiKey });
+                  const result = await ai.models.embedContent({ model: 'models/gemini-embedding-2', contents: input });
+                  const values = result?.embedding?.values || [];
+                  if (!Array.isArray(values) || values.length === 0) {
+                    return json(res, 502, { error: 'Embedding vuoto da Gemini' });
+                  }
+                  await traceDev({
+                    name: 'embed-chunk',
+                    requestId: devReqId(req),
+                    model: 'gemini-embedding-2',
+                    provider: 'gemini',
+                    userEmail: body.userEmail,
+                    customerId: body.customerId,
+                    sessionId: body.customerId,
+                    feature: 'crm',
+                    subfeature: 'embedding',
+                    observationType: 'embedding',
+                    input: { text: input.slice(0, 500) },
+                    output: { dimensions: values.length },
+                    startTime: t0,
+                  });
+                  return json(res, 200, { data: { embedding: values, model: 'gemini-embedding-2' } });
+                } catch (err) {
+                  const msg = String(err?.message || err).slice(0, 200);
+                  await traceDev({ name: 'embed-chunk', requestId: devReqId(req), model: 'gemini-embedding-2', provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, feature: 'crm', subfeature: 'embedding', observationType: 'embedding', input: { text: input.slice(0, 500) }, error: { kind: 'upstream', message: msg }, startTime: t0 });
+                  return json(res, 502, { error: `Embedding error: ${msg}` });
+                }
+              }
+
               if (url === '/api/ai/chat' || url === '/api/ai/chat/stream') {
                 const isStream = url === '/api/ai/chat/stream';
                 let providerId = body.provider || 'deepseek-v4-flash';
@@ -798,6 +840,7 @@ export default defineConfig(({ mode }) => {
             if (id.includes('/html2canvas/')) return 'html2canvas';
             if (id.includes('/@dnd-kit/')) return 'dnd-kit';
             if (id.includes('/qrcode/')) return 'qrcode';
+            if (id.includes('/@codemirror/') || id.includes('/codemirror/') || id.includes('/@lezer/') || id.includes('/@codemirror/') || id.includes('/@codemirror/language/')) return 'codemirror';
           },
         },
       },

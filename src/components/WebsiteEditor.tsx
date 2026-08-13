@@ -23,6 +23,7 @@ import { sanitizeGeneratedWebsite, enforceMapIframe, sanitizeGeneratedJs, ensure
 import { normalizeInlineImages } from '../utils/website/imageNormalize';
 import AIConsole from './ai/AIConsole';
 import { AiFontPicker } from './ai-ui';
+import CodeEditor from './website/CodeEditor';
 import { buildWebsiteFullDocument, exportWebsiteZip } from '../utils/websiteExport';
 import './WebsiteEditor.css';
 
@@ -759,28 +760,27 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
               )}
               <div className="code-editor-container">
                 {codeTab === 'html' && (
-                  <textarea
-                    className="code-textarea"
+                  <CodeEditor
                     value={codePage === 'index' ? website.html : (website.pagesHtml || {})[codePage] || ''}
-                    onChange={(e) => {
+                    onChange={(v) => {
                       if (codePage === 'index') {
-                        updateCode('html', e.target.value);
+                        updateCode('html', v);
                       } else {
                         setWebsite((prev) => ({
                           ...prev,
-                          pagesHtml: { ...(prev.pagesHtml || {}), [codePage]: e.target.value },
+                          pagesHtml: { ...(prev.pagesHtml || {}), [codePage]: v },
                           updatedAt: new Date().toISOString(),
                         }));
                       }
                     }}
-                    spellCheck={false}
+                    language="html"
                   />
                 )}
                 {codeTab === 'css' && (
-                  <textarea className="code-textarea" value={website.css} onChange={(e) => updateCode('css', e.target.value)} spellCheck={false} />
+                  <CodeEditor value={website.css} onChange={(v) => updateCode('css', v)} language="css" />
                 )}
                 {codeTab === 'js' && (
-                  <textarea className="code-textarea" value={website.js} onChange={(e) => updateCode('js', e.target.value)} spellCheck={false} />
+                  <CodeEditor value={website.js} onChange={(v) => updateCode('js', v)} language="javascript" />
                 )}
               </div>
             </div>

@@ -614,6 +614,26 @@
 .code-editor-container {
   flex: 1;
   min-height: 300px;
+  display: flex;
+}
+
+.code-editor-cm {
+  flex: 1;
+  min-height: 400px;
+  overflow: hidden;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #1e1e1e;
+}
+
+.code-editor-cm .cm-editor {
+  height: 100%;
+  font-size: 13px;
+}
+
+.code-editor-cm .cm-scroller {
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+  line-height: 1.5;
 }
 
 .code-textarea {
