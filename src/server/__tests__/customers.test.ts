@@ -12,6 +12,27 @@ vi.mock('drizzle-orm/neon-http', () => ({
   drizzle: vi.fn(() => makeDb()),
 }));
 
+// RAG: embedContent deterministico per test di retrieval (embedding del
+// testo: cocktail → [1,0], panificio → [0,1], default → [0.9,0.1]).
+vi.mock('@google/genai', () => {
+  class GoogleGenAI {
+    models = {
+      embedContent: vi.fn(async ({ contents }: any) => {
+        const t = String(contents ?? '').toLowerCase();
+        const values = t.includes('cocktail') ? [1, 0] : t.includes('panificio') ? [0, 1] : [0.9, 0.1];
+        return { embedding: { values } };
+      }),
+    };
+  }
+  return { GoogleGenAI };
+});
+
+const ingestSpy = vi.fn();
+vi.mock('../langfuse', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../langfuse')>();
+  return { ...mod, ingestLangfuse: ingestSpy };
+});
+
 function makeDb() {
   return {
     select: vi.fn(() => makeSelectChain()),
@@ -91,6 +112,7 @@ beforeEach(() => {
   mockDbState.nextReturning = null;
   delete process.env.DEEPSEEK_API_KEY;
   vi.restoreAllMocks();
+  ingestSpy.mockReset();
   vi.resetModules();
 });
 
@@ -268,8 +290,7 @@ describe('TB-027 /api/customers', () => {
     expect(lastUpdate.mood).toBe('elegante notturno');
   });
 
-  it('POST /customers/:id/ai-fill DeepSeek fallisce → fallback lookup', async () => {
-    process.env.DEEPSEEK_API_KEY = 'ds_test';
+  it('POST /customers/:id/ai-fill DeepSeek fallisce → fallback lookup', async () => {    process.env.DEEPSEEK_API_KEY = 'ds_test';
     mockDbState.selectResults.push(
       [{ id: 'cust_1', businessName: 'Bar', sector: 'bar', mood: null, target: null, preferredColors: null, activity: null }],
       [],
@@ -281,6 +302,87 @@ describe('TB-027 /api/customers', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.data.aiSuggestedFields.mood).toBe('moderno vivace');
     expect(res.body.data.costUsd).toBe(0);
+  });
+
+  it('RAG: ai-fill tracciato su Langfuse (name crm-ai-fill, feature crm, costUsd > 0)', async () => {
+    process.env.DEEPSEEK_API_KEY = 'ds_test';
+    mockDbState.selectResults.push(
+      [{ id: 'cust_1', businessName: 'Bar', sector: 'bar', mood: null, target: null, preferredColors: null, activity: null }],
+      [{ chunk: 'Cocktail bar in centro a Cagliari.' }],
+    );
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: '{"mood":"elegante notturno","target":"giovani professionisti","preferredColors":"blu notte e oro","activity":"Cocktail bar premium"}' } }],
+      usage: { prompt_tokens: 1000, completion_tokens: 500, total_tokens: 1500 },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/ai-fill', body: { adminEmail: 'admin@gmail.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(ingestSpy).toHaveBeenCalled();
+    const trace = ingestSpy.mock.calls[ingestSpy.mock.calls.length - 1][0];
+    expect(trace.name).toBe('crm-ai-fill');
+    expect(trace.feature).toBe('crm');
+    expect(trace.subfeature).toBe('ai-fill');
+    expect(trace.customerId).toBe('cust_1');
+    expect(trace.costUsd).toBeGreaterThan(0);
+    expect(trace.usage.promptTokens).toBe(1000);
+  });
+
+  it('RAG: research salva chunk CON embedding (prompt "panificio" → [0,1])', async () => {
+    process.env.FIRECRAWL_API_KEY = 'fc_test';
+    mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Panificio Sardo', contacts: { website: 'https://pani.example.com' } }]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      const u = String(url);
+      if (u.includes('api.firecrawl.dev/v2/scrape')) {
+        return new Response(JSON.stringify({ data: { markdown: 'Panificio Sardo\n\nPane fresco ogni giorno.', metadata: {}, branding: {} } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/research', body: { adminEmail: 'admin@gmail.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.knowledgeCount).toBeGreaterThanOrEqual(1);
+    const inserts = mockDbState.inserted.filter((v: any) => 'chunk' in v);
+    expect(inserts.length).toBeGreaterThanOrEqual(1);
+    for (const ins of inserts) {
+      expect(Array.isArray(ins.embedding)).toBe(true);
+      expect(ins.embedding).toEqual([0, 1]);
+    }
+  });
+
+  it('RAG: ai-fill con embedding usa il chunk più simile (query "panificio")', async () => {
+    process.env.DEEPSEEK_API_KEY = 'ds_test';
+    mockDbState.selectResults.push(
+      [{ id: 'cust_1', businessName: 'Panificio', sector: 'panificio', mood: null, target: null, preferredColors: null, activity: null }],
+      [
+        { chunk: 'Cocktail bar in centro a Cagliari.', embedding: [1, 0] },
+        { chunk: 'Pane e dolci sardi.', embedding: [0, 1] },
+      ],
+    );
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      choices: [{ message: { content: '{"mood":"caldo tradizionale","target":"famiglie","preferredColors":"grana e marrone","activity":"Panificio artigianale"}' } }],
+      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/ai-fill', body: { adminEmail: 'admin@gmail.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    const dsCall = fetchSpy.mock.calls.find(([url]) => String(url).includes('api.deepseek.com'));
+    const dsBody = String(dsCall?.[1]?.body);
+    expect(dsBody).toContain('Pane e dolci sardi');
+    expect(dsBody).not.toContain('Cocktail bar');
+  });
+
+  it('RAG: GET /customers/:id/knowledge admin → lista chunk (con embedding)', async () => {
+    mockDbState.selectResults.push([{ chunk: 'Pane e dolci sardi.', source: 'firecrawl:homepage', embedding: [0, 1] }]);
+    const res = await callHandler({
+      method: 'GET', url: '/api/customers/cust_1/knowledge?adminEmail=admin@gmail.com', body: {},
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].chunk).toBe('Pane e dolci sardi.');
+    expect(res.body.data[0].embedding).toEqual([0, 1]);
   });
 
   it('POST /customers/:id/auto-build crea 4 draft (logo/card/flyer/website)', async () => {
@@ -371,8 +473,43 @@ describe('TB-027 /api/customers', () => {
     expect(brief).toContain('Palette preferita cliente (secondaria): #112233');
   });
 
-  it('POST /customers/:id/auto-build skip logo se detectedLogoUrl presente → 3 draft (card/flyer/website)', async () => {
-    mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', sector: 'bar', contacts: {}, detectedLogoUrl: 'data:image/x-icon;base64,x' }]);
+  it('RAG: auto-build inietta top-k chunk knowledge nel briefContext di TUTTI i draft', async () => {
+    mockDbState.selectResults.push([{
+      id: 'cust_1', businessName: 'Panificio Sardo', sector: 'panificio', activity: 'Pane e dolci sardi',
+      contacts: {}, preferredColors: '#112233',
+    }]);
+    // customer_knowledge: 2 chunk con embedding (query "panificio" → [0,1])
+    mockDbState.selectResults.push([
+      { chunk: 'Cocktail bar in centro a Cagliari.', source: 'firecrawl:homepage', embedding: [1, 0] },
+      { chunk: 'Pane e dolci sardi, forno a legna dal 1980.', source: 'firecrawl:homepage', embedding: [0, 1] },
+    ]);
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(mockDbState.inserted.length).toBe(4);
+    for (const d of mockDbState.inserted) {
+      const brief = d.data?.briefContext || '';
+      expect(brief).toContain('Pane e dolci sardi, forno a legna dal 1980');
+      expect(brief).not.toContain('Cocktail bar');
+    }
+  });
+
+  it('RAG: auto-build senza chunk knowledge → briefContext invariato (nessun crash)', async () => {
+    mockDbState.selectResults.push([{
+      id: 'cust_1', businessName: 'Bar', sector: 'bar', contacts: {}, preferredColors: '#112233',
+    }]);
+    mockDbState.selectResults.push([]);
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
+    });
+    expect(res.statusCode).toBe(201);
+    const brief = mockDbState.inserted[0]?.data?.briefContext || '';
+    expect(brief).toContain('Attività: Bar');
+    expect(brief).not.toContain('Contenuto sito web');
+  });
+
+  it('POST /customers/:id/auto-build skip logo se detectedLogoUrl presente → 3 draft (card/flyer/website)', async () => {    mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'Bar', sector: 'bar', contacts: {}, detectedLogoUrl: 'data:image/x-icon;base64,x' }]);
     const res = await callHandler({
       method: 'POST', url: '/api/customers/cust_1/auto-build', body: { adminEmail: 'admin@gmail.com', autoGenerate: false },
     });

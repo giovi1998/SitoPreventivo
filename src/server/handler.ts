@@ -22,8 +22,9 @@ import {
   CreateCustomerSchema, UpdateCustomerSchema, AutoBuildSchema, IntakeSchema,
   VALID_CUSTOMER_STATUS, VALID_CUSTOMER_SOURCES, VALID_INTAKE_STATUS,
 } from './schemas.ts';
-import { buildBriefContextApi, callDeepSeekAiFill, runCustomerResearch, syncCustomerToWebsiteDocs } from './crm.ts';
+import { buildBriefContextApi, callDeepSeekAiFill, getBestKnowledgeChunks, runCustomerResearch, syncCustomerToWebsiteDocs } from './crm.ts';
 import { handleAI } from './ai.ts';
+import { ingestLangfuse } from './langfuse.ts';
 import type { VercelRequest, VercelResponse, RouteHandler } from './types.ts';
 
 export const MAX_LOG_MSG = 2000;
@@ -765,6 +766,16 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
     return json(req, res, 201, { data: created });
   }
 
+  // GET /customers/:id/knowledge → chunk knowledge del cliente (RAG).
+  // Prima di GET /customers/:id: il path ha un suffisso specifico.
+  if (path.endsWith('/knowledge') && method === 'GET' && path.includes('/customers/')) {
+    if (!requireAdmin(req, res, body, true)) return;
+    const id = path.split('/')[2];
+    const db = await getDb();
+    const chunks = await db.select().from(customerKnowledgeTable).where(eq(customerKnowledgeTable.customerId, id));
+    return json(req, res, 200, { data: chunks });
+  }
+
   // GET /customers/:id
   if (path.startsWith('/customers/') && method === 'GET') {
     if (!requireAdmin(req, res, body, true)) return;
@@ -865,9 +876,8 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
       // AI reale (DeepSeek) sopra il fallback lookup: i valori AI vincono
       // sui campi che ha effettivamente compilato.
       try {
-        const chunks = await db.select().from(customerKnowledgeTable).where(eq(customerKnowledgeTable.customerId, id));
-        const firstChunk = (chunks[0]?.chunk as string) || '';
-        const prompt = `Compila il profilo brand. Rispondi SOLO con un oggetto JSON con queste chiavi: ${missing.join(', ')}.\n${buildBriefContextApi(cust)}${firstChunk ? `\nContenuto sito web:\n${firstChunk}` : ''}`;
+        const topChunks = await getBestKnowledgeChunks(id, [cust.sector, cust.activity].filter(Boolean).join(' '));
+        const prompt = `Compila il profilo brand. Rispondi SOLO con un oggetto JSON con queste chiavi: ${missing.join(', ')}.\n${buildBriefContextApi(cust)}${topChunks.length > 0 ? `\nContenuto sito web:\n${topChunks.join('\n')}` : ''}`;
         const aiResult = await callDeepSeekAiFill(prompt);
         if (!aiResult) throw new Error('DeepSeek non disponibile o output non valido');
         for (const k of missing) {
@@ -875,6 +885,22 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
           if (typeof v === 'string' && v.trim()) aiFields[k] = v.trim();
         }
         costUsd = aiResult.costUsd;
+        // RAG tracing: ai-fill è una generazione AI → Langfuse (fire-and-forget).
+        void ingestLangfuse({
+          name: 'crm-ai-fill',
+          requestId: getRequestId(req),
+          model: 'deepseek-v4-flash',
+          provider: 'deepseek',
+          userEmail: ADMIN_EMAIL,
+          customerId: id,
+          sessionId: id,
+          feature: 'crm',
+          subfeature: 'ai-fill',
+          input: { prompt, missing },
+          output: { fields: aiFields },
+          usage: aiResult.usage,
+          costUsd,
+        });
         await db.update(customersTable).set({
           mood: (aiFields.mood as string) || cust.mood,
           target: (aiFields.target as string) || cust.target,
@@ -936,6 +962,12 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
     const autoGeneratePending = autoGenerate ? true : false;
     // Brief context stringa per AI
     const briefContext = buildBriefContextApi(cust);
+    // RAG: top-k chunk knowledge del sito cliente iniettati nel briefContext
+    // di TUTTI i draft (logo/card/flyer/website usano lo stesso contesto).
+    const knowledgeChunks = await getBestKnowledgeChunks(id, [cust.sector, cust.activity].filter(Boolean).join(' '));
+    const briefContextWithKnowledge = knowledgeChunks.length > 0
+      ? `${briefContext}\nContenuto sito web:\n${knowledgeChunks.join('\n')}`
+      : briefContext;
     // Replace semantics: un rerun sostituisce le BOZZE esistenti degli stessi
     // tipi per questo cliente (i documenti non-BOZZA non vengono toccati).
     const typesToCreate = hasManualLogo ? ['businessCard', 'flyer', 'website'] : ['logo', 'businessCard', 'flyer', 'website'];
@@ -986,7 +1018,7 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
           edits: { primaryText: cust.businessName, primaryColor: '#01696F', secondaryColor: '#1a1a2e' },
           aiStats: { totalCostUsd: '0', calls: {} },
           autoGeneratePending,
-          briefContext,
+          briefContext: briefContextWithKnowledge,
           createdAt: now, updatedAt: now,
         },
         createdAt: now, updatedAt: now,
@@ -1044,7 +1076,7 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
         backGrid: {},
         aiStats: { totalCostUsd: '0', calls: {} },
         autoGeneratePending,
-        briefContext,
+        briefContext: briefContextWithKnowledge,
         createdAt: now, updatedAt: now,
       },
       createdAt: now, updatedAt: now,
@@ -1084,7 +1116,7 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
         sector: cust.sector || 'generico',
         aiStats: { totalCostUsd: '0', calls: {} },
         autoGeneratePending,
-        briefContext,
+        briefContext: briefContextWithKnowledge,
         createdAt: now, updatedAt: now,
       },
       createdAt: now, updatedAt: now,
@@ -1121,7 +1153,7 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
           mapsUrl: '',
           notes: '',
         },
-        briefContext,
+        briefContext: briefContextWithKnowledge,
         html: '', css: '', js: '',
         framework: 'vanilla', style: 'modern', pages: ['index'],
         source: 'ai',
