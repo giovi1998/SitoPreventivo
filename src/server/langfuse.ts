@@ -59,6 +59,8 @@ export type LangfuseGenerationInput = {
   stepName?: string;
   /** T7: 16-hex NUOVO per ogni chiamata (parent della generation). */
   stepSpanId?: string;
+  /** RAG: observation type Langfuse (generation|span|embedding|retriever). */
+  observationType?: string;
 };
 
 // Il trace ID Langfuse segue W3C: 16 byte hex → in OTLP/JSON è base64.
@@ -304,7 +306,7 @@ export function buildLangfusePayload(input: LangfuseGenerationInput) {
   ];
 
   const attributes: Array<{ key: string; value: any }> = [
-    strAttr('langfuse.observation.type', 'generation'),
+    strAttr('langfuse.observation.type', input.observationType ?? 'generation'),
     strAttr('langfuse.observation.model.name', model),
     strAttr('langfuse.trace.name', name),
     { key: 'langfuse.trace.tags', value: { stringArrayValue: tags } },

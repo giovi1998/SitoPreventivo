@@ -54,6 +54,11 @@ describe('buildLangfusePayload (OTLP/HTTP JSON → Langfuse v4)', () => {
     expect(span.spanId).toMatch(/^[A-Za-z0-9+/]{10,12}=?$/);
   });
 
+  it('RAG: observationType override → langfuse.observation.type embedding', () => {
+    const payload = buildLangfusePayload({ ...baseInput, observationType: 'embedding' }) as any;
+    expect(attrValue(firstSpan(payload), 'langfuse.observation.type')).toBe('embedding');
+  });
+
   it('ingests usage and cost details as mutually exclusive buckets', () => {
     const payload = buildLangfusePayload(baseInput) as any;
     const span = firstSpan(payload);
