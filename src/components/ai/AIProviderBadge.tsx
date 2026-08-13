@@ -37,10 +37,20 @@ export function providerShortName(id: string): string {
 export function providerModelShort(model: string): string {
   return model
     .replace('minimax-m3:cloud', 'MiniMax M3')
+    .replace('minimax-m2.7:cloud', 'MiniMax M2.7')
     .replace('deepseek-v4-flash:cloud', 'V4 Flash')
     .replace('deepseek-v4-flash:0731-cloud', 'V4 Flash 0731')
     .replace('deepseek-v4-pro:cloud', 'V4 Pro')
     .replace('qwen-3.5', 'Qwen 3.5')
+    .replace('qwen3.5:397b:cloud', 'Qwen3.5 397B')
+    .replace('glm-5.2:cloud', 'GLM 5.2')
+    .replace('glm-5.1:cloud', 'GLM 5.1')
+    .replace('kimi-k3:cloud', 'Kimi K3')
+    .replace('kimi-k2.7-code:cloud', 'Kimi K2.7 Code')
+    .replace('mistral-large-3:675b:cloud', 'Mistral Large 3')
+    .replace('gemma4:31b:cloud', 'Gemma4 31B')
+    .replace('gpt-oss:120b:cloud', 'GPT-OSS 120B')
+    .replace('nemotron-3-ultra:cloud', 'Nemotron 3 Ultra')
     .replace('deepseek-v4-flash', 'V4 Flash')
     .replace('gemini-2.0-flash-preview-image-generation', 'Flash Image')
     .replace('gemini-3.1-flash-image', 'Nano Banana');

@@ -59,6 +59,36 @@ export interface ChatOptions {
   stream?: boolean;
   /** Observability: client-generated request id propagated to the server. */
   requestId?: string;
+  /** TB-029: customerId per Langfuse (session grouping + metadata). */
+  customerId?: string;
+  /** TB-029: sessione Langfuse (docId: raggruppa chat+immagini del documento). */
+  sessionId?: string;
+  /** TB-029: feature orchestrator (quote/card/flyer/...) per tag Langfuse. */
+  kind?: string;
+  /** T7: trace gerarchica agente — campi run condivisi (vedi RunTraceOptions). */
+  runId?: string;
+  runName?: string;
+  startRun?: boolean;
+  rootSpanId?: string;
+  stepName?: string;
+  stepSpanId?: string;
+}
+
+/** T7: campi trace gerarchica agente, propagati dalle options degli
+ * orchestratori fino a ChatOptions → body `/api/ai/chat`. */
+export interface RunTraceOptions {
+  /** 32-hex traceId condiviso per tutto il run agente. */
+  runId?: string;
+  /** Nome stabile del task (es. auto-build) → trace `agent:<runName>`. */
+  runName?: string;
+  /** true solo sulla prima chiamata del run → span root. */
+  startRun?: boolean;
+  /** 16-hex stabile per tutto il run (parent di ogni step span). */
+  rootSpanId?: string;
+  /** Sub-agente corrente (es. logo|card|flyer|website). */
+  stepName?: string;
+  /** 16-hex NUOVO per ogni chiamata (parent della generation). */
+  stepSpanId?: string;
 }
 
 export interface AIStreamChunk {

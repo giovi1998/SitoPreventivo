@@ -130,6 +130,37 @@ describe('OllamaProProvider', () => {
       expect(body.tools).toBeDefined();
       expect(body.tools[0].function.name).toBe('x');
     });
+
+    it('TB-029: propagates customerId, kind and userEmail in the proxy body', async () => {
+      const p = new OllamaProProvider();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+      localStorage.setItem('userEmail', JSON.stringify('user@example.com'));
+      await p.chat([{ role: 'user', content: 'x' }], { customerId: 'cust_7', kind: 'card' });
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.customerId).toBe('cust_7');
+      expect(body.kind).toBe('card');
+      expect(body.userEmail).toBe('user@example.com');
+      localStorage.removeItem('userEmail');
+    });
+
+    it('TB-029: omits customerId/kind when not provided', async () => {
+      const p = new OllamaProProvider();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+      await p.chat([{ role: 'user', content: 'x' }]);
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.customerId).toBeUndefined();
+      expect(body.kind).toBeUndefined();
+    });
   });
 
   describe('chat - response parsing', () => {

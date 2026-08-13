@@ -7,7 +7,7 @@ import { ToolRegistry } from './tools/registry';
 import { getToolDefinition } from './tools/definitions';
 import type { ToolResult } from '../utils/quoteTools';
 import { chatStore } from './chat/store';
-import { buildSystemPrompt } from './prompts/system';
+import { promptRegistry } from './prompts/registry';
 import { buildAIContext } from './prompts/context';
 import { mergeAIResponse } from './merge';
 import { needsAnalysis } from './promptUtils';
@@ -134,6 +134,8 @@ const QUOTE_TOOLS = [
 ];
 
 export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
+  protected aiKind = 'quote';
+
   protected applicableTools(): string[] {
     return QUOTE_TOOLS;
   }
@@ -212,6 +214,10 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
       onToolStart?: (toolCallId: string, name: string) => void;
       onToolComplete?: (toolCallId: string, name: string, result: string) => void;
       requestId?: string;
+      /** TB-029: attribuzione Langfuse per-cliente. */
+      customerId?: string;
+      /** TB-029: sessione Langfuse (docId: raggruppa chat+immagini del documento). */
+      sessionId?: string;
       /** TB-023: anteprima base64 screenshot preview per vision/analysis. */
       imagePreviewBase64?: string;
     }
@@ -231,7 +237,8 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
     if (session.messages.length === 0) {
       session.messages.push({
         role: 'system',
-        content: buildSystemPrompt(true),
+        // TB-029 fase 2: registry → override remoto Langfuse possibile.
+        content: promptRegistry.getPrompt('quote-system', { compact: true }),
       });
     }
 
@@ -262,6 +269,8 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
         reasoningEffort: 'max',
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
         requestId: options?.requestId,
+        customerId: options?.customerId,
+        sessionId: options?.sessionId,
       },
       {
         onStream: options?.onStream,

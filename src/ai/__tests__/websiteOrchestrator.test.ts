@@ -3,13 +3,14 @@ import type { AIStreamChunk } from '../types';
 
 let chatResponses: any[] = [];
 let fakeProvider: any;
+let fakeFallbackProvider: any = null;
 
 vi.mock('../providers/registry', () => ({
   get providerRegistry() {
     return {
-      getProvider: vi.fn(() => fakeProvider),
+      getProvider: vi.fn((id: string) => (id === 'ollama-deepseek-v4-flash-0731' && fakeFallbackProvider ? fakeFallbackProvider : fakeProvider)),
       getDefaultId: vi.fn(() => 'mock'),
-      getFallbackProvider: vi.fn(() => null),
+      getFallbackProvider: vi.fn(() => (fakeFallbackProvider ? { id: 'ollama-deepseek-v4-flash-0731', provider: fakeFallbackProvider } : null)),
       listProviders: vi.fn(() => [{ id: 'mock', name: 'Mock', model: 'mock-model', supportsStreaming: true, supportsTools: false }]),
     };
   },
@@ -67,16 +68,37 @@ function setupMockProvider() {
   return fakeProvider;
 }
 
+function setupFallbackProvider() {
+  fakeFallbackProvider = {
+    name: 'DeepSeek',
+    model: 'deepseek-v4-flash',
+    supportsStreaming: true,
+    supportsTools: false,
+    supportsVision: false,
+    chat: vi.fn(async () => {
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ css: '' }), usage: usage() };
+      return r;
+    }),
+    stream: vi.fn(async function* () {
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() };
+      const content = typeof r.content === 'string' ? r.content : '';
+      if (content) yield { type: 'content' as const, content } satisfies AIStreamChunk;
+      yield { type: 'done' as const, usage: r.usage } satisfies AIStreamChunk;
+    }),
+  };
+  return fakeFallbackProvider;
+}
+
 describe('WebsiteOrchestrator.generateSite', () => {
   let orch: WebsiteOrchestrator;
 
   beforeEach(() => {
     vi.clearAllMocks();
     chatResponses = [];
+    fakeFallbackProvider = null;
     setupMockProvider();
     orch = new WebsiteOrchestrator();
   });
-
   it('happy path: 4 step, SEO meta iniettati, costo sommato', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage(10, 5) },
@@ -94,6 +116,69 @@ describe('WebsiteOrchestrator.generateSite', () => {
     expect(result.aiCall?.costUsd).toBeGreaterThan(0);
     expect(result.site.css).toBe('body { color: red; }');
     expect(result.site.js).toBe('console.log(1);');
+  });
+
+  it('mappa: iframe AI senza città → forzato con indirizzo completo (no Monza/Rozzano)', async () => {
+    const htmlWithBadMap = '<section id="contatti"><iframe src="https://www.google.com/maps?q=Via%20Dante%20Alighieri%205%2FA&output=embed" width="100%" height="400"></iframe></section>';
+    chatResponses.push(
+      { content: JSON.stringify({ html: htmlWithBadMap, pages: ['index'] }), usage: usage(10, 5) },
+      { content: JSON.stringify({ css: 'body{}' }), usage: usage(20, 10) },
+      { content: JSON.stringify({ js: '// x' }), usage: usage(20, 10) },
+      { content: JSON.stringify({ issues: [] }), usage: usage(20, 10) },
+    );
+    const briefWithContacts = { ...baseBrief, contacts: 'Via Dante Alighieri 5/A, Cagliari, 09124' };
+    const result = await orch.generateSite(briefWithContacts, { modelId: 'mock', userEmail: 'u@test.com' });
+    expect(result.site.html).toContain('q=Via%20Dante%20Alighieri%205%2FA%20Cagliari');
+    expect(result.site.html).not.toContain('q=Via%20Dante%20Alighieri%205%2FA&');
+    expect(result.site.html).toContain('title="Mappa"');
+    expect(result.changes).toContain('map:iframe-forced');
+  });
+
+  it('hero: heroPrompts dal modello → generateHeroImages chiamato, hero-bg iniettato', async () => {
+    const htmlWithHero = '<section id="hero" class="hero"><div class="section-inner"><h1>X</h1></div></section>';
+    chatResponses.push(
+      { content: JSON.stringify({ html: htmlWithHero, pages: ['index'], heroPrompts: ['Gelato artigianale su sfondo azzurro'] }), usage: usage(10, 5) },
+      { content: JSON.stringify({ css: 'body{}' }), usage: usage(20, 10) },
+      { content: JSON.stringify({ js: '// x' }), usage: usage(20, 10) },
+      { content: JSON.stringify({ issues: [] }), usage: usage(20, 10) },
+    );
+    const genHero = vi.fn(async () => 'data:image/jpeg;base64,HERO');
+    const result = await orch.generateSite(baseBrief, { modelId: 'mock', userEmail: 'u@test.com', generateHeroImages: genHero });
+    expect(genHero).toHaveBeenCalledWith('Gelato artigianale su sfondo azzurro');
+    expect(result.heroImages).toHaveLength(1);
+    expect(result.site.html).toContain('hero-bg');
+    expect(result.site.html).toContain('data:image/jpeg;base64,HERO');
+    expect(result.changes).toContain('hero:images:1');
+  });
+
+  it('hero: senza heroPrompts → nessuna chiamata immagine', async () => {
+    chatResponses.push(
+      { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage(10, 5) },
+      { content: JSON.stringify({ css: 'body{}' }), usage: usage(20, 10) },
+      { content: JSON.stringify({ js: '// x' }), usage: usage(20, 10) },
+      { content: JSON.stringify({ issues: [] }), usage: usage(20, 10) },
+    );
+    const genHero = vi.fn(async () => 'data:image/jpeg;base64,HERO');
+    const result = await orch.generateSite(baseBrief, { modelId: 'mock', userEmail: 'u@test.com', generateHeroImages: genHero });
+    expect(genHero).not.toHaveBeenCalled();
+    expect(result.heroImages).toHaveLength(0);
+  });
+
+  it('fallback: primario 500 → Ollama 0731, sito generato comunque', async () => {    setupFallbackProvider();
+    fakeProvider.stream = vi.fn(async function* () {
+      throw new Error('Ollama (500): Internal Server Error');
+    });
+    chatResponses.push(
+      { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage(10, 5) },
+      { content: JSON.stringify({ css: 'body { color: red; }' }), usage: usage(20, 10) },
+      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage(20, 10) },
+      { content: JSON.stringify({ issues: [] }), usage: usage(20, 10) },
+    );
+    const result = await orch.generateSite(baseBrief, { modelId: 'mock', userEmail: 'u@test.com' });
+    expect(result.site.html).toContain('name="description"');
+    expect(result.site.css).toBe('body { color: red; }');
+    expect(result.changes.some((c) => c.startsWith('fallback:ollama-deepseek-v4-flash-0731'))).toBe(true);
+    expect(result.changes).toContain('fallback:html:ok');
   });
 
   it('verify issues + fixes: applica le correzioni al codice finale', async () => {
@@ -491,26 +576,45 @@ describe('WebsiteOrchestrator.refineSite', () => {
 
   const site = { html: '<h1>X</h1>', css: 'body{}', js: '// x', pages: ['index'], pagesHtml: {} };
 
-  it('merge parziale: solo i campi presenti cambiano', async () => {
-    chatResponses.push({ content: JSON.stringify({ css: 'body { color: blue; }' }), usage: usage() });
-    const result = await orch.refineSite(site, 'cambia colore', { modelId: 'mock' });
-    expect(result.site.css).toBe('body { color: blue; }');
-    expect(result.site.html).toBe('<h1>X</h1>');
+  it('edit puntuale: find&replace applicato, resto invariato', async () => {
+    chatResponses.push({ content: JSON.stringify({ edits: [{ part: 'html', find: '<h1>X</h1>', replace: '<h1>Chiccheria</h1>' }] }), usage: usage() });
+    const result = await orch.refineSite(site, 'rinomina brand', { modelId: 'mock' });
+    expect(result.site.html).toBe('<h1>Chiccheria</h1>');
+    expect(result.site.css).toBe('body{}');
     expect(result.site.js).toBe('// x');
-    expect(result.changes.some((c) => c.startsWith('refine:css:changed'))).toBe(true);
-    expect(result.changes.some((c) => c.startsWith('refine:html:'))).toBe(false);
+    expect(result.changes.some((c) => c.startsWith('refine:html:applied'))).toBe(true);
   });
 
-  it('refine: pagesHtml merge parziale con le pagine secondarie nel prompt', async () => {
+  it('edit puntuale: find non trovato → skipped, resto applicato', async () => {
+    chatResponses.push({ content: JSON.stringify({ edits: [
+      { part: 'html', find: '<h1>X</h1>', replace: '<h1>Y</h1>' },
+      { part: 'css', find: 'body{}', replace: 'body{color:red}' },
+    ] }), usage: usage() });
+    const result = await orch.refineSite(site, 'cambia', { modelId: 'mock' });
+    expect(result.site.html).toBe('<h1>Y</h1>');
+    expect(result.site.css).toBe('body{color:red}');
+    expect(result.changes.some((c) => c.startsWith('refine:html:applied'))).toBe(true);
+    expect(result.changes.some((c) => c.startsWith('refine:css:applied'))).toBe(true);
+  });
+
+  it('edit puntuale: replace gigante (riscrittura) → skipped', async () => {
+    const bigSite = { html: '<h1>X</h1>', css: 'body{}', js: '// x', pages: ['index'], pagesHtml: {} };
+    chatResponses.push({ content: JSON.stringify({ edits: [{ part: 'html', find: '<h1>X</h1>', replace: '<h1>X</h1>'.repeat(500) }] }), usage: usage() });
+    const result = await orch.refineSite(bigSite, 'riscrivi', { modelId: 'mock' });
+    expect(result.site.html).toBe(bigSite.html);
+    expect(result.changes.some((c) => c.startsWith('refine:html:skipped'))).toBe(true);
+  });
+
+  it('edit puntuale: pagesHtml con page specifica', async () => {
     const multiSite = { html: '<h1>X</h1>', css: 'body{}', js: '// x', pages: ['index', 'about'], pagesHtml: { about: '<h1>Chi siamo</h1>' } };
     let promptText = '';
-    chatResponses.push({ content: JSON.stringify({ pagesHtml: { about: '<h1>Chi siamo aggiornato</h1>' } }), usage: usage() });
+    chatResponses.push({ content: JSON.stringify({ edits: [{ part: 'pagesHtml', page: 'about', find: 'Chi siamo', replace: 'Chi siamo aggiornato' }] }), usage: usage() });
     const result = await orch.refineSite(multiSite, 'aggiorna about', { modelId: 'mock', onStep: (_s, t) => { promptText = t; } });
     expect(result.site.pagesHtml['about']).toBe('<h1>Chi siamo aggiornato</h1>');
     expect(result.site.html).toBe('<h1>X</h1>');
     expect(promptText).toContain('### HTML about');
-    expect(promptText).toContain('pagesHtml');
-    expect(result.changes.some((c) => c.startsWith('refine:pagesHtml:changed'))).toBe(true);
+    expect(promptText).toContain('edits');
+    expect(result.changes.some((c) => c.startsWith('refine:pagesHtml:applied'))).toBe(true);
   });
 
   it('JSON invalido → sito invariato + changes error', async () => {
@@ -527,9 +631,16 @@ describe('WebsiteOrchestrator.refineSite', () => {
   });
 
   it('onStep refine chiamato', async () => {
-    chatResponses.push({ content: JSON.stringify({}), usage: usage() });
+    chatResponses.push({ content: JSON.stringify({ edits: [] }), usage: usage() });
     const steps: string[] = [];
     await orch.refineSite(site, 'cambia', { modelId: 'mock', onStep: (s) => steps.push(s) });
     expect(steps).toEqual(['refine']);
+  });
+
+  it('edits vuoto → parse error (schema min 1), sito invariato', async () => {
+    chatResponses.push({ content: JSON.stringify({ edits: [] }), usage: usage() });
+    const result = await orch.refineSite(site, 'cambia', { modelId: 'mock' });
+    expect(result.site).toEqual(site);
+    expect(result.changes.some((c) => c.startsWith('error:'))).toBe(true);
   });
 });

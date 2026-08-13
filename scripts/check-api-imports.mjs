@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// Pre-commit guard: verify api/ serverless imports resolve in prod (Vercel Lambda).
-// Rules enforced (see docs/agent-gotchas.md §1):
-//   1. No static import from ../src/ in api/*.ts (cross-boundary not bundled -> ERR_MODULE_NOT_FOUND)
-//      Only dynamic `await import('../src/...')` is allowed in dev, but still risky in prod.
-//   2. No import from api/_lib/ or api/_* paths (excluded from bundle).
-//   3. Every bare/package import must resolve via node resolution.
+// Pre-commit guard: verify server entrypoint imports resolve in prod (Vercel).
+// Pattern (docs/functions/runtimes/node-js): `server.ts` alla root = unica
+// Vercel Function; la root della funzione è la root del progetto, quindi gli
+// import da src/ risolvono (gotcha §1 superato).
+// Rules enforced:
+//   1. server.ts + src/server/* devono importare solo node_modules o path
+//      relativi che risolvono (niente import da api/ — cartella rimossa).
+//   2. Ogni bare/package import deve risolvere via node resolution.
 // Exit 1 on violation. Exit 0 on clean.
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -18,18 +20,13 @@ const require = createRequire(join(root, 'package.json'));
 const errors = [];
 const scanned = [];
 
-function walkApi(dir) {
+function walkServer(dir) {
   const entries = require('node:fs').readdirSync(dir, { withFileTypes: true });
   for (const e of entries) {
     const full = join(dir, e.name);
     if (e.isDirectory()) {
       if (e.name === '__tests__' || e.name === 'node_modules') continue;
-      if (e.name.startsWith('_')) {
-        // api/_* are excluded from Vercel bundle -> importing them = ERR_MODULE_NOT_FOUND
-        errors.push(`api/${e.name}/ is excluded from Vercel bundle (api/_*). Move shared code to src/.`);
-        continue;
-      }
-      walkApi(full);
+      walkServer(full);
     } else if (e.isFile() && (e.name.endsWith('.ts') || e.name.endsWith('.js')) && !e.name.endsWith('.d.ts')) {
       scanFile(full);
     }
@@ -53,25 +50,13 @@ function scanFile(file) {
     const spec = fromMatch?.[1] ?? bareMatch?.[1];
     if (!spec) continue;
 
-    // Rule 1: cross-boundary ../src/
-    if (spec.startsWith('../src/') || spec === '../src' || /^(\.\.\/)+src\//.test(spec)) {
-      // dynamic await import('../src/...') is technically allowed but still risky in prod
-      const isDynamic = /\bawait\s+import\s*\(/.test(trimmed);
-      if (isDynamic) {
-        errors.push(`${rel}:${i + 1} WARN: dynamic \`await import('${spec}')\` from src/ — not resolved on Vercel Lambda (gotcha §1). Move shared code to bundled module or inline.`);
-      } else {
-        errors.push(`${rel}:${i + 1} static import from '${spec}' — cross-boundary, ERR_MODULE_NOT_FOUND on Vercel (gotcha §1). Use dynamic await import or move to api/.`);
-      }
+    // Rule 1: import da api/ è vietato (cartella rimossa — monolite superato)
+    if (spec.startsWith('../api/') || spec.startsWith('./api/') || spec === '../api' || spec === './api') {
+      errors.push(`${rel}:${i + 1} import from '${spec}' — api/ non esiste più (server entrypoint, gotcha §1).`);
       continue;
     }
 
-    // Rule 2: api/_* paths
-    if (spec.startsWith('./_') || /^\.\/[^/]+\/_/.test(spec)) {
-      errors.push(`${rel}:${i + 1} import from '${spec}' — api/_* excluded from bundle (gotcha §1).`);
-      continue;
-    }
-
-    // Rule 3: relative ./ or ../ must resolve to existing file
+    // Rule 2: relative ./ or ../ must resolve to existing file
     if (spec.startsWith('.')) {
       const target = resolve(dirname(file), spec);
       const candidates = [target, target + '.ts', target + '.js', target + '.mjs', target + '/index.ts', target + '/index.js'];
@@ -81,14 +66,11 @@ function scanFile(file) {
       continue;
     }
 
-    // Rule 3b: bare package specifier must resolve via node
+    // Rule 3: bare package specifier must resolve via node
     try {
       require.resolve(spec, { paths: [root] });
     } catch {
-      // Some package exports may not expose main for require — try import resolution
       try {
-        // dynamic import for ESM resolution check (sync-ish via createRequire already failed)
-        // Fallback: check node_modules/<pkg>/ exists
         const pkgName = spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0];
         if (!existsSync(join(root, 'node_modules', pkgName))) {
           errors.push(`${rel}:${i + 1} bare import '${spec}' not resolvable (no node_modules/${pkgName}).`);
@@ -98,13 +80,14 @@ function scanFile(file) {
   }
 }
 
-walkApi(join(root, 'api'));
+scanFile(join(root, 'server.ts'));
+walkServer(join(root, 'src', 'server'));
 
 if (errors.length) {
-  console.error('\n[check-api-imports] FAILED — ' + errors.length + ' issue(s) in api/:\n');
+  console.error('\n[check-api-imports] FAILED — ' + errors.length + ' issue(s) in server entrypoint:\n');
   for (const e of errors) console.error('  ' + e);
   console.error('\nScanned ' + scanned.length + ' file(s): ' + scanned.join(', '));
   process.exit(1);
 }
 
-console.log('[check-api-imports] OK — ' + scanned.length + ' api file(s), all imports resolve.');
+console.log('[check-api-imports] OK — ' + scanned.length + ' server file(s), all imports resolve.');

@@ -28,6 +28,8 @@ export interface OnboardingSuggestResult {
 }
 
 export class OnboardingAIOrchestrator extends BaseOrchestrator {
+  protected aiKind = 'onboarding';
+
   async suggest(
     name: string,
     sector: string | undefined,

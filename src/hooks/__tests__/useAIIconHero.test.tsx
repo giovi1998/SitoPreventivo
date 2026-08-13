@@ -58,6 +58,21 @@ describe('useAIIconHero', () => {
     expect(body.background).toBe('card');
   });
 
+  it('forwards sessionId to the API when provided', async () => {
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { imageBase64: 'x', mimeType: 'image/png' } }),
+    });
+
+    const { result } = renderHook(() => useAIIconHero('user@test.com', 'doc-123'));
+    await act(async () => {
+      await result.current.generate('casa', 'icon');
+    });
+    const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.sessionId).toBe('doc-123');
+  });
+
   it('throws on non-ok response', async () => {
     const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({ error: 'Troppe generazioni' }) });

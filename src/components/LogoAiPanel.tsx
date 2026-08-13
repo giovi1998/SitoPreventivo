@@ -47,6 +47,7 @@ interface Props {
   tier: 'free' | 'unlocked';
   userEmail?: string;
   docId?: string;
+  sessionId?: string;
   initialState?: LogoAiState;
   onStateChange?: (state: LogoAiState) => void;
   onAiCall?: (kind: 'logoConcept' | 'background', costUsd: number) => void;
@@ -217,8 +218,8 @@ function nowTime(): string {
 
 const DEFAULT_ANSWERS: ChatAnswers = { activity: '', mood: 'minimal', target: '', sector: 'tech' };
 
-export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, initialState, onStateChange, onAiCall }: Props) {
-  const { generate, generateBackground, isProcessing, isGeneratingBg, logs, reset } = useAILogo(userEmail);
+export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, sessionId, initialState, onStateChange, onAiCall }: Props) {
+  const { generate, generateBackground, isProcessing, isGeneratingBg, logs, reset } = useAILogo(userEmail, sessionId);
   const { addToast } = useToast();
   const lsKey = storageKeyFor(docId);
 

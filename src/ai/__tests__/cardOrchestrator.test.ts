@@ -15,6 +15,20 @@ vi.mock('../providers/registry', () => ({
   },
 }));
 
+// TB-029 fase 2: il system prompt DEVE passare dal promptRegistry (dove il
+// prefetch remoto Langfuse registra gli override). I builder locali restano
+// come fallback registrato.
+vi.mock('../prompts/registry', () => ({
+  get promptRegistry() {
+    return {
+      getPrompt: vi.fn(() => mockSystemPrompt),
+      hasPrompt: vi.fn(() => true),
+    };
+  },
+}));
+
+let mockSystemPrompt = 'SYSTEM LOCALE';
+
 import { CardAIOrchestrator } from '../cardOrchestrator';
 import { createEmptyCard } from '../../utils/documentSchemas';
 
@@ -57,6 +71,15 @@ describe('CardAIOrchestrator', () => {
     expect(result.card.front.name).toBe('MARIO ROSSI');
     expect(result.changes.length).toBeGreaterThan(0);
     expect(result.response.usage?.totalTokens).toBe(150);
+  });
+
+  it('TB-029: usa il system prompt dal promptRegistry (override remoto possibile)', async () => {
+    mockSystemPrompt = 'PROMPT REMOTO LANGfUSE';
+    const card = createEmptyCard();
+    await orch.processPrompt(card, 'cambia nome', { modelId: 'mock' });
+    const msgs = fakeProvider.chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
+    expect(msgs[0].role).toBe('system');
+    expect(msgs[0].content).toBe('PROMPT REMOTO LANGfUSE');
   });
 
   it('processPrompt preserves id and documentType', async () => {

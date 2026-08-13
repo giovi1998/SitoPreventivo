@@ -5,6 +5,71 @@
 // `svc` è la facade dataService (riferimenti cross-modulo a call time).
 import { IS_LOCAL, lsGet, lsSet, api, cryptoRandomId, buildBriefContext, buildAiFillPrompt, extractJsonObject } from './core.js';
 import { chunkMarkdown, scrapeFirecrawlLocal, extractLogoFromFirecrawl, extractWebImages, saveKnowledgeChunks, getKnowledgeChunks } from '../firecrawlLocal.js';
+import { topKChunks } from '../knowledgeTopK.js';
+
+// TB-030 sync customer→website (locale): aggiorna i doc website del cliente
+// con i campi brand. Last-write-wins con confronto updatedAt: il doc vince
+// se è più recente del customer. Mirror di syncCustomerToWebsiteDocs (server).
+function syncCustomerToWebsiteLocal(cust) {
+  const docs = lsGet('precisionQuote_documents:v1') || [];
+  const contacts = cust.contacts || {};
+  const socials = Array.isArray(cust.socials) ? cust.socials : [];
+  const font = typeof cust.font === 'string' ? cust.font : '';
+  const preferredColors = typeof cust.preferredColors === 'string' ? cust.preferredColors : '';
+  // Indirizzo per la mappa: preferisce l'indirizzo COMPLETO dal research
+  // Firecrawl (webData.json.addresses) — contacts.address è spesso solo via
+  // senza città → Google risolve male (Monza/Rozzano).
+  const webJson = (cust.webData?.json || {});
+  const webAddresses = Array.isArray(webJson.addresses) ? webJson.addresses.filter((a) => typeof a === 'string') : [];
+  const address = webAddresses[0] || String(contacts.address || '');
+  const phone = String(contacts.phone || '');
+  const email = String(contacts.email || '');
+  const custUpdated = new Date(cust.updatedAt || Date.now()).getTime();
+  let changed = false;
+  for (const d of docs) {
+    if (d.customerId !== cust.id || d.documentType !== 'website') continue;
+    const docUpdated = new Date(d.updatedAt || 0).getTime();
+    if (docUpdated > custUpdated) continue;
+    const data = d.data || {};
+    const brief = data.brief || {};
+    d.data = {
+      ...data,
+      brief: {
+        ...brief,
+        font: font || brief.font,
+        preferredColors: preferredColors || brief.preferredColors,
+        address,
+        phone,
+        email,
+        contacts: [address, phone, email].filter(Boolean).join(', '),
+        socials: socials.length > 0 ? socials : brief.socials,
+      },
+    };
+    d.updatedAt = new Date().toISOString();
+    changed = true;
+  }
+  if (changed) lsSet('precisionQuote_documents:v1', docs);
+}
+
+/** Piattaforma social dal dominio URL (instagram.com → Instagram). */
+function socialPlatformFromUrl(url) {
+  const m = url.match(/https?:\/\/(?:www\.)?([^/]+)/i);
+  const host = m ? m[1] : url;
+  const known = {
+    'instagram.com': 'Instagram',
+    'facebook.com': 'Facebook',
+    'linkedin.com': 'LinkedIn',
+    'tiktok.com': 'TikTok',
+    'youtube.com': 'YouTube',
+    'twitter.com': 'X',
+    'x.com': 'X',
+    'pinterest.com': 'Pinterest',
+  };
+  for (const [k, v] of Object.entries(known)) {
+    if (host === k || host.endsWith('.' + k)) return v;
+  }
+  return host.split('.')[0] || 'Social';
+}
 
 export function createCrmMethods(svc) {
   return {
@@ -63,9 +128,19 @@ export function createCrmMethods(svc) {
         const all = lsGet('pq_customers:v1') || [];
         const idx = all.findIndex((c) => c.id === id);
         if (idx < 0) return { error: 'Cliente non trovato' };
-        all[idx] = { ...all[idx], ...patch, updatedAt: new Date().toISOString() };
+        const updated = { ...all[idx], ...patch, updatedAt: new Date().toISOString() };
+        all[idx] = updated;
         lsSet('pq_customers:v1', all);
-        return { data: all[idx] };
+        // TB-030 sync customer→website (locale): aggiorna i doc website del
+        // cliente con i campi brand. Last-write-wins con confronto updatedAt.
+        if (!patch.skipSync) {
+          try {
+            syncCustomerToWebsiteLocal(updated);
+          } catch (e) {
+            console.warn('[sync] customer→website fallito (locale)', e?.message || e);
+          }
+        }
+        return { data: updated };
       }
       return api('PATCH', `/customers/${id}`, { adminEmail: 'admin@gmail.com', ...patch });
     },
@@ -135,8 +210,19 @@ export function createCrmMethods(svc) {
         // Logo manuale (upload admin) ha priorità: status 'manual', mai sovrascritto.
         const detectedLogoUrl = extractLogoFromFirecrawl(page);
         const logoStatus = cust.logoUrl ? 'manual' : detectedLogoUrl ? 'detected' : 'no_logo';
+        // TB-030 prefill: se il customer non ha social, popolali dai
+        // social_links Firecrawl (piattaforma dal dominio). Se non ha font,
+        // usa brandingFonts[0].
+        const links = Array.isArray(page.links) ? page.links.filter((l) => typeof l === 'string') : [];
+        const socials = Array.isArray(cust.socials) && cust.socials.length > 0
+          ? cust.socials
+          : links.filter((l) => /instagram|facebook|linkedin|tiktok|youtube|twitter|x\.com|pinterest/i.test(l)).slice(0, 5).map((l) => ({ platform: socialPlatformFromUrl(l), url: l }));
+        const fonts = Array.isArray(page.branding?.fonts) ? page.branding.fonts.filter((f) => typeof f === 'string') : [];
+        const font = typeof cust.font === 'string' && cust.font ? cust.font : (fonts.length > 0 ? fonts[0] : null);
         return persist({ web: 'ok', logo: logoStatus }, {
           ...(detectedLogoUrl ? { detectedLogoUrl } : {}),
+          ...(socials.length > 0 ? { socials } : {}),
+          ...(font ? { font } : {}),
           knowledgeCount,
           webData: {
             title: typeof page.title === 'string' ? page.title : (typeof metadata.title === 'string' ? metadata.title : ''),
@@ -163,7 +249,6 @@ export function createCrmMethods(svc) {
     },
 
     async generateEmbedding(text) {
-      if (IS_LOCAL) return { error: 'Embedding non disponibile in modalità locale' };
       return api('POST', '/ai/embeddings', { input: text });
     },
 
@@ -192,7 +277,13 @@ export function createCrmMethods(svc) {
             ]);
             const providerId = resolveProviderId();
             const provider = providerRegistry.getProvider(providerId);
-            const chunk = getKnowledgeChunks(id)[0]?.chunk || '';
+            const knowledge = getKnowledgeChunks(id);
+            // RAG locale: embedding via dev proxy (chiave server-side), poi
+            // top-k cosine (modulo condiviso server/client). Senza embedding
+            // → fallback ordine di inserimento.
+            const queryText = [c.sector, c.activity].filter(Boolean).join(' ');
+            const queryEmbedding = queryText ? await this.generateEmbedding(queryText) : null;
+            const chunk = topKChunks(knowledge, queryEmbedding?.data?.embedding ?? null, 1)[0]?.chunk || '';
             const response = await provider.chat([
               { role: 'system', content: 'Sei un consulente di branding. Rispondi SOLO con un oggetto JSON valido, senza testo extra.' },
               { role: 'user', content: buildAiFillPrompt(c, missing, chunk) },
@@ -228,6 +319,12 @@ export function createCrmMethods(svc) {
         const now = new Date().toISOString();
         const ids = [];
         const contacts = cust.contacts || {};
+        // Indirizzo per la mappa: preferisce l'indirizzo completo dal research
+        // Firecrawl (webData.json.addresses) — contacts.address è spesso solo
+        // via senza città → Google risolve male (Monza/Rozzano).
+        const webJson = (cust.webData?.json || {});
+        const webAddresses = Array.isArray(webJson.addresses) ? webJson.addresses.filter((a) => typeof a === 'string') : [];
+        const mapAddress = webAddresses[0] || String(contacts.address || '');
         const photos = Array.isArray(cust.customerPhotos) ? cust.customerPhotos : [];
         const firstPhoto = photos.length > 0 ? photos[0] : null;
         // Logo: se già caricato/detected → NON creare draft logo (l'admin ha già il logo)
@@ -236,6 +333,15 @@ export function createCrmMethods(svc) {
         const autoGeneratePending = autoGenerate ? true : false;
         // Brief context stringa per AI (passato ai draft come briefContext)
         const briefContext = buildBriefContext(cust);
+        // RAG: top-k chunk knowledge del sito cliente iniettati nel briefContext
+        // di TUTTI i draft (logo/card/flyer/website usano lo stesso contesto).
+        const knowledge = getKnowledgeChunks(id);
+        const queryText = [cust.sector, cust.activity].filter(Boolean).join(' ');
+        const queryEmbedding = queryText ? await this.generateEmbedding(queryText) : null;
+        const topChunks = topKChunks(knowledge, queryEmbedding?.data?.embedding ?? null, 3);
+        const briefContextWithKnowledge = topChunks.length > 0
+          ? `${briefContext}\nContenuto sito web:\n${topChunks.map((c) => c.chunk).join('\n')}`
+          : briefContext;
         // Shape allineate a createEmpty*() factories (documentSchemas.ts).
         // Deve rimanere identico al path PROD api/index.ts auto-build.
         const drafts = [
@@ -256,7 +362,7 @@ export function createCrmMethods(svc) {
                 textColorMode: 'auto', textOffsetX: 0, textOffsetY: 0, textScale: 1,
                 taglineOffsetX: 0, taglineOffsetY: 0, textPosition: 'overlay',
               },
-              brief: cust.activity || '', briefContext, concepts: [], selected: -1,
+              brief: cust.activity || '', briefContext: briefContextWithKnowledge, concepts: [], selected: -1,
               edits: { primaryText: cust.businessName, primaryColor: '#01696F', secondaryColor: '#1a1a2e' },
               aiStats: { totalCostUsd: '0', calls: {} },
               autoGeneratePending: !detectedLogo,
@@ -289,7 +395,7 @@ export function createCrmMethods(svc) {
               grid: {}, backGrid: {},
               aiStats: { totalCostUsd: '0', calls: {} },
               autoGeneratePending,
-              briefContext: buildBriefContext(cust),
+              briefContext: briefContextWithKnowledge,
               createdAt: now, updatedAt: now,
             },
           },
@@ -313,7 +419,7 @@ export function createCrmMethods(svc) {
               sector: cust.sector || 'generico',
               aiStats: { totalCostUsd: '0', calls: {} },
               autoGeneratePending,
-              briefContext: buildBriefContext(cust),
+              briefContext: briefContextWithKnowledge,
               createdAt: now, updatedAt: now,
             },
           },
@@ -331,16 +437,19 @@ export function createCrmMethods(svc) {
                 target: String(cust.target || ''),
                 pages: 'index',
                 preferredColors: String(cust.preferredColors || ''),
-                font: '',
+                font: String(cust.font || ''),
                 cta: '',
                 sections: 'hero, chi_siamo, contatti',
                 features: '',
-                contacts: [contacts.address, contacts.phone, contacts.email].filter(Boolean).join(', '),
-                socials: [],
+                contacts: [mapAddress, contacts.phone, contacts.email].filter(Boolean).join(', '),
+                address: mapAddress,
+                phone: String(contacts.phone || ''),
+                email: String(contacts.email || ''),
+                socials: Array.isArray(cust.socials) ? cust.socials : [],
                 mapsUrl: '',
                 notes: '',
               },
-              briefContext: buildBriefContext(cust),
+              briefContext: briefContextWithKnowledge,
               html: '', css: '', js: '',
               framework: 'vanilla', style: 'modern', pages: ['index'],
               source: 'ai',

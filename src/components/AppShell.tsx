@@ -6,6 +6,7 @@ import Topbar from './Topbar';
 import ErrorBoundary from './ErrorBoundary';
 import TierLimitModal from './TierLimitModal';
 import type { PremiumQuote, DocumentTemplateId } from '../utils/quoteSchema';
+import { prefetchRemotePrompts } from '../utils/ai/remotePrompt';
 import { migrateFromLegacy, toLegacyFormat, recalculateQuote, addEmptyOption, createEmptyQuote } from '../utils/quoteSchema';
 import { generateDOCX } from '../utils/generateDOCX';
 import PdfImportModal from './PdfImportModal';
@@ -108,7 +109,7 @@ export default function AppShell() {
     isProcessing,
     availableModels,
     lastCostUsd,
-  } = useAI(user?.email);
+  } = useAI(user?.email, routeDocId || quote.quoteId);
   const previewRef = useRef<HTMLElement>(null);
 
   const { toasts, addToast, dismissToast } = useToast();
@@ -276,6 +277,10 @@ export default function AppShell() {
         setQuotes(loaded || []);
       }).catch(() => {});
     }
+    // TB-029 fase 2: Prompt Management — prefetch prompt pilota da Langfuse
+    // (label per ambiente: staging in locale, production in prod). Fallback
+    // silenzioso ai builder locali se Langfuse non raggiungibile.
+    prefetchRemotePrompts().catch(() => {});
   }, [user?.email]);
 
   // Phase 6: migrate legacy `precisionQuote_quotes` to the unified

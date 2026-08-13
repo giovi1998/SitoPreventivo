@@ -32,7 +32,7 @@ export interface UseAILogoReturn {
 }
 
 
-export function useAILogo(userEmail?: string): UseAILogoReturn {
+export function useAILogo(userEmail?: string, sessionId?: string): UseAILogoReturn {
   const orchestratorRef = useRef<LogoAIOrchestrator | null>(null);
   const [isGeneratingBg, setIsGeneratingBg] = useState(false);
   const [lastCostUsd, setLastCostUsd] = useState(0);
@@ -93,6 +93,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
         const result = await getOrchestrator().generateLogo(logo, brief, {
           sector: options?.sector,
           modelId: resolvedModelId,
+          sessionId,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -146,7 +147,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
         throw new Error(hint);
       }
     },
-    [info, startStream, appendStream, finalizeStream, success, error, userEmail]
+    [info, startStream, appendStream, finalizeStream, success, error, userEmail, sessionId]
   );
 
   const generateBackground = useCallback(
@@ -159,7 +160,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
       setIsGeneratingBg(true);
       try {
         const imageModel = options?.imageModel || getAiImageModelDefault();
-        const result = await getOrchestrator().generateBackground(logo, context, { userEmail, imageModel });
+        const result = await getOrchestrator().generateBackground(logo, context, { userEmail, imageModel, sessionId });
         if (result.applied) {
           const pricingId = geminiImagePricingId(imageModel);
           const imageCost = calculateCostUsd(pricingId, undefined, 1);
@@ -185,7 +186,7 @@ export function useAILogo(userEmail?: string): UseAILogoReturn {
         setIsGeneratingBg(false);
       }
     },
-    [info, success, error, trackImage, userEmail]
+    [info, success, error, trackImage, userEmail, sessionId]
   );
 
   const reset = useCallback(() => {

@@ -13,6 +13,14 @@ import { useCustomerLogger } from '../../hooks/useCustomerLogger';
 import CustomerAiLogPanel from './CustomerAiLogPanel';
 import CustomerResearchSection from './CustomerResearchSection';
 import CustomerWebDataPanel from './CustomerWebDataPanel';
+import CustomerKnowledgePanel from './CustomerKnowledgePanel';
+import { prefetchRemotePrompts, REMOTE_PROMPT_PILOT } from '../../utils/ai/remotePrompt';
+
+const AB_TEST_PROMPTS = [
+  { id: 'card-system', label: 'Card' },
+  { id: 'quote-system', label: 'Preventivo' },
+  { id: 'flyer-system', label: 'Flyer' },
+].filter((p) => REMOTE_PROMPT_PILOT.includes(p.id));
 
 type Customer = Record<string, unknown> & {
   id: string;
@@ -23,6 +31,8 @@ type Customer = Record<string, unknown> & {
   mood?: string | null;
   target?: string | null;
   preferredColors?: string | null;
+  font?: string | null;
+  socials?: Array<{ platform?: string; url?: string }> | null;
   contacts?: Record<string, unknown> | null;
   package?: string | null;
   status?: string;
@@ -122,6 +132,9 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
 
   useEffect(() => {
     void load();
+    // TB-029 fase 3: i prompt di questo cliente vanno risolti con le sue
+    // promptLabels (A/B per cliente) → prefetch con customerId.
+    void prefetchRemotePrompts(customerId);
     void dataService.getUserSettings('admin@gmail.com').then((res) => {
       const img = (res.imageGenModel || 'gemini-flash-image') as string;
       setImageGenModel(img);
@@ -153,6 +166,26 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     flashSaved(`contact_${key}`);
     await load();
     onRefresh();
+  };
+
+  const addSocial = () => {
+    if (!customer) return;
+    const socials = [...(Array.isArray(customer.socials) ? customer.socials : []), { platform: '', url: '' }];
+    void dataService.updateCustomer(customer.id, { socials }).then(() => { void load(); onRefresh(); });
+  };
+
+  const updateSocial = (index: number, field: 'platform' | 'url', value: string) => {
+    if (!customer) return;
+    const socials = [...(Array.isArray(customer.socials) ? customer.socials : [])];
+    if (socials[index]) socials[index] = { ...socials[index], [field]: value };
+    void dataService.updateCustomer(customer.id, { socials }).then(() => { void load(); onRefresh(); });
+  };
+
+  const removeSocial = (index: number) => {
+    if (!customer) return;
+    const socials = [...(Array.isArray(customer.socials) ? customer.socials : [])];
+    socials.splice(index, 1);
+    void dataService.updateCustomer(customer.id, { socials }).then(() => { void load(); onRefresh(); });
   };
 
   const startEdit = (field: string, current: string) => {
@@ -417,7 +450,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const handleGenerateAll = async () => {
     if (!customer) return;
     logger.appendLog('info', `Generazione bozze AI in corso (provider: ${aiProvider})…`, undefined, { docs: docs.length, provider: aiProvider });
-    const summary = await autoGen.generateAll(docs, customer, { providerId: aiProvider });
+    const summary = await autoGen.generateAll(docs, customer, { providerId: aiProvider, customerId: customerId, agentMode: true });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const perDoc = docs
@@ -450,13 +483,12 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const handleGenerateOne = async (doc: Doc) => {
     if (!customer) return;
     logger.appendLog('info', `Rigenero bozza ${doc.documentType} (provider: ${aiProvider})…`, undefined, { docId: doc.id, provider: aiProvider });
-    await autoGen.generateOne(doc, customer, { providerId: aiProvider });
+    const genError = await autoGen.generateOne(doc, customer, { providerId: aiProvider, customerId: customerId });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const freshDoc = freshDocs.find((x) => x.id === doc.id);
     const aiStats = (freshDoc?.data as Record<string, unknown> | undefined)?.aiStats as { totalCostUsd?: string } | undefined;
     const costUsd = parseFloat(String(aiStats?.totalCostUsd ?? '0')) || 0;
-    const genError = autoGen.state.errors?.[doc.id] ?? null;
     logger.appendLog(
       genError ? 'error' : 'success',
       genError ? `Rigenerazione ${doc.documentType} fallita: ${genError}` : `Bozza ${doc.documentType} rigenerata`,
@@ -595,6 +627,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         {renderField('mood', 'Mood', customer.mood)}
         {renderField('target', 'Target', customer.target, true)}
         {renderField('preferredColors', 'Colori preferiti', customer.preferredColors)}
+        {renderField('font', 'Font preferito', customer.font)}
       </section>
 
       <section className="crm-section">
@@ -604,6 +637,17 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         {renderContact('address', 'Indirizzo')}
         {renderContact('website', 'Sito')}
         {renderField('googleMapsUrl', 'Google Maps', customer.googleMapsUrl)}
+        <div className="crm-field">
+          <span className="crm-field-label">Social</span>
+          {customer.socials?.map((s, i) => (
+            <div key={i} className="social-row">
+              <input type="text" value={s.platform || ''} onChange={(e) => updateSocial(i, 'platform', e.target.value)} placeholder="Piattaforma (es. Instagram)" maxLength={50} />
+              <input type="text" value={s.url || ''} onChange={(e) => updateSocial(i, 'url', e.target.value)} placeholder="URL o @username" maxLength={300} />
+              <button type="button" className="social-remove" onClick={() => removeSocial(i)} title="Rimuovi">✕</button>
+            </div>
+          ))}
+          <button type="button" className="social-add" onClick={addSocial}>+ Aggiungi social</button>
+        </div>
       </section>
 
       <section className="crm-section">
@@ -650,6 +694,8 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       {hasWebData && (
         <CustomerWebDataPanel webData={webData} />
       )}
+
+      <CustomerKnowledgePanel customerId={customerId} reloadKey={customer?.updatedAt ?? ''} />
 
       {hasWebAnswers && (
         <section className="crm-section" data-testid="crm-web-answers-section">
@@ -698,6 +744,44 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         </select>
         <p className="crm-note">Provider usato per palette e "Genera bozze AI". Gemini è solo per immagini, non disponibile qui.</p>
       </section>
+
+      {/* TB-029 fase 3: A/B testing prompt per cliente. Ogni riga seleziona
+          la label Langfuse (production/experiment) per un prompt pilota.
+          Salva su customers.promptLabels → override label in /api/ai/prompt. */}
+      {AB_TEST_PROMPTS.length > 0 && (
+        <section className="crm-section" data-testid="crm-ab-testing-section">
+          <h3>A/B testing prompt</h3>
+          <p className="crm-note">Label Langfuse usata per questo cliente (override su production/staging). Le versioni si gestiscono nella dashboard Langfuse.</p>
+          {AB_TEST_PROMPTS.map(({ id, label }) => {
+            const current = (customer as Customer & { promptLabels?: Record<string, string> })?.promptLabels?.[id] || 'default';
+            return (
+              <div key={id} className="crm-ab-row">
+                <span className="crm-ab-name">{label}</span>
+                <select
+                  value={current}
+                  onChange={async (e) => {
+                    const v = e.target.value;
+                    const prev = { ...((customer as Customer & { promptLabels?: Record<string, string> })?.promptLabels || {}) };
+                    if (v === 'default') delete prev[id];
+                    else prev[id] = v;
+                    await dataService.updateCustomer(customer.id, { promptLabels: prev });
+                    flashSaved(`ab_${id}`);
+                    await load();
+                    // Ri-carica i prompt con la nuova label per questo cliente.
+                    void prefetchRemotePrompts(customer.id);
+                  }}
+                  data-testid={`crm-ab-${id}`}
+                  className="crm-provider-select"
+                >
+                  <option value="default">default (per ambiente)</option>
+                  <option value="production">production</option>
+                  <option value="experiment">experiment</option>
+                </select>
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       <section className="crm-section">
         <h3>Modello AI per immagini</h3>

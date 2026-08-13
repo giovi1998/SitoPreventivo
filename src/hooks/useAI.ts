@@ -92,7 +92,7 @@ function parseResultChanges(changes: string[]): {
   return { toolCount, mergeChanges, errorKind };
 }
 
-export function useAI(userEmail?: string): UseAIReturn {
+export function useAI(userEmail?: string, docSessionId?: string): UseAIReturn {
   const orchestratorRef = useRef<AIOrchestrator | null>(null);
   const { logs: aiLogs, isProcessing, startStream, appendStream, finalizeStream, info, success, error, tool, clear } = useAILogs('useAI');
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -154,6 +154,7 @@ export function useAI(userEmail?: string): UseAIReturn {
         const run = async (onStream?: (chunk: AIStreamChunk) => void) => orchestrator.processPrompt(quote, prompt, {
           modelId: resolvedModelId,
           requestId,
+          sessionId: docSessionId,
           imagePreviewBase64: previewBase64,
           onStream,
           onToolStart: (toolCallId, name) => {
@@ -232,7 +233,7 @@ export function useAI(userEmail?: string): UseAIReturn {
     resetChat,
     aiLogs,
     isProcessing,
-    sessionId,
+    sessionId: sessionId ?? docSessionId ?? null,
     availableModels,
     lastCostUsd,
   };

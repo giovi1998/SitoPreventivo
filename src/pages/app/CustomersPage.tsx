@@ -16,8 +16,8 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (showSplash = false) => {
+    if (showSplash) setLoading(true);
     setError(null);
     const res = await dataService.getCustomers();
     if (res.error) {
@@ -28,15 +28,19 @@ export default function CustomersPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(true); }, [load]);
   useRefetchOnFocus(load);
 
   const handleSelect = useCallback((id: string) => navigate(`/app/customers/${id}`), [navigate]);
   const handleBack = useCallback(() => navigate('/app/customers'), [navigate]);
+  // Refresh silenzioso: non smonta CustomerDetail durante la generazione AI
+  // (niente splash: il dettaglio ha il proprio loading interno).
   const handleRefresh = useCallback(() => { void load(); }, [load]);
 
-  if (loading) return <div className="crm-page"><p>Caricamento clienti…</p></div>;
-  if (error) return <div className="crm-page"><p className="crm-error">{error}</p></div>;
+  // Splash solo per la lista: il dettaglio ha il proprio loading interno
+  // (CustomerDetail gestisce `loading`) — mai smontarlo per un refresh.
+  if (loading && !customerId) return <div className="crm-page"><p>Caricamento clienti…</p></div>;
+  if (error && !customerId) return <div className="crm-page"><p className="crm-error">{error}</p></div>;
 
   return (
     <div className="crm-page">

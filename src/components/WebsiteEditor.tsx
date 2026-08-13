@@ -10,7 +10,7 @@ import { useAIWebsite } from '../hooks/useAIWebsite';
 import { withAiCall } from '../utils/aiStats';
 import { DocumentAiStats } from './DocumentAiStats';
 import AIProviderBadge from './ai/AIProviderBadge';
-import { getValidatedProviderDefault, setAiProviderDefault, getAiVisionEnabled } from '../utils/uiPrefs';
+import { getValidatedProviderDefault, setAiProviderDefault, getAiVisionEnabled, getAiImageModelDefault } from '../utils/uiPrefs';
 import { providerSupportsVision } from '../utils/resolveProviderId';
 import { providerRegistry } from '../ai/providers/registry';
 import { captureElementAsBase64 } from '../utils/ai/captureElement';
@@ -19,9 +19,12 @@ import { compressDataUrl } from '../utils/card/imageCompress';
 import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
 import { injectImagesIntoHtml } from '../utils/website/imageInjection';
-import { sanitizeGeneratedWebsite } from '../utils/website/sanitizeGenerated';
+import { sanitizeGeneratedWebsite, enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss } from '../utils/website/sanitizeGenerated';
 import { normalizeInlineImages } from '../utils/website/imageNormalize';
+import { mergeKnowledgeIntoBrief } from '../utils/knowledgeTopK';
 import AIConsole from './ai/AIConsole';
+import { AiFontPicker } from './ai-ui';
+import CodeEditor from './website/CodeEditor';
 import { buildWebsiteFullDocument, exportWebsiteZip } from '../utils/websiteExport';
 import './WebsiteEditor.css';
 
@@ -96,6 +99,8 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visionPreviewRef = useRef<HTMLIFrameElement | null>(null);
   const lastVisionCacheRef = useRef<{ key: string; previews: string[] } | null>(null);
+  // TB-030: customer caricato (per il sync website→customer on save).
+  const customerRef = useRef<Record<string, unknown> | null>(null);
   const { addToast } = useToast();
 
   const {
@@ -108,7 +113,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     lastVisionCache,
     availableModels,
     lastCostUsd,
-  } = useAIWebsite(userEmail);
+  } = useAIWebsite(userEmail, loadedIdRef.current);
 
   useEffect(() => { isProcessingRef.current = isProcessing; }, [isProcessing]);
 
@@ -126,9 +131,29 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     if (!website.customerId || website.logoUrl) return;
     dataService.getCustomer(website.customerId).then((c) => {
       const customer = (c as Record<string, unknown>)?.data as Record<string, unknown> | undefined ?? c as Record<string, unknown> | undefined;
-      if (!customer?.logoUrl) return;
+      if (!customer) return;
+      customerRef.current = customer;
+      if (!customer.logoUrl) return;
       setWebsite((prev) => ({ ...prev, logoUrl: String(customer.logoUrl), updatedAt: new Date().toISOString() }));
     }).catch(() => {});
+  }, [website.customerId]);
+
+  // RAG live: carica i chunk knowledge del cliente e li fonde nel
+  // briefContext (sezione "Contenuto sito web") se non già presenti.
+  useEffect(() => {
+    if (!website.customerId) return;
+    let cancelled = false;
+    dataService.getCustomerKnowledge(website.customerId).then((res: { error?: string; data?: Array<{ chunk?: string }> }) => {
+      if (cancelled || res.error) return;
+      const chunks = (res.data ?? []).map((c) => c.chunk ?? '').filter(Boolean);
+      if (chunks.length === 0) return;
+      setWebsite((prev) => {
+        const current = prev.briefContext ?? '';
+        if (current.includes('Contenuto sito web:')) return prev;
+        return { ...prev, briefContext: mergeKnowledgeIntoBrief(current, chunks), updatedAt: new Date().toISOString() };
+      });
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, [website.customerId]);
 
   useEffect(() => {
@@ -148,11 +173,16 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   }, [website, userEmail, onSaved]);
 
   const updateBrief = useCallback((field: keyof WebsiteBrief, value: string) => {
-    setWebsite((prev) => ({
-      ...prev,
-      brief: { ...prev.brief, [field]: value },
-      updatedAt: new Date().toISOString(),
-    }));
+    setWebsite((prev) => {
+      const brief = { ...prev.brief, [field]: value };
+      // Sync: `contacts` (stringa composta per i prompt AI) deriva dai campi
+      // divisi address/phone/email. Se l'utente modifica `contacts` direttamente
+      // (documenti vecchi), i campi divisi restano vuoti e contacts vince.
+      if (field === 'address' || field === 'phone' || field === 'email') {
+        brief.contacts = [brief.address, brief.phone, brief.email].filter(Boolean).join(', ');
+      }
+      return { ...prev, brief, updatedAt: new Date().toISOString() };
+    });
   }, []);
 
   const addSocial = useCallback(() => {
@@ -227,19 +257,40 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         logoBase64: website.logoUrl || undefined,
         scrapedReference: scrapedRef || undefined,
         visionPreviews: await captureVisionPreviews(),
+        generateHeroImages: async (prompt) => {
+          const apiBase = import.meta.env?.VITE_API_BASE || '';
+          const res = await fetch(`${apiBase}/api/ai/image-flash`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: prompt.slice(0, 800),
+              kind: 'hero',
+              aspectRatio: '16:9',
+              size: '512',
+              style: 'minimalist',
+              imageModel: getAiImageModelDefault(),
+              userEmail,
+            }),
+          });
+          if (!res.ok) return null;
+          const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
+          return `data:${data.mimeType};base64,${data.imageBase64}`;
+        },
       });
       const cleaned = sanitizeGeneratedWebsite(result.site.html, result.site.css);
+      const finalCss = ensureHamburgerCss(cleaned.css);
       const withLogo = (h: string) => injectImagesIntoHtml(injectLogoIntoHtml(h, website.logoUrl), website.images);
+      const withMap = (h: string) => enforceMapIframe(h, website.brief.contacts);
       const pagesHtml: Record<string, string> = {};
       for (const [name, pageHtml] of Object.entries(result.site.pagesHtml)) {
         const cleanedPage = sanitizeGeneratedWebsite(pageHtml, result.site.css).html;
-        pagesHtml[name] = injectLogoIntoHtml(cleanedPage, website.logoUrl);
+        pagesHtml[name] = withMap(injectLogoIntoHtml(cleanedPage, website.logoUrl));
       }
       const merged = {
         ...website,
-        html: withLogo(cleaned.html),
-        css: cleaned.css,
-        js: result.site.js,
+        html: withMap(withLogo(cleaned.html)),
+        css: finalCss,
+        js: sanitizeGeneratedJs(result.site.js),
         pages: result.site.pages,
         pagesHtml,
         source: 'ai' as const,
@@ -269,9 +320,9 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       );
       setWebsite((prev) => ({
         ...prev,
-        html: result.site.html,
-        css: result.site.css,
-        js: result.site.js,
+        html: enforceMapIframe(result.site.html, prev.brief.contacts),
+        css: ensureHamburgerCss(result.site.css),
+        js: sanitizeGeneratedJs(result.site.js),
         pages: result.site.pages,
         pagesHtml: result.site.pagesHtml,
         updatedAt: new Date().toISOString(),
@@ -314,6 +365,25 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         addToast('success', `«${title}» salvato (${toSave.images.length} immagini)`);
         setShowSaveDialog(false);
         if (onSaved) onSaved(toSave);
+        // TB-030 sync website→customer (on save esplicito, last-write-wins):
+        // font/colori/contatti/social del brief aggiornano il customer.
+        // skipSync=true: il PATCH non ri-triggera il sync customer→website.
+        if (website.customerId) {
+          const b = website.brief;
+          const custContacts = (customerRef.current?.contacts || {}) as Record<string, unknown>;
+          dataService.updateCustomer(website.customerId, {
+            font: b.font || undefined,
+            preferredColors: b.preferredColors || undefined,
+            contacts: {
+              ...custContacts,
+              address: b.address || undefined,
+              phone: b.phone || undefined,
+              email: b.email || undefined,
+            },
+            socials: b.socials?.length ? b.socials : undefined,
+            skipSync: true,
+          }).catch((err) => logger.warn('Sync website→customer fallito', { err: String(err) }));
+        }
       })
       .catch((err) => {
         logger.error('Website save failed', { err: (err as Error)?.message });
@@ -492,7 +562,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     // Normalizza i data URL (base64 wrapped → strip whitespace): Chrome
     // rifiuta i payload con whitespace in about:srcdoc → ERR_INVALID_URL.
     // Soglia alta (200KB): le foto gallery (~60KB) restano visibili.
-    return normalizeInlineImages(buildWebsiteFullDocument(pageHtml, website.css, website.js), 200_000);
+    return normalizeInlineImages(buildWebsiteFullDocument(pageHtml, website.css, website.js, website.brief.font), 200_000);
   }, [website, previewPage]);
 
   return (
@@ -551,8 +621,12 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                   <input type="text" value={website.brief.preferredColors} onChange={(e) => updateBrief('preferredColors', e.target.value)} placeholder="Es. Blu scuro e oro, #01696F" maxLength={200} />
                 </div>
                 <div className="brief-field">
-                  <label>Font preferito</label>
-                  <input type="text" value={website.brief.font} onChange={(e) => updateBrief('font', e.target.value)} placeholder="Es. Inter, Georgia, Playfair Display..." maxLength={50} />
+                  <AiFontPicker
+                    label="Font preferito"
+                    value={website.brief.font}
+                    onChange={(font) => updateBrief('font', font)}
+                    aria-label="Font preferito"
+                  />
                 </div>
                 <div className="brief-field">
                   <label>Call-to-action principale</label>
@@ -567,8 +641,16 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                   <input type="text" value={website.brief.features} onChange={(e) => updateBrief('features', e.target.value)} placeholder="Es. Galleria foto, form contatto..." maxLength={300} />
                 </div>
                 <div className="brief-field">
-                  <label>Contatti</label>
-                  <input type="text" value={website.brief.contacts} onChange={(e) => updateBrief('contacts', e.target.value)} placeholder="Via Roma 1, 00100 Roma, info@..." maxLength={300} />
+                  <label>Indirizzo</label>
+                  <input type="text" value={website.brief.address} onChange={(e) => updateBrief('address', e.target.value)} placeholder="Via Roma 1, 00100 Roma" maxLength={200} />
+                </div>
+                <div className="brief-field">
+                  <label>Telefono</label>
+                  <input type="text" value={website.brief.phone} onChange={(e) => updateBrief('phone', e.target.value)} placeholder="+39 340 123 4567" maxLength={50} />
+                </div>
+                <div className="brief-field">
+                  <label>Email</label>
+                  <input type="text" value={website.brief.email} onChange={(e) => updateBrief('email', e.target.value)} placeholder="info@attivita.it" maxLength={100} />
                 </div>
                 <div className="brief-field brief-field-full">
                   <label>Social link</label>
@@ -697,28 +779,27 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
               )}
               <div className="code-editor-container">
                 {codeTab === 'html' && (
-                  <textarea
-                    className="code-textarea"
+                  <CodeEditor
                     value={codePage === 'index' ? website.html : (website.pagesHtml || {})[codePage] || ''}
-                    onChange={(e) => {
+                    onChange={(v) => {
                       if (codePage === 'index') {
-                        updateCode('html', e.target.value);
+                        updateCode('html', v);
                       } else {
                         setWebsite((prev) => ({
                           ...prev,
-                          pagesHtml: { ...(prev.pagesHtml || {}), [codePage]: e.target.value },
+                          pagesHtml: { ...(prev.pagesHtml || {}), [codePage]: v },
                           updatedAt: new Date().toISOString(),
                         }));
                       }
                     }}
-                    spellCheck={false}
+                    language="html"
                   />
                 )}
                 {codeTab === 'css' && (
-                  <textarea className="code-textarea" value={website.css} onChange={(e) => updateCode('css', e.target.value)} spellCheck={false} />
+                  <CodeEditor value={website.css} onChange={(v) => updateCode('css', v)} language="css" />
                 )}
                 {codeTab === 'js' && (
-                  <textarea className="code-textarea" value={website.js} onChange={(e) => updateCode('js', e.target.value)} spellCheck={false} />
+                  <CodeEditor value={website.js} onChange={(v) => updateCode('js', v)} language="javascript" />
                 )}
               </div>
             </div>

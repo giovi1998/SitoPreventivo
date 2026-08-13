@@ -2,10 +2,11 @@ import { z } from 'zod';
 import type { Flyer, FlyerTone, FlyerLayout, FlyerSize } from '../utils/documentSchemas';
 import { FLYER_HEADLINE_MAX, FLYER_SUBHEADLINE_MAX, FLYER_BODY_MAX, FLYER_CTA_LABEL_MAX } from '../utils/documentSchemas';
 import { getFlyerCopyBudget } from '../utils/flyer';
-import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall } from './types';
+import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall, RunTraceOptions } from './types';
 import { providerRegistry } from './providers/registry';
 import { chatStore } from './chat/store';
-import { buildFlyerSystemPrompt, buildFlyerCopyPrompt, type FlyerCopyContext } from './prompts/flyerSystem';
+import { promptRegistry } from './prompts/registry';
+import { buildFlyerCopyPrompt, type FlyerCopyContext } from './prompts/flyerSystem';
 import { ToolAwareOrchestrator } from './BaseOrchestrator';
 import {
   executeFlyerShortenBody,
@@ -89,6 +90,8 @@ function resolveFlyerBrief(flyer: Flyer, brief: string): string {
 const FLYER_TOOLS = ['flyer_shorten_body', 'flyer_add_urgency'];
 
 export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
+  protected aiKind = 'flyer';
+
   protected applicableTools(): string[] {
     return FLYER_TOOLS;
   }
@@ -102,7 +105,7 @@ export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
     flyer: Flyer,
     brief: string,
     tone: FlyerTone,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string }
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string } & RunTraceOptions
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
       const budget = getFlyerCopyBudget(flyer);
@@ -130,7 +133,7 @@ Usa TUTTE le informazioni del brief (attività, settore, servizi, colori e stile
   async refineCopy(
     flyer: Flyer,
     action: FlyerRefineAction,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string }
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string } & RunTraceOptions
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
       const currentJson = JSON.stringify({
@@ -156,7 +159,7 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
   private async runPrompt(
     flyer: Flyer,
     buildPrompt: () => string,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string },
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string } & RunTraceOptions,
     changeLabel?: string
   ): Promise<FlyerProcessResult> {
     const primaryProviderId = options?.modelId || providerRegistry.getDefaultId();
@@ -173,7 +176,8 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
     if (session.messages.length === 0) {
       session.messages.push({
         role: 'system',
-        content: buildFlyerSystemPrompt(),
+        // TB-029 fase 2: registry → override remoto Langfuse possibile.
+        content: promptRegistry.getPrompt('flyer-system'),
       });
     }
     const userContentParts: string[] = [];
@@ -194,6 +198,14 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : { type: 'json_object' },
         requestId: options?.requestId,
+        customerId: options?.customerId,
+        sessionId: options?.sessionId,
+        runId: options?.runId,
+        runName: options?.runName,
+        startRun: options?.startRun,
+        rootSpanId: options?.rootSpanId,
+        stepName: options?.stepName,
+        stepSpanId: options?.stepSpanId,
       },
       { onStream: options?.onStream }
     );

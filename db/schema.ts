@@ -52,6 +52,11 @@ export const customers = pgTable("customers", {
   target: text(),
   preferredColors: text(),
   contacts: jsonb(),
+  // TB-030 sync CRM↔website: social del cliente {platform, url}[] — shape
+  // identica a website.brief.socials per il sync bidirezionale.
+  socials: jsonb(),
+  // TB-030 sync CRM↔website: font preferito del cliente (auto-build prefill).
+  font: varchar({ length: 50 }),
   package: varchar({ length: 50 }).default("apertura"),
   source: varchar({ length: 20 }).default("manual"),
   intakeId: varchar("intake_id", { length: 50 }),
@@ -64,6 +69,9 @@ export const customers = pgTable("customers", {
   researchStatus: jsonb("research_status"),
   webData: jsonb("web_data"),
   aiSuggestedFields: jsonb("ai_suggested_fields"),
+  // TB-029 fase 3: A/B testing prompt per cliente {promptName: label}
+  // es. {"card-system": "experiment"} → override label in /api/ai/prompt.
+  promptLabels: jsonb("prompt_labels"),
   // TB-019+ landing: risposte form per futura landing page (webAnswers JSONB).
   webAnswers: jsonb("web_answers"),
   notes: text(),

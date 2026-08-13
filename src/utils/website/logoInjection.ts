@@ -17,10 +17,11 @@ export function injectLogoIntoHtml(html: string, logoUrl: string | null): string
 </div>`;
   let cleaned = html.replace(/<img[^>]*src\s*=\s*"data:image[^"]*"[^>]*\/?>/gi, '');
   cleaned = cleaned.replace(/<span[^>]*class\s*=\s*"[^"]*brand-mark[^"]*"[^>]*>.*?<\/span>/gi, '');
-  // Inject inside .brand div if present (stessa riga del nome attività)
-  const brandMatch = cleaned.match(/(<div[^>]*class\s*=\s*"[^"]*\bbrand\b[^"]*"[^>]*>)([\s\S]*?)(<\/div>)/i);
-  if (brandMatch) {
-    return cleaned.replace(brandMatch[0], `${brandMatch[1]}${logoHtml}${brandMatch[2]}${brandMatch[3]}`);
+  // Inject inside .brand div if present (stessa riga del nome attività).
+  // MAI dentro .footer-brand / .footer-col: il logo va nella nav, non nel footer.
+  const brandDiv = findBrandDiv(cleaned);
+  if (brandDiv) {
+    return cleaned.replace(brandDiv[0], `${brandDiv[1]}${logoHtml}${brandDiv[2]}${brandDiv[3]}`);
   }
   const navInnerMatch = cleaned.match(/(<div[^>]*class\s*=\s*"[^"]*\bnav-inner\b[^"]*"[^>]*>)([\s\S]*?)(<\/div>)/i);
   if (navInnerMatch) {
@@ -35,4 +36,29 @@ export function injectLogoIntoHtml(html: string, logoUrl: string | null): string
     return cleaned.replace(firstTagMatch[0], `${firstTagMatch[0]}\n${logoHtml}`);
   }
   return cleaned + '\n' + logoHtml;
+}
+
+/** Trova il primo <div class="...brand..."> che NON sia footer-brand/footer-col né dentro un <footer>. */
+function findBrandDiv(html: string): RegExpMatchArray | null {
+  const re = /(<div[^>]*class\s*=\s*"([^"]*\bbrand\b[^"]*)"[^>]*>)([\s\S]*?)(<\/div>)/gi;
+  let m: RegExpMatchArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const cls = m[2] || '';
+    if (/\bfooter-/i.test(cls)) continue;
+    // Esclude i brand dentro <footer> (es. <div class="brand"> in footer-brand)
+    const before = html.slice(0, m.index);
+    const lastFooterOpen = before.lastIndexOf('<footer');
+    const lastFooterClose = before.lastIndexOf('</footer>');
+    if (lastFooterOpen > lastFooterClose) continue;
+    return m;
+  }
+  return null;
+}
+
+/**
+ * Rimuove il blocco logo iniettato (qb-site-logo) dall'HTML. Serve per i
+ * prompt AI (refine): il base64 del logo non deve viaggiare nel contesto.
+ */
+export function stripLogoFromHtml(html: string): string {
+  return html.replace(/<div class="qb-site-logo"[\s\S]*?<\/div>\s*/gi, '');
 }

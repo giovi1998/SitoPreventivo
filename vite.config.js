@@ -71,7 +71,9 @@ export default defineConfig(({ mode }) => {
           };
 
           // ─── Fallback Ollama chat proxy (SSR-safe) ──────────────────
-          async function proxyOllamaChat(res, body, isStream) {
+          // TB-029: il dev proxy sostituisce il server handler in locale →
+          // DEVE tracciare su Langfuse (altrimenti in dev zero trace).
+          async function proxyOllamaChat(req, res, body, isStream) {
             const ollamaKey = process.env.OLLAMA_API_KEY;
             if (!ollamaKey) return json(res, 503, { error: 'OLLAMA_API_KEY non configurata' });
             const model = body.model || 'minimax-m3:cloud';
@@ -81,6 +83,38 @@ export default defineConfig(({ mode }) => {
             // lunghe superano i 300s (abort → 502 "This operation was
             // aborted" → sito perso). Alzato a 600s.
             const timeout = setTimeout(() => controller.abort(), 600_000);
+            const startedAt = Date.now();
+            const trace = async (input) => {
+              try {
+                const mod = await server.ssrLoadModule('/src/server/langfuse.ts');
+                const env = process.env.VERCEL_ENV === 'production' ? 'production' : 'development';
+                await mod.ingestLangfuse({ ...input, environment: env });
+              } catch {
+                // mai rompere la risposta per un errore di tracing
+              }
+            };
+            const baseTrace = {
+              requestId: devReqId(req),
+              model,
+              provider: 'ollama',
+              userEmail: body.userEmail,
+              customerId: body.customerId,
+              sessionId: body.sessionId,
+              feature: body.kind || 'chat',
+              subfeature: 'chat',
+              streaming: isStream,
+              costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined,
+              input: messages,
+              startTime: startedAt,
+              // T7: trace gerarchica agente (opzionali, backward-compatible)
+              runId: body.runId,
+              runName: body.runName,
+              startRun: body.startRun,
+              rootSpanId: body.rootSpanId,
+              stepName: body.stepName,
+              stepSpanId: body.stepSpanId,
+            };
+            const chatName = `${body.kind && body.kind !== 'chat' ? body.kind : 'chat'}-ai-chat`;
             const ollamaReq = { model, messages, stream: true };
             if (body.format === 'json' || body.response_format?.type === 'json_object') ollamaReq.format = 'json';
             if (body.think || body.reasoning_effort) ollamaReq.think = body.think || body.reasoning_effort;
@@ -103,6 +137,8 @@ export default defineConfig(({ mode }) => {
               });
               if (!apiRes.ok) {
                 const text = await apiRes.text().catch(() => 'Unknown error');
+                const errorKind = apiRes.status === 429 ? 'rate_limit' : apiRes.status === 401 ? 'auth' : 'upstream';
+                await trace({ ...baseTrace, name: chatName, error: { kind: errorKind, message: text.slice(0, 200) } });
                 return json(res, apiRes.status, { error: `Ollama (${apiRes.status}): ${text.slice(0, 200)}` });
               }
               if (isStream) {
@@ -115,6 +151,8 @@ export default defineConfig(({ mode }) => {
                 const reader = apiRes.body?.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
+                let streamContent = '';
+                let finalUsage;
                 if (!reader) return res.end();
                 while (true) {
                   const { done, value } = await reader.read();
@@ -129,17 +167,29 @@ export default defineConfig(({ mode }) => {
                       const parsed = JSON.parse(trimmed);
                       const content = parsed.message?.content || '';
                       if (content) {
+                        streamContent += content;
                         res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content } }] })}\n\n`);
                       }
-                      if (parsed.done) {
-                        if (parsed.prompt_eval_count != null || parsed.eval_count != null) {
-                          res.write(`data: ${JSON.stringify({ usage: { prompt_tokens: parsed.prompt_eval_count ?? 0, completion_tokens: parsed.eval_count ?? 0, total_tokens: (parsed.prompt_eval_count ?? 0) + (parsed.eval_count ?? 0) } })}\n\n`);
-                        }
+                      if (parsed.prompt_eval_count != null || parsed.eval_count != null) {
+                        finalUsage = {
+                          prompt_tokens: parsed.prompt_eval_count ?? 0,
+                          completion_tokens: parsed.eval_count ?? 0,
+                          total_tokens: (parsed.prompt_eval_count ?? 0) + (parsed.eval_count ?? 0),
+                        };
+                      }
+                      if (parsed.done && finalUsage) {
+                        res.write(`data: ${JSON.stringify({ usage: finalUsage })}\n\n`);
                       }
                     } catch {}
                   }
                 }
                 res.write('data: [DONE]\n\n');
+                await trace({
+                  ...baseTrace,
+                  name: chatName,
+                  output: { content: streamContent },
+                  usage: finalUsage ? { promptTokens: finalUsage.prompt_tokens, completionTokens: finalUsage.completion_tokens } : undefined,
+                });
                 return res.end();
               }
               // Non-stream fallback
@@ -156,12 +206,19 @@ export default defineConfig(({ mode }) => {
                   if (parsed.eval_count != null) evalCount = parsed.eval_count;
                 } catch {}
               }
+              await trace({
+                ...baseTrace,
+                name: chatName,
+                output: { content: full },
+                usage: promptEval + evalCount > 0 ? { promptTokens: promptEval, completionTokens: evalCount } : undefined,
+              });
               return json(res, 200, {
                 choices: [{ message: { content: full } }],
                 usage: { prompt_tokens: promptEval, completion_tokens: evalCount, total_tokens: promptEval + evalCount },
               });
             } catch (err) {
               const msg = err?.message || 'unknown';
+              await trace({ ...baseTrace, name: chatName, error: { kind: err?.name === 'AbortError' ? 'timeout' : 'connection', message: msg.slice(0, 200) } });
               // Se lo stream è già partito, non possiamo fare json()
               // (setHeader → ERR_HTTP_HEADERS_SENT crash del server).
               if (streamStarted) {
@@ -183,6 +240,33 @@ export default defineConfig(({ mode }) => {
           // we proxy /api/ai/* directly to the real providers. We reuse
           // the same provider classes used in production to keep dev/prod
           // behaviour identical.
+          //
+          // TB-029: ogni endpoint AI gestito qui DEVE tracciare su Langfuse
+          // (stesso data model del server handler di prod). Mai base64 raw
+          // nei payload: il resolver media di langfuse.ts li converte in
+          // token (rendering inline) o placeholder.
+          async function traceDev(input) {
+            try {
+              const mod = await server.ssrLoadModule('/src/server/langfuse.ts');
+              const env = process.env.VERCEL_ENV === 'production' ? 'production' : 'development';
+              await mod.ingestLangfuse({ ...input, environment: env });
+            } catch {
+              // mai rompere la risposta per un errore di tracing
+            }
+          }
+          // requestId client arriva nell'header X-Request-Id (come in prod).
+          const devReqId = (req) => {
+            const h = req.headers?.['x-request-id'];
+            return typeof h === 'string' && h ? h : crypto.randomUUID();
+          };
+          // TB-029 fix: costo Gemini per immagine (stessa tabella del server
+          // handler ai.ts — il client non invia costUsd, quindi il proxy lo
+          // calcola da solo, altrimenti Gemini risulta gratis in locale).
+          const GEMINI_PER_IMAGE = { 'gemini-3.1-flash-image': 0.04, 'gemini-2.0-flash-preview-image-generation': 0.02 };
+          const geminiCost = (model) => {
+            const perImage = GEMINI_PER_IMAGE[model] ?? GEMINI_PER_IMAGE['gemini-3.1-flash-image'];
+            return Math.round(perImage * 1_000_000) / 1_000_000;
+          };
           server.middlewares.use(async (req, res, next) => {
             const url = (req.url || '').split('?')[0];
             const handledPaths = [
@@ -192,8 +276,11 @@ export default defineConfig(({ mode }) => {
               '/api/ai/flyer-hero',
               '/api/ai/card-photo',
               '/api/ai/image-flash',
+              '/api/ai/design-review',
               '/api/ai/chat',
               '/api/ai/chat/stream',
+              '/api/ai/prompt',
+              '/api/ai/embeddings',
               '/api/logs',
             ];
             if (!handledPaths.includes(url)) return next();
@@ -240,15 +327,33 @@ export default defineConfig(({ mode }) => {
                 }
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
                 const provider = new mod.GeminiImageProvider(apiKey);
+                const t0 = Date.now();
                 try {
                   const result = await provider.generateBackground(prompt, 45_000);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
                   if (sizeBytes > 1_000_000) {
                     return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
                   }
+                  await traceDev({
+                    name: 'logo-background',
+                    requestId: devReqId(req),
+                    model: 'gemini-3.1-flash-image',
+                    provider: 'gemini',
+                    userEmail: body.userEmail,
+                    customerId: body.customerId,
+                    sessionId: body.sessionId,
+                    feature: 'logo',
+                    subfeature: 'background',
+                    costUsd: geminiCost('gemini-3.1-flash-image'),
+                    input: { prompt },
+                    output: { mimeType: result.mimeType, sizeKB: sizeBytes / 1024, imageBase64: `data:${result.mimeType};base64,${result.imageBase64}` },
+                    startTime: t0,
+                  });
                   return json(res, 200, { data: result });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
+                  const errorKind = msg.startsWith('GEMINI_401') || msg.startsWith('GEMINI_INVALID_KEY') ? 'auth' : msg.startsWith('GEMINI_429') || msg.startsWith('GEMINI_QUOTA_EXCEEDED') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : 'upstream';
+                  await traceDev({ name: 'logo-background', requestId: devReqId(req), model: 'gemini-3.1-flash-image', provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'logo', subfeature: 'background', costUsd: geminiCost('gemini-3.1-flash-image'), input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
@@ -272,7 +377,9 @@ export default defineConfig(({ mode }) => {
                   ? `${grounding}\n\n${prompt}${context ? '\n\nCARD CONTEXT:\n' + context : ''}`
                   : `${prompt}${context ? '\n\nCARD CONTEXT:\n' + context : ''}`;
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
-                const provider = new mod.GeminiImageProvider(apiKey, typeof body.imageModel === 'string' ? body.imageModel : undefined);
+                const t0 = Date.now();
+                const imageModel = typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image';
+                const provider = new mod.GeminiImageProvider(apiKey, imageModel);
                 try {
                   const images = [];
                   if (body.cardImage) images.push({ data: String(body.cardImage), mimeType: 'image/jpeg' });
@@ -282,9 +389,26 @@ export default defineConfig(({ mode }) => {
                   if (sizeBytes > 1_000_000) {
                     return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
                   }
+                  await traceDev({
+                    name: 'card-cover',
+                    requestId: devReqId(req),
+                    model: imageModel,
+                    provider: 'gemini',
+                    userEmail: body.userEmail,
+                    customerId: body.customerId,
+                    sessionId: body.sessionId,
+                    feature: 'card',
+                    subfeature: 'cover',
+                    costUsd: geminiCost(imageModel),
+                    input: { prompt, context: context || undefined, side: body.side },
+                    output: { mimeType: result.mimeType, sizeKB: sizeBytes / 1024, imageBase64: `data:${result.mimeType};base64,${result.imageBase64}` },
+                    startTime: t0,
+                  });
                   return json(res, 200, { data: result });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
+                  const errorKind = msg.startsWith('GEMINI_401') || msg.startsWith('GEMINI_INVALID_KEY') ? 'auth' : msg.startsWith('GEMINI_429') || msg.startsWith('GEMINI_QUOTA_EXCEEDED') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : 'upstream';
+                  await traceDev({ name: 'card-cover', requestId: devReqId(req), model: imageModel, provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'card', subfeature: 'cover', costUsd: geminiCost(imageModel), input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
@@ -308,7 +432,9 @@ export default defineConfig(({ mode }) => {
                   ? `${grounding}\n\n${prompt}${context ? '\n\nFLYER CONTEXT:\n' + context : ''}`
                   : `${prompt}${context ? '\n\nFLYER CONTEXT:\n' + context : ''}`;
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
-                const provider = new mod.GeminiImageProvider(apiKey, typeof body.imageModel === 'string' ? body.imageModel : undefined);
+                const t0 = Date.now();
+                const imageModel = typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image';
+                const provider = new mod.GeminiImageProvider(apiKey, imageModel);
                 try {
                   const images = body.flyerImage ? [{ data: String(body.flyerImage), mimeType: 'image/jpeg' }] : [];
                   const imageConfig = { image_size: '1K', aspect_ratio: body.aspectRatio || '3:2' };
@@ -317,9 +443,26 @@ export default defineConfig(({ mode }) => {
                   if (sizeBytes > 1_000_000) {
                     return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
                   }
+                  await traceDev({
+                    name: 'flyer-hero',
+                    requestId: devReqId(req),
+                    model: imageModel,
+                    provider: 'gemini',
+                    userEmail: body.userEmail,
+                    customerId: body.customerId,
+                    sessionId: body.sessionId,
+                    feature: 'flyer',
+                    subfeature: 'hero',
+                    costUsd: geminiCost(imageModel),
+                    input: { prompt, context: context || undefined },
+                    output: { mimeType: result.mimeType, sizeKB: sizeBytes / 1024, imageBase64: `data:${result.mimeType};base64,${result.imageBase64}` },
+                    startTime: t0,
+                  });
                   return json(res, 200, { data: result });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
+                  const errorKind = msg.startsWith('GEMINI_401') || msg.startsWith('GEMINI_INVALID_KEY') ? 'auth' : msg.startsWith('GEMINI_429') || msg.startsWith('GEMINI_QUOTA_EXCEEDED') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : 'upstream';
+                  await traceDev({ name: 'flyer-hero', requestId: devReqId(req), model: imageModel, provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'flyer', subfeature: 'hero', costUsd: geminiCost(imageModel), input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
@@ -342,7 +485,9 @@ export default defineConfig(({ mode }) => {
                   ? `${prompt}\n\nCARD PHOTO CONTEXT:\n${context}`
                   : prompt;
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
-                const provider = new mod.GeminiImageProvider(apiKey, typeof body.imageModel === 'string' ? body.imageModel : undefined);
+                const t0 = Date.now();
+                const imageModel = typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image';
+                const provider = new mod.GeminiImageProvider(apiKey, imageModel);
                 try {
                   const result = await provider.generateImage(
                     finalPrompt,
@@ -354,9 +499,26 @@ export default defineConfig(({ mode }) => {
                   if (sizeBytes > 1_000_000) {
                     return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
                   }
+                  await traceDev({
+                    name: 'card-photo',
+                    requestId: devReqId(req),
+                    model: imageModel,
+                    provider: 'gemini',
+                    userEmail: body.userEmail,
+                    customerId: body.customerId,
+                    sessionId: body.sessionId,
+                    feature: 'card',
+                    subfeature: 'photo',
+                    costUsd: geminiCost(imageModel),
+                    input: { prompt, context: context || undefined },
+                    output: { mimeType: result.mimeType, sizeKB: sizeBytes / 1024, imageBase64: `data:${result.mimeType};base64,${result.imageBase64}` },
+                    startTime: t0,
+                  });
                   return json(res, 200, { data: result });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
+                  const errorKind = msg.startsWith('GEMINI_401') || msg.startsWith('GEMINI_INVALID_KEY') ? 'auth' : msg.startsWith('GEMINI_429') || msg.startsWith('GEMINI_QUOTA_EXCEEDED') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : 'upstream';
+                  await traceDev({ name: 'card-photo', requestId: devReqId(req), model: imageModel, provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'card', subfeature: 'photo', costUsd: geminiCost(imageModel), input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
@@ -387,6 +549,7 @@ export default defineConfig(({ mode }) => {
                     ? `Stylized flat hero illustration of ${prompt}. Two colors only: ${primaryColor} and ${secondaryColor}. Transparent background. No text, no border. Simple geometric shapes, editorial style. 1024x576 px (16:9). Style: ${style}.`
                     : prompt;
                 const mod = await server.ssrLoadModule('/src/ai/providers/gemini.ts');
+                const t0 = Date.now();
                 const provider = new mod.GeminiImageProvider(apiKey, typeof body.imageModel === 'string' ? body.imageModel : undefined);
                 try {
                   const result = await provider.generateImage(finalPrompt, { image_size: size, aspect_ratio: aspectRatio }, 30_000, []);
@@ -394,9 +557,26 @@ export default defineConfig(({ mode }) => {
                   if (sizeBytes > 1_000_000) {
                     return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
                   }
+                  await traceDev({
+                    name: 'image-flash',
+                    requestId: devReqId(req),
+                    model: typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image',
+                    provider: 'gemini',
+                    userEmail: body.userEmail,
+                    customerId: body.customerId,
+                    sessionId: body.sessionId,
+                    feature: kind === 'icon' ? 'card' : kind === 'hero' ? 'flyer' : 'image',
+                    subfeature: kind === 'icon' ? 'icon' : kind === 'hero' ? 'hero' : 'flash',
+                    costUsd: geminiCost(typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image'),
+                    input: { prompt, kind, aspectRatio },
+                    output: { mimeType: result.mimeType, sizeKB: sizeBytes / 1024, imageBase64: `data:${result.mimeType};base64,${result.imageBase64}` },
+                    startTime: t0,
+                  });
                   return json(res, 200, { data: result });
                 } catch (err) {
                   const msg = err?.message || 'unknown';
+                  const errorKind = msg.startsWith('GEMINI_401') || msg.startsWith('GEMINI_INVALID_KEY') ? 'auth' : msg.startsWith('GEMINI_429') || msg.startsWith('GEMINI_QUOTA_EXCEEDED') ? 'rate_limit' : msg.startsWith('GEMINI_TIMEOUT') ? 'timeout' : 'upstream';
+                  await traceDev({ name: 'image-flash', requestId: devReqId(req), model: typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image', provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: kind === 'icon' ? 'card' : kind === 'hero' ? 'flyer' : 'image', subfeature: kind === 'icon' ? 'icon' : kind === 'hero' ? 'hero' : 'flash', costUsd: geminiCost(typeof body.imageModel === 'string' ? body.imageModel : 'gemini-3.1-flash-image'), input: { prompt }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
                   if (msg.startsWith('GEMINI_INVALID_KEY')) return json(res, 401, { error: 'Chiave Gemini non valida' });
                   if (msg.startsWith('GEMINI_QUOTA_EXCEEDED')) return json(res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' });
                   if (msg.startsWith('GEMINI_TIMEOUT')) return json(res, 504, { error: 'Gemini non ha risposto entro 30s.' });
@@ -404,7 +584,147 @@ export default defineConfig(({ mode }) => {
                 }
               }
 
+              // ─── /api/ai/design-review (vision, MiniMax M3) ────────
+              if (url === '/api/ai/design-review' && req.method === 'POST') {
+                const ollamaKey = process.env.OLLAMA_API_KEY;
+                if (!ollamaKey) return json(res, 503, { error: 'Design review non configurato (OLLAMA_API_KEY mancante)' });
+                const docType = typeof body.docType === 'string' ? body.docType : 'card';
+                const docJson = typeof body.docJson === 'string' ? body.docJson.slice(0, 50_000) : '';
+                const screenshot = typeof body.screenshotBase64 === 'string' ? body.screenshotBase64.replace(/^data:[^;]+;base64,/, '') : '';
+                if (!screenshot) return json(res, 400, { error: 'screenshotBase64 mancante' });
+                const systemPrompt = `Sei un graphic designer AI esperto. Analizza lo screenshot di un ${docType === 'card' ? 'biglietto da visita' : 'volantino'} e suggerisci 3 miglioramenti concreti. Restituisci SOLO un JSON array di 3 oggetti con shape: {"field": "string (es. style.bgColor, content.headline, decoration.id)", "value": "string (valore suggerito)", "reason": "string (motivazione 1 frase in italiano)"}. Focus su: palette colori, gerarchia visiva, leggibilità, decorazione, allineamento. Evita suggerimenti generici.`;
+                const ollamaBody = {
+                  model: 'minimax-m3:cloud',
+                  messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: `Analizza questo ${docType}. JSON attuale:\n${docJson.slice(0, 8000)}`, images: [screenshot] },
+                  ],
+                  stream: false,
+                  format: 'json',
+                  think: 'max',
+                };
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 60_000);
+                const t0 = Date.now();
+                try {
+                  const apiRes = await fetch('https://ollama.com/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ollamaKey}` },
+                    body: JSON.stringify(ollamaBody),
+                    signal: controller.signal,
+                  });
+                  if (!apiRes.ok) {
+                    const text = await apiRes.text().catch(() => 'unknown');
+                    const errorKind = apiRes.status === 429 ? 'rate_limit' : apiRes.status === 401 ? 'auth' : 'upstream';
+                    await traceDev({ name: 'design-review', requestId: devReqId(req), model: 'minimax-m3:cloud', provider: 'ollama', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'design-review', subfeature: 'review', costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined, input: { docType }, error: { kind: errorKind, message: text.slice(0, 200) }, startTime: t0 });
+                    return json(res, apiRes.status, { error: `Ollama (${apiRes.status}): ${text.slice(0, 200)}` });
+                  }
+                  const raw = await apiRes.json();
+                  const content = raw?.message?.content || '';
+                  const usage = { promptTokens: raw?.prompt_eval_count ?? 0, completionTokens: raw?.eval_count ?? 0 };
+                  await traceDev({
+                    name: 'design-review',
+                    requestId: devReqId(req),
+                    model: 'minimax-m3:cloud',
+                    provider: 'ollama',
+                    userEmail: body.userEmail,
+                    customerId: body.customerId,
+                    sessionId: body.sessionId,
+                    feature: 'design-review',
+                    subfeature: 'review',
+                    costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined,
+                    input: { docType, prompt: systemPrompt.slice(0, 120) },
+                    output: { content },
+                    usage,
+                    startTime: t0,
+                  });
+                  return json(res, 200, { data: { suggestions: content } });
+                } catch (err) {
+                  const msg = err?.message || 'unknown';
+                  const errorKind = err?.name === 'AbortError' ? 'timeout' : 'connection';
+                  await traceDev({ name: 'design-review', requestId: devReqId(req), model: 'minimax-m3:cloud', provider: 'ollama', userEmail: body.userEmail, customerId: body.customerId, sessionId: body.sessionId, feature: 'design-review', subfeature: 'review', costUsd: typeof body.costUsd === 'number' ? body.costUsd : undefined, input: { docType }, error: { kind: errorKind, message: msg.slice(0, 200) }, startTime: t0 });
+                  return json(res, 502, { error: `Design review error: ${msg.slice(0, 200)}` });
+                } finally {
+                  clearTimeout(timeout);
+                }
+              }
+
               // ─── /api/ai/chat and /api/ai/chat/stream proxy ───────
+              // TB-029 fase 2: Prompt Management — dev mirror di GET /api/ai/prompt.
+              // Il client decide la label (staging in locale, production in prod);
+              // qui fetchiamo Langfuse con le credenziali di dev.
+              if (url === '/api/ai/prompt' && req.method === 'GET') {
+                const q = new URL(req.url, 'http://localhost');
+                const name = (q.searchParams.get('name') || '').trim();
+                const label = (q.searchParams.get('label') || '').trim() || 'production';
+                if (!name) return json(res, 400, { error: 'Parametro name mancante' });
+                const pk = process.env.LANGFUSE_PUBLIC_KEY || process.env.VITE_LANGFUSE_PUBLIC_KEY;
+                const sk = process.env.LANGFUSE_SECRET_KEY || process.env.VITE_LANGFUSE_SECRET_KEY;
+                const base = process.env.LANGFUSE_BASE_URL || process.env.VITE_LANGFUSE_BASE_URL;
+                if (!pk || !sk || !base) {
+                  // Senza credenziali → fallback al template locale lato client (404).
+                  return json(res, 404, { error: 'Langfuse non configurato (LANGFUSE_* o VITE_LANGFUSE_* in .env)' });
+                }
+                try {
+                  const upstream = await fetch(`${base}/api/public/v2/prompts/${encodeURIComponent(name)}?label=${label}`, {
+                    headers: { Authorization: `Basic ${Buffer.from(`${pk}:${sk}`).toString('base64')}` },
+                    signal: AbortSignal.timeout(2000),
+                  });
+                  if (!upstream.ok) return json(res, upstream.status, { error: `Langfuse ${upstream.status}` });
+                  const body = await upstream.json();
+                  const prompt = Array.isArray(body.prompt)
+                    ? body.prompt
+                    : typeof body.prompt === 'string'
+                      ? [{ role: 'system', content: body.prompt }]
+                      : null;
+                  if (!prompt) return json(res, 502, { error: 'Prompt vuoto' });
+                  return json(res, 200, { data: { name: String(body.name ?? name), version: Number(body.version ?? 0), prompt, fallback: false } });
+                } catch (err) {
+                  return json(res, 502, { error: `Langfuse error: ${String(err?.message || err).slice(0, 120)}` });
+                }
+              }
+
+              // ─── /api/ai/embeddings (RAG, gemini-embedding-2) ──────
+              if (url === '/api/ai/embeddings' && req.method === 'POST') {
+                if (!apiKey) {
+                  return json(res, 503, { error: 'GEMINI_API_KEY non configurata (metti VITE_GEMINI_API_KEY in .env)' });
+                }
+                const input = typeof body.input === 'string' ? body.input : '';
+                if (!input || input.length > 8000) {
+                  return json(res, 400, { error: 'input mancante o troppo lungo' });
+                }
+                const t0 = Date.now();
+                try {
+                  const { GoogleGenAI } = await import('@google/genai');
+                  const ai = new GoogleGenAI({ apiKey });
+                  const result = await ai.models.embedContent({ model: 'models/gemini-embedding-2', contents: input });
+                  const values = result?.embedding?.values || [];
+                  if (!Array.isArray(values) || values.length === 0) {
+                    return json(res, 502, { error: 'Embedding vuoto da Gemini' });
+                  }
+                  await traceDev({
+                    name: 'embed-chunk',
+                    requestId: devReqId(req),
+                    model: 'gemini-embedding-2',
+                    provider: 'gemini',
+                    userEmail: body.userEmail,
+                    customerId: body.customerId,
+                    sessionId: body.customerId,
+                    feature: 'crm',
+                    subfeature: 'embedding',
+                    observationType: 'embedding',
+                    input: { text: input.slice(0, 500) },
+                    output: { dimensions: values.length },
+                    startTime: t0,
+                  });
+                  return json(res, 200, { data: { embedding: values, model: 'gemini-embedding-2' } });
+                } catch (err) {
+                  const msg = String(err?.message || err).slice(0, 200);
+                  await traceDev({ name: 'embed-chunk', requestId: devReqId(req), model: 'gemini-embedding-2', provider: 'gemini', userEmail: body.userEmail, customerId: body.customerId, feature: 'crm', subfeature: 'embedding', observationType: 'embedding', input: { text: input.slice(0, 500) }, error: { kind: 'upstream', message: msg }, startTime: t0 });
+                  return json(res, 502, { error: `Embedding error: ${msg}` });
+                }
+              }
+
               if (url === '/api/ai/chat' || url === '/api/ai/chat/stream') {
                 const isStream = url === '/api/ai/chat/stream';
                 let providerId = body.provider || 'deepseek-v4-flash';
@@ -424,13 +744,13 @@ export default defineConfig(({ mode }) => {
                   // Ollama in SSR non può usare fetch relativo: bypassiamo il
                   // provider e chiamiamo l'upstream direttamente, come fa il fallback.
                   if (providerId.startsWith('ollama')) {
-                    return await proxyOllamaChat(res, body, isStream);
+                    return await proxyOllamaChat(req, res, body, isStream);
                   }
                   const mod = await server.ssrLoadModule('/src/ai/providers/registry.ts').catch(() => null);
                   if (!mod) {
                     // Fallback: direct Ollama proxy using env key.
                     if (providerId.startsWith('ollama')) {
-                      return await proxyOllamaChat(res, body, isStream);
+                      return await proxyOllamaChat(req, res, body, isStream);
                     }
                     return json(res, 503, { error: 'Provider non disponibile in SSR. Riprova con Ollama o riavvia il dev server.' });
                   }
@@ -520,6 +840,7 @@ export default defineConfig(({ mode }) => {
             if (id.includes('/html2canvas/')) return 'html2canvas';
             if (id.includes('/@dnd-kit/')) return 'dnd-kit';
             if (id.includes('/qrcode/')) return 'qrcode';
+            if (id.includes('/@codemirror/') || id.includes('/codemirror/') || id.includes('/@lezer/') || id.includes('/@codemirror/') || id.includes('/@codemirror/language/')) return 'codemirror';
           },
         },
       },

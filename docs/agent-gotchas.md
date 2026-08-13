@@ -8,8 +8,8 @@ Leggere la sezione pertinente prima di toccare il modulo corrispondente.
 
 ## 1. Vercel function bundling — lessons learned
 
-Quattro commit tentarono di refactorare la struttura API; tutti e quattro
-ruppero la produzione, ognuno per una causa diversa.
+Quattro tentativi storici di refactorare la struttura API ruppero la
+produzione; il quinto (server entrypoint, 2026-08-10) ha FUNZIONATO.
 
 1. `f004e5e` (split in `api/lib/` + `api/routes/`): superato il limite di 12
    funzioni Hobby. Vercel conta ogni `.ts` in `api/` come funzione.
@@ -25,27 +25,60 @@ ruppero la produzione, ognuno per una causa diversa.
    e rispondeva **405 Method Not Allowed** a ogni POST `/api/*` (index.html
    è uno static asset che non accetta POST).
 
-**Conclusione**: su piano Hobby, un singolo monolite è l'unica opzione
-sicura. Tenere SEMPRE in `vercel.json`, in quest'ordine (prima matcha
-prima):
+**Conclusione attuale (2026-08-10, commit `de7fd94`)**: il pattern
+"server entrypoint" (docs/functions/runtimes/node-js) è la via giusta:
+`server.ts` alla root + preset framework `node` nel project settings
+(runtime `@vercel/backends`) = UNA Vercel Function che riceve tutto, con
+import da `src/` risolti (la root della funzione è la root del progetto).
+Niente rewrites in `vercel.json` — il server gestisce `/api/*` + statici
+`dist/` + SPA fallback. Dettagli e setup in §1.3. Regression test:
+`src/__tests__/vercelConfig.test.ts`.
 
-```json
-{ "rewrites": [
-  { "source": "/api/(.*)", "destination": "/api" },
-  { "source": "/(.*)", "destination": "/index.html" }
-] }
-```
+### 1.1 Cross-boundary `api/` → `src/` — SUPERATO
 
-Regression test: `src/__tests__/vercelConfig.test.ts` (presenza + ordine).
+Il cross-boundary era specifico del vecchio setup `api/index.ts` (il
+bundler tracciava `api/` come entry point separato → `src/` fuori dal
+bundle, `ERR_MODULE_NOT_FOUND`). Con il server entrypoint (`server.ts` alla
+root) la root della funzione è la root del progetto: **gli import da
+`src/` funzionano**. `api/` è stata eliminata (commit `de7fd94`). La
+costante `OLLAMA_PRO_FLAT_MONTHLY` resta inlined in `src/server/handler.ts`
+per coerenza con i test che la importano.
 
-### 1.1 Import cross-boundary `api/` → `src/`
+### 1.3 Server entrypoint `server.ts` — RISOLTO (2026-08-10, framework=node)
 
-Import statici da `api/index.ts` verso `../src/...` non risolvono su
-Vercel Lambda: il bundler traccia `api/` come entry point separato e
-`src/` resta fuori dal bundle. Sintomo: `ERR_MODULE_NOT_FOUND: Cannot
-find module '/var/task/src/ai/...'`. Fix: inlinare le costanti/funzioni
-necessarie direttamente in `api/index.ts` (es. `OLLAMA_PRO_FLAT_MONTHLY`).
-Non importare MAI da `../src/` in `api/index.ts` in produzione.
+Il pattern documentato (`docs/functions/runtimes/node-js`: `server.ts` alla
+root con `server.listen()` = unica Vercel Function; root funzione = root
+progetto → import da `src/` risolvono) FUNZIONA, ma richiede il preset
+framework **`node`** esplicito nel project settings.
+
+**Prima diagnosi (errata)**: deploy con `framework: null` → 404 su `/api/*`,
+lambda `entrypoint: "."` con `output: []` (bundle vuoto). Causa reale: la
+detection automatica del framework avviene SOLO alla creazione del progetto
+(dashboard/git import); al deploy CLI con progetto esistente Vercel usa le
+settings così come sono → `framework: null` = trattato come static-only.
+
+**Fix**: `PATCH /v9/projects/<name>` con `{"framework": "node",
+"outputDirectory": null}` (il preset Node, `slug: 'node'` in
+`packages/frameworks/src/frameworks.ts`, usa il runtime `@vercel/backends`
+e rileva `server.ts`/`server.js`/`server.mjs` alla root o in `src/`).
+Build log conferma: `Build complete - Using server.ts as the root
+entrypoint.`
+
+**Setup attuale** (commit `de7fd94`):
+- `server.ts` alla root: http server + body reader 4MB + statici da `dist/`
+  + SPA fallback. `src/server/handler.ts`: ex `api/index.ts` verbatim.
+- `vercel.json`: SOLO `buildCommand` (niente rewrites, niente
+  outputDirectory — il server serve `dist/` a runtime).
+- Project settings: `framework: "node"`, `buildCommand:
+  "npm run db:migrate && npm run build"`, `outputDirectory: null`.
+- Test API in `src/server/__tests__/` (path import `../handler`).
+- Validato su preview: GET config/logo-config 200, POST users/login 401
+  (routing+body+DB ok), SSE chat/stream 200 streaming, SPA fallback 200,
+  404 JSON. Import da `src/` risolvono (cross-boundary §1.1 superato per
+  il server; `api/` non esiste più).
+
+⚠️ Se il progetto venisse ricreato da zero: `vercel link` + PATCH framework
+`node` (o import git che auto-detecta). Mai `framework: null`.
 
 ### 1.2 Lazy `getDb()` — operator precedence (§1.2)
 
@@ -68,7 +101,7 @@ cerca `Symbol.iterator` sulla chain, che non ha iteratore.
 const [row] = await (await getDb()).select().from(table).where(cond);
 ```
 
-**Regola**: OGNI chiamata DB in `api/index.ts` deve avere `await` prima
+**Regola**: OGNI chiamata DB in `src/server/handler.ts` deve avere `await` prima
 della catena query (select, insert.values().returning(),
 update.set().where().returning(), delete.where()). Anche le fire-and-forget
 (devono avere `await` per propagare errori). Pattern corretto:
@@ -114,7 +147,7 @@ Due bug distinti hanno bloccato la generazione background per un intero
 ciclo; nessuno era nel provider Gemini in sé.
 
 1. **Path proxy dev deve combaciare char-per-char col client/prod**. Client
-   (`LogoAiPanel.tsx`) e `api/index.ts` usano `/api/ai/logo-config` +
+   (`LogoAiPanel.tsx`) e `src/server/handler.ts` usano `/api/ai/logo-config` +
    `/api/ai/logo-background`. Il middleware dev in `vite.config.js`
    intercettava `/api/logo-config` (senza `/ai/`): fetch falliva
    silenziosamente, `config.provider` restava `'none'`, ramo background
@@ -131,39 +164,39 @@ ciclo; nessuno era nel provider Gemini in sé.
 4. **`interactions.create()` vuole `response_modalities` minuscolo**
    (`['text', 'image']`), non `['TEXT', 'IMAGE']` (vecchia REST
    `generateContent`). Maiuscolo → `400: value 'TEXT' is not supported`.
-5. **Risoluzione per-endpoint + JPEG q85 (spec ai-image-quality, 2026-08-06)**:
-   la pipeline era bloccata a 512px → immagini pixelate su aree grandi
-   (card 1004×650, hero A4 2362×1358, logo export 2048). Ora:
-   card-cover/card-photo/image-flash `image_size: '1K'` (clamp 500KB),
-   flyer-hero/logo-background `'2K'` (clamp **1.5MB**, timeout 45s). Tutte
-   le chiamate impostano `image_output_options: { mime_type: 'image/jpeg',
-   compression_quality: 85 }` (PNG 2K = 2-4MB, oltre clamp).
-   - **`image_output_options` NON è nel tipo SDK 2.10** (`ImageConfig_2` =
-     solo `aspect_ratio`/`image_size`): serve cast
-     `as { image_size?: string; aspect_ratio?: string }`. Wire snake_case:
-     `interactions.create` passa il body invariato; il camelCase
-     `imageOutputOptions` esiste solo nel models API e l'SDK lo rifiuta
-     ("only supported in Gemini Enterprise Agent Platform").
+5. **Risoluzione 1K uniforme + Nano Banana 2 Lite (spec ai-image-quality,
+   2026-08-06; correzione probe live 2026-08-07)**: la pipeline era
+   bloccata a 512px → immagini pixelate su aree grandi (card 1004×650,
+   hero A4 2362×1358, logo export 2048). Ora tutti gli endpoint chiedono
+   `image_size: '1K'` (1K JPEG misurato ~850KB) con clamp uniforme **1MB**
+   (`GEMINI_IMG_CLAMP_BYTES` in `src/server/core.ts`); logo-background e
+   flyer-hero con timeout 45s. Il 2K non si usa mai: 2752×1536 ≈ 3.2MB →
+   ~4.4MB base64 supera il limite risposta Vercel 4.5MB.
+   - **Mai `image_output_options`/`output_mime_type` sulle interactions
+     API**: probe live 2026-08-07 → `400 Unknown parameter`. JPEG è già
+     l'output default di `gemini-3.1-flash-image`, nessun output control
+     necessario.
    - **Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`)**: solo 1K →
-     `resolveImageSize` (provider) / `resolveGeminiImageSize` (api) forzano
-     `'1K'` su qualunque endpoint. Pricing `gemini-nano-banana-lite` $0.02;
-     mapping centralizzato `geminiImagePricingId` in `providerPricing.ts`.
+     `resolveGeminiImageSize` (server) / `resolveImageSize` (provider)
+     forzano `'1K'` su qualunque endpoint. Pricing
+     `gemini-nano-banana-lite` $0.02; mapping centralizzato
+     `geminiImagePricingId` in `providerPricing.ts`.
    - `image-flash` zod: `size` enum `['512','1K']` default `'1K'` (`'256'`
      non valido — il vecchio retry auto-build `['512','256']` falliva con
-     400 silenzioso; ora `['1K','512']`); `aspectRatio` enum senza `'3:1'`
-     (non supportato da Gemini 3.1).
+     400 silenzioso; ora `['1K','512']`); `aspectRatio` enum esteso ai
+     rapporti supportati da Gemini 3.1 (rimosso `'3:1'`).
    - Persistenza path-aware: `compressDataUrl` default 1024px/400KB;
      background/hero 1536px/400KB (`dataService/images.js`); PNG con alpha
      resta PNG (downscale iterativo, mai fallback JPEG).
 6. **`await import('../src/...')` non risolto in prod Vercel**. L'import
-   dinamico di un modulo sotto `src/` da `api/index.ts` fallisce in
+   dinamico di un modulo sotto `src/` da `src/server/handler.ts` fallisce in
    produzione (`Cannot find module '/var/task/src/...'`) anche se gli
    import **statici** da `src/` funzionano. Sintomo: 404
    `{"error":"Endpoint AI non trovato"}` o 502. Fix:
    `await import('@google/genai')` diretto (node_modules sempre bundled) e
    logica provider inlinata.
 7. **Import statico di `@google/genai` crasha l'intera funzione**. Il
-   pacchetto v2.10.0 è ESM-only; l'import statico in cima a `api/index.ts`
+   pacchetto v2.10.0 è ESM-only; l'import statico in cima a `src/server/handler.ts`
    rompe il bundle Vercel: OGNI endpoint `/api/*` ritorna
    `FUNCTION_INVOCATION_FAILED` (anche `/api/ping`). Fix: solo import
    dinamico dentro l'handler della route.
@@ -185,7 +218,7 @@ ciclo; nessuno era nel provider Gemini in sé.
     `buildCardAIContext` (`src/ai/prompts/cardContext.ts`) strippa
     `coverImageUrl` insieme a `photoUrl` e `logoUrl`.
 11. **Context limit disallineato validatore vs builder**. Zod
-    `context: z.string().max(N)` in `api/index.ts` e `MAX_CONTEXT_LEN` in
+    `context: z.string().max(N)` in `src/server/handler.ts` e `MAX_CONTEXT_LEN` in
     `coverBrief.ts` devono coincidere (ora 2000). Verificare SEMPRE dopo
     modifiche a `buildCoverContext`.
 12. **`LogoAiPanel`: background AI perso cambiando tab AI → Builder → AI**.
@@ -680,7 +713,7 @@ Codice signup/onboarding **conservato** dietro feature flag
    placeId, placeData JSONB, customerPhotos JSONB, detectedLogoUrl,
    researchStatus JSONB, aiSuggestedFields JSONB, notes, assignedTo,
    timestamps). Colonna `documents.customerId` (FK nullable,
-   retrocompatibile). Mirror in `api/index.ts` (`customersTable`,
+   retrocompatibile). Mirror in `src/server/handler.ts` (`customersTable`,
    `documentsTable` aggiornata).
 2. **Endpoint** (tutti admin, guard `requireAdmin` helper):
    - `GET /api/customers?status=&adminEmail=` — lista filtrata.
@@ -761,7 +794,7 @@ Codice signup/onboarding **conservato** dietro feature flag
    `new|in_progress|done|rejected`, businessName, ownerName, sector,
    activity, mood, target, preferredColors, contacts JSONB, package,
    sourceRef UNIQUE nullable, notes, assignedTo, timestamps). Mirror in
-   `api/index.ts` (`intakesTable`).
+   `src/server/handler.ts` (`intakesTable`).
 2. **Endpoint**:
    - `POST /api/intake` (pubblico, rate limit 5/ora/IP via
      `consumeRateLimit(ip, 'intake', 5, 60*60*1000)`). Zod
@@ -791,7 +824,7 @@ Codice signup/onboarding **conservato** dietro feature flag
 ### Gotchas specifici
 
 - **z.record 2 args**: zod v3 richiede `z.record(z.string(), z.unknown())`
-  non `z.record(z.unknown())` (TS error in api/index.ts mirror).
+  non `z.record(z.unknown())` (TS error in src/server/handler.ts mirror).
 - **b&b come key object**: `b&b` non quotato in TS rompe il parser
   (`&` → TS1005). Quota: `'b&b': '...'`.
 - **mock DB select.where**: chain mock in test deve ritornare array con
@@ -887,7 +920,7 @@ Contesto cliente:
 - **Research dev reale**: branch LOCAL di `researchCustomer` usa
   `VITE_FIRECRAWL_API_KEY` (browser, dev-only come `VITE_GEMINI_API_KEY`)
   via `src/utils/firecrawlLocal.js` (chunkMarkdown DUPLICATO da
-  api/index.ts — boundary Vercel, annotato). Chunks →
+  src/server/handler.ts — boundary Vercel, annotato). Chunks →
   `pq_customer_knowledge:v1`. Logo detection solo da risposta Firecrawl
   (branding/metadata, URL remoto, niente fetch HTML cross-origin).
   Status: `no_key` senza key, `no_website` senza sito, `error` su
@@ -945,7 +978,7 @@ Contesto cliente:
 - **Locale (`src/utils/firecrawlLocal.js`)**: `scrapeFirecrawlLocal` mirror di
   `fetchFirecrawlPage` con fallback payload; parsing robusto screenshot /
   links / json / images.
-- **API (`api/index.ts`)**: `fetchFirecrawlPage` ritorna `FirecrawlResult`
+- **API (`src/server/handler.ts`)**: `fetchFirecrawlPage` ritorna `FirecrawlResult`
   arricchito; research endpoint salva tutto in `webData` e usa
   `branding.logo` o `json.logo` per `detectedLogoUrl`.
 - **UI layout**: sezione "Dati dal sito" su 2 colonne (main/side). Main:
@@ -1274,7 +1307,7 @@ non serve). Dettaglio per provider:
 - Mappatura per provider: DeepSeek accetta `low`/`high`/`max`; Ollama
   `low`/`medium`/`high`/`max` (`medium` solo Ollama — il selettore UI
   non lo espone, resta via options esplicite)
-- Server proxy (`api/index.ts`): `reasoning_effort` nel body è accettato
+- Server proxy (`src/server/handler.ts`): `reasoning_effort` nel body è accettato
   anche per provider `ollama` e mappato a `think` (`reasoning_effort ?? 'max'`)
 - Dev proxy (`vite.config.js`): propaga `think`/`format`/`num_predict` e
   `reasoningEffort` nelle options verso il provider Ollama
@@ -1418,7 +1451,7 @@ Dettagli per `src/ai/prompts/websiteSystem.ts` e `src/ai/websiteOrchestrator.ts`
 - `src/utils/websiteExport.ts` (`exportWebsiteZip`, `buildWebsiteFullDocument`)
   condiviso da editor + Collection: immagini/logo base64 → `assets/` con
   `src` relativi, `.html` per pagina. Test: `websiteExport.test.ts` (5).
-- `api/index.ts` bodyParser `1mb` → `4mb` (documenti website con immagini
+- `src/server/handler.ts` (ex api) bodyParser `1mb` → `4mb` (documenti website con immagini
   inline superavano 1MB → salvataggio 413).
 
 ### 26.10 Dev proxy: ERR_HTTP_HEADERS_SENT
@@ -1743,7 +1776,7 @@ proxy (`vite.config.js` `proxyOllamaChat`) NON propagava `tools` nel body
 upstream — `ollamaReq = { model, messages, stream: true }` e basta. I
 tool_calls precompilati (verify analyze_site) arrivavano a Ollama senza
 `tools` dichiarato → 400 "Value looks like object, but can't find closing
-'}' symbol". In PROD `api/index.ts:1373` i tools erano già propagati
+'}' symbol". In PROD `src/server/handler.ts:1373` i tools erano già propagati
 (§26.17) — il bug era solo dev. Fix: `if (Array.isArray(body.tools) &&
 body.tools.length > 0) ollamaReq.tools = body.tools;`.
 
@@ -1782,7 +1815,7 @@ ma con coda/concorrenza può sforare) → abort → 502 → **eccezione propagat
 
 **Fix**:
 1. **Timeout dev proxy 300s → 600s** (`vite.config.js`): 10 min per
-   generazioni Ollama lunghe. In PROD `api/index.ts:1340` il timeout
+   generazioni Ollama lunghe. In PROD `src/server/handler.ts:1340` il timeout
    Ollama è **60s** — per CSS da 100-130s fallirebbe SEMPRE: va alzato
    alla prossima deploy (TODO prod, gotcha §1 regola vercel).
 2. **Step CSS/JS/pagine BEST-EFFORT**: un loro timeout/errore NON perde
@@ -1806,7 +1839,7 @@ typecheck + suite impattata verde. ⚠️ Riavvio dev server obbligatorio
 suo AbortController, quindi "si resetta" naturalmente tra step. Il valore
 era solo troppo basso: 300s (dev) / 60s (prod) con Ollama thinking 'max' +
 16k tok → abort → 502 → sito perso. Ora 600s in entrambi (vite.config.js
-+ api/index.ts). In prod la durata massima Vercel Hobby per una funzione è
++ src/server/handler.ts). In prod la durata massima Vercel Hobby per una funzione è
 60s **solo per funzioni sincrone** — con streaming/flush il limite si
 allunga; se dovesse restare il 502 in prod, il piano Hobby è il tetto
 (vedi to-be-done: valutare pro/streaming serverless).
@@ -1943,6 +1976,151 @@ stringhe JS), `seoMeta.test.ts` (9 — sanitize, ordine, coerenza og:desc),
 `websiteOrchestrator.test.ts` (15 — tool precompilati, loop recheck
 pulito/residuo, fixes, costo), `websiteSystem.test.ts` (12 — prompt verify
 rules). Gate: typecheck + 524 test impattati verdi.
+
+### 26.25 Langfuse — costi Gemini dev proxy + nomi trace + tipi multimodali (2026-08-12)
+
+**Bug (to-be-done Langfuse follow-up, da CSV export)**: in locale Gemini
+risultava gratis (`costDetails: {}`) e le trace immagini avevano nomi
+vecchi (`generate-image-flash`) + `subfeature:chat` errato.
+
+**Fix**:
+1. **Costi Gemini nel dev proxy**: `vite.config.js` — `GEMINI_PER_IMAGE`
+   (`gemini-3.1-flash-image` 0.04, `gemini-2.0-flash-preview-image-generation`
+   0.02) + `geminiCost(model)` (round 6 decimali). I 5 endpoint Gemini
+   (logo-background, card-cover, flyer-hero, card-photo, image-flash)
+   passano `costUsd: geminiCost(...)` a `traceDev` — prima solo
+   `body.costUsd` (mai inviato dal client → 0). Stessa tabella del server
+   handler `ai.ts` (`computeCostUsd('gemini', model, undefined, 1)`).
+2. **Nomi trace server allineati**: `src/server/ai.ts` — `flyer-hero`,
+   `card-photo`, `image-flash` (era `generate-*`) + `subfeature` corretta
+   (`hero`/`photo`/`icon|hero|flash` per kind) + `costUsd` Gemini. Ora
+   server handler e dev proxy hanno nomi/subfeature/costi identici.
+3. **Tipi multimodali**: `LangfuseMessage.content` = `string |
+   LangfuseContentPart[]` (parti OpenAI-style `{type:'text'}` /
+   `{type:'image_url', image_url:{url}}` — formato documentato Langfuse
+   per generazioni text+image). `sanitizeInput` e `resolveMediaRefs`
+   gestiscono le parti image_url: placeholder senza upload, token
+   `@@@langfuseMedia@@@` con upload (mai base64 raw). **Attenzione**:
+   `sanitizeInput` appende il placeholder `[immagine allegata]` SOLO ai
+   messaggi con `images[]` non vuoto (prima lo appendeva anche ai
+   messaggi senza → test PII rotti).
+
+**Test**: +3 (dev proxy costUsd 0.04, parti image_url placeholder, parti
+image_url → token media), fix 1 (sanitize PII). Gate: typecheck + 3011
+test verdi.
+
+### 26.26 Langfuse — media upload end-to-end + sessioni complete + latency reale (2026-08-12)
+
+**Bug (to-be-done Langfuse follow-up, da CSV export)**: le trace immagini
+mostravano ancora `[immagine allegata]` (placeholder), le sessioni
+Langfuse restavano vuote anche per documenti con `sessionId=docId`, e tutte
+le trace avevano `latencyMs=0`.
+
+**Fix**:
+1. **Media upload funzionante** (`src/server/langfuse.ts`):
+   - `sha256Hash` = base64 del digest binario (44 char). Prima era hex
+     (64 char) → 400 `invalid_format` dalla regex Langfuse.
+   - PUT presigned con header `x-amz-checksum-sha256` (senza → 403 S3).
+   - PATCH `/api/public/media/{mediaId}` con `{uploadedAt, uploadHttpStatus}`
+     post-PUT (senza → GET 404 "Media upload failed" → placeholder).
+   - `contentLength` = byte reali (`Buffer.from(b64,'base64').length`), non
+     arrotondato.
+   - `traceId` media = 32-hex W3C (formato atteso dalla UI), non base64
+     OTLP.
+2. **Sessioni complete**:
+   - Server: `sessionId` aggiunto agli zod di `card-cover`, `card-photo`,
+     `logo-background`, `flyer-hero`, `image-flash`, `design-review` e
+     passato a `traceGeneration` (prima Zod lo strippava).
+   - Client: `sessionId` aggiunto alle deps di `useCallback` in
+     `useAICard`/`useAILogo`/`useAIFlyer`/`useAIWebsite` (closure stale su
+     doc-switch); `useAISocial` ora passa `sessionId` all'orchestratore;
+     `useAIIconHero` accetta `sessionId` e lo manda nel body (wiring
+     `CardEditorShell` con `loadedIdRef.current`).
+3. **Latency reale**: `buildLangfusePayload` usava `endTime ?? startTime`
+   (i chiamanti passano solo `startTime` → 0ms). Ora default `endTime`
+   = payload build time.
+4. **Design-review allineato**: nome trace `design-review` (era
+   `generate-design-review`) + subfeature `review` + sessionId.
+5. **Dead code**: rimosso `buildTags` duplicato in `src/server/ai.ts`.
+
+**Verifica end-to-end**: avviato `npm run dev`, chiamate reali a
+`card-cover`/`image-flash`/`card-ai-chat` con `sessionId` — su Langfuse
+cloud risultano raggruppate nella stessa sessione, output immagini con
+token `@@@langfuseMedia@@@`, latenze 10,76s / 8,72s / 1,48s.
+
+**Test**: aggiornati `langfuse.test.ts` (sha base64/PATCH/checksum/
+contentLength/latency), `langfuseApi.test.ts` (sessionId card-cover),
+`useAIIconHero.test.tsx` (sessionId body). Gate: typecheck + 3013 test
+verdi.
+
+### 26.27 Langfuse agenti — trace gerarchica agente→sub-agente + agente con harness (2026-08-12)
+
+Effort wayfinder (mappa `docs/wayfinder/langfuse-agentic-map.md`, 10
+ticket T1-T10, decisioni+risoluzioni nei singoli ticket).
+
+**Decisioni research** (ticket T1/T2):
+- **LangChain/LangGraph: DON'T ADOPT**. Nested span = solo
+  `parentSpanId` OTLP (~5 LOC); il vero gap era il traceId (ogni chiamata
+  un requestId → trace separate). LangGraph ~12MB / AI SDK ~7MB / OTel
+  1-2MB contro §25; SDK v5 richiede `forceFlush()` pre-exit (peggio della
+  fire-and-forget 2s). Provider layer custom → AI SDK = rewrite out of
+  scope.
+- **Next.js: DON'T MIGRATE** (~90-140h, SPA pura client-state, monolite
+  §1 load-bearing, Langfuse non Next-gated).
+
+**Trace gerarchica (T7)** — una trace per run, 3 livelli:
+1. **Client** (`src/ai/runTrace.ts`): `newRunId()` (32-hex) +
+   `newSpanId()` (16-hex). `useAutoBuildGenerate` genera runId/
+   rootSpanId per run, stepSpanId per step, propaga via `RunTraceOptions`
+   (in `types.ts`, esteso `ChatOptions`) → orchestratori (logo/card/
+   flyer/website) → body `/api/ai/chat`.
+2. **Server** (`ai.ts`): Zod `runId` (regex 32-hex), `runName`,
+   `startRun` (boolean), `rootSpanId`/`stepSpanId` (regex 16-hex) su
+   `/ai/chat` e `/ai/chat/stream`; destructure + passaggio ai 5
+   `traceGeneration` chat; dev proxy `vite.config.js` propagato.
+3. **Payload** (`langfuse.ts`): `parentSpanId` + campi run; traceId =
+   runId (media upload inclusi, `ingestLangfuse` usa `input.runId ??
+   toTraceHexId(requestId)`); emette root `agent:<runName>` (solo
+   `startRun`) + step `agent:<runName>:<stepName>` + generation con
+   parent link. **Backward-compat**: senza campi run = identico a prima.
+
+**Website**: ogni chiamata interna (html/pages/css/js/verify) è un
+sub-step con stepSpanId nuovo (`runTrace(step)` helper in
+`websiteOrchestrator`, `startRun` solo sulla prima chiamata).
+
+**Agente con harness (T9)** — `src/ai/agentOrchestrator.ts`:
+- 4 tools `generate_logo/card/flyer/website` (filtro `include`),
+  loop plan→act max 6 round su `BaseOrchestrator` (niente LangGraph);
+  tool fail → `{ok:false, summary}` senza crash; `onToolResult` per
+  salvataggio dal chiamante. **NON ancora collegato alla UI** (nessun
+  componente lo usa) — wiring CRM = prossimo step.
+- Trace: l'agente emette `stepName:'plan'` (root su round 0) + ogni
+  tool usa `stepName = oggetto` + stepSpanId nuovo.
+
+**⚠️ Bug PROD sbloccato — website mai generato con auto-generate**:
+`websiteOrchestrator` manda `maxTokens: 16384` (7 call site) ma Zod
+server aveva `max_tokens.max(8192)` → **400 validation su OGNI step
+website in PROD** (il dev proxy Vite non valida il body → in locale
+funzionava). Fix: max 16384 in entrambi gli schemi `/ai/chat` +
+spec test. **Deployato con faacc42** — riprovare "Genera bozze AI"
+in prod con cliente reale.
+
+**⚠️ Trace finte su Langfuse da test unitari (T10)** — le trace con
+`prompt:"p"` e `sizeKB: 0.0029` (3 byte, `image: PNG/JPEG`) erano
+**trace dei test endpoint**: `resetApiTests` (helpers/apiTest.ts) non
+azzerava `LANGFUSE_*`/`VITE_LANGFUSE_*` → `ingestLangfuse` fallback
+VITE_* → env reali da .env locale → ogni test (flyerHero, imageFlash,
+cardCover, ...) mandava OTLP reale con dati mock al cloud. Fix:
+`resetApiTests` azzera le 6 env; regression test in `flyerHero.test.ts`
+(nessuna chiamata `/otel/v1/traces` o `/media`). I test di ingest che
+verificano OTLP impostano le proprie env DOPO resetApiTests (già così).
+
+**Test**: +3 payload gerarchico (root+step+gen, no-root, backward-compat),
++4 Zod run fields, +4 Zod max_tokens 16384, +5 agente (tool exec,
+runTrace propagation, tool fail, no-tool stop, include filter), +1
+regression test no-cloud, +7 expected tags aggiornati con `status:ok`.
+Gate: typecheck 0 + **3033 test verdi** + build zero-warning.
+
 
 ## 27. Design review tipografica card/logo/flyer (2026-08-06)
 

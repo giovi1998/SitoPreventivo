@@ -419,6 +419,7 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
           <LogoAiPanel
             key={`${aiPanelResetKey}-${initialLogo?.id ?? 'new'}`}
             docId={initialLogo?.id}
+            sessionId={loadedIdRef.current}
             logo={logo}
             onPatch={(patch) => {
               for (const [k, v] of Object.entries(patch)) onPatch(`builder.${k}`, v);

@@ -33,6 +33,7 @@ export interface UseAIWebsiteReturn {
       logoBase64?: string;
       scrapedReference?: string;
       visionPreviews?: string[];
+      generateHeroImages?: (prompt: string) => Promise<string | null>;
     },
   ) => Promise<WebsiteProcessResult>;
   refine: (
@@ -51,7 +52,7 @@ export interface UseAIWebsiteReturn {
   lastCostUsd: number;
 }
 
-export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
+export function useAIWebsite(userEmail?: string, sessionId?: string): UseAIWebsiteReturn {
   const orchestratorRef = useRef<WebsiteOrchestrator | null>(null);
   const [lastCostUsd, setLastCostUsd] = useState(0);
   const [currentStep, setCurrentStep] = useState<string | null>(null);
@@ -102,6 +103,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
         logoBase64?: string;
         scrapedReference?: string;
         visionPreviews?: string[];
+        generateHeroImages?: (prompt: string) => Promise<string | null>;
       },
     ) => {
       const requestId = newRequestId();
@@ -119,9 +121,11 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
           style: options?.style,
           briefContext: options?.briefContext,
           modelId: resolvedModelId,
+          sessionId,
           logoBase64: options?.logoBase64,
           scrapedReference: options?.scrapedReference,
           visionPreviews: options?.visionPreviews,
+          generateHeroImages: options?.generateHeroImages,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -178,7 +182,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
         throw new Error(hint);
       }
     },
-    [info, startStream, appendStream, finalizeStream, success, error, userEmail],
+    [info, startStream, appendStream, finalizeStream, success, error, userEmail, sessionId],
   );
 
   const refine = useCallback(
@@ -248,7 +252,7 @@ export function useAIWebsite(userEmail?: string): UseAIWebsiteReturn {
         throw new Error(hint);
       }
     },
-    [info, startStream, appendStream, finalizeStream, success, error, userEmail],
+    [info, startStream, appendStream, finalizeStream, success, error, userEmail, sessionId],
   );
 
   const reset = useCallback(() => {

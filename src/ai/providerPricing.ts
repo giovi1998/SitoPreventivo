@@ -25,10 +25,20 @@ export const PRICING: Record<string, ProviderPricing> = {
   // Ollama Pro è $20/mo flat — costUsd per chiamata è 0 nel tracking
   // (il costo fisso mensile è visibility separata in admin dashboard)
   'ollama-minimax-m3': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-minimax-m2.7': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-deepseek-v4-flash': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-deepseek-v4-flash-0731': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-deepseek-v4-pro': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-qwen-3.5': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-qwen3.5-397b': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-glm-5.2': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-glm-5.1': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-kimi-k3': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-kimi-k2.7-code': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-mistral-large-3': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-gemma4-31b': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-gpt-oss-120b': { input: 0, output: 0, unit: 'flat_monthly' },
+  'ollama-nemotron-3-ultra': { input: 0, output: 0, unit: 'flat_monthly' },
   // Provider ID nel registry è 'ollama-minimax-m3' ma il model è
   // 'minimax-m3:cloud' — pricing lookup usa provider ID
   //

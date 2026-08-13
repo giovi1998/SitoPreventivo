@@ -45,11 +45,28 @@ const mocks = vi.hoisted(() => ({
   generateBackground: vi.fn(),
   processPrompt: vi.fn(),
   generateCopy: vi.fn(),
+  generateSite: vi.fn(),
   providerSupportsVision: vi.fn(() => false),
   getAiVisionEnabled: vi.fn(() => false),
   svgToPng: vi.fn(),
   compressDataUrl: vi.fn(async (v: string) => v),
   saveDocument: vi.fn(),
+  agentRun: vi.fn(),
+  buildAgentBrief: vi.fn(() => ({ businessName: 'Bar' })),
+  agentResultData: vi.fn(() => ({ builder: {} })),
+  docTypeOfTool: vi.fn((name: unknown) => (name === 'generate_logo' ? 'logo' : 'businessCard')),
+}));
+
+vi.mock('../../ai/agentOrchestrator', () => ({
+  AgentOrchestrator: vi.fn().mockImplementation(function () {
+    return { run: mocks.agentRun };
+  }),
+}));
+
+vi.mock('../../ai/agentSave', () => ({
+  buildAgentBrief: mocks.buildAgentBrief,
+  agentResultData: mocks.agentResultData,
+  docTypeOfTool: mocks.docTypeOfTool,
 }));
 
 vi.mock('../../ai/logoOrchestrator', () => ({
@@ -67,6 +84,12 @@ vi.mock('../../ai/cardOrchestrator', () => ({
 vi.mock('../../ai/flyerOrchestrator', () => ({
   FlyerAIOrchestrator: vi.fn().mockImplementation(function () {
     return { generateCopy: mocks.generateCopy };
+  }),
+}));
+
+vi.mock('../../ai/websiteOrchestrator', () => ({
+  WebsiteOrchestrator: vi.fn().mockImplementation(function () {
+    return { generateSite: mocks.generateSite };
   }),
 }));
 
@@ -124,8 +147,14 @@ beforeEach(() => {
   mocks.generateCopy.mockResolvedValue({
     flyer: { content: { headline: 'H', subheadline: 'S', body: 'B', cta: { label: 'C' } } },
     response: { content: '{}', usage },
-    changes: ['copy_generated'],
     applied: true,
+    changes: ['copy:generated'],
+  });
+  mocks.generateSite.mockResolvedValue({
+    site: { html: '<h1>x</h1>', css: 'body{}', js: '//', pages: ['index'], pagesHtml: {} },
+    response: { content: '{}', usage },
+    changes: ['html:generated'],
+    aiCall: { costUsd: 0 },
   });
 });
 
@@ -258,6 +287,60 @@ describe('useAutoBuildGenerate', () => {
     expect(result.current.state.errors.logo_1).toBeUndefined();
   });
 
+  it('generateOne: ritorna il messaggio errore (log non bugiardo), null se ok', async () => {
+    const doc: AutoBuildDoc = { id: 'logo_1', documentType: 'logo', title: 'Logo', data: { briefContext: 'bar', builder: {} } };
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    mocks.generateLogo.mockRejectedValueOnce(new Error('quota piena'));
+    let err: string | null = 'sentinel';
+    await act(async () => {
+      err = await result.current.generateOne(doc, customer);
+    });
+    expect(err).toBe('quota piena');
+    mocks.generateLogo.mockResolvedValueOnce({
+      applied: true,
+      concepts: [logoBuilder, { ...logoBuilder }, { ...logoBuilder }],
+      selected: -1,
+      response: { content: '{}', usage },
+      changes: ['logo:generated:concepts=3'],
+    });
+    await act(async () => {
+      err = await result.current.generateOne(doc, customer);
+    });
+    expect(err).toBeNull();
+  });
+
+  it('T12: generateSite riceve SOLO logoBase64, mai la card/flyer (vision rule)', async () => {
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    const docs: AutoBuildDoc[] = [
+      { id: 'card_1', documentType: 'businessCard', title: 'Card', data: { briefContext: 'bar', front: { name: 'Mario', photoUrl: 'data:image/png;base64,CARD' }, autoGeneratePending: true } },
+      { id: 'flyer_1', documentType: 'flyer', title: 'Flyer', data: { briefContext: 'bar', content: { heroImage: 'data:image/png;base64,FLYER' }, autoGeneratePending: true } },
+      { id: 'website_1', documentType: 'website', title: 'Sito', data: { briefContext: 'bar', autoGeneratePending: true } },
+    ];
+    await act(async () => {
+      await result.current.generateAll(docs, customer);
+    });
+    const siteOpts = mocks.generateSite.mock.calls[0][1];
+    // logoBase64 è l'UNICO input visivo accettato (regola T12: card/flyer MAI al website)
+    const html = String(siteOpts.logoBase64 ?? '');
+    expect(html).not.toContain('CARD');
+    expect(html).not.toContain('FLYER');
+    // il websiteOrchestrator non riceve mai immagini card/flyer nelle options
+    expect(siteOpts.visionPreviews ?? []).toHaveLength(0);
+    expect(mocks.generateSite).toHaveBeenCalledTimes(1);
+  });
+
+  it('T12: vision card/flyer non viene MAI passata nemmeno in agentMode', async () => {
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    mocks.agentRun.mockImplementation(async (_brief: any, _docs: any, _ctx: any, opts: any) => {
+      await opts.onToolResult({ name: 'generate_website', ok: true, summary: 'Sito', data: { site: { html: 'x', css: '', js: '', pages: ['index'], pagesHtml: {} } } });
+    });
+    await act(async () => {
+      await result.current.generateAll(makeDocs(), customer, { agentMode: true });
+    });
+    // generateSite (sub-orchestratore) mai chiamato → card/flyer mai arrivate
+    expect(mocks.generateSite).not.toHaveBeenCalled();
+  });
+
   it('autoGeneratePending azzerato nei dati salvati', async () => {
     const { result } = renderHook(() => useAutoBuildGenerate());
     await act(async () => {
@@ -266,6 +349,23 @@ describe('useAutoBuildGenerate', () => {
     for (const call of mockSave.mock.calls) {
       expect(call[1].data.autoGeneratePending).toBe(false);
     }
+  });
+
+  it('T11: agentMode delega all\'AgentOrchestrator e salva i tool result', async () => {
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    mocks.agentRun.mockImplementation(async (_brief: any, _docs: any, _ctx: any, opts: any) => {
+      await opts.onToolResult({ name: 'generate_logo', ok: true, summary: 'Logo generato', data: { concepts: [{}], selected: 0 } });
+      await opts.onToolResult({ name: 'generate_card', ok: false, summary: 'Card fallita' });
+    });
+    await act(async () => {
+      const summary = await result.current.generateAll(makeDocs(), customer, { agentMode: true });
+      expect(mocks.agentRun).toHaveBeenCalledTimes(1);
+      expect(summary.statuses.logo_1).toBe('done');
+      expect(summary.statuses.card_1).toBe('error');
+      expect(summary.errors.card_1).toBe('Card fallita');
+    });
+    // il result ok → saveDraft chiamato col data mappato
+    expect(mockSave.mock.calls.some((c) => String(c[1].id).includes('logo'))).toBe(true);
   });
 
   it('saveDocument preserva customerId del draft', async () => {
@@ -377,9 +477,9 @@ describe('useAutoBuildGenerate', () => {
       await act(async () => {
         await result.current.generateAll(makeDocs(), customer, { providerId: 'deepseek-v4-flash' });
       });
-      expect(mocks.generateLogo.mock.calls[0][2]).toEqual({ modelId: 'deepseek-v4-flash' });
+      expect(mocks.generateLogo.mock.calls[0][2]).toEqual(expect.objectContaining({ modelId: 'deepseek-v4-flash' }));
       expect(mocks.processPrompt.mock.calls[0][2].modelId).toBe('deepseek-v4-flash');
-      expect(mocks.generateCopy.mock.calls[0][3]).toEqual({ modelId: 'deepseek-v4-flash' });
+      expect(mocks.generateCopy.mock.calls[0][3]).toEqual(expect.objectContaining({ modelId: 'deepseek-v4-flash' }));
     });
 
     it('generateOne passa providerId come modelId', async () => {
@@ -388,7 +488,7 @@ describe('useAutoBuildGenerate', () => {
       await act(async () => {
         await result.current.generateOne(doc, customer, { providerId: 'deepseek-v4-flash' });
       });
-      expect(mocks.generateLogo.mock.calls[0][2]).toEqual({ modelId: 'deepseek-v4-flash' });
+      expect(mocks.generateLogo.mock.calls[0][2]).toEqual(expect.objectContaining({ modelId: 'deepseek-v4-flash' }));
     });
 
     it('senza options gli orchestratori ricevono modelId undefined (default registry)', async () => {
@@ -396,9 +496,9 @@ describe('useAutoBuildGenerate', () => {
       await act(async () => {
         await result.current.generateAll(makeDocs(), customer);
       });
-      expect(mocks.generateLogo.mock.calls[0][2]).toEqual({ modelId: undefined });
+      expect(mocks.generateLogo.mock.calls[0][2]).toEqual(expect.objectContaining({ modelId: undefined }));
       expect(mocks.processPrompt.mock.calls[0][2].modelId).toBeUndefined();
-      expect(mocks.generateCopy.mock.calls[0][3]).toEqual({ modelId: undefined });
+      expect(mocks.generateCopy.mock.calls[0][3]).toEqual(expect.objectContaining({ modelId: undefined }));
     });
   });
 

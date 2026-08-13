@@ -19,7 +19,10 @@
     "typecheck": "tsc --noEmit",
     "prepare": "husky",
     "check:api-imports": "node scripts/check-api-imports.mjs",
-    "docs:sync-check": "node scripts/docs-sync-check.mjs"
+    "docs:sync-check": "node scripts/docs-sync-check.mjs",
+    "prompts:sync": "tsx scripts/sync-prompts.ts",
+    "prompts:sync:staging": "tsx scripts/sync-prompts.ts --label staging",
+    "prompts:sync:prod": "tsx scripts/sync-prompts.ts --label production"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",

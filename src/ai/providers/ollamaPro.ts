@@ -2,6 +2,7 @@ import { BaseAIProvider } from './base';
 import type { ChatMessage, ChatOptions, AIResponse, AIStreamChunk } from '../types';
 import { getAiReasoningEffort } from '../../utils/uiPrefs';
 import dataService from '../../utils/dataService';
+import { currentUserEmail } from '../../utils/dataService/core';
 
 /**
  * Ollama Pro Cloud provider (TB-023, spec-design-ai-harness-upgrade.md).
@@ -54,8 +55,10 @@ export class OllamaProProvider extends BaseAIProvider {
   constructor(model = 'minimax-m3:cloud') {
     super();
     this.model = model;
-    // MiniMax M3 e qwen-3.5 supportano vision; deepseek-v4-pro no.
-    this.supportsVision = /minimax-m3|qwen-3\.5|gemma4|qwen3-vl/i.test(model);
+    // Vision: verificato 2026-08-12 su Ollama Pro Cloud — kimi-k3,
+    // kimi-k2.7-code, gemma4:31b, mistral-large-3:675b, minimax-m3,
+    // qwen3.5 accettano immagini; glm/gpt-oss/nemotron/minimax-m2.7 no.
+    this.supportsVision = /minimax-m3|qwen-3\.5|qwen3\.5|gemma4|kimi-k3|kimi-k2\.7-code|mistral-large-3/i.test(model);
   }
 
   async chat(
@@ -143,6 +146,15 @@ export class OllamaProProvider extends BaseAIProvider {
       ...(options?.jsonSchema ? { format: options.jsonSchema } : {}),
       ...(options?.responseFormat?.type === 'json_object' ? { format: 'json' } : {}),
       ...(options?.tools && this.supportsTools ? { tools: options.tools } : {}),
+      ...(options?.customerId ? { customerId: options.customerId } : {}),
+      ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
+      ...(options?.kind ? { kind: options.kind } : {}),
+      ...(options?.runId ? { runId: options.runId } : {}),
+      ...(options?.runName ? { runName: options.runName } : {}),
+      ...(options?.startRun ? { startRun: true } : {}),
+      ...(options?.rootSpanId ? { rootSpanId: options.rootSpanId } : {}),
+      ...(options?.stepName ? { stepName: options.stepName } : {}),
+      ...(options?.stepSpanId ? { stepSpanId: options.stepSpanId } : {}),
     };
     return body;
   }
@@ -167,7 +179,7 @@ export class OllamaProProvider extends BaseAIProvider {
         'X-Request-Id': requestId,
         'X-Provider': 'ollama',
       },
-      body: JSON.stringify({ ...body, provider: 'ollama', requestId }),
+      body: JSON.stringify({ ...body, provider: 'ollama', requestId, userEmail: currentUserEmail() }),
     });
 
     if (!res.ok) {
@@ -250,7 +262,7 @@ export class OllamaProProvider extends BaseAIProvider {
         'X-Request-Id': requestId,
         'X-Provider': 'ollama',
       },
-      body: JSON.stringify({ ...body, provider: 'ollama', requestId }),
+      body: JSON.stringify({ ...body, provider: 'ollama', requestId, userEmail: currentUserEmail() }),
     });
 
     if (!res.ok) {

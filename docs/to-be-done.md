@@ -4,6 +4,37 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ## 🔴 Da fare (prodotto)
 
+### 🎯 Langfuse follow-up (2026-08-11, da CSV export)
+
+- [x] **Costi Gemini = 0 in Langfuse**: le trace `card-cover`/`image-flash`
+  hanno `costDetails: {}` e `totalCost: 0` — Gemini sembra gratis. Il
+  `computeCostUsd` server-side calcola il costo ma il dev proxy Gemini
+  (vite.config.js) non lo passa: `traceDev` per i 5 endpoint Gemini non
+  include `costUsd` calcolato (solo `body.costUsd` override, mai inviato
+  dal client). Fix: calcolare `computeCostUsd('gemini', model, undefined, 1)`
+  nel dev proxy (come fa il server handler) e passarlo a `traceDev`.
+  Verificare anche che il server handler prod lo faccia (sì, ma testare).
+- [x] **`generate-image-flash` nome vecchio + `subfeature:chat` errato**:
+  la trace `generate-image-flash` (21:09) ha ancora il nome vecchio e
+  `subfeature:chat` invece di `subfeature:icon|hero|flash`. Il server
+  handler `src/server/ai.ts` non è stato aggiornato (solo il dev proxy
+  vite.config.js lo era). Fix: rinominare in `image-flash` + subfeature
+  corretta in `ai.ts` (stesso mapping del dev proxy).
+- [x] **Media ancora placeholder**: `image: "[immagine allegata]"` nelle
+  trace Gemini — l'upload media fallisce ancora (400?). Verificare il
+  payload `POST /api/public/media` (sha256Hash+field+traceId) con
+  credenziali reali e il formato `traceId` (base64 OTLP vs hex atteso).
+- [x] **Sessioni vuote**: le trace chat/cover non hanno `sessionId` — il
+  wiring `sessionId=docId` è stato aggiunto ma il CSV mostra sessioni
+  vuote (trace del 21:19, dopo il fix?). Verificare che `loadedIdRef.current`
+  sia valorizzato al momento della chiamata e che il body arrivi al server.
+- [ ] **`costDetails` per DeepSeek/Ollama**: chat `card-ai-chat` ha
+  `costDetails: {}` — `computeCostUsd` per Ollama flat → 0 (corretto), ma
+  per DeepSeek via Ollama (`deepseek-v4-flash:cloud`) il costo è 0 perché
+  il provider è `ollama` (flat). Decisione: tracciare il costo DeepSeek
+  anche quando passa da Ollama? (il modello è pay-per-token solo su
+  DeepSeek diretto; su Ollama Pro è flat).
+
 ### 🎯 Sprint prossima settimana (priorità utente 2026-08-01)
 
 - [ ] **2. Immagini AI con background pixelato (residuo: verifica Playwright)**:
@@ -28,6 +59,13 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   va. Non è ancora mai stato validato live E2E (vedi **TB-027h follow-up**
   più sotto).
   **Fix parziali fatti (non ancora validati live in prod)**:
+  - **2026-08-12 (root cause website confermato + fix deployato)**: il
+    website falliva con 400 su OGNI step in PROD — `max_tokens` Zod
+    server max 8192 vs `maxTokens: 16384` mandati dal websiteOrchestrator
+    (in locale il dev proxy Vite non valida il body → sembrava solo prod).
+    Fix: max 16384 in entrambi gli schemi `/ai/chat` (commit faacc42,
+    gotcha §26.27). **⚠️ Da validare live**: riprovare "Genera bozze AI"
+    con 1 cliente reale dopo il deploy.
   - 2026-08-01: icona card falliva con `TypeError: Cannot destructure
     property 'accentColor' of '...style'` — `photoBrief.ts` usa
     `card.style ?? createEmptyCard().style` (fallback difensivo) e
@@ -131,8 +169,6 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   card/flyer → generazione AI con background persistente (no strip quota).
 - [ ] **Creazione oggetti senza clienti**: flusso standalone (Collection →
   Nuovo) deve restare invariato e funzionante dopo le modifiche CRM.
-- [ ] **RAG avanzato**: usare `customer_knowledge` (chunk Firecrawl) con
-  embedding `gemini-embedding-2` per retrieval contestuale negli orchestratori.
 - [ ] **Miglioria caricamento immagine logo in clienti**: preview persistente
   anche dopo navigazione, compressione ottimale, opzione "usa questo logo
   ovunque" (card/flyer/logo).

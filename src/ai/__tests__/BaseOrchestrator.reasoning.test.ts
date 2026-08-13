@@ -6,7 +6,7 @@ class TestOrchestrator extends BaseOrchestrator {
   testHandleStream(
     provider: AIProvider,
     messages: ChatMessage[],
-    options: { reasoningEffort?: 'low' | 'high' | 'max' } = {},
+    options: { reasoningEffort?: 'low' | 'high' | 'max'; customerId?: string; kind?: string } = {},
     callbacks: { onStream?: (chunk: AIStreamChunk) => void } = {}
   ): Promise<AIResponse> {
     return this.handleStream(provider, messages, options, callbacks);
@@ -88,6 +88,46 @@ describe('BaseOrchestrator.handleStream + reasoningContent (CON: DeepSeek tool m
     expect(chat).toHaveBeenCalledWith(
       [{ role: 'user', content: 'x' }],
       expect.objectContaining({ reasoningEffort: 'low' })
+    );
+  });
+
+  it('TB-029: propaga kind di default (chat) e customerId alle options del provider', async () => {
+    const o = new TestOrchestrator();
+    const chat = vi.fn().mockResolvedValue({ content: null });
+    const provider: AIProvider = {
+      name: 'Test',
+      model: 'test',
+      supportsStreaming: true,
+      supportsTools: true,
+      chat,
+      async *stream(): AsyncGenerator<AIStreamChunk> {
+        yield { type: 'done' };
+      },
+    };
+    await o.testHandleStream(provider, [{ role: 'user', content: 'x' }], { customerId: 'cust_9' });
+    expect(chat).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'x' }],
+      expect.objectContaining({ customerId: 'cust_9', kind: 'chat' })
+    );
+  });
+
+  it('TB-029: override kind esplicito vince sul default dell\u2019orchestratore', async () => {
+    const o = new TestOrchestrator();
+    const chat = vi.fn().mockResolvedValue({ content: null });
+    const provider: AIProvider = {
+      name: 'Test',
+      model: 'test',
+      supportsStreaming: true,
+      supportsTools: true,
+      chat,
+      async *stream(): AsyncGenerator<AIStreamChunk> {
+        yield { type: 'done' };
+      },
+    };
+    await o.testHandleStream(provider, [{ role: 'user', content: 'x' }], { kind: 'card' });
+    expect(chat).toHaveBeenCalledWith(
+      [{ role: 'user', content: 'x' }],
+      expect.objectContaining({ kind: 'card' })
     );
   });
 });

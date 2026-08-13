@@ -58,7 +58,7 @@ interface UseAICardReturn {
   lastCostUsd: number;
 }
 
-export function useAICard(userEmail?: string): UseAICardReturn {
+export function useAICard(userEmail?: string, sessionId?: string): UseAICardReturn {
   const { logs: cardAiLogs, isProcessing: isCardProcessing, totalCostUsd, lastCostUsd, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAICard');
   const setLastCostUsd = useCallback((value: number) => {
     // no-op: lastCostUsd viene gestito internamente da useAILogs tramite meta.costUsd
@@ -157,6 +157,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
           modelId: resolvedModelId,
           userEmail,
           requestId,
+          sessionId,
           imagePreviewBase64: previewBase64,
           onStream: (chunk: AIStreamChunk) => {
             if (chunk.type === 'content' && chunk.content) {
@@ -166,20 +167,40 @@ export function useAICard(userEmail?: string): UseAICardReturn {
           },
         });
 
-        const textCost = result.costUsd ?? calculateCostUsd(resolvedModelId, result.response.usage);
-        setLastCostUsd(textCost);
-        // Fallback tracking per orchestratori mock/legacy che non ritornano costUsd.
-        if (result.costUsd == null && userEmail && userEmail !== 'admin@gmail.com' && result.response.usage?.totalTokens) {
-          Promise.resolve(dataService.trackTokens(userEmail, result.response.usage.totalTokens, textCost) as unknown as Promise<unknown>).catch(() => {});
+        // Fix error:empty: risposta vuota (deepseek-v4-flash:cloud) → retry
+        // automatico con prompt semplificato (stesso pattern di useAI quote).
+        let finalResult = result;
+        const resultIsEmpty = !result.response?.content && (!result.response?.toolCalls || result.response.toolCalls.length === 0);
+        if (resultIsEmpty) {
+          info('⚠ Prima risposta vuota. Riprovo con prompt semplificato…', undefined, { requestId });
+          const retryStreamId = startStream('Riprovo con prompt semplificato…', { requestId });
+          finalResult = await orchestrator.processPrompt(card, prompt, {
+            modelId: resolvedModelId,
+            userEmail,
+            requestId,
+            sessionId,
+            imagePreviewBase64: previewBase64,
+            onStream: (chunk: AIStreamChunk) => {
+              if (chunk.type === 'content' && chunk.content) appendStream(retryStreamId, chunk.content);
+            },
+          });
+          finalizeStream(retryStreamId, true, { detail: finalResult.rawResponse?.slice(0, 16384) });
         }
 
-        const tokens = result.response.usage
-          ? { prompt: result.response.usage.promptTokens, completion: result.response.usage.completionTokens, total: result.response.usage.totalTokens }
-          : undefined;
-        finalizeStream(streamId, true, { tokens, costUsd: textCost, detail: result.rawResponse?.slice(0, 16384), modelId: resolvedModelId, requestId, hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });
+        const textCost = finalResult.costUsd ?? calculateCostUsd(resolvedModelId, finalResult.response.usage);
+        setLastCostUsd(textCost);
+        // Fallback tracking per orchestratori mock/legacy che non ritornano costUsd.
+        if (finalResult.costUsd == null && userEmail && userEmail !== 'admin@gmail.com' && finalResult.response.usage?.totalTokens) {
+          Promise.resolve(dataService.trackTokens(userEmail, finalResult.response.usage.totalTokens, textCost) as unknown as Promise<unknown>).catch(() => {});
+        }
 
-        const realChanges = result.changes.filter((c: string) => !c.startsWith('error:'));
-        const errorChanges = result.changes.filter((c: string) => c.startsWith('error:'));
+        const tokens = finalResult.response.usage
+          ? { prompt: finalResult.response.usage.promptTokens, completion: finalResult.response.usage.completionTokens, total: finalResult.response.usage.totalTokens }
+          : undefined;
+        finalizeStream(streamId, true, { tokens, costUsd: textCost, detail: finalResult.rawResponse?.slice(0, 16384), modelId: resolvedModelId, requestId, hasImage: !!previewBase64, imagePreviewBase64: previewBase64 });
+
+        const realChanges = finalResult.changes.filter((c: string) => !c.startsWith('error:'));
+        const errorChanges = finalResult.changes.filter((c: string) => c.startsWith('error:'));
 
         if (realChanges.length > 0) {
           const changeList = realChanges.map((c: string) => `• ${c}`).join('\n');
@@ -198,7 +219,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
           info('Risposta AI ricevuta (vedi dettaglio sopra)', undefined, { requestId });
         }
 
-        return { card: result.card, changes: result.changes, rawResponse: result.rawResponse, aiCall: { kind: 'text' as const, costUsd: textCost } };
+        return { card: finalResult.card, changes: finalResult.changes, rawResponse: finalResult.rawResponse, aiCall: { kind: 'text' as const, costUsd: textCost } };
       } catch (err: any) {
         const msg = err.message || 'Errore AI';
         const hint = mapAiError(err);
@@ -207,7 +228,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         throw new Error(hint);
       }
     },
-    [userEmail, ensureTokenBudget, info, startStream, appendStream, finalizeStream, success, error, getOrchestrator]
+    [userEmail, ensureTokenBudget, info, startStream, appendStream, finalizeStream, success, error, getOrchestrator, sessionId]
   );
 
   const resetCardChat = useCallback(() => {
@@ -234,6 +255,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
 
         const imageModel = options?.imageModel || getAiImageModelDefault();
         const payload = buildCardCoverPayload(coverPrompt, coverContext, { cardImage, logoImage }, side, userEmail, imageModel);
+        if (sessionId) payload.sessionId = sessionId;
 
         const apiBase = import.meta.env?.VITE_API_BASE || '';
         const res = await fetch(`${apiBase}/api/ai/card-cover`, {
@@ -262,7 +284,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         throw new Error(hint);
       }
     },
-    [userEmail, ensureTokenBudget, trackImageTokens, info, success, error]
+    [userEmail, ensureTokenBudget, trackImageTokens, info, success, error, sessionId]
   );
 
   const generatePhoto = useCallback(
@@ -288,6 +310,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
             context: context || undefined,
             userEmail: userEmail || undefined,
             imageModel,
+            ...(sessionId ? { sessionId } : {}),
           }),
         });
 
@@ -311,7 +334,7 @@ export function useAICard(userEmail?: string): UseAICardReturn {
         throw new Error(hint);
       }
     },
-    [userEmail, ensureTokenBudget, trackImageTokens, info, success, error]
+    [userEmail, ensureTokenBudget, trackImageTokens, info, success, error, sessionId]
   );
 
   return {

@@ -5,7 +5,7 @@ import { ToolRegistry } from './tools/registry';
 import dataService from '../utils/dataService';
 import { calculateCostUsd } from './providerPricing';
 import { getAiAutoFallback } from '../utils/uiPrefs';
-import type { ChatMessage, AIResponse, AIStreamChunk, AIProvider, AIToolCall, ToolExecutor, ToolResult } from './types';
+import type { ChatMessage, AIResponse, AIStreamChunk, AIProvider, AIToolCall, ToolExecutor, ToolResult, RunTraceOptions } from './types';
 
 type AIUsage = NonNullable<AIResponse['usage']>;
 
@@ -35,6 +35,8 @@ type AIUsage = NonNullable<AIResponse['usage']>;
 export abstract class BaseOrchestrator {
   protected activeSessionId: string | null = null;
   protected chatStore = chatStore;
+  /** TB-029: feature tag Langfuse per l'orchestratore (override nei subclass). */
+  protected aiKind = 'chat';
 
   getCurrentSessionId(): string | null {
     return this.activeSessionId;
@@ -153,9 +155,13 @@ export abstract class BaseOrchestrator {
     options: {
       tools?: unknown;
       reasoningEffort?: 'low' | 'high' | 'max';
+      maxTokens?: number;
       responseFormat?: { type: 'json_object' };
       requestId?: string;
-    } = {},
+      customerId?: string;
+      sessionId?: string;
+      kind?: string;
+    } & RunTraceOptions = {},
     callbacks: {
       onStream?: (chunk: AIStreamChunk) => void;
       onFallback?: (fallbackId: string, reason: string) => void;
@@ -164,7 +170,10 @@ export abstract class BaseOrchestrator {
     const autoFallback = getAiAutoFallback();
     const run = async (providerId: string) => {
       const provider = providerRegistry.getProvider(providerId);
-      const response = await this.handleStream(provider, messages, options, callbacks);
+      // Il fallback senza vision non può processare images: le rimuove.
+      const supportsVision = (provider as { supportsVision?: boolean }).supportsVision ?? false;
+      const msgs = supportsVision ? messages : messages.map((m) => (m.images ? { ...m, images: undefined } : m));
+      const response = await this.handleStream(provider, msgs, options, callbacks);
       return { response, providerId, didFallback: false };
     };
 
@@ -194,7 +203,14 @@ export abstract class BaseOrchestrator {
       reasoningEffort?: 'low' | 'high' | 'max';
       maxTokens?: number;
       responseFormat?: { type: 'json_object' };
-    } = {},
+      requestId?: string;
+      /** TB-029: attribuzione Langfuse per-cliente. */
+      customerId?: string;
+      /** TB-029: sessione Langfuse (docId: raggruppa chat+immagini del documento). */
+      sessionId?: string;
+      /** TB-029: feature tag Langfuse (quote/card/flyer/...). */
+      kind?: string;
+    } & RunTraceOptions = {},
     callbacks: {
       onStream?: (chunk: AIStreamChunk) => void;
     } = {}
@@ -203,9 +219,10 @@ export abstract class BaseOrchestrator {
     let reasoningContent = '';
     const toolCalls = new Map<string, AIToolCall>();
     let usage: AIUsage | undefined;
+    const providerOptions = { ...options, kind: options.kind ?? this.aiKind } as Parameters<AIProvider['chat']>[1];
 
     if (callbacks.onStream && provider.supportsStreaming) {
-      for await (const chunk of provider.stream(messages, options as Parameters<AIProvider['stream']>[1])) {
+      for await (const chunk of provider.stream(messages, providerOptions)) {
         callbacks.onStream(chunk);
         if (chunk.type === 'content') {
           content += chunk.content || '';
@@ -227,7 +244,7 @@ export abstract class BaseOrchestrator {
       };
     }
 
-    return await provider.chat(messages, options as Parameters<AIProvider['chat']>[1]);
+    return await provider.chat(messages, providerOptions);
   }
 
   /**
@@ -309,7 +326,11 @@ function isTransientAiError(msg: string): boolean {
   const m = msg.toLowerCase();
   return (
     m.includes('429') ||
+    m.includes('500') ||
+    m.includes('502') ||
+    m.includes('503') ||
     m.includes('504') ||
+    m.includes('internal server error') ||
     m.includes('timeout') ||
     m.includes('timed out') ||
     m.includes('errore di rete') ||

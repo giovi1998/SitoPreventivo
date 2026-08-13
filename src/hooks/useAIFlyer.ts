@@ -44,7 +44,7 @@ interface UseAIFlyerReturn {
   lastCostUsd: number;
 }
 
-export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
+export function useAIFlyer(userEmail?: string, sessionId?: string): UseAIFlyerReturn {
   const { logs, isProcessing, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAIFlyer');
   const [lastCostUsd, setLastCostUsd] = useState(0);
   const availableModels = useRef(new FlyerAIOrchestrator().getProviderList()).current;
@@ -138,13 +138,13 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       }
       return runWith(
         `Invio richiesta: "${trimmed.length > 60 ? trimmed.slice(0, 57) + '...' : trimmed}" (${tone})`,
-        async (onStream) => getOrchestrator().generateCopy(flyer, trimmed, tone, { modelId: resolvedModelId, onStream, imagePreviewBase64 }),
+        async (onStream) => getOrchestrator().generateCopy(flyer, trimmed, tone, { modelId: resolvedModelId, onStream, imagePreviewBase64, sessionId }),
         options?.modelId,
         imagePreviewBase64,
         trimmed,
       );
     },
-    [getOrchestrator, runWith]
+    [getOrchestrator, runWith, sessionId]
   );
 
   const refine = useCallback(
@@ -163,13 +163,13 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
       }
       return runWith(
         `Rifinisci copy: ${action}`,
-        async (onStream) => getOrchestrator().refineCopy(flyer, action, { modelId: resolvedModelId, onStream, imagePreviewBase64 }),
+        async (onStream) => getOrchestrator().refineCopy(flyer, action, { modelId: resolvedModelId, onStream, imagePreviewBase64, sessionId }),
         options?.modelId,
         imagePreviewBase64,
         `Azione: ${action}`,
       );
     },
-    [getOrchestrator, runWith]
+    [getOrchestrator, runWith, sessionId]
   );
 
   const generateHero = useCallback(
@@ -186,6 +186,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         const flyerImage = await renderFlyerScreenshot(flyer);
         const imageModel = options?.imageModel || getAiImageModelDefault();
         const payload = buildFlyerHeroPayload(flyer, sector, tone, { flyerImage }, userEmail, options?.promptOverride, imageModel);
+        if (sessionId) payload.sessionId = sessionId;
         const apiBase = import.meta.env?.VITE_API_BASE || '';
         const res = await fetch(`${apiBase}/api/ai/flyer-hero`, {
           method: 'POST',
@@ -218,7 +219,7 @@ export function useAIFlyer(userEmail?: string): UseAIFlyerReturn {
         return { flyer, applied: false, error: hint };
       }
     },
-    [info, success, error, userEmail]
+    [info, success, error, userEmail, sessionId]
   );
 
   const reset = useCallback(() => {

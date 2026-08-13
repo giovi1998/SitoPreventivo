@@ -135,6 +135,13 @@ export function buildWebsiteHtmlPrompt(
     } else {
       parts.push('⚠️ Per l\'embed Google Maps usa l\'indirizzo reale come parametro q, non il codice goo.gl.');
     }
+  } else if (brief.contacts) {
+    const address = sanitizeMapAddress(brief.contacts);
+    if (address) {
+      parts.push(`⚠️ MAPPA OBBLIGATORIA — usa ESATTAMENTE questo iframe nella sezione contatti (NON costruirne un altro, NON copiare l'emoji):`);
+      parts.push(`  <iframe src="https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed" width="100%" height="400" style="border:0;" allowfullscreen="" loading="lazy"></iframe>`);
+      parts.push(`  Il parametro q deve essere esattamente "${encodeURIComponent(address)}" (indirizzo senza emoji/icone + città).`);
+    }
   }
   if (brief.notes) parts.push(`Note: ${brief.notes}`);
   if (briefContext) parts.push(`Contesto: ${briefContext}`);
@@ -152,9 +159,10 @@ export function buildWebsiteHtmlPrompt(
   parts.push('\n⚠️ STRUTTURA NAV OBBLIGATORIA:');
   parts.push('- <header class="nav"> o <nav class="nav"> con <div class="nav-inner">');
   parts.push('- <div class="brand"> con il nome attività (il logo viene iniettato dopo)');
-  parts.push('- <button class="menu-toggle">☰</button> DENTRO il nav (per hamburger mobile)');
+  parts.push('- <button class="menu-toggle" aria-label="Apri menu di navigazione"></button> DENTRO il nav (per hamburger mobile)');
   parts.push('- <ul class="nav-links"> con i link');
   parts.push('- Il bottone menu-toggle deve essere SEMPRE presente, anche se il sito è semplice.');
+  parts.push('- 🚫 NIENTE TESTO/EMOJI nel bottone menu-toggle (es. ☰): l\'icona hamburger va disegnata via CSS (::before/::after con content:"" + box-shadow o gradienti). Il bottone deve essere VUOTO.');
   parts.push('\n⚠️ QUALITÀ HTML:');
   parts.push('- Usa <section> con id per ogni sezione (es. <section id="chi-siamo">)');
   parts.push('- Aggiungi <meta name="description"> nel <head> con descrizione SEO');
@@ -163,6 +171,7 @@ export function buildWebsiteHtmlPrompt(
   parts.push('- Ogni sezione deve avere <div class="section-inner"> per contenuto centrato');
   parts.push('- Aggiungi classe .current-year nel footer per l\'anno automatico via JS');
   parts.push('- I link social devono avere target="_blank" rel="noopener"');
+  parts.push('🚫 FOOTER MINIMALE: il footer DEVE essere semplice — una riga con copyright (.current-year) e al massimo i contatti essenziali. VIETATO: footer-brand con logo/nome duplicato (il brand è già nella nav), colonne multiple, footer-bottom separato, crediti "Sito web:". Un solo <footer> con <div class="section-inner"> e testo inline.');
   parts.push('\n⚠️ MULTI-PAGINA (se il brief richiede più di una pagina):');
   parts.push('- Restituisci UN SOLO HTML, quello della pagina index. Le altre pagine (about, contact...) vengono generate in uno step successivo.');
   parts.push('- Nella nav usa link relativi: href="about.html", href="contact.html". NON aggiungere hash o pagine che non esistono.');
@@ -237,11 +246,20 @@ Regole:
 Rispondi SOLO con JSON: { "html": "...", "title": "..." }`;
 }
 
-/** Rimuove emoji/icone dall'indirizzo per Google Maps (es. "📍 Via Dante 5/A" → "Via Dante 5/A"). */
-function sanitizeMapAddress(contacts: string): string {
+/**
+ * Estrae l'indirizzo per Google Maps dai contatti del brief.
+ * I contatti sono "indirizzo, città, paese, telefono, email" — filtra
+ * telefono/email/URL e prende indirizzo + città + paese (fino a 3 segmenti).
+ * Es. "Via Dante 5/A, Cagliari, Italy, 3405669008, x@y.it" → "Via Dante 5/A Cagliari Italy"
+ */
+export function sanitizeMapAddress(contacts: string): string {
   const cleaned = contacts.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '').trim();
-  const partsList = cleaned.split(',').map(p => p.trim()).filter(Boolean);
-  return partsList.slice(0, 2).join(' ');
+  const partsList = cleaned
+    .split(',')
+    .map(p => p.trim())
+    .filter(Boolean)
+    .filter((p) => !/^\+?[\d\s().-]{6,}$/.test(p) && !/^\d{4,6}$/.test(p) && !/@/.test(p) && !/^https?:\/\//i.test(p));
+  return partsList.slice(0, 3).join(' ');
 }
 
 export function buildWebsiteCssPrompt(

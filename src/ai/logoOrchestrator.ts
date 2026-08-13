@@ -4,7 +4,7 @@ import { promptRegistry } from './prompts/registry';
 import { buildLogoGeneratePrompt, sanitizeLogoBrief } from './prompts/logoSystem';
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { isValidLucideIcon } from '../utils/logoGenerator';
-import type { AIStreamChunk, AIResponse } from './types';
+import type { AIStreamChunk, AIResponse, RunTraceOptions } from './types';
 import { providerRegistry } from './providers/registry';
 
 /**
@@ -57,6 +57,8 @@ export interface LogoProcessResult {
 }
 
 export class LogoAIOrchestrator extends BaseOrchestrator {
+  protected aiKind = 'logo';
+
   async generateLogo(
     logo: Logo,
     brief: string,
@@ -65,8 +67,12 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       modelId?: string;
       onStream?: (chunk: AIStreamChunk) => void;
       userEmail?: string;
+      /** TB-029: attribuzione Langfuse per-cliente. */
+      customerId?: string;
+      /** TB-029: sessione Langfuse (docId). */
+      sessionId?: string;
       imagePreviewBase64?: string;
-    } = {},
+    } & RunTraceOptions = {},
   ): Promise<LogoProcessResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
@@ -104,7 +110,17 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
     const response = await this.handleStream(
       provider,
       messages,
-      { reasoningEffort: 'max', responseFormat: { type: 'json_object' } },
+      {
+        reasoningEffort: 'max',
+        responseFormat: { type: 'json_object' },
+        sessionId: options.sessionId,
+        runId: options.runId,
+        runName: options.runName,
+        startRun: options.startRun,
+        rootSpanId: options.rootSpanId,
+        stepName: options.stepName,
+        stepSpanId: options.stepSpanId,
+      },
       { onStream: options.onStream },
     );
 
@@ -158,7 +174,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
   async generateBackground(
     logo: Logo,
     context: { activity: string; mood: string; target: string; imagePrompt?: string },
-    options: { userEmail?: string; imageModel?: string } = {},
+    options: { userEmail?: string; imageModel?: string; sessionId?: string } = {},
   ): Promise<{ logo: Logo; applied: boolean; error?: string }> {
     const prompt = context.imagePrompt && context.imagePrompt.trim().length > 10
       ? `${context.imagePrompt.trim()}\nNO text, NO letters, NO words, NO readable typography. 1024x340 px, 3:1 aspect ratio.`
@@ -176,6 +192,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       compressPreviousBackground(logo),
     ]);
     const payload = buildLogoBackgroundPayload(prompt, { logoImage, previousBackground }, options.userEmail, options.imageModel);
+    if (options.sessionId) payload.sessionId = options.sessionId;
 
     try {
       const res = await fetch(`${apiBase}/ai/logo-background`, {
