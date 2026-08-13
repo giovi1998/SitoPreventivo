@@ -136,6 +136,13 @@ export const generatedImageDocumentSchema = genericDocumentSchema.extend({
   documentType: z.literal('generatedImage'),
 });
 
+// TB-028: website builder — stesso trattamento opaque-jsonb (data contiene
+// html/css/js/brief/pagesHtml). Senza questo, ogni save website → 400
+// "Invalid discriminator value" (regressione 2026-08-13 prod).
+export const websiteDocumentSchema = genericDocumentSchema.extend({
+  documentType: z.literal('website'),
+});
+
 export const DocumentBodySchema = z.object({
   email: z.string().email('Email non valida'),
   document: z.discriminatedUnion('documentType', [
@@ -144,6 +151,7 @@ export const DocumentBodySchema = z.object({
     logoDocumentSchema,
     flyerDocumentSchema,
     generatedImageDocumentSchema,   // <-- ADD THIS
+    websiteDocumentSchema,
   ]),
 });
 
