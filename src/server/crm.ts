@@ -3,6 +3,8 @@ import crypto from 'node:crypto';
 import { eq, and } from 'drizzle-orm';
 import { getDb, customersTable, customerKnowledgeTable, documentsTable } from './db.ts';
 import { clampDataUrl } from './core.ts';
+import { ingestLangfuse } from './langfuse.ts';
+import { topKChunks } from '../utils/knowledgeTopK.js';
 import type { FirecrawlResult } from './types.ts';
 // TB-030 sync customer→website: aggiorna i doc website del cliente con i
 // campi brand (font/colori/contatti/social). Last-write-wins con confronto
@@ -104,7 +106,7 @@ export function extractJsonObjectApi(text: string): Record<string, unknown> | nu
 
 // TB-027 ai-fill: chiamata DeepSeek server-side (stesso pattern fetch di /ai/chat).
 // Null su qualunque fallimento: il chiamante fa fallback alla tabella lookup.
-export async function callDeepSeekAiFill(prompt: string): Promise<{ fields: Record<string, unknown>; costUsd: number } | null> {
+export async function callDeepSeekAiFill(prompt: string): Promise<{ fields: Record<string, unknown>; costUsd: number; usage?: { promptTokens: number; completionTokens: number } } | null> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) return null;
   try {
@@ -134,7 +136,7 @@ export async function callDeepSeekAiFill(prompt: string): Promise<{ fields: Reco
     // Mirror providerPricing.ts deepseek-v4-flash ($0.14/$0.28 per 1M tok) — inline:
     // src/ non importabile da api/ (gotcha §1 cross-boundary).
     const costUsd = Math.round((((data.usage?.prompt_tokens || 0) * 0.14 + (data.usage?.completion_tokens || 0) * 0.28) / 1_000_000) * 1_000_000) / 1_000_000;
-    return { fields, costUsd };
+    return { fields, costUsd, usage: { promptTokens: data.usage?.prompt_tokens || 0, completionTokens: data.usage?.completion_tokens || 0 } };
   } catch {
     return null;
   }
@@ -167,10 +169,66 @@ export async function saveCustomerKnowledge(customerId: string, chunks: string[]
       chunk,
       source,
       metadata: metadata || {},
+      embedding: await embedText(chunk, customerId),
     });
     inserted++;
   }
   return inserted;
+}
+
+// RAG: embedding Gemini server-side (chiave mai nel browser). [] se non
+// configurato o errore: il chunk resta salvato senza embedding (retrieval
+// fallback all'ordine di inserimento). Best-effort, mai throw. Tracciato
+// su Langfuse con observation type `embedding` (v4 docs).
+export async function embedText(text: string, customerId?: string): Promise<number[]> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return [];
+  const startTime = Date.now();
+  try {
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey });
+    const result = await ai.models.embedContent({
+      model: 'models/gemini-embedding-2',
+      contents: text.slice(0, 8000),
+    });
+    const values = (result as unknown as { embedding?: { values?: number[] } })?.embedding?.values;
+    const embedding = Array.isArray(values) && values.length > 0 ? values : [];
+    void ingestLangfuse({
+      name: 'embed-chunk',
+      requestId: `rag-${customerId ?? 'anon'}`,
+      model: 'gemini-embedding-2',
+      provider: 'gemini',
+      customerId,
+      sessionId: customerId,
+      feature: 'crm',
+      subfeature: 'embedding',
+      observationType: 'embedding',
+      input: { text: text.slice(0, 500) },
+      output: { dimensions: embedding.length },
+      startTime,
+    });
+    return embedding;
+  } catch (err) {
+    console.warn('[knowledge] embedding fallito, chunk salvato senza', (err as Error)?.message);
+    return [];
+  }
+}
+
+// RAG retrieval: top-k chunk per similarità cosine (modulo condiviso
+// client/server). queryText = descrizione attività/settore del customer.
+// Senza embedding (o tutti ortogonali) → fallback ordine di inserimento.
+export async function getBestKnowledgeChunks(customerId: string, queryText: string, k = 3): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.select().from(customerKnowledgeTable).where(eq(customerKnowledgeTable.customerId, customerId));
+  if (rows.length === 0) return [];
+  const chunks = rows.map((r: { chunk?: unknown; source?: unknown; embedding?: unknown }) => ({
+    chunk: String(r.chunk ?? ''),
+    source: r.source ? String(r.source) : undefined,
+    embedding: Array.isArray(r.embedding) ? r.embedding as number[] : undefined,
+  }));
+  const queryEmbedding = await embedText(queryText.slice(0, 2000), customerId);
+  const topK = topKChunks(chunks, queryEmbedding, k);
+  return topK.map((c) => c.chunk);
 }
 
 // TB-027 auto-research: Firecrawl website scrape. Best-effort, no crash.
