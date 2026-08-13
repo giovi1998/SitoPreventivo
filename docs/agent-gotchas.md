@@ -1827,6 +1827,18 @@ ma con coda/concorrenza può sforare) → abort → 502 → **eccezione propagat
 3. **`totalCost` null-safe**: `cssResponse`/`jsResponse` possono essere
    null → guardie.
 
+**Regressione prod 2026-08-13 (stream 60s)**: il path **non-stream**
+(`/api/ai/chat`) era già a 600s, ma lo **stream** (`/api/ai/chat/stream`,
+usato da `useAIWebsite` e auto-build) era rimasto a **60s** in
+`src/server/ai.ts` → abort a 60s → stream troncato → JSON incompleto →
+`not_json: Unexpected end of JSON input` → **sito fallback placeholder
+(237ch HTML, CSS 609ch)** da "Rigenera" in CRM. In dev funzionava perché
+il proxy Vite ha 600s. Fix: timeout stream Ollama 60s → 600s
+(`src/server/ai.ts`, allineato al path non-stream) + regression test
+`ollamaStream.test.ts` (fake timers: a 60s lo stream DEVE essere vivo, a
+600s abort). Vale per entrambi i branch (master e
+migliorie-LayoutOggettiCardFlyerLogo).
+
 **Test**: `websiteOrchestrator.test.ts` (24 — CSS/JS/pagina falliti →
 sito generato con changes error, verify error doppio best-effort). Gate:
 typecheck + suite impattata verde. ⚠️ Riavvio dev server obbligatorio
