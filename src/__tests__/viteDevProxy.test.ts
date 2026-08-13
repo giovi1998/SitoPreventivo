@@ -1,6 +1,15 @@
 // @vitest-environment node
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
+vi.mock('@google/genai', () => {
+  class GoogleGenAI {
+    models = {
+      embedContent: vi.fn(async () => ({ embedding: { values: [0.5, 0.5] } })),
+    };
+  }
+  return { GoogleGenAI };
+});
+
 // Smoke test del dev API proxy inline in vite.config.js.
 // Regression: il fallback Ollama usava `json()` fuori scope → il client
 // riceveva "AI error: json is not defined" (502). Inoltre /api/logs non
@@ -221,5 +230,38 @@ describe('vite dev API proxy (vite.config.js)', () => {
     expect(traceCalls[0].name).toBe('card-cover');
     expect(traceCalls[0].costUsd).toBe(0.04);
     expect(traceCalls[0].subfeature).toBe('cover');
+  });
+
+  it('RAG: POST /api/ai/embeddings risponde embedding + trace observationType embedding', async () => {
+    process.env.GEMINI_API_KEY = 'test-gemini';
+    const traceCalls: any[] = [];
+    const api = await loadApiMiddleware(async (id: string) => {
+      if (id === '/src/server/langfuse.ts') {
+        return { ingestLangfuse: async (input: any) => { traceCalls.push(input); } };
+      }
+      return null;
+    });
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/ai/embeddings', { input: 'pane e dolci sardi', userEmail: 'u@x.com', customerId: 'cust_1' }),
+      res,
+      () => { throw new Error('next() non deve essere chiamato per /api/ai/embeddings'); },
+    );
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).data.embedding).toEqual([0.5, 0.5]);
+    expect(traceCalls.length).toBe(1);
+    expect(traceCalls[0].name).toBe('embed-chunk');
+    expect(traceCalls[0].observationType).toBe('embedding');
+    expect(traceCalls[0].customerId).toBe('cust_1');
+  });
+
+  it('RAG: /api/ai/embeddings senza GEMINI_API_KEY → 503 strutturato', async () => {
+    const api = await loadApiMiddleware(async () => null);
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.VITE_GEMINI_API_KEY;
+    const res = mockRes();
+    await api(mockReq('POST', '/api/ai/embeddings', { input: 'test' }), res, () => {});
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body).error).toContain('GEMINI_API_KEY');
   });
 });
