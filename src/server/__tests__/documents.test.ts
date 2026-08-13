@@ -247,6 +247,28 @@ describe('documents API', () => {
     expect(res.body.id).toBe('logo-new-1');
   });
 
+  it('POST /documents with valid website returns 201', async () => {
+    // Regression TB-028: ogni save website → 400 "Invalid discriminator
+    // value" perché websiteDocumentSchema mancava dalla union (2026-08-13).
+    const res = await callHandler({
+      method: 'POST',
+      url: '/api/documents',
+      headers: { origin: 'http://localhost' },
+      body: {
+        email: 'user@test.com',
+        document: {
+          documentType: 'website',
+          id: 'web-new-1',
+          title: 'Sito Acme',
+          data: { html: '<html></html>', css: '', js: '' },
+        },
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.documentType).toBe('website');
+    expect(res.body.id).toBe('web-new-1');
+  });
+
   it('POST /documents with FLAT logo (no data wrapper) still stores builder payload', async () => {
     // Regression: client editors send flat shape { builder, source, ... }
     // without nesting under `data`. Old handler stored data:null → empty
