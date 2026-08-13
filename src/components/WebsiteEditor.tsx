@@ -21,6 +21,7 @@ import { injectLogoIntoHtml } from '../utils/website/logoInjection';
 import { injectImagesIntoHtml } from '../utils/website/imageInjection';
 import { sanitizeGeneratedWebsite, enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss } from '../utils/website/sanitizeGenerated';
 import { normalizeInlineImages } from '../utils/website/imageNormalize';
+import { mergeKnowledgeIntoBrief } from '../utils/knowledgeTopK';
 import AIConsole from './ai/AIConsole';
 import { AiFontPicker } from './ai-ui';
 import CodeEditor from './website/CodeEditor';
@@ -135,6 +136,24 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       if (!customer.logoUrl) return;
       setWebsite((prev) => ({ ...prev, logoUrl: String(customer.logoUrl), updatedAt: new Date().toISOString() }));
     }).catch(() => {});
+  }, [website.customerId]);
+
+  // RAG live: carica i chunk knowledge del cliente e li fonde nel
+  // briefContext (sezione "Contenuto sito web") se non già presenti.
+  useEffect(() => {
+    if (!website.customerId) return;
+    let cancelled = false;
+    dataService.getCustomerKnowledge(website.customerId).then((res: { error?: string; data?: Array<{ chunk?: string }> }) => {
+      if (cancelled || res.error) return;
+      const chunks = (res.data ?? []).map((c) => c.chunk ?? '').filter(Boolean);
+      if (chunks.length === 0) return;
+      setWebsite((prev) => {
+        const current = prev.briefContext ?? '';
+        if (current.includes('Contenuto sito web:')) return prev;
+        return { ...prev, briefContext: mergeKnowledgeIntoBrief(current, chunks), updatedAt: new Date().toISOString() };
+      });
+    }).catch(() => {});
+    return () => { cancelled = true; };
   }, [website.customerId]);
 
   useEffect(() => {
