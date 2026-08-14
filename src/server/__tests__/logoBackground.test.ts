@@ -63,14 +63,22 @@ describe('POST /api/ai/logo-background', () => {
     expect(createInteraction.mock.calls[0][1]).toEqual({ timeout: 45_000 });
   });
 
-  it('accepts a 900KB image (clamp 1MB)', async () => {
+  it('accepts a 900KB image (clamp 1.2MB)', async () => {
     mockGeminiOk('x'.repeat(1_200_000)); // ~900KB raw
     const res = await callApiHandler(makeReq({ prompt: 'p' }));
     expect(res.statusCode).toBe(200);
   });
 
-  it('returns 413 when image exceeds 1MB', async () => {
+  it('accepts a ~1.05MB image (16:9 1K JPEG variance, live 2026-08-13)', async () => {
+    // Regression: clamp 1MB → 413 intermittenti su logo-background 16:9
+    // (1376×768 ≈ 850KB-1.05MB). Clamp alzato a 1.2MB.
     mockGeminiOk('x'.repeat(1_400_000)); // ~1.05MB raw
+    const res = await callApiHandler(makeReq({ prompt: 'p' }));
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('returns 413 when image exceeds 1.2MB', async () => {
+    mockGeminiOk('x'.repeat(1_800_000)); // ~1.35MB raw
     const res = await callApiHandler(makeReq({ prompt: 'p' }));
     expect(res.statusCode).toBe(413);
   });

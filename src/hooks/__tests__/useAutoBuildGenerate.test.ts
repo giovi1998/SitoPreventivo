@@ -49,7 +49,7 @@ const mocks = vi.hoisted(() => ({
   providerSupportsVision: vi.fn(() => false),
   getAiVisionEnabled: vi.fn(() => false),
   svgToPng: vi.fn(),
-  compressDataUrl: vi.fn(async (v: string) => v),
+  compressDataUrl: vi.fn(async (v: string, _maxDim?: number, _maxBytes?: number) => v),
   saveDocument: vi.fn(),
   agentRun: vi.fn(),
   buildAgentBrief: vi.fn(() => ({ businessName: 'Bar' })),
@@ -123,7 +123,7 @@ beforeEach(() => {
   mocks.providerSupportsVision.mockReturnValue(false);
   mocks.getAiVisionEnabled.mockReturnValue(false);
   mocks.svgToPng.mockResolvedValue(new Uint8Array([65, 66, 67]));
-  mocks.compressDataUrl.mockImplementation(async (v: string) => v);
+  mocks.compressDataUrl.mockImplementation(async (v: string, _maxDim?: number, _maxBytes?: number) => v);
   mockSave.mockResolvedValue({ success: true });
   mockFetch.mockResolvedValue({
     ok: true,
@@ -389,6 +389,11 @@ describe('useAutoBuildGenerate', () => {
   it('T6: agentMode arricchisce le immagini (logo bg, card photo+cover, flyer hero) prima del save', async () => {
     // Regressione 2026-08-13: il path agente salvava solo testo —
     // backgroundImage/photoUrl/coverImageUrl/heroImage restavano null.
+    // base64 grande (>300K chars) per attivare la compressione pre-save.
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { imageBase64: 'x'.repeat(400_000), mimeType: 'image/jpeg' } }),
+    });
     mocks.agentResultData.mockImplementation((docType: string) => {
       if (docType === 'logo') return { builder: { primaryText: 'La Chiccheria', primaryColor: '#722F37', secondaryColor: '#F5E6D3' }, concepts: [{}] };
       if (docType === 'businessCard') return { front: { name: 'Maria Piras' }, style: { bgColor: '#fff', accentColor: '#722F37' } };
@@ -405,14 +410,20 @@ describe('useAutoBuildGenerate', () => {
       await result.current.generateAll(makeDocs(), customer, { agentMode: true });
     });
     const saved = (type: string) => mockSave.mock.calls.map((c) => c[1]).find((d) => d.documentType === type)?.data;
-    expect((saved('logo').builder as Record<string, unknown>).backgroundImage).toContain('data:image/png');
+    expect((saved('logo').builder as Record<string, unknown>).backgroundImage).toContain('data:image/jpeg');
     expect((saved('logo').builder as Record<string, unknown>).textBackdrop).toBe('pill');
     const front = saved('businessCard').front as Record<string, unknown>;
-    expect(front.photoUrl).toContain('data:image/png');
-    expect(front.coverImageUrl).toContain('data:image/png');
-    expect((saved('flyer').content as Record<string, unknown>).heroImage).toContain('data:image/png');
+    expect(front.photoUrl).toContain('data:image/jpeg');
+    expect(front.coverImageUrl).toContain('data:image/jpeg');
+    expect((saved('flyer').content as Record<string, unknown>).heroImage).toContain('data:image/jpeg');
     expect(mockFetch.mock.calls.some((c) => c[0] === '/api/ai/image-flash')).toBe(true);
     expect(mockFetch.mock.calls.some((c) => c[0] === '/api/ai/card-photo')).toBe(true);
+    // Persistenza path-aware (§2.5): background/hero/cover a 1536px,
+    // photo a 1024px — prima 768px piatto declassava tutto sotto soglia.
+    const dims = new Map(mocks.compressDataUrl.mock.calls.map((c) => [c[1], c[2]]));
+    expect(dims.get(1536)).toBe(400_000);
+    expect(mocks.compressDataUrl.mock.calls.some((c) => c[1] === 1024 && c[2] === 400_000)).toBe(true);
+    expect(mocks.compressDataUrl.mock.calls.some((c) => c[1] === 768)).toBe(false);
   });
 
   it('saveDocument preserva customerId del draft', async () => {

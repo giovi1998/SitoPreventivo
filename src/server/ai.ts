@@ -587,7 +587,9 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         model: 'models/gemini-embedding-2',
         contents: v.data.input,
       });
-      const embedding = (result as unknown as { embedding?: { values?: number[] } })?.embedding?.values || [];
+      // SDK ritorna `embeddings: [{values}]` (plurale); fallback singolare.
+      const r = result as unknown as { embeddings?: Array<{ values?: number[] }>; embedding?: { values?: number[] } };
+      const embedding = r?.embeddings?.[0]?.values ?? r?.embedding?.values ?? [];
       if (!Array.isArray(embedding) || embedding.length === 0) {
         return json(req, res, 502, { error: 'Embedding vuoto da Gemini' });
       }

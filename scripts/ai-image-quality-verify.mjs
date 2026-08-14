@@ -13,9 +13,10 @@
  *   node scripts/ai-image-quality-verify.mjs --endpoints-only  # phase A only (~2 min)
  *
  * Phase A (raw endpoints, no browser): POST /api/ai/card-photo, card-cover,
- * flyer-hero, logo-background → assert mimeType image/jpeg (proves
- * image_output_options accepted — gotchas §2.5) and source dims (1K ≥1024,
- * 2K ≥1536 on the long side).
+ * flyer-hero, logo-background → assert mimeType image/jpeg (output default
+ * di gemini-3.1-flash-image; nessun output control accettato — probe live
+ * 2026-08-07, gotchas §2.5) e source dims 1K (long side ≥1024, tutti gli
+ * endpoint — il 2K non si usa: supera il limite risposta Vercel 4.5MB).
  *
  * Phase B (Playwright app flow): login → customer "La Chiccheria" →
  * auto-build → Genera bozze AI (or reuse already-generated docs) → read
@@ -34,6 +35,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASE = (process.env.BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 const SHOTS = path.join(ROOT, 'e2e', '__screenshots__', 'ai-image-quality');
+const PROFILE_DIR = path.join(ROOT, 'e2e', '__screenshots__', '.pw-profile');
 const ENDPOINTS_ONLY = process.argv.includes('--endpoints-only');
 const CUSTOMER_NAME = 'La Chiccheria';
 mkdirSync(SHOTS, { recursive: true });
@@ -91,8 +93,8 @@ async function phaseA() {
         const err = await res.json().catch(() => ({}));
         report.phaseA[name] = { ok: false, status: res.status, error: (err.error || '').slice(0, 300), elapsedS: +elapsed };
         console.log(`[A] FAIL ${name}: HTTP ${res.status} ${String(err.error).slice(0, 120)} (${elapsed}s)`);
-        // Stop rule: Gemini rejecting the request shape (image_output_options
-        // cast, gotchas §2.5) must surface here, not be retried blindly.
+        // Stop rule: Gemini rejecting the request shape (config non
+        // accettata, gotchas §2.5) must surface here, not be retried blindly.
         if (res.status === 400 || (res.status === 502 && /image|output|config/i.test(String(err.error)))) {
           fatal = `${name}: HTTP ${res.status} — ${String(err.error).slice(0, 200)}`;
         }
@@ -114,7 +116,7 @@ async function phaseA() {
     await sleep(2000); // gentle on the 5/min rate limit
   }
   if (fatal) {
-    note(`FATAL phase A — possibile rifiuto image_output_options: ${fatal}`);
+    note(`FATAL phase A — possibile rifiuto config Gemini: ${fatal}`);
     return false;
   }
   return Object.values(report.phaseA).every((r) => r.ok);
@@ -145,21 +147,26 @@ async function collectDocIds(page) {
 
 async function phaseB() {
   console.log('=== Phase B: app flow (Playwright) ===');
-  const browser = await chromium.launch({ headless: true });
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  // Profilo persistente condiviso con design-review-ai-gen.mjs: in IS_LOCAL
+  // i dati vivono in localStorage — senza persistenza ogni run parte vuoto
+  // (customer "La Chiccheria" mai trovato) e rigenera tutto (doppio costo AI).
+  const ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: true, viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   page.on('console', (m) => { if (m.type() === 'error') report.consoleErrors.push(m.text().slice(0, 300)); });
   page.on('pageerror', (e) => report.consoleErrors.push(`pageerror: ${String(e).slice(0, 300)}`));
 
-  // Login
+  // Login (solo se il form appare — sessione persistente valida → redirect)
   await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
-  await page.fill('#auth-email', 'admin@gmail.com');
-  await page.fill('#auth-password', password);
-  await page.click('button.auth-submit');
-  await page.waitForURL(/\/app/, { timeout: 15000 }).catch(() => {});
+  const emailField = page.locator('#auth-email');
+  if (await emailField.waitFor({ timeout: 10000 }).then(() => true).catch(() => false)) {
+    await emailField.fill('admin@gmail.com');
+    await page.fill('#auth-password', password);
+    await page.click('button.auth-submit');
+    await page.waitForURL(/\/app/, { timeout: 15000 }).catch(() => {});
+  }
   const loggedIn = !page.url().includes('/login');
   step('login', loggedIn, `url=${page.url()}`);
-  if (!loggedIn) { await browser.close(); return false; }
+  if (!loggedIn) { await ctx.close(); return false; }
 
   // Customer reuse
   await page.goto(`${BASE}/app/customers`, { waitUntil: 'domcontentloaded' });
@@ -169,7 +176,7 @@ async function phaseB() {
   if (!(await card.count() > 0)) {
     note(`customer "${CUSTOMER_NAME}" non trovato — esegui prima scripts/design-review-ai-gen.mjs --smoke`);
     step('customer', false, 'missing');
-    await browser.close();
+    await ctx.close();
     return false;
   }
   await card.click();
@@ -194,14 +201,21 @@ async function phaseB() {
   step('drafts', !!(docIds.logo && docIds.businessCard && docIds.flyer), JSON.stringify(docIds));
 
   const genBtn = page.locator('[data-testid="crm-generate-drafts-btn"]');
-  const canGenerate = await genBtn.isEnabled().catch(() => false);
+  // Click solo se ci sono draft pending: il bottone può risultare enabled
+  // anche a generazione già avvenuta → click a vuoto + poll infinito su
+  // badge che non arriveranno mai (falso FAIL, 2026-08-13).
+  const hasPending = await page.evaluate((ids) => {
+    const all = JSON.parse(localStorage.getItem('precisionQuote_documents:v1') || '[]');
+    return all.some((d) => ids.includes(d.id) && d.autoGeneratePending);
+  }, Object.values(docIds));
+  const canGenerate = hasPending && (await genBtn.isEnabled().catch(() => false));
   if (canGenerate) {
     await genBtn.click();
-    console.log('[B] Genera bozze AI started — polling up to 8 min…');
+    console.log('[B] Genera bozze AI started — polling up to 20 min…');
     await sleep(20000);
     const finalStatus = {};
     const t0 = Date.now();
-    while (Date.now() - t0 < 8 * 60 * 1000) {
+    while (Date.now() - t0 < 20 * 60 * 1000) {
       let allDone = true;
       for (const type of TARGETS) {
         const txt = await page.locator(`[data-testid="crm-doc-gen-${docIds[type]}"]`).innerText().catch(() => '');
@@ -226,13 +240,16 @@ async function phaseB() {
     return byId;
   }, Object.values(docIds));
 
+  // Soglie persistite: generazione 1K uniforme (long side 1024–1408 a
+  // seconda dell'aspect ratio) + compressDataUrl cap 1024px (background/hero
+  // 1536). Min 1000 separa nettamente l'era 512px senza dipendere dall'aspect.
   const IMG_FIELDS = {
-    logo: [['builder.backgroundImage', (d) => d.builder?.backgroundImage, 1300]],
+    logo: [['builder.backgroundImage', (d) => d.builder?.backgroundImage, 1000]],
     businessCard: [
-      ['front.photoUrl', (d) => d.front?.photoUrl, 1100],
-      ['front.coverImageUrl', (d) => d.front?.coverImageUrl, 1024],
+      ['front.photoUrl', (d) => d.front?.photoUrl, 1000],
+      ['front.coverImageUrl', (d) => d.front?.coverImageUrl, 1000],
     ],
-    flyer: [['content.heroImage', (d) => d.content?.heroImage, 1300]],
+    flyer: [['content.heroImage', (d) => d.content?.heroImage, 1000]],
   };
   for (const type of TARGETS) {
     const d = flatDocs[docIds[type]];
@@ -319,7 +336,7 @@ async function phaseB() {
   step('quality:logo', logoOk, logoQ ? `wordmark=${logoQ.wordmark} tagline=${logoQ.tagline} ratio=${logoQ.ratio}` : 'no svg');
   await page.locator('[data-logo-preview]').first().screenshot({ path: path.join(SHOTS, 'logo.png') }).catch(() => {});
 
-  await browser.close();
+  await ctx.close();
   return Object.values(report.phaseB).every((v) => typeof v !== 'object' || v.ok !== false);
 }
 

@@ -318,7 +318,7 @@ Regression test: `src/__tests__/vercelConfig.test.ts`.
 `src/server/handler.ts` (ESM-only → `FUNCTION_INVOCATION_FAILED` su TUTTI
 gli endpoint); solo `await import('@google/genai')` dentro l'handler.
 `response_modalities` minuscolo. `image_size: '1K'` uniforme su tutti gli
-endpoint (clamp 1MB, timeout 45s logo-background/flyer-hero); 2K mai
+endpoint (clamp 1.2MB, timeout 45s logo-background/flyer-hero); 2K mai
 (~4.4MB base64 → oltre il limite risposta Vercel 4.5MB); mai
 `image_output_options`/`output_mime_type` (400 probe live, §2.5).
 Nano Banana 2 Lite solo 1K (`resolveGeminiImageSize`). Prompt neutri, no
@@ -352,7 +352,10 @@ calibrate in `geometry.ts`; `GLYPH_HEIGHT_FACTOR=1.15`;
 `vite.config.js`; cover "entrambi i lati" serializzata (mai parallela,
 502); limiti `context` proxy = server (2000). Il proxy gestisce anche
 `/api/logs` (mirror dev) e il fallback Ollama chat diretto (timeout 600s,
-tools propagati — senza → 400 silenzioso e verify morto).
+tools propagati in richiesta E in risposta — `tool_calls` NDJSON inoltrati
+al client stream e non-stream, history normalizzata camelCase→snake_case
+con arguments oggetto — senza → agent loop morto o 400 "Value looks like
+object", gotcha §26.18).
 
 **Build zero-warning + npm 12 (§25)**: `npm run build` deve restare
 pulito. Regole: moduli già statico-importati nel main → import statico,

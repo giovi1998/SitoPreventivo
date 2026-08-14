@@ -1,56 +1,162 @@
 {
-  "date": "2026-08-07T08:07:44.252Z",
+  "date": "2026-08-14T09:24:54.532Z",
   "phaseA": {
     "card-photo": {
       "ok": true,
       "mimeType": "image/jpeg",
       "h": 1200,
       "w": 896,
-      "bytes": 792942,
+      "bytes": 850851,
       "minLongSide": 1024,
-      "elapsedS": 11.7
+      "elapsedS": 12.7
     },
     "card-cover": {
       "ok": true,
       "mimeType": "image/jpeg",
       "h": 1024,
       "w": 1024,
-      "bytes": 800607,
+      "bytes": 593877,
       "minLongSide": 1024,
-      "elapsedS": 8.8
+      "elapsedS": 12.3
     },
     "flyer-hero": {
       "ok": true,
       "mimeType": "image/jpeg",
       "h": 848,
       "w": 1264,
-      "bytes": 915999,
+      "bytes": 880647,
       "minLongSide": 1024,
-      "elapsedS": 10.8
+      "elapsedS": 11.9
     },
     "logo-background": {
       "ok": true,
       "mimeType": "image/jpeg",
       "h": 768,
       "w": 1376,
-      "bytes": 767781,
+      "bytes": 1009962,
       "minLongSide": 1024,
-      "elapsedS": 11
+      "elapsedS": 13.2
     }
   },
   "phaseB": {
-    "docs": {},
+    "docs": {
+      "logo": {
+        "id": "logo_424a2c92-af2e-4aab-973f-43073e0c0472",
+        "images": {
+          "builder.backgroundImage": {
+            "ok": true,
+            "w": 1376,
+            "h": 768,
+            "mime": "image/jpeg",
+            "bytes": 154925,
+            "minLongSide": 1000
+          }
+        },
+        "quality": {
+          "wordmark": 36,
+          "tagline": 15,
+          "ratio": 0.417,
+          "ratioOk": true
+        }
+      },
+      "businessCard": {
+        "id": "businessCard_b628515a-93c9-4c06-b45e-796e63f8d127",
+        "images": {
+          "front.photoUrl": {
+            "ok": true,
+            "w": 765,
+            "h": 1024,
+            "mime": "image/jpeg",
+            "bytes": 42845,
+            "minLongSide": 1000
+          },
+          "front.coverImageUrl": {
+            "ok": true,
+            "w": 1376,
+            "h": 768,
+            "mime": "image/jpeg",
+            "bytes": 134324,
+            "minLongSide": 1000
+          }
+        },
+        "quality": {
+          "name": 22,
+          "title": 16,
+          "company": 14,
+          "contactsMin": 19,
+          "textOverflowCells": 0,
+          "hierarchy": true,
+          "contactsFloorOk": true
+        }
+      },
+      "flyer": {
+        "id": "flyer_1f1e36a6-47c8-47f2-8056-f40a22b1da86",
+        "images": {
+          "content.heroImage": {
+            "ok": true,
+            "w": 1024,
+            "h": 572,
+            "mime": "image/jpeg",
+            "bytes": 78476,
+            "minLongSide": 1000
+          }
+        },
+        "quality": {
+          "maxFontMm": 10.5833,
+          "minFontMm": 3.8806,
+          "texts": 4,
+          "outOfBounds": 0,
+          "floorsOk": true
+        }
+      }
+    },
     "login": {
       "ok": true,
       "evidence": "url=http://localhost:8000/app"
     },
     "customer": {
-      "ok": false,
-      "evidence": "missing"
+      "ok": true,
+      "evidence": "id=cust_c3d2689a-8d57-4826-bc32-dbdc05d7412f"
+    },
+    "drafts": {
+      "ok": true,
+      "evidence": "{\"website\":\"website_20d2b0aa-3f8c-4c04-949e-29eeaf5918c6\",\"flyer\":\"flyer_1f1e36a6-47c8-47f2-8056-f40a22b1da86\",\"businessCard\":\"businessCard_b628515a-93c9-4c06-b45e-796e63f8d127\",\"logo\":\"logo_424a2c92-af2e-4aab-973f-43073e0c0472\"}"
+    },
+    "generate": {
+      "ok": true,
+      "evidence": "reused existing generated docs"
+    },
+    "img:builder.backgroundImage": {
+      "ok": true,
+      "evidence": "image/jpeg 1376x768 (151KB, min 1000)"
+    },
+    "img:front.photoUrl": {
+      "ok": true,
+      "evidence": "image/jpeg 765x1024 (42KB, min 1000)"
+    },
+    "img:front.coverImageUrl": {
+      "ok": true,
+      "evidence": "image/jpeg 1376x768 (131KB, min 1000)"
+    },
+    "img:content.heroImage": {
+      "ok": true,
+      "evidence": "image/jpeg 1024x572 (77KB, min 1000)"
+    },
+    "quality:card": {
+      "ok": true,
+      "evidence": "name=22 title=16 company=14 contactsMin=19 overflowCells=0"
+    },
+    "quality:flyer": {
+      "ok": true,
+      "evidence": "max=10.58mm min=3.88mm texts=4 oob=0"
+    },
+    "quality:logo": {
+      "ok": true,
+      "evidence": "wordmark=36 tagline=15 ratio=0.417"
     }
   },
   "notes": [
-    "customer \"La Chiccheria\" non trovato — esegui prima scripts/design-review-ai-gen.mjs --smoke"
+    "Genera bozze AI disabilitato — riuso documenti già generati"
   ],
   "consoleErrors": []
 }

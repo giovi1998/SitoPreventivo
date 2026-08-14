@@ -45,9 +45,11 @@ export function resolveGeminiImageSize(model: string, requestedSize: string): st
 // NOTA (probe live 2026-08-07): le interactions API NON accettano nessun
 // output control (`image_output_options`/`output_mime_type` → 400 Unknown
 // parameter). JPEG è già l'output default di gemini-3.1-flash-image.
-// 1K JPEG misurato ~850KB → clamp uniforme 1MB. 2K (2752×1536, ~3.2MB →
+// 1K JPEG: ~550-880KB tipici, ma 16:9 (logo-background, flyer-hero 16:9)
+// arriva a ~1.05MB per varianza → clamp uniforme 1.2MB (verifica live
+// 2026-08-13: 1MB → 413 intermittenti). 2K (2752×1536, ~3.2MB →
 // 4.4MB base64) supera il limite risposta Vercel 4.5MB: mai usarlo.
-export const GEMINI_IMG_CLAMP_BYTES = 1_000_000;
+export const GEMINI_IMG_CLAMP_BYTES = 1_200_000;
 export function getRequestId(req: VercelRequest): string {
   const header = req.headers['x-request-id'];
   const value = Array.isArray(header) ? header[0] : header;

@@ -40,6 +40,7 @@ const BASE = (process.env.BASE_URL || 'http://localhost:8000').replace(/\/$/, ''
 const SHOTS = path.join(ROOT, 'e2e', '__screenshots__', 'design-review', 'ai');
 const EXPORT_DIR = path.join(SHOTS, 'export');
 const COMPARE_DIR = path.join(SHOTS, 'compare');
+const PROFILE_DIR = path.join(ROOT, 'e2e', '__screenshots__', '.pw-profile');
 const SMOKE = process.argv.includes('--smoke');
 const CUSTOMER_NAME = 'La Chiccheria';
 mkdirSync(SHOTS, { recursive: true });
@@ -127,9 +128,12 @@ function pngSize(p) {
 }
 
 // Vertical contact sheet: preview on top, export below, with labels.
+// Immagini embed come data URL: `setContent` + src file:// viene bloccato
+// da Chromium (about:blank non ha accesso file:) → icone broken image.
 async function contactSheet(previewPng, exportPng, outPng, label) {
   const { chromium: c2 } = await import('playwright');
   const b2 = await c2.launch({ headless: true });
+  const dataUrl = (p) => `data:image/png;base64,${readFileSync(p).toString('base64')}`;
   try {
     const page2 = await b2.newPage({ viewport: { width: 1200, height: 1600 } });
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>
@@ -139,8 +143,8 @@ async function contactSheet(previewPng, exportPng, outPng, label) {
       .col{flex:1;text-align:center} .col img{max-width:100%;border:1px solid #eee;background:#fff}
       .cap{font-size:11px;color:#666;margin-top:4px}
     </style></head><body><h1>${label}</h1>
-      <div class="row"><div class="col"><img src="file://${exportPng.split(path.sep).join('/')}"><div class="cap">EXPORT</div></div>
-      <div class="col"><img src="file://${previewPng.split(path.sep).join('/')}"><div class="cap">PREVIEW</div></div></div>
+      <div class="row"><div class="col"><img src="${dataUrl(exportPng)}"><div class="cap">EXPORT</div></div>
+      <div class="col"><img src="${dataUrl(previewPng)}"><div class="cap">PREVIEW</div></div></div>
     </body></html>`;
     await page2.setContent(html);
     await page2.waitForTimeout(800);
@@ -154,8 +158,10 @@ async function contactSheet(previewPng, exportPng, outPng, label) {
 const imgKind = (v) => (typeof v !== 'string' || !v ? null : v.startsWith('data:') ? 'data-url' : /^https?:/.test(v) ? 'remote-url' : 'other');
 
 async function main() {
-  const browser = await chromium.launch({ headless: true });
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  // Profilo persistente condiviso con ai-image-quality-verify.mjs: in
+  // IS_LOCAL customer/documenti vivono in localStorage → riuso tra run
+  // (niente doppia generazione AI).
+  const ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: true, viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   page.on('console', (m) => { if (m.type() === 'error') report.consoleErrors.push(m.text().slice(0, 300)); });
   page.on('pageerror', (e) => report.consoleErrors.push(`pageerror: ${String(e).slice(0, 300)}`));
@@ -166,12 +172,16 @@ async function main() {
     return p;
   };
 
-  // ── Step 1: login ──────────────────────────────────────────────
+  // ── Step 1: login (solo se il form appare — con sessione persistente
+  // valida /login redirige ad /app e il campo non esiste) ──
   await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
-  await page.fill('#auth-email', 'admin@gmail.com');
-  await page.fill('#auth-password', password);
-  await page.click('button.auth-submit');
-  await page.waitForURL(/\/app/, { timeout: 15000 }).catch(() => {});
+  const emailField = page.locator('#auth-email');
+  if (await emailField.waitFor({ timeout: 10000 }).then(() => true).catch(() => false)) {
+    await emailField.fill('admin@gmail.com');
+    await page.fill('#auth-password', password);
+    await page.click('button.auth-submit');
+    await page.waitForURL(/\/app/, { timeout: 15000 }).catch(() => {});
+  }
   const loggedIn = !page.url().includes('/login');
   step(1, 'Login admin', loggedIn, `url=${page.url()}`);
   if (!loggedIn) { await shot('login-fail'); throw new Error('login failed'); }
@@ -294,13 +304,13 @@ async function main() {
     throw new Error('generate-drafts button disabled');
   }
   await genBtn.click();
-  console.log('[step 5] Genera bozze AI started — polling badges up to 8 min…');
+  console.log('[step 5] Genera bozze AI started — polling badges up to 20 min…');
   await sleep(20000);
   const TARGETS = ['logo', 'businessCard', 'flyer'];
   const finalStatus = {};
   const t0 = Date.now();
   let lastShot = 0;
-  while (Date.now() - t0 < 8 * 60 * 1000) {
+  while (Date.now() - t0 < 20 * 60 * 1000) {
     let allDone = true;
     for (const type of TARGETS) {
       const id = docIds[type];
@@ -328,7 +338,9 @@ async function main() {
   const ROUTES = { logo: 'logo', businessCard: 'card', flyer: 'flyer' };
   const EXPORT_ITEMS = {
     // type → [menu button locator, item text, output name, minSize {w,h}]
-    logo: [page.locator('.action-bar__btn--secondary'), 'PNG 1024', 'logo-export.png', { w: 1024, h: 1024 }],
+    // logo: PNG 1024 → width 1024, height = aspect del viewBox (i layout
+    // orizzontali NON sono quadrati, es. 1024×410) → min solo su width.
+    logo: [page.locator('.action-bar__btn--secondary'), 'PNG 1024', 'logo-export.png', { w: 1024, h: 1 }],
     businessCard: [page.locator('.card-export-menu button').first(), 'PNG fronte (300 DPI)', 'card-export-front.png', { w: 1000, h: 600 }],
     flyer: [page.locator('.flyer-editor-shell button').filter({ hasText: 'PNG' }).first(), 'PNG', 'flyer-export.png', { w: 1000, h: 600 }],
   };
@@ -401,7 +413,7 @@ async function main() {
   writeFileSync(path.join(SHOTS, 'report.json'), JSON.stringify(report, null, 2));
   step(7, 'report.json written', true, path.join(SHOTS, 'report.json'));
 
-  await browser.close();
+  await ctx.close();
   console.log('\n===== REPORT =====');
   console.log(JSON.stringify(report.docs, null, 2));
   const allDone = TARGETS.every((t) => report.docs[t]?.status === 'done');

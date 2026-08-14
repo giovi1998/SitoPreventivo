@@ -168,10 +168,13 @@ ciclo; nessuno era nel provider Gemini in sé.
    2026-08-06; correzione probe live 2026-08-07)**: la pipeline era
    bloccata a 512px → immagini pixelate su aree grandi (card 1004×650,
    hero A4 2362×1358, logo export 2048). Ora tutti gli endpoint chiedono
-   `image_size: '1K'` (1K JPEG misurato ~850KB) con clamp uniforme **1MB**
-   (`GEMINI_IMG_CLAMP_BYTES` in `src/server/core.ts`); logo-background e
+   `image_size: '1K'` (1K JPEG ~550-990KB misurati) con clamp uniforme
+   **1.2MB** (`GEMINI_IMG_CLAMP_BYTES` in `src/server/core.ts`); logo-background e
    flyer-hero con timeout 45s. Il 2K non si usa mai: 2752×1536 ≈ 3.2MB →
-   ~4.4MB base64 supera il limite risposta Vercel 4.5MB.
+   ~4.4MB base64 supera il limite risposta Vercel 4.5MB. **Clamp 1MB era
+   troppo stretto**: 16:9 1K JPEG varia 850KB-1.05MB → 413 intermittenti
+   su logo-background (verifica live 2026-08-13) → alzato a 1.2MB
+   (~1.6MB on the wire, margine ampio sul 4.5MB).
    - **Mai `image_output_options`/`output_mime_type` sulle interactions
      API**: probe live 2026-08-07 → `400 Unknown parameter`. JPEG è già
      l'output default di `gemini-3.1-flash-image`, nessun output control
@@ -187,7 +190,11 @@ ciclo; nessuno era nel provider Gemini in sé.
      rapporti supportati da Gemini 3.1 (rimosso `'3:1'`).
    - Persistenza path-aware: `compressDataUrl` default 1024px/400KB;
      background/hero 1536px/400KB (`dataService/images.js`); PNG con alpha
-     resta PNG (downscale iterativo, mai fallback JPEG).
+     resta PNG (downscale iterativo, mai fallback JPEG). **Anche il save
+     CRM auto-build è path-aware** (2026-08-13): `DRAFT_IMAGE_PATHS` in
+     `useAutoBuildGenerate.ts` — cover/background/hero 1536px/400KB,
+     photo/logoUrl 1024px/400KB (era 768px/200KB piatto → immagini 1K
+     declassate sotto soglia qualità, trovato dalla verifica live).
 6. **`await import('../src/...')` non risolto in prod Vercel**. L'import
    dinamico di un modulo sotto `src/` da `src/server/handler.ts` fallisce in
    produzione (`Cannot find module '/var/task/src/...'`) anche se gli

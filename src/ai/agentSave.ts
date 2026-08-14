@@ -15,8 +15,22 @@ const DOC_TYPE_OF_TOOL: Record<string, string> = {
   generate_website: 'website',
 };
 
+// Inverso: documentType → tipo agente (include dei tool). Senza questa mappa
+// 'businessCard' non matcha il tool 'generate_card' → card mai generata
+// (bug live 2026-08-13: l'agente saltava la card in silenzio).
+const AGENT_TYPE_OF_DOC: Record<string, 'logo' | 'card' | 'flyer' | 'website'> = {
+  logo: 'logo',
+  businessCard: 'card',
+  flyer: 'flyer',
+  website: 'website',
+};
+
 export function docTypeOfTool(toolName: string): string {
   return DOC_TYPE_OF_TOOL[toolName] ?? '';
+}
+
+export function agentTypeOfDoc(documentType: string): 'logo' | 'card' | 'flyer' | 'website' | undefined {
+  return AGENT_TYPE_OF_DOC[documentType];
 }
 
 function firstBrief(docs: BriefDoc[]): string {
@@ -64,7 +78,9 @@ export function agentResultData(docType: string, result: AgentToolResult): Recor
   switch (docType) {
     case 'logo': {
       const concepts = (d.concepts ?? []) as Array<Record<string, unknown>>;
-      const selected = typeof d.selected === 'number' ? d.selected : 0;
+      // logoOrchestrator ritorna selected:-1 (l'utente sceglie in UI); in
+      // auto-build l'agente prende il primo concept valido.
+      const selected = typeof d.selected === 'number' && d.selected >= 0 ? d.selected : 0;
       const builder = concepts[selected];
       if (!builder) return null;
       return { builder, concepts };

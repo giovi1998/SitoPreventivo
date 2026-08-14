@@ -46,8 +46,8 @@ describe('POST /api/ai/card-photo', () => {
     expect(input).toContain('CARD PHOTO CONTEXT');
   });
 
-  it('returns 413 when image exceeds 1MB', async () => {
-    mockGeminiOk('x'.repeat(1_400_000)); // ~1.05MB raw
+  it('returns 413 when image exceeds 1.2MB', async () => {
+    mockGeminiOk('x'.repeat(1_800_000)); // ~1.35MB raw
     const res = await callApiHandler(makeReq({ prompt: 'p' }));
     expect(res.statusCode).toBe(413);
   });

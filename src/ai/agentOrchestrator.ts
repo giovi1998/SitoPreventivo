@@ -203,7 +203,7 @@ export class AgentOrchestrator extends BaseOrchestrator {
             name,
             ok: true,
             summary: `Card generata: layout ${style?.layout ?? 'default'}, palette #${style?.bgColor?.replace('#', '') ?? '?'}/${style?.accentColor?.replace('#', '') ?? '?'}.`,
-            data: result.card,
+            data: { card: result.card },
           };
         }
         case 'generate_flyer': {
@@ -220,7 +220,7 @@ export class AgentOrchestrator extends BaseOrchestrator {
             summary: result.applied
               ? `Flyer copy generata: headline "${docs.flyer.content.headline}".`
               : `Flyer copy non valida: ${result.changes || 'schema fail'}`,
-            data: result.flyer,
+            data: { flyer: result.flyer },
           };
         }
         case 'generate_website': {
@@ -256,7 +256,7 @@ export class AgentOrchestrator extends BaseOrchestrator {
             name,
             ok: true,
             summary: `Sito generato: ${result.site.pages.join(', ')} (html ${result.site.html.length}ch, css ${result.site.css.length}ch, js ${result.site.js.length}ch).`,
-            data: result.site,
+            data: { site: result.site },
           };
         }
         default:

@@ -71,14 +71,14 @@ describe('POST /api/ai/flyer-hero', () => {
     expect(call.generation_config.image_config.image_size).toBe('1K');
   });
 
-  it('accepts a 900KB image (clamp 1MB: 1K JPEG misurato ~850KB)', async () => {
+  it('accepts a 900KB image (clamp 1.2MB)', async () => {
     mockGeminiOk('x'.repeat(1_200_000)); // ~900KB raw
     const res = await callApiHandler(makeReq({ prompt: 'p' }));
     expect(res.statusCode).toBe(200);
   });
 
-  it('returns 413 when image exceeds 1MB', async () => {
-    mockGeminiOk('x'.repeat(1_400_000)); // ~1.05MB raw
+  it('returns 413 when image exceeds 1.2MB', async () => {
+    mockGeminiOk('x'.repeat(1_800_000)); // ~1.35MB raw
     const res = await callApiHandler(makeReq({ prompt: 'p' }));
     expect(res.statusCode).toBe(413);
   });

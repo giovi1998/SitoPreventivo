@@ -4,7 +4,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 vi.mock('@google/genai', () => {
   class GoogleGenAI {
     models = {
-      embedContent: vi.fn(async () => ({ embedding: { values: [0.5, 0.5] } })),
+      embedContent: vi.fn(async () => ({ embeddings: [{ values: [0.5, 0.5] }] })),
     };
   }
   return { GoogleGenAI };
@@ -199,6 +199,102 @@ describe('vite dev API proxy (vite.config.js)', () => {
     expect(withToolCalls).toHaveLength(1);
     expect(withToolCalls[0].content).toBe('');
     expect(withToolCalls[0].tool_calls[0].function.name).toBe('analyze_site');
+  });
+
+  it('fallback Ollama non-stream FORWARD tool_calls nella risposta (agent loop) — regressione 2026-08-13', async () => {
+    // Il dev proxy scartava message.tool_calls dall'NDJSON: l'agent
+    // orchestratore riceveva solo testo → loop plan→act morto al round 0.
+    process.env.OLLAMA_API_KEY = 'test-key';
+    const ndjson = [
+      JSON.stringify({ message: { content: 'Genero il logo.', tool_calls: [{ function: { name: 'generate_logo', arguments: { focus: 'elegante' } } }] } }),
+      JSON.stringify({ done: true, prompt_eval_count: 10, eval_count: 5 }),
+    ].join('\n') + '\n';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(ndjson, { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } }),
+      ),
+    );
+    const api = await loadApiMiddleware(async () => null);
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/ai/chat', { provider: 'ollama-minimax-m3', messages: [{ role: 'user', content: 'brief' }] }),
+      res,
+      () => {},
+    );
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    const toolCalls = body.choices[0].message.tool_calls;
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0].type).toBe('function');
+    expect(toolCalls[0].function.name).toBe('generate_logo');
+    // arguments oggetto NDJSON → stringificati in formato OpenAI
+    expect(JSON.parse(toolCalls[0].function.arguments)).toEqual({ focus: 'elegante' });
+  });
+
+  it('fallback Ollama stream FORWARD tool_calls come delta SSE — regressione 2026-08-13', async () => {
+    process.env.OLLAMA_API_KEY = 'test-key';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          '{"message":{"content":"ok"}}\n{"message":{"tool_calls":[{"function":{"name":"generate_card","arguments":{}}}]}}\n{"done":true}\n',
+          { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } },
+        ),
+      ),
+    );
+    const api = await loadApiMiddleware(async () => null);
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/ai/chat/stream', { provider: 'ollama-minimax-m3', messages: [{ role: 'user', content: 'brief' }] }),
+      res,
+      () => {},
+    );
+    expect(res.statusCode).toBe(200);
+    const events = res.body.split('\n\n').filter((l) => l.startsWith('data: {'));
+    const withTools = events.find((l) => l.includes('tool_calls'));
+    expect(withTools, `delta tool_calls assente nello stream SSE: ${res.body.slice(0, 300)}`).toBeDefined();
+    const payload = JSON.parse((withTools as string).slice(6));
+    expect(payload.choices[0].delta.tool_calls[0].function.name).toBe('generate_card');
+  });
+
+  it('fallback Ollama NORMALIZZA history agent (camelCase → snake_case, arguments → oggetto) — regressione 400 round 2', async () => {
+    // L'agent loop manda al round 2: assistant con toolCalls camelCase e
+    // arguments stringificati + messaggio role:'tool' con toolCallId.
+    // Ollama vuole snake_case + arguments oggetto → 400 "Value looks like
+    // object..." (bug live 2026-08-13).
+    process.env.OLLAMA_API_KEY = 'test-key';
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('{"message":{"content":"fine"}}\n{"done":true}\n', {
+        status: 200,
+        headers: { 'Content-Type': 'application/x-ndjson' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const api = await loadApiMiddleware(async () => null);
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/ai/chat', {
+        provider: 'ollama-minimax-m3',
+        messages: [
+          { role: 'user', content: 'brief' },
+          { role: 'assistant', content: 'Genero il logo.', toolCalls: [{ id: 'call_1', function: { name: 'generate_logo', arguments: '{"focus":"elegante"}' } }] },
+          { role: 'tool', content: '"Logo generato"', toolCallId: 'call_1', name: 'generate_logo' },
+        ],
+        tools: [{ type: 'function', function: { name: 'generate_logo', description: 'd', parameters: {} } }],
+      }),
+      res,
+      () => {},
+    );
+    expect(res.statusCode).toBe(200);
+    const upstreamBody = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    const assistant = upstreamBody.messages[1];
+    expect(assistant.toolCalls).toBeUndefined();
+    expect(assistant.tool_calls[0].function.name).toBe('generate_logo');
+    expect(assistant.tool_calls[0].function.arguments).toEqual({ focus: 'elegante' });
+    const toolMsg = upstreamBody.messages[2];
+    expect(toolMsg.toolCallId).toBeUndefined();
+    expect(toolMsg.tool_call_id).toBe('call_1');
   });
 
   it('TB-029 fix: /api/ai/card-cover passa costUsd Gemini (0.04) a ingestLangfuse', async () => {

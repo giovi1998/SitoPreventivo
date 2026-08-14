@@ -398,9 +398,15 @@ function buildSvgForLayout(builder: LogoBuilder): string {
     const textWidth = estimateTextWidth(builder.primaryText, primaryFontSize);
     const taglineWidth = hasTagline ? estimateTextWidth(builder.tagline, taglineFontSize) : 0;
     if (!suppressOverlay) decorations = renderDecorations(builder, W, iconCenter, iconSize, primaryX, primaryY - Math.round(primaryFontSize * 0.45), textWidth, primaryFontSize);
+    // Il box del backdrop deve partire dal bordo SINISTRO del testo: con
+    // anchor 'middle' (backgroundImage) x è il centro — prima la pill era
+    // shiftata a destra di metà testo e non copriva il wordmark (bug
+    // visivo auto-build 2026-08-13, testo bianco su zona chiara immagine).
+    const primaryBoxX = textAnchor === 'middle' ? primaryX - textWidth / 2 : primaryX;
+    const taglineBoxX = textAnchor === 'middle' ? taglineX - taglineWidth / 2 : taglineX;
     const box = unionTextBox(
-      { x: primaryX, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
-      hasTagline ? { x: taglineX, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
+      { x: primaryBoxX, y: primaryY - primaryFontSize * 0.85, width: textWidth, height: primaryFontSize * 1.15 },
+      hasTagline ? { x: taglineBoxX, y: taglineY - taglineFontSize * 0.85, width: taglineWidth, height: taglineFontSize * 1.25 } : null,
     );
     backdrop = buildTextBackdrop(builder, box, W, primaryTextColor);
   } else {

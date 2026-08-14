@@ -5,6 +5,41 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-13
 
+- **Qualità oggetti card/flyer/logo — verifica live end-to-end + catena di
+  fix (2026-08-13)** (mappa wayfinder `docs/wayfinder/qualita-oggetti-map.md`,
+  ticket T1-T7; da `to-be-done.md` "Verifica visiva modifiche AI" e #2
+  "Immagini AI pixelate — residuo verifica"):
+  - **Verifica live ALL CHECKS PASS** su cliente demo "La Chiccheria":
+    Phase A endpoint 4/4 (1K JPEG), Phase B immagini persistite tutte
+    ≥1000px, quality card 22/16/14 + contatti 19px + 0 overflow, flyer
+    floor stampa + 0 out-of-bounds, logo ratio tagline 0.417; export reali
+    logo 1024, card 1004×650, flyer 1819×2551.
+  - **Agent mode CRM riparato** ("Genera bozze AI" non salvava nulla):
+    dev proxy Ollama droppava i `tool_calls` in risposta (stream +
+    non-stream) → loop plan→act morto; history normalizzata
+    camelCase→snake_case con arguments oggetto (era 400 Ollama);
+    `useAutoBuildGenerate` passava docs `{}` ai tool (TypeError flyer);
+    include filtrava `generate_card` ('businessCard'≠'card'); data shape
+    tool→save disallineata; logo `selected:-1` mai salvato.
+  - **Immagini AI in agent mode** (T6): `enrichAgentDocWithImages` (logo
+    bg + pill, card photo/cover, flyer hero) + compressione saveDraft
+    path-aware 1536/1024px (era 768px piatta → sotto soglia qualità).
+  - **Clamp immagini 1MB → 1.2MB** (T5): 16:9 1K JPEG varia fino a
+    ~1.05MB → 413 intermittenti su logo-background.
+  - **Pill textBackdrop disallineata** su logo horizontal+bgImage
+    (anchor middle: box dal centro invece che dal bordo sinistro).
+  - **Embeddings 502** (T7): SDK `@google/genai` ritorna `embeddings[]`
+    plurale; parsing singolare → sempre vuoto. Fix 3 siti (ai.ts, crm.ts,
+    dev proxy) + live 200.
+  - **Script di verifica robusti**: profilo Playwright persistente
+    condiviso (riuso customer/docs, zero doppia spesa AI), contact sheet
+    data-URL (era file:// → broken), soglia logo export 1024×1 (layout
+    orizzontale non quadrato), poll 20 min, click generate solo se
+    pending, login per presenza campo.
+  - Test: +20 (proxy tool_calls/normalizzazione, agentSave, hook T6/T11,
+    embeddings plurale, pill regression, clamp boundary). **3181 verdi**,
+    typecheck 0.
+
 - **RAG pipeline completa — chunking/embedding/retrieval + tracing Langfuse
   + UI (2026-08-13)** (da `to-be-done.md` "RAG avanzato"):
   - **Embedding server-side**: `saveCustomerKnowledge` embedda ogni chunk

@@ -18,7 +18,7 @@
       "step": 3,
       "name": "Customer detail open",
       "ok": true,
-      "evidence": "id=cust_195bf5d0-550c-4cef-b33d-38869201c36e"
+      "evidence": "id=cust_c3d2689a-8d57-4826-bc32-dbdc05d7412f"
     },
     {
       "step": 3.5,
@@ -29,14 +29,14 @@
     {
       "step": 4.1,
       "name": "Auto-build draft",
-      "ok": false,
-      "evidence": "log tail: REGISTRO OPERAZIONI AI\nCopia\nCancella\n17:42:46\n▶\nAuto-build draft in corso…"
+      "ok": true,
+      "evidence": "ok"
     },
     {
       "step": 4.2,
       "name": "Draft docs present (logo/card/flyer)",
       "ok": true,
-      "evidence": "{\"logo\":\"logo_4745c1df-6b5f-4e76-b64a-e377060dfacd\",\"businessCard\":\"businessCard_784cc771-a05f-4e86-8523-3387920ca78b\",\"flyer\":\"flyer_ee690241-791f-40ef-843e-1f3493c1adca\",\"website\":\"website_e502c8b1-abee-4021-8913-e0fddd9e0f89\"}"
+      "evidence": "{\"logo\":\"logo_424a2c92-af2e-4aab-973f-43073e0c0472\",\"businessCard\":\"businessCard_b628515a-93c9-4c06-b45e-796e63f8d127\",\"flyer\":\"flyer_1f1e36a6-47c8-47f2-8056-f40a22b1da86\",\"website\":\"website_20d2b0aa-3f8c-4c04-949e-29eeaf5918c6\"}"
     },
     {
       "step": 5,
@@ -48,49 +48,119 @@
       "step": 6.1,
       "name": "Screenshot logo-ai.png",
       "ok": true,
-      "evidence": "url=http://localhost:8000/app/logo/logo_4745c1df-6b5f-4e76-b64a-e377060dfacd"
+      "evidence": "url=http://localhost:8000/app/logo/logo_424a2c92-af2e-4aab-973f-43073e0c0472"
+    },
+    {
+      "step": 6.5,
+      "name": "Export real logo",
+      "ok": true,
+      "evidence": "logo-export.png 1024x410 (min 1024x1)"
     },
     {
       "step": 6.2,
       "name": "Screenshot card-ai-front/back.png",
       "ok": true,
-      "evidence": "front=true back=true url=http://localhost:8000/app/card/businessCard_784cc771-a05f-4e86-8523-3387920ca78b"
+      "evidence": "front=true back=true url=http://localhost:8000/app/card/businessCard_b628515a-93c9-4c06-b45e-796e63f8d127"
+    },
+    {
+      "step": 6.5,
+      "name": "Export real businessCard",
+      "ok": true,
+      "evidence": "card-export-front.png 1004x650 (min 1000x600)"
     },
     {
       "step": 6.3,
       "name": "Screenshot flyer-ai.png",
       "ok": true,
-      "evidence": "url=http://localhost:8000/app/flyer/flyer_ee690241-791f-40ef-843e-1f3493c1adca"
+      "evidence": "url=http://localhost:8000/app/flyer/flyer_1f1e36a6-47c8-47f2-8056-f40a22b1da86"
+    },
+    {
+      "step": 6.5,
+      "name": "Export real flyer",
+      "ok": true,
+      "evidence": "flyer-export.png 1819x2551 (min 1000x600)"
     }
   ],
   "docs": {
     "logo": {
-      "id": "logo_4745c1df-6b5f-4e76-b64a-e377060dfacd",
+      "id": "logo_424a2c92-af2e-4aab-973f-43073e0c0472",
       "status": "done",
+      "export": {
+        "path": "logo-export.png",
+        "w": 1024,
+        "h": 410,
+        "minRequired": {
+          "w": 1024,
+          "h": 1
+        },
+        "pass": true
+      },
+      "compareSheet": "C:\\Users\\Giovanni\\Desktop\\SitoPreventivo\\e2e\\__screenshots__\\design-review\\ai\\compare\\logo-compare.png",
       "aiImages": {
         "backgroundImage": "data-url"
       }
     },
     "businessCard": {
-      "id": "businessCard_784cc771-a05f-4e86-8523-3387920ca78b",
+      "id": "businessCard_b628515a-93c9-4c06-b45e-796e63f8d127",
       "status": "done",
+      "export": {
+        "path": "card-export-front.png",
+        "w": 1004,
+        "h": 650,
+        "minRequired": {
+          "w": 1000,
+          "h": 600
+        },
+        "pass": true
+      },
+      "compareSheet": "C:\\Users\\Giovanni\\Desktop\\SitoPreventivo\\e2e\\__screenshots__\\design-review\\ai\\compare\\businessCard-compare.png",
       "aiImages": {
         "photoUrl": "data-url",
         "coverImageUrl": "data-url"
       }
     },
     "flyer": {
-      "id": "flyer_ee690241-791f-40ef-843e-1f3493c1adca",
+      "id": "flyer_1f1e36a6-47c8-47f2-8056-f40a22b1da86",
       "status": "done",
+      "export": {
+        "path": "flyer-export.png",
+        "w": 1819,
+        "h": 2551,
+        "minRequired": {
+          "w": 1000,
+          "h": 600
+        },
+        "pass": true
+      },
+      "compareSheet": "C:\\Users\\Giovanni\\Desktop\\SitoPreventivo\\e2e\\__screenshots__\\design-review\\ai\\compare\\flyer-compare.png",
       "aiImages": {
         "heroImage": "data-url"
       }
     }
   },
   "consoleErrors": [
-    "[ERROR] Auto-build draft AI fallito {route: useAutoBuildGenerate, docId: website_e502c8b1-abee-4021-8913-e0fddd9e0f89, err: Error: network error}"
+    "Failed to load resource: the server responded with a status of 502 (Bad Gateway)",
+    "[ERROR] Auto-build agente fallito {route: useAutoBuildGenerate, err: Failed to fetch}"
   ],
   "notes": [
     "ai-gen error lines: none"
-  ]
+  ],
+  "reviewTemplate": {
+    "logo": [
+      "tagline leggibile (0.42x wordmark)",
+      "contrasto testo su backgroundImage",
+      "bordo pulito a 1024px"
+    ],
+    "businessCard": [
+      "gerarchia 22/16/14 (nome > ruolo > company)",
+      "contatti retro leggibili",
+      "coerenza wrap/font preview vs export"
+    ],
+    "flyer": [
+      "floor stampa headline 24pt / body 10pt",
+      "sezioni spaziate",
+      "hero non sfocata (max-side >= 1000)"
+    ],
+    "howTo": "Apri i contact sheet in compare/ (preview vs export affiancati) e verifica ogni riga del template. La Chiccheria = caso reale AI: bordeaux/crema, settore pasticceria, brief completo."
+  }
 }

@@ -70,10 +70,39 @@ export default defineConfig(({ mode }) => {
             res.end(JSON.stringify(payload));
           };
 
+          function safeParseArgs(raw) {
+            try { return JSON.parse(raw || '{}'); } catch { return {}; }
+          }
           // ─── Fallback Ollama chat proxy (SSR-safe) ──────────────────
-          // TB-029: il dev proxy sostituisce il server handler in locale →
-          // DEVE tracciare su Langfuse (altrimenti in dev zero trace).
+          // Normalizza i messaggi per Ollama: il client usa camelCase
+          // (toolCalls/toolCallId/reasoningContent) e arguments stringificati
+          // (formato OpenAI); Ollama vuole snake_case e arguments OGGETTO —
+          // altrimenti 400 "Value looks like object..." (agent round 2,
+          // 2026-08-13). Mirror della mappa in src/server/ai.ts.
+          function normalizeOllamaMessage(m) {
+            const msg = { role: m.role, content: m.content };
+            const toolCalls = m.tool_calls || m.toolCalls;
+            const toolCallId = m.tool_call_id || m.toolCallId;
+            if (toolCallId) msg.tool_call_id = toolCallId;
+            if (m.name) msg.name = m.name;
+            const thinking = m.reasoning_content || m.reasoningContent;
+            if (thinking) msg.thinking = thinking;
+            if (Array.isArray(m.images) && m.images.length > 0) msg.images = m.images;
+            if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+              msg.tool_calls = toolCalls.map((tc) => ({
+                function: {
+                  name: tc.function.name,
+                  arguments: typeof tc.function.arguments === 'string'
+                    ? safeParseArgs(tc.function.arguments)
+                    : (tc.function.arguments ?? {}),
+                },
+              }));
+            }
+            return msg;
+          }
           async function proxyOllamaChat(req, res, body, isStream) {
+            // TB-029: il dev proxy sostituisce il server handler in locale →
+            // DEVE tracciare su Langfuse (altrimenti in dev zero trace).
             const ollamaKey = process.env.OLLAMA_API_KEY;
             if (!ollamaKey) return json(res, 503, { error: 'OLLAMA_API_KEY non configurata' });
             const model = body.model || 'minimax-m3:cloud';
@@ -115,7 +144,7 @@ export default defineConfig(({ mode }) => {
               stepSpanId: body.stepSpanId,
             };
             const chatName = `${body.kind && body.kind !== 'chat' ? body.kind : 'chat'}-ai-chat`;
-            const ollamaReq = { model, messages, stream: true };
+            const ollamaReq = { model, messages: messages.map(normalizeOllamaMessage), stream: true };
             if (body.format === 'json' || body.response_format?.type === 'json_object') ollamaReq.format = 'json';
             if (body.think || body.reasoning_effort) ollamaReq.think = body.think || body.reasoning_effort;
             if (body.max_tokens) ollamaReq.options = { ...(ollamaReq.options || {}), num_predict: body.max_tokens };
@@ -153,6 +182,7 @@ export default defineConfig(({ mode }) => {
                 let buffer = '';
                 let streamContent = '';
                 let finalUsage;
+                const streamToolCalls = [];
                 if (!reader) return res.end();
                 while (true) {
                   const { done, value } = await reader.read();
@@ -169,6 +199,18 @@ export default defineConfig(({ mode }) => {
                       if (content) {
                         streamContent += content;
                         res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content } }] })}\n\n`);
+                      }
+                      // Ollama emette i tool_calls in NDJSON: senza forward il
+                      // client li perde e l'agent loop si ferma al plan (bug
+                      // trovato via trace Langfuse, 2026-08-13).
+                      const ndToolCalls = parsed.message?.tool_calls;
+                      if (Array.isArray(ndToolCalls) && ndToolCalls.length > 0) {
+                        for (const tc of ndToolCalls) {
+                          if (tc?.function?.name) {
+                            streamToolCalls.push({ function: { name: tc.function.name, arguments: typeof tc.function.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function.arguments ?? {}) } });
+                          }
+                        }
+                        res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { tool_calls: ndToolCalls.map((tc, i) => ({ index: i, function: { name: tc.function?.name, arguments: typeof tc.function?.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function?.arguments ?? {}) } })) } }] })}\n\n`);
                       }
                       if (parsed.prompt_eval_count != null || parsed.eval_count != null) {
                         finalUsage = {
@@ -187,7 +229,7 @@ export default defineConfig(({ mode }) => {
                 await trace({
                   ...baseTrace,
                   name: chatName,
-                  output: { content: streamContent },
+                  output: { content: streamContent, ...(streamToolCalls.length > 0 ? { toolCalls: streamToolCalls } : {}) },
                   usage: finalUsage ? { promptTokens: finalUsage.prompt_tokens, completionTokens: finalUsage.completion_tokens } : undefined,
                 });
                 return res.end();
@@ -198,10 +240,22 @@ export default defineConfig(({ mode }) => {
               let full = '';
               let promptEval = 0;
               let evalCount = 0;
+              const toolCalls = [];
               for (const line of lines) {
                 try {
                   const parsed = JSON.parse(line);
                   full += parsed.message?.content || '';
+                  // Stesso forward dei tool_calls del ramo stream: normalizza
+                  // in formato OpenAI (id + arguments stringificati).
+                  for (const tc of parsed.message?.tool_calls ?? []) {
+                    if (tc?.function?.name) {
+                      toolCalls.push({
+                        id: `call_${Date.now()}_${toolCalls.length}`,
+                        type: 'function',
+                        function: { name: tc.function.name, arguments: typeof tc.function.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function.arguments ?? {}) },
+                      });
+                    }
+                  }
                   if (parsed.prompt_eval_count != null) promptEval = parsed.prompt_eval_count;
                   if (parsed.eval_count != null) evalCount = parsed.eval_count;
                 } catch {}
@@ -209,11 +263,11 @@ export default defineConfig(({ mode }) => {
               await trace({
                 ...baseTrace,
                 name: chatName,
-                output: { content: full },
+                output: { content: full, ...(toolCalls.length > 0 ? { toolCalls } : {}) },
                 usage: promptEval + evalCount > 0 ? { promptTokens: promptEval, completionTokens: evalCount } : undefined,
               });
               return json(res, 200, {
-                choices: [{ message: { content: full } }],
+                choices: [{ message: { content: full, ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}) } }],
                 usage: { prompt_tokens: promptEval, completion_tokens: evalCount, total_tokens: promptEval + evalCount },
               });
             } catch (err) {
@@ -331,8 +385,8 @@ export default defineConfig(({ mode }) => {
                 try {
                   const result = await provider.generateBackground(prompt, 45_000);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
-                  if (sizeBytes > 1_000_000) {
-                    return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
+                  if (sizeBytes > 1_200_000) {
+                    return json(res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' });
                   }
                   await traceDev({
                     name: 'logo-background',
@@ -386,8 +440,8 @@ export default defineConfig(({ mode }) => {
                   if (body.logoImage) images.push({ data: String(body.logoImage), mimeType: 'image/png' });
                   const result = await provider.generateCardCover(finalPrompt, 30_000, images);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
-                  if (sizeBytes > 1_000_000) {
-                    return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
+                  if (sizeBytes > 1_200_000) {
+                    return json(res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' });
                   }
                   await traceDev({
                     name: 'card-cover',
@@ -440,8 +494,8 @@ export default defineConfig(({ mode }) => {
                   const imageConfig = { image_size: '1K', aspect_ratio: body.aspectRatio || '3:2' };
                   const result = await provider.generateImage(finalPrompt, imageConfig, 45_000, images);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
-                  if (sizeBytes > 1_000_000) {
-                    return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
+                  if (sizeBytes > 1_200_000) {
+                    return json(res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' });
                   }
                   await traceDev({
                     name: 'flyer-hero',
@@ -496,8 +550,8 @@ export default defineConfig(({ mode }) => {
                     [],
                   );
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
-                  if (sizeBytes > 1_000_000) {
-                    return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
+                  if (sizeBytes > 1_200_000) {
+                    return json(res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' });
                   }
                   await traceDev({
                     name: 'card-photo',
@@ -554,8 +608,8 @@ export default defineConfig(({ mode }) => {
                 try {
                   const result = await provider.generateImage(finalPrompt, { image_size: size, aspect_ratio: aspectRatio }, 30_000, []);
                   const sizeBytes = Math.ceil(result.imageBase64.length * 0.75);
-                  if (sizeBytes > 1_000_000) {
-                    return json(res, 413, { error: 'Immagine troppo grande (>1MB). Riprova con un prompt più semplice.' });
+                  if (sizeBytes > 1_200_000) {
+                    return json(res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' });
                   }
                   await traceDev({
                     name: 'image-flash',
@@ -698,7 +752,9 @@ export default defineConfig(({ mode }) => {
                   const { GoogleGenAI } = await import('@google/genai');
                   const ai = new GoogleGenAI({ apiKey });
                   const result = await ai.models.embedContent({ model: 'models/gemini-embedding-2', contents: input });
-                  const values = result?.embedding?.values || [];
+                  // SDK ritorna `embeddings: [{values}]` (plurale); fallback
+                  // al singolare REST/legacy. Prima solo singolare → 502.
+                  const values = result?.embeddings?.[0]?.values || result?.embedding?.values || [];
                   if (!Array.isArray(values) || values.length === 0) {
                     return json(res, 502, { error: 'Embedding vuoto da Gemini' });
                   }

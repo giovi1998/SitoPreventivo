@@ -170,6 +170,21 @@ describe('logoGenerator v2.3 (text readability + position controls)', () => {
       expect(backdropIdx).toBeGreaterThan(-1);
       expect(textIdx).toBeGreaterThan(backdropIdx);
     });
+
+    it('horizontal + backgroundImage: la pill è centrata sul testo (anchor middle) — regressione 2026-08-13', () => {
+      // Con anchor 'middle' il box backdrop partiva dal CENTRO del testo
+      // (x = primaryX) invece che dal bordo sinistro → pill shiftata a
+      // destra di metà testo, wordmark scoperto sulla zona chiara immagine.
+      const svg = builderToSvg({
+        ...baseBuilder,
+        backgroundImage: 'data:image/jpeg;base64,QUJD',
+        textBackdrop: 'pill',
+      });
+      const textX = Number(svg.match(/<text x="([\d.]+)"/)![1]);
+      const rect = svg.match(/<rect x="(-?[\d.]+)" y="-?[\d.]+" width="([\d.]+)"[^>]*rx=/)!;
+      const rectCenter = Number(rect[1]) + Number(rect[2]) / 2;
+      expect(Math.abs(rectCenter - textX)).toBeLessThanOrEqual(12);
+    });
   });
 
   describe('textOffsetX/Y', () => {

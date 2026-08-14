@@ -110,3 +110,6 @@ __pycache__/
 
 .vercel
 .env*
+
+# Playwright persistent profile degli script design-review/verify (browser data, mai committare)
+e2e/__screenshots__/.pw-profile/

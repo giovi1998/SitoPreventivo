@@ -69,12 +69,12 @@ describe('POST /api/ai/card-cover', () => {
     });
   });
 
-  it('returns 413 when Gemini image exceeds 1MB', async () => {
-    const big = 'x'.repeat(1_400_000); // ~1.05MB raw
+  it('returns 413 when Gemini image exceeds 1.2MB', async () => {
+    const big = 'x'.repeat(1_800_000); // ~1.35MB raw
     mockGeminiOk(big);
     const res = await callApiHandler(makeReq({ prompt: 'p' }));
     expect(res.statusCode).toBe(413);
-    expect(res.body.error).toMatch(/1MB/i);
+    expect(res.body.error).toMatch(/1\.2MB/i);
   });
 
   it('returns 429 after exceeding 5 req/min/IP', async () => {
