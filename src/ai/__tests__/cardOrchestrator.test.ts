@@ -29,8 +29,22 @@ vi.mock('../prompts/registry', () => ({
 
 let mockSystemPrompt = 'SYSTEM LOCALE';
 
-import { CardAIOrchestrator } from '../cardOrchestrator';
+import { CardAIOrchestrator, buildCardDraftPrompt } from '../cardOrchestrator';
 import { createEmptyCard } from '../../utils/documentSchemas';
+
+describe('buildCardDraftPrompt', () => {
+  it('chiede struttura grid + testi + stile e include il brief', () => {
+    // Regressione 2026-08-13: il tool generate_card dell'agente usava un
+    // prompt generico → l'AI ometteva layout/grid → card non centrata.
+    const p = buildCardDraftPrompt('pasticceria a Cagliari');
+    expect(p).toContain('STRUTTURA');
+    expect(p).toContain('grid');
+    expect(p).toContain('TESTI');
+    expect(p).toContain('STILE');
+    expect(p).toContain('pasticceria a Cagliari');
+  });
+});
+
 
 function setupMockProvider(overrides: Partial<typeof fakeProvider> = {}) {
   fakeProvider = {

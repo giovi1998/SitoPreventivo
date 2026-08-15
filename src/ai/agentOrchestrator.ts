@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { LogoAIOrchestrator } from './logoOrchestrator';
-import { CardAIOrchestrator } from './cardOrchestrator';
+import { CardAIOrchestrator, buildCardDraftPrompt } from './cardOrchestrator';
 import { FlyerAIOrchestrator } from './flyerOrchestrator';
 import { WebsiteOrchestrator } from './websiteOrchestrator';
 import { providerRegistry } from './providers/registry';
@@ -191,7 +191,11 @@ export class AgentOrchestrator extends BaseOrchestrator {
           };
         }
         case 'generate_card': {
-          const prompt = `Genera il biglietto da visita completo per ${brief.businessName} (${brief.sector}). ${brief.description}. Palette: ${brief.preferredColors || 'coerente col settore'}.`;
+          // Stesso prompt strutturale del path non-agente (grid+testi+stile):
+          // un prompt generico ometteva layout/grid → card non centrata.
+          const prompt = buildCardDraftPrompt(
+            `${brief.description}\nAttività: ${brief.businessName} (${brief.sector}). Palette: ${brief.preferredColors || 'coerente col settore'}. Contatti: ${brief.contacts || 'dal brief'}.`,
+          );
           const result = await new CardAIOrchestrator().processPrompt(docs.card, prompt, {
             modelId: ctx.modelId,
             customerId: ctx.customerId,

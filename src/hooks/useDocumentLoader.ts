@@ -92,5 +92,11 @@ export function useDocumentLoader({ view, documentType, contextField }: UseDocum
           : null)
     : undefined;
 
+  // Se c'è un docId ma nessun doc disponibile (caricamento in corso o non
+  // trovato), ritorna null invece di undefined. undefined viene interpretato
+  // come "nuovo documento" dai componenti, causando crash su dati parziali
+  // se il fetch fallisce (es. website.html di un doc cancellato).
+  if (docId && initialDoc === undefined && loading) return { docId, initialDoc: null, loading, onReset, onSaved };
+
   return { docId, initialDoc, loading, onReset, onSaved };
 }

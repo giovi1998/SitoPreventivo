@@ -104,6 +104,12 @@ storybook-static/
 test-results/
 playwright-report/
 
+# Screenshot di review UX generati dagli script (non committare)
+e2e/__screenshots__/review-ux/
+
+# Script one-shot di verifica UX (non committare)
+scripts/_*.mjs
+
 # Python bytecode
 __pycache__/
 *.pyc

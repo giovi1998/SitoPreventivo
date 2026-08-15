@@ -8,9 +8,33 @@ import {
   FRONT_ELEMENT_KEYS,
   BACK_ELEMENT_KEYS,
 } from '../gridElements';
-import { createEmptyCard, createGiovanniCardTemplate, deriveGridFromLayout } from '../../documentSchemas';
+import { createEmptyCard, createGiovanniCardTemplate, deriveGridFromLayout, ensureCardGrid } from '../../documentSchemas';
 import type { BusinessCard } from '../../documentSchemas';
 import type { GridElementKey } from '../gridElements';
+
+describe('ensureCardGrid', () => {
+  it('card con layout ma senza grid → useGrid true + grid derivata (regressione preview legacy non centrata 2026-08-13)', () => {
+    const card = createEmptyCard();
+    card.front.layout = 'left';
+    card.front.name = 'Maria Piras';
+    // caso live: l'AI salva `grid: {}` (oggetto vuoto, NON nullish)
+    card.grid = {} as BusinessCard['grid'];
+    delete (card.front as { useGrid?: boolean }).useGrid;
+    const out = ensureCardGrid(card);
+    expect(out.front.useGrid).toBe(true);
+    expect(out.back.useGrid).toBe(true);
+    expect(Object.keys(out.grid?.elements ?? {}).length).toBeGreaterThan(0);
+    expect(out.grid?.elements?.name).toBeDefined();
+    expect(out.backGrid).toBeDefined();
+  });
+
+  it('card già in grid mode resta invariata (stessa istanza)', () => {
+    const card = createGiovanniCardTemplate();
+    card.front.useGrid = true;
+    expect(ensureCardGrid(card)).toBe(card);
+  });
+});
+
 
 describe('gridElements', () => {
   describe('elementKeysForSide', () => {

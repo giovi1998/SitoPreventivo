@@ -42,32 +42,34 @@ export function hasElementContent(
   card: BusinessCard,
   side: GridSide,
 ): boolean {
+  const front = card.front ?? {};
   if (side === 'front') {
-    if (key === 'photo') return !!card.front.photoUrl;
-    if (key === 'logo') return !!card.front.logoUrl;
-    if (key === 'name') return card.front.name.trim().length > 0;
-    if (key === 'title') return card.front.title.trim().length > 0;
-    if (key === 'company') return card.front.company.trim().length > 0;
+    if (key === 'photo') return !!front.photoUrl;
+    if (key === 'logo') return !!front.logoUrl;
+    if (key === 'name') return (front.name ?? '').trim().length > 0;
+    if (key === 'title') return (front.title ?? '').trim().length > 0;
+    if (key === 'company') return (front.company ?? '').trim().length > 0;
     return false;
   }
   // back
+  const back = card.back ?? {};
   if (key === 'contacts') {
     return !!(
-      card.back.phone.trim() ||
-      card.back.email.trim() ||
-      card.back.website.trim() ||
-      card.back.address.trim() ||
-      card.back.vatNumber.trim()
+      (back.phone ?? '').trim() ||
+      (back.email ?? '').trim() ||
+      (back.website ?? '').trim() ||
+      (back.address ?? '').trim() ||
+      (back.vatNumber ?? '').trim()
     );
   }
   if (key === 'qr') {
-    return !!(card.back.qrPayload.trim() || card.back.website.trim());
+    return !!((back.qrPayload ?? '').trim() || (back.website ?? '').trim());
   }
   if (key === 'socials') {
-    return card.back.socials.some((s) => s.platform && s.url);
+    return (back.socials ?? []).some((s) => s.platform && s.url);
   }
   if (key === 'services') {
-    return (card.back.services ?? []).some((s) => s.trim().length > 0);
+    return (back.services ?? []).some((s) => (s ?? '').trim().length > 0);
   }
   return false;
 }

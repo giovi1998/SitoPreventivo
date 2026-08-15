@@ -26,6 +26,21 @@ export interface CardProcessResult {
   costUsd?: number;
 }
 
+/** Prompt completo per generare una card da zero (struttura grid + testi +
+ * stile). Unica sorgente condivisa: auto-build non-agente e tool
+ * `generate_card` dell'agente (senza struttura l'AI ometteva layout/grid →
+ * rendering fallback legacy non centrato, bug visivo 2026-08-13). */
+export function buildCardDraftPrompt(brief: string): string {
+  return [
+    'Crea il biglietto da visita completo per questa attività partendo dal brief.',
+    'Definisci TUTTI e tre gli aspetti:',
+    '- STRUTTURA: layout fronte più adatto e disposizione elementi (grid) senza sovrapposizioni;',
+    '- TESTI: nome, titolo/ruolo, servizi (back.services) plausibili per il settore;',
+    '- STILE: palette coerente (bgColor, textColor, accentColor in #RRGGBB), fontFamily, eventuale decorazione.',
+    `Brief: ${brief}`,
+  ].join('\n');
+}
+
 const CARD_TOOLS = [
   'card_apply_palette',
   'card_switch_layout',

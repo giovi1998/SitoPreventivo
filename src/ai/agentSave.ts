@@ -4,6 +4,8 @@
 // Il save vero (saveDraft + aiStats + compressione) resta nel hook.
 
 import type { AgentBrief, AgentToolResult } from './agentOrchestrator';
+import { ensureCardGrid } from '../utils/documentSchemas';
+import type { BusinessCard } from '../utils/documentSchemas';
 
 type BriefDoc = { data?: Record<string, unknown> | null };
 type BriefCustomer = { businessName?: string; aiSuggestedFields?: Record<string, unknown> | null };
@@ -88,7 +90,9 @@ export function agentResultData(docType: string, result: AgentToolResult): Recor
     case 'businessCard': {
       const card = d.card as Record<string, unknown> | undefined;
       if (!card) return null;
-      return { ...card };
+      // Grid mode garantita: senza useGrid/grid la preview parte in
+      // fallback legacy non centrata mentre l'export deriva la grid.
+      return { ...ensureCardGrid(card as unknown as BusinessCard) };
     }
     case 'flyer': {
       const flyer = d.flyer as Record<string, unknown> | undefined;

@@ -127,6 +127,8 @@ export function gridPresetLeft(): CardGrid {
     cols: 4,
     rows: 4,
     elements: {
+      // v2.17: foto a sinistra (3/4 altezza) + logo sotto la foto,
+      // testo a destra. Nessun overlap: photo occupa righe 0-2, logo riga 3.
       photo: { x: 0, y: 0, w: 2, h: 3, alignH: 'center', alignV: 'center' },
       name: { x: 2, y: 0, w: 2, h: 1, alignH: 'left', alignV: 'center' },
       title: { x: 2, y: 1, w: 2, h: 1, alignH: 'left', alignV: 'center' },
@@ -355,6 +357,28 @@ export function deriveGridFromLayout(
   return filterGridElementsByContent(presetFn(), card, 'front');
 }
 
+/**
+ * Garantisce la grid mode su una card generata: se ha un layout ma nessuna
+ * grid, deriva la grid dal layout e setta useGrid su entrambi i lati.
+ * Senza questo la preview usa il fallback legacy non centrato mentre
+ * l'export deriva la grid → preview ≠ export (bug visivo auto-build
+ * 2026-08-13). Card già in grid restano invariate.
+ */
+export function ensureCardGrid(card: BusinessCard): BusinessCard {
+  if (card.front.useGrid && hasGridElements('front', card)) return card;
+  // Attenzione: `{}` (AI che risponde con grid vuota) NON è nullish →
+  // `??` la terrebbe e la preview resterebbe in legacy. Si guarda il
+  // contenuto, non la presenza.
+  const grid = hasGridElements('front', card) ? card.grid : deriveGridFromLayout(card, 'front');
+  const withFront = { ...card, grid };
+  return {
+    ...withFront,
+    front: { ...card.front, useGrid: true },
+    back: { ...card.back, useGrid: true },
+    backGrid: hasGridElements('back', withFront) ? withFront.backGrid : deriveGridFromLayout(withFront, 'back'),
+  };
+}
+
 function filterGridElementsByContent(
   grid: CardGrid,
   card: BusinessCard,
@@ -372,7 +396,7 @@ function filterGridElementsByContent(
   // (il fallback {!grid.elements.socials && socialsContent} in
   // BackPreview renderizza i socials dentro contacts).
   if (side === 'back' && !els.contacts && grid.elements.contacts) {
-    const hasSocials = card.back.socials.some((s) => s.platform && s.url);
+    const hasSocials = (card.back?.socials ?? []).some((s) => s.platform && s.url);
     if (hasSocials) {
       els.contacts = grid.elements.contacts;
     }
@@ -385,7 +409,9 @@ function filterGridElementsByContent(
 // (isGridMode = useGrid && hasGridElements).
 export function hasGridElements(side: 'front' | 'back', card: BusinessCard): boolean {
   const grid = side === 'back' ? card.backGrid : card.grid;
-  if (!grid) return false;
+  // L'AI può salvare `grid: {}` (senza elements): non è nullish ma è
+  // vuota — senza la guard su elements questa funzione crashava.
+  if (!grid?.elements) return false;
   for (const [key, rect] of Object.entries(grid.elements)) {
     if (rect && hasElementContent(key as GridElementKey, card, side)) return true;
   }

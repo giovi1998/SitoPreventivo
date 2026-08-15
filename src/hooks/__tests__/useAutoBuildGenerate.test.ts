@@ -77,7 +77,8 @@ vi.mock('../../ai/logoOrchestrator', () => ({
   }),
 }));
 
-vi.mock('../../ai/cardOrchestrator', () => ({
+vi.mock('../../ai/cardOrchestrator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../ai/cardOrchestrator')>()),
   CardAIOrchestrator: vi.fn().mockImplementation(function () {
     return { processPrompt: mocks.processPrompt };
   }),

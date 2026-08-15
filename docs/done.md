@@ -3,6 +3,29 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-14
+
+- **Card centrata in agent mode + website editor mobile (T8, wayfinder
+  `qualita-oggetti-map.md`)**:
+  - `buildCardDraftPrompt` condiviso (auto-build non-agente + tool
+    `generate_card` dell'agente): prompt strutturale STRUTTURA grid +
+    TESTI + STILE — prima l'agente usava un prompt generico → card non
+    centrata (preview legacy ≠ export).
+  - `ensureCardGrid` (`schemas/card.ts`): garantisce grid mode su card
+    generata (deriva grid dal layout, `useGrid` su entrambi i lati);
+    applicata in `agentSave.ts` + `useAutoBuildGenerate.ts`. Card già in
+    grid invariate.
+  - `gridElements.ts` null-safety (`front`/`back`/`grid.elements` — l'AI
+    può salvare `grid: {}`).
+  - `useDocumentLoader` ritorna `initialDoc: null` durante fetch di doc
+    mancante → `WebsitePage` fallback "Sito non trovato" (prima crash su
+    `.html`).
+  - Website editor mobile: viewport default 375px su workspace mobile,
+    tab default `preview` se il doc ha contenuto, grid stack su
+    `@media 1023px` (era `1fr 320px` → iframe 38px invisibile).
+  - Guardia anti-regressione: e2e `AC-007` (iframe preview website
+    full-width a 390px).
+
 ## 2026-08-13
 
 - **Qualità oggetti card/flyer/logo — verifica live end-to-end + catena di

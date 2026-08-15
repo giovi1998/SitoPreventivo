@@ -11,6 +11,7 @@ import { withAiCall } from '../utils/aiStats';
 import { DocumentAiStats } from './DocumentAiStats';
 import AIProviderBadge from './ai/AIProviderBadge';
 import { getValidatedProviderDefault, setAiProviderDefault, getAiVisionEnabled, getAiImageModelDefault } from '../utils/uiPrefs';
+import { MQ_WORKSPACE } from '../hooks/useMediaQuery';
 import { providerSupportsVision } from '../utils/resolveProviderId';
 import { providerRegistry } from '../ai/providers/registry';
 import { captureElementAsBase64 } from '../utils/ai/captureElement';
@@ -74,21 +75,26 @@ function stepLabel(step: string): string {
   return 'Elaborazione…';
 }
 
-function websiteHasContent(w: Website): boolean {
-  return !!(w.html || w.css || w.js);
+function websiteHasContent(w: Partial<Website> | null | undefined): boolean {
+  return !!(w?.html || w?.css || w?.js);
 }
 
 
 export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unlocked', onReset, onSaved }: WebsiteEditorProps) {
   const { save: saveDocumentGuarded } = useDocumentSave();
   const [website, setWebsite] = useState<Website>(() => mergeWebsiteWithDefaults(initialWebsite));
-  const [tab, setTab] = useState<'brief' | 'code' | 'preview'>('brief');
+  const initialHasContent = websiteHasContent(initialWebsite);
+  const [tab, setTab] = useState<'brief' | 'code' | 'preview'>(() => (initialHasContent ? 'preview' : 'brief'));
   const [codeTab, setCodeTab] = useState<CodeTab>('html');
   const [previewPage, setPreviewPage] = useState('index');
   const [codePage, setCodePage] = useState('index');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [viewport, setViewport] = useState('100%');
+  // Default mobile viewport su workspace mobile: l'iframe mostra subito il
+  // rendering 375px invece del desktop 100% schiacciato.
+  const [viewport, setViewport] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(MQ_WORKSPACE).matches ? '375px' : '100%',
+  );
   const [refinePrompt, setRefinePrompt] = useState('');
   const [verifyIssues, setVerifyIssues] = useState<string[] | null>(null);
   const [aiModel, setAiModel] = useState(() => getValidatedProviderDefault(providerRegistry));

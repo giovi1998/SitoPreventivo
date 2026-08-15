@@ -39,11 +39,12 @@ con report verde, problemi visivi trovati fixati, residui tipografici
 - [T3 — Review report + contact sheet, decidere i fix](tickets/t03-review-report-contact-sheet.md) — card/flyer OK; trovato+fixato pill textBackdrop disallineata su horizontal+bgImage (anchor middle); regression test.
 - [T4 — Residui tipografici §27.1/§27.4 card e logo](tickets/t04-residui-tipografici-card-logo.md) — safe margin wontfix-migrazione, socials 16px ok (7pt = domanda aperta), thumbnail front-only wontfix YAGNI, no-grid congelato legacy.
 - [T7 — 502 /api/ai/embeddings: SDK ritorna `embeddings[]` plurale](tickets/t07-embeddings-502-sdk-plurale.md) — parsing singolare→plurale+fallback in 3 siti (ai.ts, crm.ts, dev proxy); live 200.
+- [T8 — Card non centrata in agent mode + website editor mobile rotto](tickets/t08-grid-centering-website-mobile.md) — `buildCardDraftPrompt` condiviso (agente+auto-build), `ensureCardGrid` (grid derivata, useGrid su entrambi i lati), null-safety `gridElements`, `useDocumentLoader` null + fallback "Sito non trovato", website editor mobile (viewport 375px, tab preview, grid stack @1023px); guardia AC-007.
 
 ## Not yet specified
 
-- **Fix emergenti dalla verifica live**: nessuno aperto dopo T7 — la
-  verifica 2026-08-13 è ALL CHECKS PASS.
+- **Fix emergenti dalla verifica live**: T8 chiuso 2026-08-14 (card
+  centrata + website mobile); nessun altro aperto.
 - **Socials/services retro a 7pt pieno (19px)**: da v2.19 sono a 16px
   (6pt). Alzare base+floor a 19px = +19% di ingombro: tradeoff design da
   decidere con l'utente (criterio `design-criteria.md` 7pt contatti vs
@@ -55,7 +56,9 @@ con report verde, problemi visivi trovati fixati, residui tipografici
   (faacc42) e l'agent wiring vanno validati live in produzione.
 - **Guardia anti-regressione permanente** (to-be-done #2): soglia px/cm
   dell'asset nel render come test Playwright in `e2e/` (oggi gli script
-  sono manuali, fuori CI). Da decidere dopo il primo run verde.
+  sono manuali, fuori CI). **Coperta da AC-007** (e2e/breakpoints.spec.ts:
+  iframe preview website full-width su mobile) — chiudere quando il resto
+  della guardia (soglie asset card/flyer/logo) entra in CI.
 
 ## Out of scope
 

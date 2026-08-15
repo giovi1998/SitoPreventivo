@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import dataService from '../utils/dataService';
 import { LogoAIOrchestrator } from '../ai/logoOrchestrator';
-import { CardAIOrchestrator } from '../ai/cardOrchestrator';
+import { CardAIOrchestrator, buildCardDraftPrompt } from '../ai/cardOrchestrator';
 import { FlyerAIOrchestrator } from '../ai/flyerOrchestrator';
 import { WebsiteOrchestrator } from '../ai/websiteOrchestrator';
 import { builderToSvg, svgToPng } from '../utils/logoGenerator';
@@ -19,7 +19,7 @@ import type { RunTraceOptions } from '../ai/types';
 import { AgentOrchestrator } from '../ai/agentOrchestrator';
 import { buildAgentBrief, agentResultData, agentTypeOfDoc, docTypeOfTool } from '../ai/agentSave';
 import type { BusinessCard, Flyer, FlyerTone, Logo, LogoBuilder } from '../utils/documentSchemas';
-import { createEmptyCard, createEmptyFlyer, createEmptyLogo } from '../utils/documentSchemas';
+import { createEmptyCard, createEmptyFlyer, createEmptyLogo, ensureCardGrid } from '../utils/documentSchemas';
 
 export type DraftGenStatus = 'pending' | 'running' | 'done' | 'error';
 
@@ -441,14 +441,7 @@ async function generateCardDraft(
   const base = { ...doc.data } as Record<string, unknown>;
   const logoUrl = resolveCardLogoUrl(logoBuilder, customer);
   if (logoUrl) base.front = { ...(base.front as Record<string, unknown>), logoUrl };
-  const prompt = [
-    'Crea il biglietto da visita completo per questa attività partendo dal brief.',
-    'Definisci TUTTI e tre gli aspetti:',
-    '- STRUTTURA: layout fronte più adatto e disposizione elementi (grid) senza sovrapposizioni;',
-    '- TESTI: nome, titolo/ruolo, servizi (back.services) plausibili per il settore;',
-    '- STILE: palette coerente (bgColor, textColor, accentColor in #RRGGBB), fontFamily, eventuale decorazione.',
-    `Brief: ${brief}`,
-  ].join('\n');
+  const prompt = buildCardDraftPrompt(brief);
   const imagePreviewBase64 = await logoVisionBase64(visionLogoBuilder);
   const result = await new CardAIOrchestrator().processPrompt(base as unknown as BusinessCard, prompt, {
     imagePreviewBase64,
@@ -494,7 +487,7 @@ async function generateCardDraft(
       aiStats = incrementAiStats(aiStats, 'cover', cover.costUsd);
     }
   }
-  await saveDraft(doc, { ...merged, aiStats });
+  await saveDraft(doc, { ...ensureCardGrid(merged as unknown as BusinessCard), aiStats });
   return merged;
 }
 
