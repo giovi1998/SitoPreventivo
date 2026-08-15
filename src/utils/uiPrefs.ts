@@ -115,6 +115,7 @@ export function setAiProviderDefault(providerId: string): void {
 
 export const AI_IMAGE_MODELS = [
   { id: 'gemini-3.1-flash-image', name: 'Gemini Nano Banana', description: 'Qualità alta, dettagli ricchi' },
+  { id: 'gemini-3.1-flash-lite-image', name: 'Gemini Nano Banana 2 Lite', description: 'Veloce ed economico, risoluzione 1K' },
   // Rimosso gemini-2.0-flash-preview-image-generation: ritirato da Google
   // (404 upstream). Il server normalizza pref stale → gemini-3.1-flash-image.
 ];

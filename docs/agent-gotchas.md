@@ -164,12 +164,37 @@ ciclo; nessuno era nel provider Gemini in sé.
 4. **`interactions.create()` vuole `response_modalities` minuscolo**
    (`['text', 'image']`), non `['TEXT', 'IMAGE']` (vecchia REST
    `generateContent`). Maiuscolo → `400: value 'TEXT' is not supported`.
-5. **Dimensione immagine non enforced di default**: senza
-   `generation_config.image_config.image_size`, Gemini produce a `1K`
-   (~400KB-2MB) e il clamp server (500KB, `src/server/handler.ts`
-   `/ai/logo-background`) scarta ~2/3 delle immagini con 413. Fix: chiedere
-   `image_size: '512'` (+ `aspect_ratio: '16:9'`) in richiesta. Valori:
-   `'512' | '1K' | '2K' | '4K'`.
+5. **Risoluzione 1K uniforme + Nano Banana 2 Lite (spec ai-image-quality,
+   2026-08-06; correzione probe live 2026-08-07)**: la pipeline era
+   bloccata a 512px → immagini pixelate su aree grandi (card 1004×650,
+   hero A4 2362×1358, logo export 2048). Ora tutti gli endpoint chiedono
+   `image_size: '1K'` (1K JPEG ~550-990KB misurati) con clamp uniforme
+   **1.2MB** (`GEMINI_IMG_CLAMP_BYTES` in `src/server/core.ts`); logo-background e
+   flyer-hero con timeout 45s. Il 2K non si usa mai: 2752×1536 ≈ 3.2MB →
+   ~4.4MB base64 supera il limite risposta Vercel 4.5MB. **Clamp 1MB era
+   troppo stretto**: 16:9 1K JPEG varia 850KB-1.05MB → 413 intermittenti
+   su logo-background (verifica live 2026-08-13) → alzato a 1.2MB
+   (~1.6MB on the wire, margine ampio sul 4.5MB).
+   - **Mai `image_output_options`/`output_mime_type` sulle interactions
+     API**: probe live 2026-08-07 → `400 Unknown parameter`. JPEG è già
+     l'output default di `gemini-3.1-flash-image`, nessun output control
+     necessario.
+   - **Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`)**: solo 1K →
+     `resolveGeminiImageSize` (server) / `resolveImageSize` (provider)
+     forzano `'1K'` su qualunque endpoint. Pricing
+     `gemini-nano-banana-lite` $0.02; mapping centralizzato
+     `geminiImagePricingId` in `providerPricing.ts`.
+   - `image-flash` zod: `size` enum `['512','1K']` default `'1K'` (`'256'`
+     non valido — il vecchio retry auto-build `['512','256']` falliva con
+     400 silenzioso; ora `['1K','512']`); `aspectRatio` enum esteso ai
+     rapporti supportati da Gemini 3.1 (rimosso `'3:1'`).
+   - Persistenza path-aware: `compressDataUrl` default 1024px/400KB;
+     background/hero 1536px/400KB (`dataService/images.js`); PNG con alpha
+     resta PNG (downscale iterativo, mai fallback JPEG). **Anche il save
+     CRM auto-build è path-aware** (2026-08-13): `DRAFT_IMAGE_PATHS` in
+     `useAutoBuildGenerate.ts` — cover/background/hero 1536px/400KB,
+     photo/logoUrl 1024px/400KB (era 768px/200KB piatto → immagini 1K
+     declassate sotto soglia qualità, trovato dalla verifica live).
 6. **`await import('../src/...')` non risolto in prod Vercel**. L'import
    dinamico di un modulo sotto `src/` da `src/server/handler.ts` fallisce in
    produzione (`Cannot find module '/var/task/src/...'`) anche se gli
@@ -1809,6 +1834,18 @@ ma con coda/concorrenza può sforare) → abort → 502 → **eccezione propagat
 3. **`totalCost` null-safe**: `cssResponse`/`jsResponse` possono essere
    null → guardie.
 
+**Regressione prod 2026-08-13 (stream 60s)**: il path **non-stream**
+(`/api/ai/chat`) era già a 600s, ma lo **stream** (`/api/ai/chat/stream`,
+usato da `useAIWebsite` e auto-build) era rimasto a **60s** in
+`src/server/ai.ts` → abort a 60s → stream troncato → JSON incompleto →
+`not_json: Unexpected end of JSON input` → **sito fallback placeholder
+(237ch HTML, CSS 609ch)** da "Rigenera" in CRM. In dev funzionava perché
+il proxy Vite ha 600s. Fix: timeout stream Ollama 60s → 600s
+(`src/server/ai.ts`, allineato al path non-stream) + regression test
+`ollamaStream.test.ts` (fake timers: a 60s lo stream DEVE essere vivo, a
+600s abort). Vale per entrambi i branch (master e
+migliorie-LayoutOggettiCardFlyerLogo).
+
 **Test**: `websiteOrchestrator.test.ts` (24 — CSS/JS/pagina falliti →
 sito generato con changes error, verify error doppio best-effort). Gate:
 typecheck + suite impattata verde. ⚠️ Riavvio dev server obbligatorio
@@ -2103,3 +2140,92 @@ runTrace propagation, tool fail, no-tool stop, include filter), +1
 regression test no-cloud, +7 expected tags aggiornati con `status:ok`.
 Gate: typecheck 0 + **3033 test verdi** + build zero-warning.
 
+
+## 27. Design review tipografica card/logo/flyer (2026-08-06)
+
+Criteri di riferimento raccolti in `docs/design-criteria.md` (fonti online:
+min contatti card 7-9pt, safe area 4mm/5-10mm, gerarchia 3 livelli, body
+flyer ≥10pt, headline ≥24pt, tagline ≥40% wordmark). Baseline screenshot:
+`e2e/design-review.spec.ts` (env `DESIGN_REVIEW_OUT`, default
+`e2e/__screenshots__/design-review/prima`).
+
+### 27.1 Card — reference frame unificato 640×414
+
+- Export era calibrato su frame 340px-alto (font ~22% più grandi della
+  preview 640×414) e back su width-ref 512. Ora **una sola sorgente**:
+  `CARD_REF = {w:640, h:414}` in `gridConstants.ts`; tutti i denominatori
+  `/340` e `/512` derivano da lì. Mai reintrodurre costanti assolute.
+- Contatti retro: val 12.8→19px logici, key 10.88→16 (minimo stampa ~7pt,
+  criterio `design-criteria.md`). Floor shrink-to-fit ora **frazioni di
+  CARD_REF.h** (era px assoluti → ~2pt a 300dpi).
+- Front export: name/title/company con wrap (`wrapTextAtWhitespace`) +
+  clip-path cella (prima overflow silenzioso su nomi lunghi). Gerarchia
+  allargata 22/16/14. Preview grid-mode allineata in `cardBase.css`.
+- `layoutAudit.ts` FONT_RATIO_KEY cap 0.045 (realign completo deferred).
+- Residui noti: safe margin 16px<4mm, socials/services base sotto 7pt,
+  fallback no-grid con sizing legacy, thumbnail Collection front-only.
+
+### 27.2 Logo — tagline derivata dal wordmark fittato
+
+- Tagline = `~0.42×` wordmark fittato + `fitText` proprio (era costante
+  12/14 → ratio 37.5-38.9%, clipping tagline lunghe, inversione gerarchia
+  con wordmark lungo al floor).
+- `TEXT_AREA_EXTRA` era contato doppio (getViewBox + buildSvgForLayout) →
+  tenuto solo in buildSvgForLayout; image area invariante su textPosition.
+- Vertical/stacked: blocco icona+testo centrato (era ancorato top con
+  ~100u di dead space; top margin ≥16).
+- `buildTextBackdrop` sceglie il tono dalla **luminanza del colore testo
+  risolto** (non dal mode) — fix dark-on-dark in `auto` senza bgImage.
+- Export raster (PNG/JPG/ICO/favicon): `embedFontInSvg` (riusa
+  `card/fontEmbed.ts`) — prima fallback sans-serif perché SVG in `<img>`
+  non accede ai webfont. PDF via svg2pdf resta Helvetica (strutturale).
+- Thumbnail Collection: `mergeLogoWithDefaults` prima di `builderToSvg`
+  (doc parziali → SVG NaN → thumbnail vuota).
+
+### 27.3 Flyer — floor tipografici stampa + export body
+
+- `FONT_SIZE_BOUNDS` min alzati ai floor stampa TUTTI i formati
+  (headline 24pt/sub 12/body 10/cta 10); A6 max alzati (28/14/11/11).
+- `scaledFontBounds(size, fontScale)` in geometry.ts = unica sorgente:
+  scala per fontScale e clampa ai floor (fontScale 0.7 non scende più a
+  ~5pt). Usata da layoutEngine E budgets (budget coerente col layout).
+- Export PDF/PNG: `buildFlyerSvg(flyer, {renderBodyAsText:true})` — il
+  body in `foreignObject` spariva nel PDF (pdfmake non lo supporta) e in
+  PNG su Safari.
+- **Budget prompt vs hard limit**: `getFlyerCopyBudget` ora espone anche
+  `bodyPromptMaxChars` (calcolato a `bounds.body.max` × 0.85, assorbe gap
+  min/max + drift metrico Inter-vs-Arial). `flyerOrchestrator.generateCopy`
+  passa QUELLO al prompt; `bodyMaxChars` resta l'hard limit UI. Prima il
+  prompt diceva "max 1445" quando al font reale entravano ~1210 → body
+  clippato a metà glifo senza ellipsis (clip CSS foreignObject, wrap CSS
+  più largo delle metriche Arial stimate).
+
+### 27.4 Auto-build AI — contrasto testo su immagini AI
+
+- Logo: se `backgroundImage` AI presente e il concept non dichiara
+  `textBackdrop`, il flow applica `textBackdrop:'pill'` di default
+  (`useAutoBuildGenerate.generateLogoDraft`); backdrop esplicito del
+  concept preservato. System prompt logo: `imagePrompt` deve prevedere
+  una "text legibility zone" (centro più scuro/non affollato).
+- Card: `cardSystem.ts` ha la sezione "GERARCHIA TIPOGRAFICA E
+  LEGGIBILITÀ SU COVER" (nome>ruolo>azienda via placement.scale, testo su
+  zone quiete, mai testo piccolo su zone busy). Single source = system
+  prompt; il prompt hardcoded dell'auto-build non duplica regole.
+- Driver validazione live: `scripts/design-review-ai-gen.mjs` (login
+  admin → crea cliente → auto-build → Genera bozze AI → screenshot
+  preview in `e2e/__screenshots__/design-review/ai/` + report.json con
+  stato per-doc e classificazione immagini AI). Flag `--smoke` per login
+  + seed senza chiamate AI.
+
+### 27.5 Completamenti v2.19 (stessa sessione, sera)
+
+- **Socials/services retro sotto floor**: base socials 12.16→16/414
+  (preview CSS 0.62→1rem), services 13.6→16 (0.85→1rem), servicesLabel
+  11.2→13.6 (0.7→0.85rem), services--long 0.7→0.85rem. layoutAudit cap
+  FONT_RATIO_SOCIAL 0.04→0.045 (come KEY, realign completo pending).
+- **Logo placeholder salvato come successo**: se il parse AI fallisce,
+  `logoOrchestrator` ripiega su `fallbackConcept()` ("Brand") con
+  `applied:true` e flag `logo:fallback_concepts` in `changes`. Il CRM
+  salvava il placeholder come "done". Fix: `generateLogoDraft` lancia su
+  quel flag → badge errore + retry. Regression test
+  `useAutoBuildGenerate.test.ts` ("logo fallback placeholder → error").

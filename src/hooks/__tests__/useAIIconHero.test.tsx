@@ -105,17 +105,38 @@ describe('useAIIconHero', () => {
     await waitFor(() => expect(result.current.isProcessing).toBe(false));
   });
 
-  it('requests size 512 (server clamp is 500KB — 1K returns 413)', async () => {
+  it('requests size 1K (JPEG q85 output stays under the server clamp)', async () => {
     const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: { imageBase64: 'x', mimeType: 'image/png' } }),
+      json: async () => ({ data: { imageBase64: 'x', mimeType: 'image/jpeg' } }),
     });
 
     const { result } = renderHook(() => useAIIconHero('user@test.com'));
     await act(async () => { await result.current.generate('mela', 'icon'); });
     const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.size).toBe('512');
+    expect(body.size).toBe('1K');
+  });
+
+  it('costUsd segue il modello richiesto: Lite $0.02, default Nano Banana 2 $0.04', async () => {
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { imageBase64: 'x', mimeType: 'image/jpeg' } }),
+    });
+
+    const { result } = renderHook(() => useAIIconHero('user@test.com'));
+    let lite: { aiCall: { costUsd: number } } | undefined;
+    await act(async () => {
+      lite = await result.current.generate('mela', 'icon', { imageModel: 'gemini-3.1-flash-lite-image' });
+    });
+    expect(lite!.aiCall.costUsd).toBe(0.02);
+
+    let def: { aiCall: { costUsd: number } } | undefined;
+    await act(async () => {
+      def = await result.current.generate('mela', 'icon');
+    });
+    expect(def!.aiCall.costUsd).toBe(0.04);
   });
 
   it('persists the generated icon via saveGeneratedImage (Collection "Immagini Generate")', async () => {

@@ -2,7 +2,8 @@
  * Shared back-side geometry for CardPreview (CSS) and svgRenderer (export).
  * Goal: hard WYSIWYG — same proportions in preview and SVG/PNG/PDF.
  *
- * Calibrated against cardPreviewSide.css on a ~340px-tall eu-85x55 preview:
+ * Calibrated against cardPreviewSide.css on the 640×414 logical-px preview
+ * (CARD_REF, eu-85x55 at CARD_PREVIEW_REF_WIDTH):
  * - padding: 10px 14px
  * - header: eyebrow 0.7rem + bottom border + 6px margins ≈ 0.10–0.12 of height
  * - cell text padding: 6px 10px
@@ -10,12 +11,13 @@
 import { FONT_SCALE_MIN, FONT_SCALE_MAX, QR_SIZE_PX, gridPresetBackDefault } from '../documentSchemas';
 import type { BusinessCard, CardGrid } from '../documentSchemas';
 import { getEffectiveQrPayload } from './qrPayload';
+import { CARD_REF } from './gridConstants';
 
 export type AlignH = 'left' | 'center' | 'right';
 export type AlignV = 'top' | 'center' | 'bottom';
 
 /** Preview reference height (px) used historically for QR_SIZE_PX mapping. */
-export const PREVIEW_REF_H = 340;
+export const PREVIEW_REF_H = CARD_REF.h;
 
 export function clampFontScale(v: number): number {
   if (typeof v !== 'number' || Number.isNaN(v)) return 1;
@@ -41,9 +43,9 @@ export interface BackPad {
  */
 export function backPad(pxW: number, pxH: number): BackPad {
   return {
-    x: Math.max(8, Math.round(pxW * (14 / 512))),
+    x: Math.max(8, Math.round(pxW * (14 / CARD_REF.w))),
     y: Math.max(6, Math.round(pxH * (10 / PREVIEW_REF_H))),
-    cellX: Math.max(4, Math.round(pxW * (10 / 512))),
+    cellX: Math.max(4, Math.round(pxW * (10 / CARD_REF.w))),
     cellY: Math.max(3, Math.round(pxH * (6 / PREVIEW_REF_H))),
   };
 }
@@ -62,7 +64,8 @@ export interface BackHeaderMetrics {
 
 /**
  * Header metrics matching `.card-back-header` + eyebrow/wordmark rem sizes.
- * eyebrow ≈ 0.7rem ≈ 11.2px on 16px root → ~0.033 of 340px height.
+ * eyebrow ≈ 0.7rem ≈ 11.2px, wordmark ≈ 0.68rem ≈ 10.88px on the 414px-tall
+ * reference (CARD_REF.h).
  */
 export function backHeaderMetrics(
   pxW: number,
@@ -70,8 +73,8 @@ export function backHeaderMetrics(
   fontScale: number,
   pad: BackPad,
 ): BackHeaderMetrics {
-  const eyebrowSize = scaleFs(pxH * 0.033, fontScale);
-  const wordmarkSize = scaleFs(pxH * 0.032, fontScale);
+  const eyebrowSize = scaleFs(pxH * (11.2 / CARD_REF.h), fontScale);
+  const wordmarkSize = scaleFs(pxH * (10.88 / CARD_REF.h), fontScale);
   const textH = Math.max(eyebrowSize, wordmarkSize);
   const textY = pad.y + textH;
   const dividerY = textY + Math.round(pxH * 0.018);

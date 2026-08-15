@@ -4,6 +4,8 @@ import { newRequestId } from '../utils/ai/requestId';
 import { mapAiError } from '../utils/ai/mapAiError';
 import { logger } from '../utils/logger';
 import { IMAGE_TOKEN_COST } from '../ai/costs';
+import { calculateCostUsd, geminiImagePricingId } from '../ai/providerPricing';
+import { getAiImageModelDefault } from '../utils/uiPrefs';
 import { saveGeneratedImage } from '../utils/saveGeneratedImage';
 import dataService from '../utils/dataService';
 
@@ -55,9 +57,9 @@ export function useAIIconHero(userEmail?: string, sessionId?: string): UseAIIcon
             prompt: prompt.slice(0, 1000),
             kind,
             aspectRatio: kind === 'hero' ? '16:9' : '1:1',
-            // '512': il clamp server è 500KB (gotcha §2-3) — a '1K' Gemini
-            // produce PNG >500KB e l'endpoint risponde 413.
-            size: '512',
+            // '1K': con output JPEG q85 (spec ai-image-quality) il clamp
+            // server 500KB non scatta più come coi PNG 1K.
+            size: '1K',
             primaryColor: options?.primaryColor,
             secondaryColor: options?.secondaryColor,
             style: options?.style || 'minimalist',
@@ -81,8 +83,12 @@ export function useAIIconHero(userEmail?: string, sessionId?: string): UseAIIcon
 
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
 
-        // Stima costo: ~$0.02 per immagine Gemini Flash
-        const costUsd = 0.02;
+        // Costo reale dal modello richiesto (default = pref UI immagini).
+        const costUsd = calculateCostUsd(
+          geminiImagePricingId(options?.imageModel || getAiImageModelDefault()),
+          undefined,
+          1,
+        );
         if (userEmail && userEmail !== 'admin@gmail.com') {
           Promise.resolve(dataService.trackTokens(userEmail, IMAGE_TOKEN_COST, costUsd) as unknown as Promise<unknown>).catch(() => {});
         }

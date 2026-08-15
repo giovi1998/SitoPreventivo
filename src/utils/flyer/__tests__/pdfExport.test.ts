@@ -1,5 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type Mock } from 'vitest';
+
+vi.mock('../svgRenderer', async (importActual) => {
+  const actual = await importActual<typeof import('../svgRenderer')>();
+  return { ...actual, buildFlyerSvg: vi.fn(actual.buildFlyerSvg) };
+});
+
 import { generateFlyerPdf } from '../pdfExport';
+import { buildFlyerSvg } from '../svgRenderer';
 import * as watermark from '../../watermark';
 import type { Flyer } from '../../documentSchemas';
 
@@ -48,5 +55,16 @@ describe('flyer pdfExport (TB-007)', () => {
     expect(firstArg).toHaveProperty('content');
     expect(secondArg).toBe('free');
     applySpy.mockRestore();
+  });
+
+  it('renders the body as native SVG text (no foreignObject) for pdfmake', async () => {
+    await generateFlyerPdf(sampleFlyer, { tier: 'unlocked' });
+    const spy = buildFlyerSvg as unknown as Mock;
+    expect(spy).toHaveBeenCalled();
+    const [, opts] = spy.mock.calls[spy.mock.calls.length - 1];
+    expect(opts).toEqual({ renderBodyAsText: true });
+    const svg = spy.mock.results[spy.mock.results.length - 1].value as string;
+    expect(svg).not.toContain('foreignObject');
+    expect(svg).toContain('Testo promozionale di esempio');
   });
 });

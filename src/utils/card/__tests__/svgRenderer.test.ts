@@ -97,10 +97,10 @@ describe('svgRenderer', () => {
       const y = Number(img.match(/y="([^"]+)"/)?.[1] ?? NaN);
       const width = Number(img.match(/width="([^"]+)"/)?.[1] ?? NaN);
       const height = Number(img.match(/height="([^"]+)"/)?.[1] ?? NaN);
-      // v2.14: cell size accounts for grid padding (16px/340 ref) + gap (4px/340 ref)
-      // pxW=1024, pxH=663 → pad=31, gap=8 → cellW=(962-24)/4=234.5, cellH=(601-24)/4=144.25
-      expect(width).toBeCloseTo(2 * 234.5 * 1.2, 0);
-      expect(height).toBeCloseTo(4 * 144.25 * 1.2, 0);
+      // v2.14: cell size accounts for grid padding (16px/414 ref) + gap (4px/414 ref)
+      // pxW=1024, pxH=663 → pad=26, gap=6 → cellW=(972-18)/4=238.5, cellH=(611-18)/4=148.25
+      expect(width).toBeCloseTo(2 * 238.5 * 1.2, 0);
+      expect(height).toBeCloseTo(4 * 148.25 * 1.2, 0);
       expect(x).toBeGreaterThan(0); // original cell x=0 + nudge right
       expect(y).toBeLessThan(0); // original cell y=0 + nudge up
     });
@@ -165,12 +165,14 @@ describe('svgRenderer', () => {
     it('renders Giovanni template back SVG with full email text and no truncation', () => {
       const card = createGiovanniCardTemplate();
       const svg = buildBackSvg(card, 1024, 663);
-      expect(svg).toContain('webdevcaglian@gmail.com');
-      // The email should appear in full (not mangled or missing chars)
-      expect(svg).toContain('>webdevcaglian@gmail.com<');
-      // If wrapped at whitespace it will span multiple <text> or <tspan> lines,
-      // or a single line. The important thing is the full string is present.
-      const emailMatches = svg.match(/webdevcaglian@gmail\.com/g);
+      expect(svg).toContain('webdevcaglian@gmail.com'.slice(0, 15));
+      // v2.18: with the print-minimum val size (19px logical) the email wraps
+      // to two lines inside the contacts cell (same as the preview). The full
+      // string must still be present across the wrapped <text> lines — check
+      // the flattened text content (tags stripped, whitespace collapsed).
+      const flattened = svg.replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+      expect(flattened).toContain('webdevcaglian@gmail.com');
+      const emailMatches = flattened.match(/webdevcaglian@gmail\.com/g);
       expect(emailMatches?.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -603,11 +605,11 @@ describe('svgRenderer', () => {
       const svg = buildBackSvg(card, 1050, 650);
       const servicesFontSizes = extractTextFontSizes(svg, 'Consulenza pedagogica');
       expect(servicesFontSizes.length).toBeGreaterThan(0);
-      // v2.5.1: floor raised to 14px and line-height tightened to 1.2,
-      // so 2 services + label fit a 1-row cell at a readable size
-      // (previously shrunk to ~20px, now stays around 30-38px). The
-      // font is still bounded by the cell height, just no longer
-      // collapses to invisible.
+      // v2.18: the floor is a fraction of the unified 640×414 reference
+      // (19/414 of pxH), which sits above the 13.6/414 base, so services
+      // never shrink below their base size (~21px at pxH=650). The font is
+      // still bounded by the cell clip, just no longer collapses to
+      // invisible text at high DPI.
       servicesFontSizes.forEach((size) => expect(size).toBeGreaterThanOrEqual(14));
       servicesFontSizes.forEach((size) => expect(size).toBeLessThan(50));
     });
@@ -655,8 +657,8 @@ describe('svgRenderer', () => {
       const c = attrsOf(center);
       const l = attrsOf(leftTop);
       const r = attrsOf(rightBottom);
-      // v2.14: cell w accounts for grid padding+gap → 469 → 72% = 337.68
-      expect(c.w).toBeCloseTo(469 * 0.72, 0);
+      // v2.14: cell w accounts for grid padding+gap → 477 → 72% = 343.44
+      expect(c.w).toBeCloseTo(477 * 0.72, 0);
       // 3×3 must move the logo box, not only the aspect-ratio paint
       expect(l.x).toBeLessThan(c.x);
       expect(r.x).toBeGreaterThan(c.x);
@@ -667,7 +669,7 @@ describe('svgRenderer', () => {
     it('v2.10.1: contact font sizes stay readable-but-not-huge at export DPI', () => {
       const card = createGiovanniCardTemplate();
       const svg = buildBackSvg(card, 1024, 663);
-      // TELEFONO key: should be ~18px (9.3/340*663), not 50+
+      // TELEFONO key: should be ~27px (16/414*663, fontScale 1.05), not 50+
       const idx = svg.indexOf('TELEFONO');
       expect(idx).toBeGreaterThan(0);
       const tag = svg.slice(Math.max(0, idx - 200), idx);
@@ -812,13 +814,13 @@ describe('v2.14 preview/export parity', () => {
       },
     };
     const svg = buildFrontSvg(card, 1024, 663);
-    // v2.17: name 1.15rem = 18.4/340; title 0.9rem = 14.4/340 (fontScale=1)
-    // name: 663 * (18.4/340) = 35.9 → ~36
-    // title: 663 * (14.4/340) = 28.1 → ~28
+    // v2.18: name 1.375rem = 22/414; title 1rem = 16/414 (fontScale=1)
+    // name: 663 * (22/414) = 35.2 → ~35
+    // title: 663 * (16/414) = 25.6 → ~26
     const nameSize = fontSizeOfText(svg, 'MARIO');
     const titleSize = fontSizeOfText(svg, 'Dev');
-    expect(nameSize).toBeCloseTo(663 * (18.4 / 340), 0);
-    expect(titleSize).toBeCloseTo(663 * (14.4 / 340), 0);
+    expect(nameSize).toBeCloseTo(663 * (22 / 414), 0);
+    expect(titleSize).toBeCloseTo(663 * (16 / 414), 0);
   });
 
   it('front grid cells have padding offset (not starting at 0,0)', () => {
@@ -831,12 +833,12 @@ describe('v2.14 preview/export parity', () => {
       },
     };
     const svg = buildFrontSvg(card, 1024, 663);
-    // With grid padding (16/340*663 ≈ 31), the first cell starts at y≈31, not y=0
+    // With grid padding (16/414*663 ≈ 26), the first cell starts at y≈26, not y=0
     const nameY = yOfText(svg, 'MARIO');
-    expect(nameY).toBeGreaterThan(10); // should be ≈31+3=34, not 0
+    expect(nameY).toBeGreaterThan(10); // should be ≈26+10=36, not 0
   });
 
-  it('back key/val font sizes match grid-mode rem values (10.88/12.8 base)', () => {
+  it('back key/val font sizes match grid-mode rem values (16/19 base)', () => {
     const card = {
       ...createEmptyCard(),
       back: { ...createEmptyCard().back, phone: '123456789', useGrid: true },
@@ -848,12 +850,12 @@ describe('v2.14 preview/export parity', () => {
       },
     };
     const svg = buildBackSvg(card, 1024, 663);
-    // v2.17: key 0.68rem = 10.88/340 → 663*(10.88/340) ≈ 21.2
-    // val 0.8rem = 12.8/340 → 663*(12.8/340) ≈ 24.9
+    // v2.18: key 1rem = 16/414 → 663*(16/414) ≈ 25.6
+    // val 1.1875rem = 19/414 → 663*(19/414) ≈ 30.4
     const keySize = fontSizeOfText(svg, 'TELEFONO');
     const valSize = fontSizeOfText(svg, '123456789');
-    expect(keySize).toBeCloseTo(663 * (10.88 / 340), 0);
-    expect(valSize).toBeCloseTo(663 * (12.8 / 340), 0);
+    expect(keySize).toBeCloseTo(663 * (16 / 414), 0);
+    expect(valSize).toBeCloseTo(663 * (19 / 414), 0);
   });
 });
 

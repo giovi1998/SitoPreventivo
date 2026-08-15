@@ -708,7 +708,8 @@ describe('CardPreview', () => {
       const photoEl = document.querySelector('[data-testid="grid-el-photo"]') as HTMLElement;
       expect(photoEl).not.toBeNull();
       const style = window.getComputedStyle(photoEl);
-      // gridPresetLeft: photo at x=0, y=0, w=2, h=3 → gridColumn 1 / span 2, gridRow 1 / span 3
+      // gridPresetLeft (v2.17): photo at x=0, y=0, w=2, h=3 (rows 0-2)
+      // → gridColumn 1 / span 2, gridRow 1 / span 3
       expect(style.gridColumn).toBe('1 / span 2');
       expect(style.gridRow).toBe('1 / span 3');
     });

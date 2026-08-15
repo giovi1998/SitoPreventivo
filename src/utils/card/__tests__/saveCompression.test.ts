@@ -73,6 +73,16 @@ describe('compressCardImages', () => {
     expect(result.back.coverImageUrl).toBe('data:image/jpeg;base64,COMPRESSED');
   });
 
+  it('usa budget persistenza 1200px/400KB (native-res 1K)', async () => {
+    const { compressDataUrl } = await import('../imageCompress');
+    const bigDataUrl = 'data:image/jpeg;base64,' + 'A'.repeat(500);
+    const card = makeCard({
+      front: { ...makeCard().front, photoUrl: bigDataUrl },
+    });
+    await compressCardImages(card);
+    expect(vi.mocked(compressDataUrl)).toHaveBeenCalledWith(bigDataUrl, 1200, 400_000);
+  });
+
   it('does not mutate the original card', async () => {
     const bigDataUrl = 'data:image/jpeg;base64,' + 'A'.repeat(500);
     const card = makeCard({

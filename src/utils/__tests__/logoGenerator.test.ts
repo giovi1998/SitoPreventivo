@@ -311,6 +311,9 @@ describe('logoGenerator', () => {
         get src() { return this._src; }
       }
       (global as any).Image = FakeImage;
+      // fetch stubbato: embedFontInSvg non deve fare chiamate di rete nei test
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (() => Promise.reject(new Error('offline in tests'))) as typeof fetch;
       const originalCreate = document.createElement.bind(document);
       (document as any).createElement = (tag: string) => {
         const el = originalCreate(tag);
@@ -336,6 +339,7 @@ describe('logoGenerator', () => {
         expect(png.length).toBeGreaterThan(0);
       } finally {
         (global as any).Image = originalImage;
+        globalThis.fetch = originalFetch;
         (document as any).createElement = originalCreate;
       }
     });
@@ -361,6 +365,8 @@ describe('logoGenerator', () => {
         get src() { return this._src; }
       }
       (global as any).Image = FakeImage;
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (() => Promise.reject(new Error('offline in tests'))) as typeof fetch;
       const sizes: { w: number; h: number }[] = [];
       const originalCreate = document.createElement.bind(document);
       (document as any).createElement = (tag: string) => {
@@ -394,6 +400,7 @@ describe('logoGenerator', () => {
       (global as any).__sizes = sizes;
       (global as any).__restore = () => {
         (global as any).Image = originalImage;
+        globalThis.fetch = originalFetch;
         (document as any).createElement = originalCreate;
       };
     }

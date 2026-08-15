@@ -103,22 +103,26 @@
 }
 
 .card-preview-side.grid-mode .card-name {
-  font-size: calc(1.15rem * var(--card-font-scale));
+  /* v2.18: widened hierarchy — name 22px logical (was 1.15rem=18.4px). */
+  font-size: calc(1.375rem * var(--card-font-scale));
   font-weight: 700;
 }
 
 .card-preview-side.grid-mode .card-title {
-  font-size: calc(0.9rem * var(--card-font-scale));
+  /* v2.18: title 16px logical (was 0.9rem=14.4px). */
+  font-size: calc(1rem * var(--card-font-scale));
   font-weight: 600;
 }
 
 .card-preview-side.grid-mode .card-company {
-  font-size: calc(0.84rem * var(--card-font-scale));
+  /* v2.18: company 14px logical (was 0.84rem=13.44px). */
+  font-size: calc(0.875rem * var(--card-font-scale));
   opacity: 0.8;
 }
 
 .card-preview-side.grid-mode .card-back-key {
-  font-size: calc(0.68rem * var(--card-font-scale));
+  /* v2.18: print minimum — key 16px logical (was 0.68rem=10.88px). */
+  font-size: calc(1rem * var(--card-font-scale));
   text-transform: uppercase;
   letter-spacing: 0.04em;
   opacity: 0.6;
@@ -126,7 +130,8 @@
 }
 
 .card-preview-side.grid-mode .card-back-val {
-  font-size: calc(0.8rem * var(--card-font-scale));
+  /* v2.18: print minimum — val 19px logical, ≥7pt on 55mm (was 0.8rem=12.8px). */
+  font-size: calc(1.1875rem * var(--card-font-scale));
   /* Phase 2.2: wrap invece di ellipsis (vedi .card-back-val flexbox). */
   overflow-wrap: break-word;
   word-break: break-word;

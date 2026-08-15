@@ -11,7 +11,7 @@ vi.mock('@google/genai', () => {
 });
 
 // Imported after the mock so the mocked module is used.
-const { GeminiImageProvider } = await import('../gemini');
+const { GeminiImageProvider, resolveImageSize } = await import('../gemini');
 
 describe('GeminiImageProvider (spec v2.1, @google/genai SDK)', () => {
   beforeEach(() => {
@@ -67,22 +67,58 @@ describe('GeminiImageProvider (spec v2.1, @google/genai SDK)', () => {
     await expect(provider.generateBackground('test')).rejects.toThrow('Something else broke');
   });
 
-  it('passes model, prompt, timeout and a 512px imageConfig to interactions.create', async () => {
+  it('passes model, prompt, timeout and a 1K imageConfig to interactions.create', async () => {
     createMock.mockResolvedValueOnce({
-      output_image: { data: 'abc', mime_type: 'image/png' },
+      output_image: { data: 'abc', mime_type: 'image/jpeg' },
     });
     const provider = new GeminiImageProvider('fake-key', 'gemini-3.1-flash-image');
     await provider.generateBackground('A prompt', 15_000);
+    // Niente image_output_options: le interactions API lo rifiutano (400
+    // Unknown parameter, probe live 2026-08-07); JPEG è già l'output default.
     expect(createMock).toHaveBeenCalledWith(
       {
         model: 'gemini-3.1-flash-image',
         input: 'A prompt',
         generation_config: {
-          image_config: { image_size: '512', aspect_ratio: '16:9' },
+          image_config: { image_size: '1K', aspect_ratio: '16:9' },
         },
         response_modalities: ['text', 'image'],
       },
       { timeout: 15_000 },
     );
+  });
+
+  it('generateCardCover requests 1K without output options', async () => {
+    createMock.mockResolvedValueOnce({
+      output_image: { data: 'abc', mime_type: 'image/jpeg' },
+    });
+    const provider = new GeminiImageProvider('fake-key');
+    await provider.generateCardCover('Cover prompt');
+    expect(createMock.mock.calls[0][0].generation_config.image_config).toEqual({
+      image_size: '1K',
+      aspect_ratio: '1:1',
+    });
+  });
+
+  it('forces image_size 1K for Nano Banana 2 Lite even when 2K is requested', async () => {
+    createMock.mockResolvedValueOnce({
+      output_image: { data: 'abc', mime_type: 'image/jpeg' },
+    });
+    const provider = new GeminiImageProvider('fake-key', 'gemini-3.1-flash-lite-image');
+    await provider.generateBackground('A prompt');
+    expect(createMock.mock.calls[0][0].model).toBe('gemini-3.1-flash-lite-image');
+    expect(createMock.mock.calls[0][0].generation_config.image_config.image_size).toBe('1K');
+  });
+});
+
+describe('resolveImageSize', () => {
+  it('forces 1K for gemini-3.1-flash-lite-image', () => {
+    expect(resolveImageSize('gemini-3.1-flash-lite-image', '2K')).toBe('1K');
+    expect(resolveImageSize('gemini-3.1-flash-lite-image', '512')).toBe('1K');
+  });
+
+  it('delegates the requested size for other models', () => {
+    expect(resolveImageSize('gemini-3.1-flash-image', '2K')).toBe('2K');
+    expect(resolveImageSize('gemini-3.1-flash-image', '1K')).toBe('1K');
   });
 });

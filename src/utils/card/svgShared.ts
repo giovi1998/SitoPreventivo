@@ -96,7 +96,11 @@ export function wrapTextAtWhitespace(
       } else {
         if (current) {
           pushCurrent();
-          current = /^[/@._\-\s]+$/.test(token) ? '' : token;
+          // Keep a punctuation separator at the wrap point (start of the new
+          // line) so wrapped emails/URLs never lose characters — dropping it
+          // turned "…@gmail" + ".com" into "…@gmail" + "com". Leading spaces
+          // are still trimmed away by pushCurrent, so word wraps look the same.
+          current = token;
         } else {
           lines.push(token);
           current = '';

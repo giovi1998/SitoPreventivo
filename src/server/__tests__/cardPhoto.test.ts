@@ -32,7 +32,10 @@ describe('POST /api/ai/card-photo', () => {
     expect(res.body.data.imageBase64).toBe('photodata');
     expect(res.body.data.mimeType).toBe('image/jpeg');
     const cfg = createInteraction.mock.calls[0][0].generation_config.image_config;
-    expect(cfg).toEqual({ image_size: '512', aspect_ratio: '3:4' });
+    expect(cfg).toEqual({
+      image_size: '1K',
+      aspect_ratio: '3:4',
+    });
   });
 
   it('concatenates context into prompt', async () => {
@@ -43,8 +46,8 @@ describe('POST /api/ai/card-photo', () => {
     expect(input).toContain('CARD PHOTO CONTEXT');
   });
 
-  it('returns 413 when image exceeds 500KB', async () => {
-    mockGeminiOk('x'.repeat(700_000));
+  it('returns 413 when image exceeds 1.2MB', async () => {
+    mockGeminiOk('x'.repeat(1_800_000)); // ~1.35MB raw
     const res = await callApiHandler(makeReq({ prompt: 'p' }));
     expect(res.statusCode).toBe(413);
   });

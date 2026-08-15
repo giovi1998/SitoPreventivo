@@ -105,9 +105,9 @@ async function callHandler(req: any) {
 }
 
 vi.mock('@google/genai', () => {
-  const embedContent = vi.fn().mockResolvedValue({
-    embedding: { values: [0.1, 0.2, 0.3, 0.4] },
-  });
+const embedContent = vi.fn().mockResolvedValue({
+  embeddings: [{ values: [0.1, 0.2, 0.3, 0.4] }],
+});
   class GoogleGenAI {
     models = { embedContent };
   }

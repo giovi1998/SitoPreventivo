@@ -121,4 +121,20 @@ describe('buildCardSystemPrompt', () => {
     const p = buildCardSystemPrompt();
     expect(p).toMatch(/userLocked/i);
   });
+
+  // ─── Gerarchia tipografica + leggibilità su cover (design review auto-build) ───
+  it('declares typographic hierarchy: nome più grande, ruolo medio, azienda più piccola (mai stessa dimensione)', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toMatch(/gerarchia/i);
+    expect(p).toMatch(/nome[^.]{0,80}(più grande|maggiore)/i);
+    expect(p).toMatch(/azienda[^.]{0,80}(più piccola|minore)/i);
+    expect(p).toMatch(/mai la stessa dimensione|mai uguali/i);
+  });
+
+  it('prefers text placement over quiet/uniform cover areas, avoiding busy zones behind small text', () => {
+    const p = buildCardSystemPrompt();
+    expect(p).toMatch(/cover/i);
+    expect(p).toMatch(/quieta|uniforme|zone libere|aree solide/i);
+    expect(p).toMatch(/busy|ricche di dettagli|dettagliate/i);
+  });
 });

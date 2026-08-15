@@ -162,6 +162,39 @@ test.describe('Breakpoint migration 767/1023', () => {
     expect(hasMobileConceptRules).toBe(true);
   });
 
+  test('AC-007: at 390px website editor preview iframe is full-width (grid stacked, no 38px collapse)', async ({ page }) => {
+    // Regressione 2026-08-13: `.website-content` restava `1fr 320px` anche
+    // su mobile → colonna main ~54px → iframe preview largo 38px (invisibile).
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginAndGo(page, '/app/editor');
+    await page.evaluate(() => {
+      localStorage.setItem('userRole', 'admin'); // route /app/website è AdminEditorRoute
+      const docs = [{
+        id: 'web-bp-1',
+        documentType: 'website',
+        title: 'Sito test',
+        status: 'BOZZA',
+        userEmail: 'breakpoints-test@example.com',
+        html: '<html><body><h1>Test</h1></body></html>',
+        css: '',
+        js: '',
+        pages: ['index'],
+        pagesHtml: {},
+        source: 'ai',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }];
+      localStorage.setItem('precisionQuote_documents:v1', JSON.stringify(docs));
+    });
+    await page.goto('/app/website/web-bp-1');
+    await page.getByRole('tab', { name: 'Preview' }).click();
+    const iframe = page.locator('.preview-iframe');
+    await expect(iframe).toBeVisible({ timeout: 15000 });
+    const box = await iframe.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThan(300);
+  });
+
   test('single header: at 375x812 /app/editor exactly one visible header (mobile-topbar only)', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await loginAndGo(page, '/app/editor');

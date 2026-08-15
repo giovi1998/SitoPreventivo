@@ -1,5 +1,4 @@
 import type { Flyer, FlyerLayout } from '../documentSchemas';
-import { FONT_SCALE_MIN, FONT_SCALE_MAX } from '../documentSchemas';
 import {
   type FlyerLayoutPlan,
   type FlyerElementId,
@@ -7,6 +6,7 @@ import {
   type MmRect,
   type FlyerDensity,
   FONT_SIZE_BOUNDS,
+  scaledFontBounds,
   SAFE_AREA_INSET_MM,
   GAP_MM,
   QR_MIN_MM,
@@ -30,14 +30,7 @@ export function computeFlyerLayout(flyer: Flyer): FlyerLayoutPlan {
   const page = buildPageRects(flyer);
   const content = normalizeContent(flyer);
   const layout = flyer.style.layout;
-  const rawBounds = FONT_SIZE_BOUNDS[flyer.size];
-  const scale = clamp(flyer.style.fontScale ?? 1, FONT_SCALE_MIN, FONT_SCALE_MAX);
-  const bounds: typeof rawBounds = {
-    headline: { min: rawBounds.headline.min * scale, max: rawBounds.headline.max * scale },
-    subheadline: { min: rawBounds.subheadline.min * scale, max: rawBounds.subheadline.max * scale },
-    body: { min: rawBounds.body.min * scale, max: rawBounds.body.max * scale },
-    cta: { min: rawBounds.cta.min * scale, max: rawBounds.cta.max * scale },
-  };
+  const bounds = scaledFontBounds(flyer.size, flyer.style.fontScale);
   const dims = page.trim;
   const safe = page.safe;
   const hasHero = !!content.heroImage;

@@ -19,6 +19,7 @@ vi.mock('../providers/registry', () => ({
 
 import { FlyerAIOrchestrator, flyerAIOutputSchema } from '../flyerOrchestrator';
 import { createEmptyFlyer } from '../../utils/documentSchemas';
+import { getFlyerCopyBudget } from '../../utils/flyer';
 
 class MockProvider implements AIProvider {
   readonly name = 'Mock';
@@ -184,6 +185,21 @@ describe('FlyerAIOrchestrator (phase 3)', () => {
       const userMsg = messages.find((m) => m.role === 'user');
       expect(userMsg?.content).toContain('Sagra della birra');
       expect(userMsg?.content).not.toContain('Contesto cliente:');
+    });
+
+    it('passa al prompt il budget body conservativo (bodyPromptMaxChars), non l\'hard limit al font minimo', async () => {
+      const mock = setupMock();
+      mock.chatMock.mockResolvedValue({
+        content: JSON.stringify({ headline: 'H', subheadline: '', body: '', cta: { label: '' } }),
+      });
+      const orch = new FlyerAIOrchestrator();
+      const flyer = createEmptyFlyer();
+      await orch.generateCopy(flyer, 'Sagra della birra', 'formale');
+      const messages = mock.chatMock.mock.calls[0][0] as ChatMessage[];
+      const userMsg = messages.find((m) => m.role === 'user');
+      const budget = getFlyerCopyBudget(flyer);
+      expect(budget.bodyPromptMaxChars).toBeLessThan(budget.bodyMaxChars);
+      expect(userMsg?.content).toContain(`max ${budget.bodyPromptMaxChars} caratteri`);
     });
   });
 

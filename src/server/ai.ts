@@ -6,6 +6,7 @@ import {
   json, getRequestId, logAI, jsonWithRequestId, getClientIp,
   consumeRateLimit, validate, addCorsHeaders, requireAdmin,
   buildGeminiMultimodalInput, normalizeGeminiImageModel,
+  resolveGeminiImageSize, GEMINI_IMG_CLAMP_BYTES,
 } from './core.ts';
 import { getDb, customersTable } from './db.ts';
 import { fetchFirecrawlPage } from './crm.ts';
@@ -586,7 +587,9 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         model: 'models/gemini-embedding-2',
         contents: v.data.input,
       });
-      const embedding = (result as unknown as { embedding?: { values?: number[] } })?.embedding?.values || [];
+      // SDK ritorna `embeddings: [{values}]` (plurale); fallback singolare.
+      const r = result as unknown as { embeddings?: Array<{ values?: number[] }>; embedding?: { values?: number[] } };
+      const embedding = r?.embeddings?.[0]?.values ?? r?.embedding?.values ?? [];
       if (!Array.isArray(embedding) || embedding.length === 0) {
         return json(req, res, 502, { error: 'Embedding vuoto da Gemini' });
       }
@@ -676,7 +679,11 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const { model, messages, max_tokens, tools, options: ollamaOptions, format } = v.data;
       const ollamaModel = model || 'minimax-m3:cloud';
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 600000); // stream troncato a 60s → not_json → sito fallback (regressione 2026-08-13, gotcha §26.20)
+      // Ollama con thinking 'max' + output 16k tok: le generazioni website
+      // (CSS/JS lunghi) superano i 60s — timeout allineato al path non-stream
+      // (600s, gotcha §26.20). A 60s l'abort troncava lo stream → JSON
+      // incompleto → not_json → sito fallback (regressione prod 2026-08-13).
+      const timeout = setTimeout(() => controller.abort(), 600000);
       let apiRes: Response;
       try {
         const ollamaBody: Record<string, unknown> = {
@@ -1164,7 +1171,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         // TB-029: sessione Langfuse = docId (raggruppa chat+immagini del documento)
         sessionId: z.string().min(1).max(200).optional(),
         // TB-023: modello immagine Gemini selezionabile
-        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
+        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
       }),
       body,
     );
@@ -1202,7 +1209,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
           model: normalizeGeminiImageModel(v.data.imageModel),
           input,
           generation_config: {
-            image_config: { image_size: '512', aspect_ratio: '1:1' },
+            image_config: { image_size: '1K', aspect_ratio: '1:1' },
           },
           response_modalities: ['text', 'image'],
         },
@@ -1216,9 +1223,9 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const imageBase64 = image.data;
       const mimeType = image.mime_type || 'image/png';
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
-      if (sizeBytes > 500_000) {
+      if (sizeBytes > GEMINI_IMG_CLAMP_BYTES) {
         logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
-        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' }, requestId);
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_card_cover', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
@@ -1302,11 +1309,11 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
           model: 'gemini-3.1-flash-image',
           input,
           generation_config: {
-            image_config: { image_size: '512', aspect_ratio: '16:9' },
+            image_config: { image_size: '1K', aspect_ratio: '16:9' },
           },
           response_modalities: ['text', 'image'],
         },
-        { timeout: 30_000 },
+        { timeout: 45_000 },
       );
       const image = interaction.output_image;
       if (!image || !image.data) {
@@ -1316,9 +1323,9 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const imageBase64 = image.data;
       const mimeType = image.mime_type || 'image/png';
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
-      if (sizeBytes > 500_000) {
+      if (sizeBytes > GEMINI_IMG_CLAMP_BYTES) {
         logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
-        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' }, requestId);
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
@@ -1343,7 +1350,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       logAI({ tag: 'ai_logo_background', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
       if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
       if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
-      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 45s.' }, requestId);
       if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
       return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
     }
@@ -1372,7 +1379,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         // TB-029: sessione Langfuse = docId
         sessionId: z.string().min(1).max(200).optional(),
         // TB-023: modello immagine Gemini selezionabile
-        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
+        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
       }),
       body,
     );
@@ -1396,16 +1403,20 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const input = buildGeminiMultimodalInput(finalPrompt, [
         v.data.flyerImage ? { data: v.data.flyerImage, mimeType: 'image/jpeg' } : null,
       ]);
+      const modelId = normalizeGeminiImageModel(v.data.imageModel);
       const interaction = await ai.interactions.create(
         {
-          model: normalizeGeminiImageModel(v.data.imageModel),
+          model: modelId,
           input,
           generation_config: {
-            image_config: { image_size: '512', aspect_ratio: v.data.aspectRatio ?? '3:2' },
+            image_config: {
+              image_size: resolveGeminiImageSize(modelId, '1K'),
+              aspect_ratio: v.data.aspectRatio ?? '3:2',
+            },
           },
           response_modalities: ['text', 'image'],
         },
-        { timeout: 30_000 },
+        { timeout: 45_000 },
       );
       const image = interaction.output_image;
       if (!image || !image.data) {
@@ -1415,9 +1426,9 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const imageBase64 = image.data;
       const mimeType = image.mime_type || 'image/png';
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
-      if (sizeBytes > 500_000) {
+      if (sizeBytes > GEMINI_IMG_CLAMP_BYTES) {
         logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
-        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' }, requestId);
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
@@ -1442,7 +1453,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       logAI({ tag: 'ai_flyer_hero', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind });
       if (msg.startsWith('GEMINI_401')) return jsonWithRequestId(req, res, 401, { error: 'Chiave Gemini non valida' }, requestId);
       if (msg.startsWith('GEMINI_429')) return jsonWithRequestId(req, res, 429, { error: 'Quota Gemini esaurita. Riprova più tardi.' }, requestId);
-      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 30s.' }, requestId);
+      if (msg.startsWith('GEMINI_TIMEOUT')) return jsonWithRequestId(req, res, 504, { error: 'Gemini non ha risposto entro 45s.' }, requestId);
       if (errorKind === 'copyright') return jsonWithRequestId(req, res, 400, { error: 'Generazione bloccata dal filtro di sicurezza. Prova un prompt più neutro.' }, requestId);
       return jsonWithRequestId(req, res, 502, { error: `Gemini error: ${msg.slice(0, 200)}` }, requestId);
     }
@@ -1471,7 +1482,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
         // TB-029: sessione Langfuse = docId
         sessionId: z.string().min(1).max(200).optional(),
         // TB-023: modello immagine Gemini selezionabile
-        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
+        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
       }),
       body,
     );
@@ -1493,7 +1504,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
           model: normalizeGeminiImageModel(v.data.imageModel),
           input: finalPrompt,
           generation_config: {
-            image_config: { image_size: '512', aspect_ratio: '3:4' },
+            image_config: { image_size: '1K', aspect_ratio: '3:4' },
           },
           response_modalities: ['text', 'image'],
         },
@@ -1507,9 +1518,9 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const imageBase64 = image.data;
       const mimeType = image.mime_type || 'image/png';
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
-      if (sizeBytes > 500_000) {
+      if (sizeBytes > GEMINI_IMG_CLAMP_BYTES) {
         logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
-        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' }, requestId);
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_card_photo', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB });
@@ -1543,7 +1554,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
   // TB-023: Gemini 2.0 Flash image generation — icone stilizzate ed
   // hero illustrations per card+flyer. Modello economico (~$0.02/img)
   // alternativo a Nano Banana 3.1. Stesso pattern degli altri endpoint
-  // Gemini (dynamic import, 500KB clamp, rate limit 10/min).
+  // Gemini (dynamic import, 1MB clamp, rate limit 10/min).
   if (path === '/ai/image-flash' && method === 'POST') {
     const requestId = getRequestId(req);
     const ip = getClientIp(req);
@@ -1560,13 +1571,13 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     const v = validate(
       z.object({
         prompt: z.string().max(1000),
-        aspectRatio: z.enum(['1:1', '16:9', '3:1']).optional(),
+        aspectRatio: z.enum(['1:1', '3:2', '2:3', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9']).optional(),
         size: z.enum(['512', '1K']).optional(),
         kind: z.enum(['icon', 'hero', 'custom']).optional(),
         primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         style: z.string().max(50).optional(),
-        imageModel: z.string().max(80).optional(),
+        imageModel: z.enum(['gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image', 'gemini-2.0-flash-preview-image-generation']).optional(),
         background: z.enum(['white', 'card', 'accent']).optional(),
         userEmail: z.string().email().optional(),
         // TB-029: sessione Langfuse = docId
@@ -1586,7 +1597,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const ai = new GoogleGenAI({ apiKey });
       const kind = v.data.kind || 'custom';
       const aspectRatio = v.data.aspectRatio || (kind === 'hero' ? '16:9' : '1:1');
-      const size = v.data.size || '512';
+      const size = v.data.size || '1K';
       // TB-023: sfondo icona configurabile. Gemini non produce alpha reale,
       // quindi "white" è il default prevedibile (l'icona viene poi mostrata
       // su card chiare). 'card'/'accent' usano i colori brand come tinta piena.
@@ -1612,7 +1623,10 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
           model: modelId,
           input: finalPrompt,
           generation_config: {
-            image_config: { image_size: size, aspect_ratio: aspectRatio },
+            image_config: {
+              image_size: resolveGeminiImageSize(modelId, size),
+              aspect_ratio: aspectRatio,
+            },
           },
           response_modalities: ['text', 'image'],
         },
@@ -1626,9 +1640,9 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const imageBase64 = image.data;
       const mimeType = image.mime_type || 'image/png';
       const sizeBytes = Math.ceil(imageBase64.length * 0.75);
-      if (sizeBytes > 500_000) {
+      if (sizeBytes > GEMINI_IMG_CLAMP_BYTES) {
         logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'error', errorKind: 'clamp_413' });
-        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>500KB). Riprova con un prompt più semplice.' }, requestId);
+        return jsonWithRequestId(req, res, 413, { error: 'Immagine troppo grande (>1.2MB). Riprova con un prompt più semplice.' }, requestId);
       }
       const sizeKB = sizeBytes / 1024;
       logAI({ tag: 'ai_image_flash', requestId, email: userEmail, durationMs: Date.now() - startedAt, outcome: 'ok', sizeKB, provider: 'gemini-flash' });

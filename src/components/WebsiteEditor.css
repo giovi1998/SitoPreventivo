@@ -653,6 +653,51 @@
 }
 
 /* ─── RESPONSIVE ─── */
+@media (max-width: 1023px) {
+  /* Workspace stack: la grid 1fr 320px lasciava ~54px alla colonna main
+     (iframe preview largo 38px — invisibile, bug 2026-08-13). E la
+     catena height:100%/flex schiacciava l'iframe a una striscia: su
+     mobile flusso naturale, scroll di pagina. */
+  .website-editor {
+    height: auto;
+  }
+  .website-content {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+  .website-main {
+    flex: 1 1 auto;
+    overflow: visible;
+    padding-bottom: 24px;
+  }
+  .website-rail {
+    flex: 0 0 auto;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 260px;
+    overflow-y: auto;
+    background: var(--bg-secondary, #f8f9fa);
+    padding-bottom: 0;
+  }
+  .website-rail .ai-console {
+    height: auto;
+    max-height: 260px;
+  }
+  .website-rail .ai-console__panel {
+    max-height: 160px;
+    flex: none;
+    overflow-y: auto;
+  }
+  .website-rail .ai-console--expanded .ai-console__panel {
+    flex: none;
+  }
+  .website-rail .ai-console__log {
+    min-height: 0;
+    max-height: 90px;
+  }
+}
+
 @media (max-width: 767px) {
   .website-brief-panel {
     grid-template-columns: 1fr;

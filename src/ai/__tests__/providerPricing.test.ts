@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateCostUsd, OLLAMA_PRO_FLAT_MONTHLY } from '../providerPricing';
+import { calculateCostUsd, geminiImagePricingId, OLLAMA_PRO_FLAT_MONTHLY } from '../providerPricing';
 
 describe('providerPricing calculateCostUsd (spec TB-023 §6.1)', () => {
   it('AC-TC-001: DeepSeek pay-per-token (600 input + 400 output → 0.000196)', () => {
@@ -33,5 +33,16 @@ describe('providerPricing calculateCostUsd (spec TB-023 §6.1)', () => {
     // TB-026: per-image non richiede usage, conta solo imageCount
     expect(calculateCostUsd('gemini-nano-banana', undefined, 2)).toBe(0.08);
     expect(calculateCostUsd('gemini-nano-banana', undefined, 0)).toBe(0);
+  });
+
+  it('Nano Banana 2 Lite: $0.02/immagine (metà di Nano Banana 2)', () => {
+    expect(calculateCostUsd('gemini-nano-banana-lite', undefined, 1)).toBe(0.02);
+  });
+
+  it('geminiImagePricingId: mapping modello → pricingId a 3 vie', () => {
+    expect(geminiImagePricingId('gemini-3.1-flash-lite-image')).toBe('gemini-nano-banana-lite');
+    expect(geminiImagePricingId('gemini-2.0-flash-preview-image-generation')).toBe('gemini-flash-image');
+    expect(geminiImagePricingId('gemini-3.1-flash-image')).toBe('gemini-nano-banana');
+    expect(geminiImagePricingId(undefined)).toBe('gemini-nano-banana');
   });
 });

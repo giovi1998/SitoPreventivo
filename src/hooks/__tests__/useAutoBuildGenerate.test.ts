@@ -13,6 +13,7 @@ vi.mock('../../utils/logger', () => ({
 
 vi.mock('../../ai/providerPricing', () => ({
   calculateCostUsd: vi.fn(() => 0.001),
+  geminiImagePricingId: vi.fn(() => 'gemini-nano-banana'),
 }));
 
 vi.mock('../../utils/resolveProviderId', () => ({
@@ -41,18 +42,19 @@ vi.mock('../../utils/card/imageCompress', async (importOriginal) => {
 
 const mocks = vi.hoisted(() => ({
   generateLogo: vi.fn(),
+  generateBackground: vi.fn(),
   processPrompt: vi.fn(),
   generateCopy: vi.fn(),
   generateSite: vi.fn(),
   providerSupportsVision: vi.fn(() => false),
   getAiVisionEnabled: vi.fn(() => false),
   svgToPng: vi.fn(),
-  compressDataUrl: vi.fn(async (v: string) => v),
+  compressDataUrl: vi.fn(async (v: string, _maxDim?: number, _maxBytes?: number) => v),
   saveDocument: vi.fn(),
   agentRun: vi.fn(),
   buildAgentBrief: vi.fn(() => ({ businessName: 'Bar' })),
-  agentResultData: vi.fn(() => ({ builder: {} })),
-  docTypeOfTool: vi.fn((name: unknown) => (name === 'generate_logo' ? 'logo' : 'businessCard')),
+  agentResultData: vi.fn((_docType: string) => ({ builder: {} })) as ReturnType<typeof vi.fn> & ((docType: string) => unknown),
+  docTypeOfTool: vi.fn((name: unknown) => ({ generate_logo: 'logo', generate_card: 'businessCard', generate_flyer: 'flyer', generate_website: 'website' })[name as string] ?? ''),
 }));
 
 vi.mock('../../ai/agentOrchestrator', () => ({
@@ -65,15 +67,18 @@ vi.mock('../../ai/agentSave', () => ({
   buildAgentBrief: mocks.buildAgentBrief,
   agentResultData: mocks.agentResultData,
   docTypeOfTool: mocks.docTypeOfTool,
+  agentTypeOfDoc: (documentType: string) =>
+    ({ logo: 'logo', businessCard: 'card', flyer: 'flyer', website: 'website' })[documentType],
 }));
 
 vi.mock('../../ai/logoOrchestrator', () => ({
   LogoAIOrchestrator: vi.fn().mockImplementation(function () {
-    return { generateLogo: mocks.generateLogo };
+    return { generateLogo: mocks.generateLogo, generateBackground: mocks.generateBackground };
   }),
 }));
 
-vi.mock('../../ai/cardOrchestrator', () => ({
+vi.mock('../../ai/cardOrchestrator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../ai/cardOrchestrator')>()),
   CardAIOrchestrator: vi.fn().mockImplementation(function () {
     return { processPrompt: mocks.processPrompt };
   }),
@@ -119,7 +124,7 @@ beforeEach(() => {
   mocks.providerSupportsVision.mockReturnValue(false);
   mocks.getAiVisionEnabled.mockReturnValue(false);
   mocks.svgToPng.mockResolvedValue(new Uint8Array([65, 66, 67]));
-  mocks.compressDataUrl.mockImplementation(async (v: string) => v);
+  mocks.compressDataUrl.mockImplementation(async (v: string, _maxDim?: number, _maxBytes?: number) => v);
   mockSave.mockResolvedValue({ success: true });
   mockFetch.mockResolvedValue({
     ok: true,
@@ -131,6 +136,10 @@ beforeEach(() => {
     selected: -1,
     response: { content: '{}', usage },
     changes: ['logo:generated:concepts=3'],
+  });
+  mocks.generateBackground.mockResolvedValue({
+    applied: true,
+    logo: { builder: { backgroundImage: 'data:image/png;base64,QUJD' } },
   });
   mocks.processPrompt.mockResolvedValue({
     card: { front: { name: 'Mario AI' }, back: {}, style: {} },
@@ -248,6 +257,23 @@ describe('useAutoBuildGenerate', () => {
     expect(summary?.errors).toEqual({ flyer_1: 'AI down' });
   });
 
+  it('logo fallback placeholder (parse AI fallito) → error, non salvato', async () => {
+    const placeholder = { primaryText: 'Brand', tagline: 'Il tuo nuovo logo' };
+    mocks.generateLogo.mockResolvedValueOnce({
+      applied: true,
+      concepts: [placeholder, placeholder, placeholder],
+      selected: -1,
+      response: { content: 'non-json', usage },
+      changes: ['error:invalid_json', 'logo:fallback_concepts'],
+    });
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    await act(async () => {
+      await result.current.generateAll(makeDocs(), customer);
+    });
+    expect(result.current.state.statuses.logo_1).toBe('error');
+    expect(mockSave.mock.calls.some((c) => c[1].id === 'logo_1')).toBe(false);
+  });
+
   it('generateOne: errore in state.errors, cancellato al retry riuscito', async () => {
     const doc: AutoBuildDoc = { id: 'logo_1', documentType: 'logo', title: 'Logo', data: { briefContext: 'bar', builder: {} } };
     const { result } = renderHook(() => useAutoBuildGenerate());
@@ -343,6 +369,62 @@ describe('useAutoBuildGenerate', () => {
     });
     // il result ok → saveDraft chiamato col data mappato
     expect(mockSave.mock.calls.some((c) => String(c[1].id).includes('logo'))).toBe(true);
+    // Regressione 2026-08-13: l'agent DEVE ricevere i draft reali con
+    // default (mai `{}` — scaledFontBounds leggeva size undefined →
+    // TypeError "reading 'undefined'" su generate_flyer).
+    const agentDocs = mocks.agentRun.mock.calls[0][1];
+    expect(agentDocs.flyer.size).toBeDefined();
+    expect(agentDocs.flyer.style).toBeDefined();
+    expect(agentDocs.flyer.content).toBeDefined();
+    expect(agentDocs.card.front).toBeDefined();
+    expect(agentDocs.logo.builder).toBeDefined();
+    // e i dati del draft vincono sui default
+    expect((agentDocs.card.front as Record<string, unknown>).name).toBe('Mario');
+    // Regressione 2026-08-13: 'businessCard' DEVE mappare a 'card' —
+    // senza la mappa il tool generate_card veniva filtrato via dall'include
+    // e l'agente saltava la card in silenzio.
+    const include = mocks.agentRun.mock.calls[0][3]?.include ?? mocks.agentRun.mock.calls[0][3];
+    expect(include).toEqual(expect.arrayContaining(['logo', 'card', 'flyer']));
+  });
+
+  it('T6: agentMode arricchisce le immagini (logo bg, card photo+cover, flyer hero) prima del save', async () => {
+    // Regressione 2026-08-13: il path agente salvava solo testo —
+    // backgroundImage/photoUrl/coverImageUrl/heroImage restavano null.
+    // base64 grande (>300K chars) per attivare la compressione pre-save.
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { imageBase64: 'x'.repeat(400_000), mimeType: 'image/jpeg' } }),
+    });
+    mocks.agentResultData.mockImplementation((docType: string) => {
+      if (docType === 'logo') return { builder: { primaryText: 'La Chiccheria', primaryColor: '#722F37', secondaryColor: '#F5E6D3' }, concepts: [{}] };
+      if (docType === 'businessCard') return { front: { name: 'Maria Piras' }, style: { bgColor: '#fff', accentColor: '#722F37' } };
+      if (docType === 'flyer') return { content: { headline: 'H' }, style: { bgColor: '#fff', accentColor: '#722F37' } };
+      return null;
+    });
+    mocks.agentRun.mockImplementation(async (_brief: any, _docs: any, _ctx: any, opts: any) => {
+      for (const name of ['generate_logo', 'generate_card', 'generate_flyer']) {
+        await opts.onToolResult({ name, ok: true, summary: 'ok', data: {} });
+      }
+    });
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    await act(async () => {
+      await result.current.generateAll(makeDocs(), customer, { agentMode: true });
+    });
+    const saved = (type: string) => mockSave.mock.calls.map((c) => c[1]).find((d) => d.documentType === type)?.data;
+    expect((saved('logo').builder as Record<string, unknown>).backgroundImage).toContain('data:image/jpeg');
+    expect((saved('logo').builder as Record<string, unknown>).textBackdrop).toBe('pill');
+    const front = saved('businessCard').front as Record<string, unknown>;
+    expect(front.photoUrl).toContain('data:image/jpeg');
+    expect(front.coverImageUrl).toContain('data:image/jpeg');
+    expect((saved('flyer').content as Record<string, unknown>).heroImage).toContain('data:image/jpeg');
+    expect(mockFetch.mock.calls.some((c) => c[0] === '/api/ai/image-flash')).toBe(true);
+    expect(mockFetch.mock.calls.some((c) => c[0] === '/api/ai/card-photo')).toBe(true);
+    // Persistenza path-aware (§2.5): background/hero/cover a 1536px,
+    // photo a 1024px — prima 768px piatto declassava tutto sotto soglia.
+    const dims = new Map(mocks.compressDataUrl.mock.calls.map((c) => [c[1], c[2]]));
+    expect(dims.get(1536)).toBe(400_000);
+    expect(mocks.compressDataUrl.mock.calls.some((c) => c[1] === 1024 && c[2] === 400_000)).toBe(true);
+    expect(mocks.compressDataUrl.mock.calls.some((c) => c[1] === 768)).toBe(false);
   });
 
   it('saveDocument preserva customerId del draft', async () => {
@@ -397,7 +479,28 @@ describe('useAutoBuildGenerate', () => {
     expect(mocks.processPrompt).not.toHaveBeenCalled();
     expect(result.current.state.statuses.logo_1).toBe('done');
     const save = mockSave.mock.calls.find((c) => c[1].id === 'logo_1')!;
-    expect(save[1].data.builder).toEqual({ ...logoBuilder, backgroundImage: 'data:image/png;base64,QUJD' });
+    // Sfondo AI → textBackdrop 'pill' di default per la leggibilità del wordmark
+    expect(save[1].data.builder).toEqual({ ...logoBuilder, backgroundImage: 'data:image/png;base64,QUJD', textBackdrop: 'pill' });
+    // Background logo: persistenza 1400px/400KB (native-res 1K 16:9 = 1376)
+    expect(mocks.compressDataUrl).toHaveBeenCalledWith('data:image/png;base64,QUJD', 1400, 400_000);
+  });
+
+  it('logo: textBackdrop esplicito del concept non viene sovrascritto dal default', async () => {
+    mocks.generateLogo.mockResolvedValue({
+      applied: true,
+      concepts: [{ ...logoBuilder, textBackdrop: 'band' }, { ...logoBuilder }, { ...logoBuilder }],
+      selected: -1,
+      response: { content: '{}', usage },
+      changes: ['logo:generated:concepts=3'],
+    });
+    const doc: AutoBuildDoc = { id: 'logo_1', documentType: 'logo', title: 'Logo', data: { briefContext: 'bar', builder: {} } };
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    await act(async () => {
+      await result.current.generateOne(doc, customer);
+    });
+    const save = mockSave.mock.calls.find((c) => c[1].id === 'logo_1')!;
+    expect(save[1].data.builder.backgroundImage).toBe('data:image/png;base64,QUJD');
+    expect(save[1].data.builder.textBackdrop).toBe('band');
   });
 
   it('storage quota: NON strippa builder.backgroundImage, fallisce e logga errore', async () => {
@@ -531,7 +634,8 @@ describe('useAutoBuildGenerate', () => {
       });
       const flashCalls = mockFetch.mock.calls.filter((c) => c[0] === '/api/ai/image-flash');
       expect(flashCalls).toHaveLength(2);
-      expect(flashCalls[1][1].body).toContain('"size":"256"');
+      expect(flashCalls[0][1].body).toContain('"size":"1K"');
+      expect(flashCalls[1][1].body).toContain('"size":"512"');
     });
   });
 

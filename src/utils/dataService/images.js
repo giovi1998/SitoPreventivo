@@ -10,27 +10,32 @@ async function loadCompressDataUrl() {
 
 // Campi immagine base64 noti: compressi automaticamente prima del save locale
 // per evitare QuotaExceededError (gotcha §2.12). Il fallback resta lsSet, che
-// mappa la quota su un errore strutturato.
+// mappa la quota su un errore strutturato. Parametri path-aware (probe live
+// 2026-08-07): Gemini 1K = short side 1024 (16:9 → 1376×768, 3:4 → 896×1200);
+// i cap 1400/1200 conservano la risoluzione nativa senza upscale.
 const B64_IMAGE_PATHS = [
-  ['front', 'photoUrl'],
-  ['front', 'logoUrl'],
-  ['front', 'coverImageUrl'],
-  ['back', 'coverImageUrl'],
-  ['builder', 'backgroundImage'],
-  ['content', 'heroImage'],
+  ['front', 'photoUrl', 1200, 400_000],
+  ['front', 'logoUrl', 1200, 400_000],
+  ['front', 'coverImageUrl', 1200, 400_000],
+  ['back', 'coverImageUrl', 1200, 400_000],
+  ['builder', 'backgroundImage', 1400, 400_000],
+  ['content', 'heroImage', 1400, 400_000],
 ];
 // ~225KB raw espressi in caratteri base64 (4/3 + prefix data URL).
 const B64_COMPRESS_MIN_CHARS = 300_000;
+// Website: immagini inline nell'HTML, budget più stretto (molte per documento).
+const WEBSITE_IMG_MAX_DIM = 1024;
+const WEBSITE_IMG_MAX_BYTES = 300_000;
 
 export async function compressPayloadImages(payload) {
   if (!payload || typeof payload !== 'object') return payload;
   let out = payload;
-  for (const [parent, field] of B64_IMAGE_PATHS) {
+  for (const [parent, field, maxDim, maxBytes] of B64_IMAGE_PATHS) {
     const node = out[parent];
     const value = node && node[field];
     if (typeof value === 'string' && value.startsWith('data:') && value.length > B64_COMPRESS_MIN_CHARS) {
       const compressDataUrl = await loadCompressDataUrl();
-      const compressed = await compressDataUrl(value, 768, 200_000);
+      const compressed = await compressDataUrl(value, maxDim, maxBytes);
       if (compressed && compressed !== value) {
         out = { ...out, [parent]: { ...node, [field]: compressed } };
       }
@@ -52,7 +57,7 @@ export async function compressPayloadImages(payload) {
       let next = html;
       for (const src of new Set(bigSrcs)) {
         try {
-          const compressed = await compressDataUrl(src, 768, 200_000);
+          const compressed = await compressDataUrl(src, WEBSITE_IMG_MAX_DIM, WEBSITE_IMG_MAX_BYTES);
           if (compressed && compressed !== src) next = next.split(src).join(compressed);
         } catch { /* immagine non comprimibile: resta l'originale */ }
       }
@@ -77,7 +82,7 @@ export async function compressPayloadImages(payload) {
       let next = pageHtml;
       for (const src of new Set(bigSrcs)) {
         try {
-          const compressed = await compressDataUrl(src, 768, 200_000);
+          const compressed = await compressDataUrl(src, WEBSITE_IMG_MAX_DIM, WEBSITE_IMG_MAX_BYTES);
           if (compressed && compressed !== src) next = next.split(src).join(compressed);
         } catch { /* immagine non comprimibile: resta l'originale */ }
       }
@@ -89,7 +94,7 @@ export async function compressPayloadImages(payload) {
   if (typeof out.logoUrl === 'string' && out.logoUrl.startsWith('data:') && out.logoUrl.length > B64_COMPRESS_MIN_CHARS) {
     try {
       const compressDataUrl = await loadCompressDataUrl();
-      const compressed = await compressDataUrl(out.logoUrl, 768, 200_000);
+      const compressed = await compressDataUrl(out.logoUrl, WEBSITE_IMG_MAX_DIM, WEBSITE_IMG_MAX_BYTES);
       if (compressed && compressed !== out.logoUrl) out = { ...out, logoUrl: compressed };
     } catch { /* immagine non comprimibile: resta l'originale */ }
   }
@@ -100,7 +105,7 @@ export async function compressPayloadImages(payload) {
     for (const img of out.images) {
       if (typeof img === 'string' && img.startsWith('data:') && img.length > B64_COMPRESS_MIN_CHARS) {
         try {
-          const compressed = await compressDataUrl(img, 768, 200_000);
+          const compressed = await compressDataUrl(img, WEBSITE_IMG_MAX_DIM, WEBSITE_IMG_MAX_BYTES);
           if (compressed && compressed !== img) { next.push(compressed); changed = true; continue; }
         } catch { /* immagine non comprimibile: resta l'originale */ }
       }

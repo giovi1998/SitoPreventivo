@@ -94,3 +94,21 @@ describe('computeFlyerLayout overflow warnings', () => {
     expect(plan.overflowFlags.body).toBe(true);
   });
 });
+
+describe('fontScale print floors', () => {
+  it('fontScale 0.7 never pushes the body minimum below 10pt', () => {
+    const flyer = createFlyerTemplate('ristorante', 'classic');
+    flyer.style.fontScale = 0.7;
+    flyer.content.body = 'parola '.repeat(800);
+    const plan = computeFlyerLayout(flyer);
+    expect(plan.text.body.fontSizePt).toBeGreaterThanOrEqual(10);
+  });
+
+  it('fontScale 0.7 never pushes the headline minimum below 24pt', () => {
+    const flyer = createFlyerTemplate('ristorante', 'classic');
+    flyer.style.fontScale = 0.7;
+    flyer.content.headline = 'Titolo Molto Lungo Che Non Entra Anche Rimpicciolito Al Minimo';
+    const plan = computeFlyerLayout(flyer);
+    expect(plan.text.headline.fontSizePt).toBeGreaterThanOrEqual(24);
+  });
+});

@@ -29,7 +29,7 @@ export async function generateFlyerPng(flyer: Flyer, options: FlyerExportOptions
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D non disponibile');
 
-  const svg = buildFlyerSvg(flyer);
+  const svg = buildFlyerSvg(flyer, { renderBodyAsText: true });
   const svgBlob = new Blob([svg], { type: 'image/svg+xml' });
   const svgUrl = URL.createObjectURL(svgBlob);
   await new Promise<void>((resolve, reject) => {

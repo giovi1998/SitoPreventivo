@@ -1,14 +1,14 @@
 import { useCallback, useRef, useState } from 'react';
 import dataService from '../utils/dataService';
 import { LogoAIOrchestrator } from '../ai/logoOrchestrator';
-import { CardAIOrchestrator } from '../ai/cardOrchestrator';
+import { CardAIOrchestrator, buildCardDraftPrompt } from '../ai/cardOrchestrator';
 import { FlyerAIOrchestrator } from '../ai/flyerOrchestrator';
 import { WebsiteOrchestrator } from '../ai/websiteOrchestrator';
 import { builderToSvg, svgToPng } from '../utils/logoGenerator';
 import { buildCardPhotoBrief } from '../utils/card/photoBrief';
 import { compressDataUrl } from '../utils/card/imageCompress';
 import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
-import { calculateCostUsd } from '../ai/providerPricing';
+import { calculateCostUsd, geminiImagePricingId } from '../ai/providerPricing';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
 import { incrementAiStats, type AiStats } from '../utils/aiStats';
 import { logger } from '../utils/logger';
@@ -17,9 +17,9 @@ import { enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss } from '../ut
 import { newRunId, newSpanId } from '../ai/runTrace';
 import type { RunTraceOptions } from '../ai/types';
 import { AgentOrchestrator } from '../ai/agentOrchestrator';
-import { buildAgentBrief, agentResultData, docTypeOfTool } from '../ai/agentSave';
+import { buildAgentBrief, agentResultData, agentTypeOfDoc, docTypeOfTool } from '../ai/agentSave';
 import type { BusinessCard, Flyer, FlyerTone, Logo, LogoBuilder } from '../utils/documentSchemas';
-import { createEmptyFlyer } from '../utils/documentSchemas';
+import { createEmptyCard, createEmptyFlyer, createEmptyLogo, ensureCardGrid } from '../utils/documentSchemas';
 
 export type DraftGenStatus = 'pending' | 'running' | 'done' | 'error';
 
@@ -144,7 +144,7 @@ async function saveDraft(doc: AutoBuildDoc, data: Record<string, unknown>): Prom
   // Retry con compressione più aggressiva se quota superata.
   if (res?.error && /spazio|quota/i.test(String(res.error))) {
     logger.warn('Auto-build: quota superata, riprovo con compressione più aggressiva', { route: 'useAutoBuildGenerate', docId: doc.id });
-    compressed = await compressDraftImages(data, 512, 100_000);
+    compressed = await compressDraftImages(data, { maxDim: 1024, maxBytes: 200_000 });
     res = await dataService.saveDocument('admin@gmail.com', {
       id: basePayload.id,
       documentType: basePayload.documentType,
@@ -165,13 +165,18 @@ async function saveDraft(doc: AutoBuildDoc, data: Record<string, unknown>): Prom
 // save per evitare QuotaExceededError su localStorage (gotcha §2.12).
 const B64_COMPRESS_MIN_CHARS = 300_000;
 
-const DRAFT_IMAGE_PATHS: ReadonlyArray<readonly [string, string]> = [
-  ['front', 'photoUrl'],
-  ['front', 'logoUrl'],
-  ['front', 'coverImageUrl'],
-  ['back', 'coverImageUrl'],
-  ['builder', 'backgroundImage'],
-  ['content', 'heroImage'],
+// Persistenza path-aware (gotcha §2.5): background/hero a 1536px (le aree
+// di stampa grandi — card full-bleed 1004px@300dpi, hero A5 ~1748px —
+// altrimenti escono sfocate), il resto a 1024px. Prima era 768px piatto
+// per tutto → immagini AI 1K declassate sotto la soglia di qualità
+// (verifica live 2026-08-13: 768×429 persistiti).
+const DRAFT_IMAGE_PATHS: ReadonlyArray<readonly [string, string, number, number]> = [
+  ['front', 'photoUrl', 1024, 400_000],
+  ['front', 'logoUrl', 1024, 400_000],
+  ['front', 'coverImageUrl', 1536, 400_000],
+  ['back', 'coverImageUrl', 1536, 400_000],
+  ['builder', 'backgroundImage', 1536, 400_000],
+  ['content', 'heroImage', 1536, 400_000],
 ];
 
 // Immagini opzionali che possiamo sacrificare se lo storage è pieno.
@@ -198,15 +203,14 @@ function stripOptionalImages(data: Record<string, unknown>): Record<string, unkn
 
 async function compressDraftImages(
   data: Record<string, unknown>,
-  maxDim = 768,
-  maxBytes = 200_000,
+  override?: { maxDim: number; maxBytes: number },
 ): Promise<Record<string, unknown>> {
   let out = data;
-  for (const [parent, field] of DRAFT_IMAGE_PATHS) {
+  for (const [parent, field, maxDim, maxBytes] of DRAFT_IMAGE_PATHS) {
     const node = out[parent] as Record<string, unknown> | undefined;
     const value = node?.[field];
     if (typeof value === 'string' && value.startsWith('data:') && value.length > B64_COMPRESS_MIN_CHARS) {
-      const compressed = await compressDataUrl(value, maxDim, maxBytes);
+      const compressed = await compressDataUrl(value, override?.maxDim ?? maxDim, override?.maxBytes ?? maxBytes);
       if (compressed && compressed !== value) {
         out = { ...out, [parent]: { ...node, [field]: compressed } };
       }
@@ -227,7 +231,7 @@ async function generateFlashImage(
   kind: 'icon' | 'hero',
   palette: { primaryColor?: string; secondaryColor?: string },
 ): Promise<FlashImageResult | null> {
-  const sizes = ['512', '256'] as const;
+  const sizes = ['1K', '512'] as const;
   for (const size of sizes) {
     try {
       const apiBase = import.meta.env?.VITE_API_BASE || '';
@@ -252,9 +256,7 @@ async function generateFlashImage(
         return null;
       }
       const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
-      const pricingId = imageModel === 'gemini-2.0-flash-preview-image-generation'
-        ? 'gemini-flash-image'
-        : 'gemini-nano-banana';
+      const pricingId = geminiImagePricingId(imageModel);
       return {
         dataUrl: `data:${data.mimeType};base64,${data.imageBase64}`,
         costUsd: calculateCostUsd(pricingId, undefined, 1),
@@ -282,6 +284,14 @@ async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: Aut
     });
     throw new Error('Logo AI: nessun concept valido');
   }
+  // Parse AI fallito → l'orchestratore ripiega su concept placeholder
+  // ("Brand"): mai salvarlo come successo, l'utente deve poter riprovare.
+  if (result.changes?.includes('logo:fallback_concepts')) {
+    logger.warn('Auto-build: logo AI fallback placeholder, output non valido', {
+      route: 'useAutoBuildGenerate', docId: doc.id, raw: result.rawResponse?.slice(0, 300),
+    });
+    throw new Error('Logo AI: output non valido (placeholder), riprova');
+  }
   let builder = selected;
   // Immagine AI di sfondo per il logo (Gemini). Mai fatale: se fallisce resta l'icona SVG.
   // Non c'è guard spazio qui: se il save supera quota, saveDraft farà strip del background.
@@ -293,9 +303,9 @@ async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: Aut
       { userEmail: 'admin@gmail.com', imageModel: getAiImageModelDefault() },
     );
     if (bgResult.applied && bgResult.logo.builder.backgroundImage) {
-      // Comprimi subito come per flyer hero: Gemini 1024px → ~1-2MB base64,
+      // Comprimi subito come per flyer hero: Gemini 2K → ~1-2MB base64,
       // supera quota localStorage e saveDraft falliva silenziosamente.
-      const compressed = await compressDataUrl(bgResult.logo.builder.backgroundImage, 512, 150_000);
+      const compressed = await compressDataUrl(bgResult.logo.builder.backgroundImage, 1400, 400_000);
       builder = { ...builder, backgroundImage: compressed ?? bgResult.logo.builder.backgroundImage };
       logger.info('Auto-build: background logo generato', { route: 'useAutoBuildGenerate', docId: doc.id });
     } else {
@@ -314,6 +324,11 @@ async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: Aut
       builder = { ...builder, backgroundImage: bg.dataUrl };
       logger.info('Auto-build: background logo generato via image-flash fallback', { route: 'useAutoBuildGenerate', docId: doc.id });
     }
+  }
+  // Wordmark bianco su sfondo AI: attiva lo scrim di default (design-criteria:
+  // contrasto su backgroundImage). Un textBackdrop esplicito del concept vince.
+  if (builder.backgroundImage && (!builder.textBackdrop || builder.textBackdrop === 'none')) {
+    builder = { ...builder, textBackdrop: 'pill' };
   }
   const data = {
     ...doc.data,
@@ -342,13 +357,77 @@ async function generateCardIcon(card: BusinessCard): Promise<{ dataUrl: string; 
   const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
   return {
     dataUrl: `data:${data.mimeType};base64,${data.imageBase64}`,
-    costUsd: calculateCostUsd('gemini-nano-banana', undefined, 1),
+    costUsd: calculateCostUsd(geminiImagePricingId(getAiImageModelDefault()), undefined, 1),
   };
 }
 
 function resolveCardLogoUrl(logoBuilder: LogoBuilder | null, customer: AutoBuildCustomer): string | null {
   if (logoBuilder) return `data:image/svg+xml;utf8,${encodeURIComponent(builderToSvg(logoBuilder))}`;
   return customer.detectedLogoUrl ?? null;
+}
+
+// T6: il path agente salva il testo dei tool; le immagini (logo bg, card
+// cover+photo, flyer hero) vengono arricchite qui con lo stesso stack del
+// path non-agente. lean-code: logo bg via image-flash (come il fallback
+// di generateLogoDraft); upgrade al endpoint dedicato se la qualità lagga.
+async function enrichAgentDocWithImages(
+  docType: string,
+  data: Record<string, unknown>,
+  brief: string,
+): Promise<Record<string, unknown>> {
+  let aiStats = data.aiStats as AiStats | undefined;
+  if (docType === 'logo') {
+    const builder = data.builder as LogoBuilder | undefined;
+    if (!builder?.primaryText || builder.backgroundImage) return data;
+    const bg = await generateFlashImage(`Logo emblem background. ${brief.slice(0, 300)}`, 'hero', {
+      primaryColor: builder.primaryColor,
+      secondaryColor: builder.secondaryColor,
+    });
+    if (!bg) return data;
+    aiStats = incrementAiStats(aiStats, 'background', bg.costUsd);
+    const needsBackdrop = !builder.textBackdrop || builder.textBackdrop === 'none';
+    return { ...data, builder: { ...builder, backgroundImage: bg.dataUrl, ...(needsBackdrop ? { textBackdrop: 'pill' as const } : {}) }, aiStats };
+  }
+  if (docType === 'businessCard') {
+    const merged = { ...data };
+    let front = (merged.front ?? {}) as Record<string, unknown>;
+    if (!front.photoUrl) {
+      try {
+        // CON-IS-001: l'icona AI va in photoUrl, logoUrl mai toccato.
+        const icon = await generateCardIcon(merged as unknown as BusinessCard);
+        if (icon) {
+          front = { ...front, photoUrl: icon.dataUrl };
+          merged.front = front;
+          aiStats = incrementAiStats(aiStats, 'photo', icon.costUsd);
+        }
+      } catch { /* immagini best-effort, mai fatali */ }
+    }
+    if (!front.coverImageUrl) {
+      const style = (merged.style ?? {}) as { bgColor?: string; accentColor?: string };
+      const cover = await generateFlashImage(`Cover di sfondo per biglietto da visita professionale. ${brief}. Astratta, elegante, coerente col settore, senza testo né loghi.`, 'hero', {
+        primaryColor: style.accentColor,
+        secondaryColor: style.bgColor,
+      });
+      if (cover) {
+        merged.front = { ...front, coverImageUrl: cover.dataUrl };
+        aiStats = incrementAiStats(aiStats, 'cover', cover.costUsd);
+      }
+    }
+    return { ...merged, aiStats };
+  }
+  if (docType === 'flyer') {
+    const content = (data.content ?? {}) as Record<string, unknown>;
+    if (content.heroImage) return data;
+    const style = (data.style ?? {}) as { bgColor?: string; accentColor?: string };
+    const hero = await generateFlashImage(`Hero image per volantino pubblicitario. ${brief}. Fotorealistica o illustrata, coerente col settore, senza testo.`, 'hero', {
+      primaryColor: style.accentColor,
+      secondaryColor: style.bgColor,
+    });
+    if (!hero) return data;
+    aiStats = incrementAiStats(aiStats, 'hero', hero.costUsd);
+    return { ...data, content: { ...content, heroImage: hero.dataUrl }, aiStats };
+  }
+  return data;
 }
 
 async function generateCardDraft(
@@ -362,14 +441,7 @@ async function generateCardDraft(
   const base = { ...doc.data } as Record<string, unknown>;
   const logoUrl = resolveCardLogoUrl(logoBuilder, customer);
   if (logoUrl) base.front = { ...(base.front as Record<string, unknown>), logoUrl };
-  const prompt = [
-    'Crea il biglietto da visita completo per questa attività partendo dal brief.',
-    'Definisci TUTTI e tre gli aspetti:',
-    '- STRUTTURA: layout fronte più adatto e disposizione elementi (grid) senza sovrapposizioni;',
-    '- TESTI: nome, titolo/ruolo, servizi (back.services) plausibili per il settore;',
-    '- STILE: palette coerente (bgColor, textColor, accentColor in #RRGGBB), fontFamily, eventuale decorazione.',
-    `Brief: ${brief}`,
-  ].join('\n');
+  const prompt = buildCardDraftPrompt(brief);
   const imagePreviewBase64 = await logoVisionBase64(visionLogoBuilder);
   const result = await new CardAIOrchestrator().processPrompt(base as unknown as BusinessCard, prompt, {
     imagePreviewBase64,
@@ -415,7 +487,7 @@ async function generateCardDraft(
       aiStats = incrementAiStats(aiStats, 'cover', cover.costUsd);
     }
   }
-  await saveDraft(doc, { ...merged, aiStats });
+  await saveDraft(doc, { ...ensureCardGrid(merged as unknown as BusinessCard), aiStats });
   return merged;
 }
 
@@ -576,16 +648,26 @@ export function useAutoBuildGenerate() {
         try {
           const agent = new AgentOrchestrator();
           const runTrace: RunTraceOptions = { runId, runName: 'auto-build', startRun: true, rootSpanId };
+          // I tool ricevono i draft REALI (con default per i parziali):
+          // `{}` rompeva generateCopy (size/style mancanti → TypeError
+          // "reading 'undefined'" in scaledFontBounds, bug live 2026-08-13).
+          const draftData = (type: string) =>
+            targets.find((d) => d.documentType === type)?.data as Record<string, unknown> | undefined;
+          const agentBrief = buildAgentBrief(docs, customer);
           await agent.run(
-            buildAgentBrief(docs, customer),
-            { logo: {} as any, card: {} as any, flyer: {} as any },
+            agentBrief,
+            {
+              logo: { ...createEmptyLogo(), ...draftData('logo') } as any,
+              card: { ...createEmptyCard(), ...draftData('businessCard') } as any,
+              flyer: { ...createEmptyFlyer(), ...draftData('flyer') } as any,
+            },
             {
               modelId: options.providerId,
               customerId: options.customerId,
               runTrace,
             },
             {
-              include: targets.map((t) => t.documentType) as any,
+              include: targets.map((t) => agentTypeOfDoc(t.documentType)).filter((t): t is NonNullable<typeof t> => t != null),
               onToolResult: async (result) => {
                 toolCount++;
                 const docType = docTypeOfTool(result.name);
@@ -598,7 +680,11 @@ export function useAutoBuildGenerate() {
                 if (result.ok) {
                   const data = agentResultData(docType, result);
                   if (data) {
-                    await saveDraft(doc, { ...(doc.data as Record<string, unknown>), ...data });
+                    let enriched = data;
+                    try {
+                      enriched = await enrichAgentDocWithImages(docType, data, agentBrief.description || agentBrief.businessName);
+                    } catch { /* immagini best-effort: salva comunque il testo */ }
+                    await saveDraft(doc, { ...(doc.data as Record<string, unknown>), ...enriched });
                     statuses[doc.id] = 'done';
                     setStatus(doc.id, 'done');
                   }

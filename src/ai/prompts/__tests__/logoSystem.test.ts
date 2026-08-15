@@ -47,4 +47,17 @@ describe('logoSystem (v2 ready)', () => {
     expect(buildLogoGeneratePrompt('Logo moderno', 'food'))
       .toBe(buildLogoGeneratePrompt('Logo moderno', 'food', undefined));
   });
+
+  it('system prompt: imagePrompt deve preservare una text legibility zone (centrale, scura, non affollata)', () => {
+    const p = buildLogoSystemPrompt();
+    expect(p).toMatch(/text legibility zone/i);
+    expect(p).toMatch(/darker|più scura|scuro/i);
+    expect(p).toMatch(/uncluttered|priva di dettagli|non affollata/i);
+  });
+
+  it('generate prompt ricorda che il wordmark bianco si sovrappone allo sfondo', () => {
+    const p = buildLogoGeneratePrompt('Logo per pizzeria', 'food');
+    expect(p).toMatch(/text legibility zone|zona centrale/i);
+    expect(p).toMatch(/wordmark|testo bianco/i);
+  });
 });

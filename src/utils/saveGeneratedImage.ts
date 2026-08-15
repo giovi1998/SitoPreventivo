@@ -26,7 +26,7 @@ function generateId(): string {
 
 /**
  * Auto-save an AI-generated image as a "generatedImage" document in the collection.
- * Compresses the image to ≤300KB before saving to avoid localStorage QuotaExceeded.
+ * Compresses the image to ≤400KB/1024px before saving to avoid localStorage QuotaExceeded.
  * Fire-and-forget: failures are logged but never block the caller.
  */
 export async function saveGeneratedImage(
@@ -38,7 +38,7 @@ export async function saveGeneratedImage(
 ): Promise<void> {
   if (!userEmail || !imageDataUrl) return;
   const title = `${CATEGORY_LABELS[category] || category} · ${SOURCE_LABELS[source] || source}`;
-  const compressed = await compressDataUrl(imageDataUrl, 512, 300_000);
+  const compressed = await compressDataUrl(imageDataUrl, 1024, 400_000);
   const finalDataUrl = compressed || imageDataUrl;
   console.log(`[saveGeneratedImage] ${category}/${source}: raw=${Math.round(imageDataUrl.length * 0.75 / 1024)}KB → compressed=${Math.round(finalDataUrl.length * 0.75 / 1024)}KB`);
   const doc = {

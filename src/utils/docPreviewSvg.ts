@@ -1,5 +1,5 @@
 import type { BusinessCard, Logo, Flyer } from './documentSchemas';
-import { mergeCardWithDefaults, mergeFlyerWithDefaults } from './documentSchemas';
+import { mergeCardWithDefaults, mergeFlyerWithDefaults, mergeLogoWithDefaults } from './documentSchemas';
 import { builderToSvg, sanitizeSvg } from './logoGenerator';
 import { buildCardSvg } from './card/svgRenderer';
 import { buildFlyerSvg } from './flyer/svgRenderer';
@@ -20,7 +20,10 @@ import { migrateFromLegacy, type PremiumQuote } from './quoteSchema';
 export function buildPreviewSvg(doc: any): string {
   try {
     if (doc.documentType === 'logo' && doc.builder) {
-      return sanitizeSvg(builderToSvg(doc.builder as Logo['builder']));
+      // Merge defaults (come card/flyer): doc vecchi/parziali senza campi
+      // builder (layout, textScale, ...) produrrebbero SVG con NaN o
+      // crasherebbero in getViewBox → thumbnail vuota.
+      return sanitizeSvg(builderToSvg(mergeLogoWithDefaults(doc as Partial<Logo>).builder));
     }
     if (doc.documentType === 'businessCard') {
       const card = mergeCardWithDefaults(doc as Partial<BusinessCard>);

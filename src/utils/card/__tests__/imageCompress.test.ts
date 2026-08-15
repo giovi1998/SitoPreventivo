@@ -125,5 +125,38 @@ describe('imageCompress', () => {
       const result = await compressDataUrl(dataUrl);
       expect(result).toBe(dataUrl);
     });
+
+    it('default 1024px/400KB: immagine 800px ~345KB resta invariata', async () => {
+      mockImage(800, 800);
+      const dataUrl = 'data:image/jpeg;base64,' + 'A'.repeat(460_000);
+      expect(await compressDataUrl(dataUrl)).toBe(dataUrl);
+    });
+
+    it('PNG oltre soglia: downscale iterativo, output resta PNG (alpha preservato, mai JPEG)', async () => {
+      mockImage(2048, 2048);
+      const bigPng = 'data:image/png;base64,' + 'A'.repeat(600_000);
+      let pngCalls = 0;
+      let jpegCalled = false;
+      const origCreate = document.createElement.bind(document);
+      const createSpy = vi.spyOn(document, 'createElement');
+      createSpy.mockImplementation((tag: string, opts?: any) => {
+        if (tag === 'canvas') {
+          return {
+            width: 0, height: 0,
+            getContext: () => ({ drawImage: vi.fn(), clearRect: vi.fn() }),
+            toDataURL: (mime: string) => {
+              if (mime === 'image/jpeg') { jpegCalled = true; return 'data:image/jpeg;base64,JPEG'; }
+              pngCalls++;
+              return 'data:image/png;base64,' + 'P'.repeat(pngCalls >= 2 ? 100 : 600_000);
+            },
+          } as any;
+        }
+        return origCreate(tag, opts);
+      });
+      const result = await compressDataUrl(bigPng);
+      expect(result).toContain('data:image/png');
+      expect(jpegCalled).toBe(false);
+      createSpy.mockRestore();
+    });
   });
 });

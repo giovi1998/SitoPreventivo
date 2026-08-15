@@ -391,6 +391,26 @@ describe('dataService documents (local path)', () => {
       expect(stored[0].content.heroImage).toMatch(/^data:image\/jpeg;base64,COMPRESSED_/);
     });
 
+    it('parametri path-aware: background/hero 1400px, campi card 1200px (native-res 1K)', async () => {
+      const doc = {
+        ...createGiovanniQrTemplate(),
+        id: 'path-aware',
+        documentType: 'businessCard',
+        userEmail: 'user@test.com',
+        front: { photoUrl: bigDataUrl() },
+        builder: { backgroundImage: bigDataUrl() },
+        content: { heroImage: bigDataUrl() },
+      };
+      const result = await dataService.saveDocument('user@test.com', doc);
+      expect(result.success).toBe(true);
+      const calls = mockCompressDataUrl.mock.calls;
+      expect(calls).toHaveLength(3);
+      expect(calls).toContainEqual([expect.stringContaining('data:image/png'), 1200, 400_000]);
+      expect(calls).toContainEqual([expect.stringContaining('data:image/png'), 1400, 400_000]);
+      const bg1400 = calls.filter((c) => c[1] === 1400);
+      expect(bg1400).toHaveLength(2);
+    });
+
     it('non tocca immagini piccole o valori non data-URL', async () => {
       const card = {
         ...createGiovanniQrTemplate(),

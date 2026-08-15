@@ -191,7 +191,11 @@ export async function embedText(text: string, customerId?: string): Promise<numb
       model: 'models/gemini-embedding-2',
       contents: text.slice(0, 8000),
     });
-    const values = (result as unknown as { embedding?: { values?: number[] } })?.embedding?.values;
+    // SDK @google/genai ritorna `embeddings: [{values}]` (plurale); la REST
+    // v1beta e i vecchi mock usano `embedding` singolare. Prima leggevamo
+    // solo il singolare → sempre vuoto → 502 "Embedding vuoto" (2026-08-13).
+    const r = result as unknown as { embeddings?: Array<{ values?: number[] }>; embedding?: { values?: number[] } };
+    const values = r?.embeddings?.[0]?.values ?? r?.embedding?.values;
     const embedding = Array.isArray(values) && values.length > 0 ? values : [];
     void ingestLangfuse({
       name: 'embed-chunk',

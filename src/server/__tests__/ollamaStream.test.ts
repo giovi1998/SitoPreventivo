@@ -1,9 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { resetApiTests, callApiHandler } from './helpers/apiTest';
 
 beforeEach(() => {
   resetApiTests();
   process.env.OLLAMA_API_KEY = 'test-ollama';
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 const globalAny = global as any;
@@ -52,6 +56,53 @@ describe('POST /api/ai/chat/stream Ollama routing', () => {
     expect(res.headers['Content-Type']).toBe('text/event-stream');
     expect(body.model).toBe('minimax-m3:cloud');
     expect(body.stream).toBe(true);
+  });
+
+  it('regressione prod 2026-08-13: timeout stream Ollama è 600s (non 60s) — a 60s il JSON website troncato dava not_json', async () => {
+    vi.useFakeTimers();
+    let aborted = false;
+    globalAny.fetch = vi.fn(async (url: string, init: any) => {
+      if (String(url).includes('/api/public/otel/v1/traces')) {
+        return { ok: true, status: 200 };
+      }
+      init.signal.addEventListener('abort', () => {
+        aborted = true;
+      });
+      return {
+        ok: true,
+        headers: new Map([['content-type', 'application/x-ndjson']]),
+        body: {
+          getReader() {
+            return {
+              async read() {
+                if (aborted) throw new Error('AbortError');
+                // Stream mai completato: resta appeso finché l'abort non
+                // scatta (solo così il timeout è osservabile).
+                await new Promise((resolve) => init.signal.addEventListener('abort', resolve));
+                throw new Error('AbortError');
+              },
+            };
+          },
+        },
+      };
+    });
+
+    const req = {
+      method: 'POST',
+      url: '/api/ai/chat/stream',
+      headers: { origin: 'http://localhost', 'x-forwarded-for': '1.1.1.1' },
+      body: { provider: 'ollama', model: 'minimax-m3:cloud', messages: [{ role: 'user', content: 'genera sito' }] },
+    };
+
+    const resPromise = callApiHandler(req);
+    // 60s: lo stream DEVE essere ancora vivo (vecchio bug abortiva qui).
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(aborted).toBe(false);
+    // 600s: solo qui l'abort scatta.
+    await vi.advanceTimersByTimeAsync(540_000);
+    expect(aborted).toBe(true);
+    const res: any = await resPromise;
+    expect(res.statusCode).toBe(200);
   });
 
   it('returns 503 when OLLAMA_API_KEY is missing', async () => {

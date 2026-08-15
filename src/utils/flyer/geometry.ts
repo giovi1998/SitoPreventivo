@@ -1,5 +1,5 @@
 import type { Flyer, FlyerLayout, FlyerSize, FlyerOrientation } from '../documentSchemas';
-import { getFlyerDimensions, FLYER_BLEED_MM } from '../documentSchemas';
+import { getFlyerDimensions, FLYER_BLEED_MM, FONT_SCALE_MIN, FONT_SCALE_MAX } from '../documentSchemas';
 
 export type FlyerElementId =
   | 'hero'
@@ -75,12 +75,36 @@ export const FONT_SIZE_BOUNDS: Record<FlyerSize, {
   body: { min: number; max: number };
   cta: { min: number; max: number };
 }> = {
-  A6: { headline: { min: 10, max: 22 }, subheadline: { min: 7, max: 12 }, body: { min: 6, max: 9 }, cta: { min: 6, max: 9 } },
-  A5: { headline: { min: 12, max: 30 }, subheadline: { min: 8, max: 15 }, body: { min: 7, max: 11 }, cta: { min: 7, max: 11 } },
-  A4: { headline: { min: 16, max: 44 }, subheadline: { min: 10, max: 22 }, body: { min: 8, max: 13 }, cta: { min: 8, max: 13 } },
-  Letter: { headline: { min: 16, max: 42 }, subheadline: { min: 10, max: 21 }, body: { min: 8, max: 13 }, cta: { min: 8, max: 13 } },
-  Square: { headline: { min: 14, max: 34 }, subheadline: { min: 9, max: 17 }, body: { min: 7, max: 11 }, cta: { min: 7, max: 11 } },
+  A6: { headline: { min: 24, max: 28 }, subheadline: { min: 12, max: 14 }, body: { min: 10, max: 11 }, cta: { min: 10, max: 11 } },
+  A5: { headline: { min: 24, max: 30 }, subheadline: { min: 12, max: 15 }, body: { min: 10, max: 11 }, cta: { min: 10, max: 11 } },
+  A4: { headline: { min: 24, max: 44 }, subheadline: { min: 12, max: 22 }, body: { min: 10, max: 13 }, cta: { min: 10, max: 13 } },
+  Letter: { headline: { min: 24, max: 42 }, subheadline: { min: 12, max: 21 }, body: { min: 10, max: 13 }, cta: { min: 10, max: 13 } },
+  Square: { headline: { min: 24, max: 34 }, subheadline: { min: 12, max: 17 }, body: { min: 10, max: 11 }, cta: { min: 10, max: 11 } },
 };
+
+// Absolute print legibility floors (pt). fontScale must never push a
+// minimum below these values (docs/design-criteria.md).
+export const PRINT_FONT_MIN_PT = { headline: 24, subheadline: 12, body: 10, cta: 10 } as const;
+
+/**
+ * Font bounds scaled by the user's fontScale, with minimums clamped to the
+ * absolute print floors. Shared by the layout engine and the copy budget so
+ * the UI allowance always matches real layout capacity.
+ */
+export function scaledFontBounds(size: FlyerSize, fontScale: number | undefined): (typeof FONT_SIZE_BOUNDS)[FlyerSize] {
+  const raw = FONT_SIZE_BOUNDS[size];
+  const scale = clamp(fontScale ?? 1, FONT_SCALE_MIN, FONT_SCALE_MAX);
+  const entry = (b: { min: number; max: number }, floor: number) => {
+    const min = Math.max(b.min * scale, floor);
+    return { min, max: Math.max(b.max * scale, min) };
+  };
+  return {
+    headline: entry(raw.headline, PRINT_FONT_MIN_PT.headline),
+    subheadline: entry(raw.subheadline, PRINT_FONT_MIN_PT.subheadline),
+    body: entry(raw.body, PRINT_FONT_MIN_PT.body),
+    cta: entry(raw.cta, PRINT_FONT_MIN_PT.cta),
+  };
+}
 
 export const SAFE_AREA_INSET_MM = 5;
 export const GAP_MM = 3;

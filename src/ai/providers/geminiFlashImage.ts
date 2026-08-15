@@ -31,7 +31,7 @@ export class GeminiFlashImageProvider extends GeminiImageProvider {
     const fullPrompt = `Stylized flat illustration of ${prompt}. Two colors only: ${options.primaryColor} and ${options.secondaryColor}. Transparent background. No text, no border, no gradients, no shadows. Simple geometric shapes. 256x256 px. Style: ${styleHint}.`;
     return this.generateImage(
       fullPrompt,
-      { image_size: '512', aspect_ratio: '1:1' },
+      { image_size: '1K', aspect_ratio: '1:1' },
       timeoutMs,
     );
   }
@@ -49,7 +49,7 @@ export class GeminiFlashImageProvider extends GeminiImageProvider {
     const fullPrompt = `Stylized flat hero illustration of ${prompt}. Two colors only: ${options.primaryColor} and ${options.secondaryColor}. Transparent background. No text, no border. Simple geometric shapes, editorial style. 1024x576 px (16:9). Style: ${styleHint}.`;
     return this.generateImage(
       fullPrompt,
-      { image_size: '512', aspect_ratio: '16:9' },
+      { image_size: '1K', aspect_ratio: '16:9' },
       timeoutMs,
     );
   }

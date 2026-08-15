@@ -1,18 +1,27 @@
 # AGENTS.md – Quickbrand
 
+Quickbrand (repo `sitopreventivo`): webapp React + Vercel serverless per
+generare preventivi, QR code, business card, loghi, flyer, post social e
+siti web — con assistenza AI (DeepSeek / Ollama Pro Cloud / Gemini) e CRM
+admin. Frontend React 18 + Vite, backend monolitico `api/index.ts`,
+database Neon Postgres via Drizzle ORM, export PDF/PNG/SVG tutto
+client-side.
+
 ## Quick Commands
 
 ```bash
-npm run dev          # Dev server: Vite (port 8000)
+npm run dev          # Dev server: Vite (port 8000, proxy /api/ai/* incluso)
 npm run build        # Production build → dist/
-npm run test         # Run tests (vitest)
+npm run test         # vitest run --coverage (identico a test:coverage)
 npm run test:watch   # Watch mode
-npm run test:coverage # Vitest + coverage v8 (thresholds in vitest.config.ts)
-npm run test:e2e     # Playwright
+npm run test:e2e     # Playwright (33 spec)
 npm run test:e2e:ci  # Playwright seriale (--workers=1)
+npm run test:e2e:critical  # Gate E2E route critiche: node scripts/e2e-gate.mjs
 npm run typecheck    # tsc --noEmit
 npm run db:generate  # Generate Drizzle migration
 npm run db:migrate   # Apply migrations to Neon
+npm run check:api-imports   # Serverless import safety (gotcha §1)
+npm run docs:sync-check     # Reminder docs non sincronizzati
 ```
 
 ## Output Style (adhd-caveman skill) — OBBLIGATORIO SEMPRE
@@ -78,10 +87,13 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 - **Observability**: server logs via `console.*` in `src/server/handler.ts`
   (JSON in prod). Client logs via `src/utils/logger.ts` + `/api/logs`
   (Vercel logs). Zero servizi esterni.
-- **AI**: default **MiniMax M3** (Ollama Pro Cloud, `ollama-minimax-m3`,
-  multimodale/vision, flat rate) per tutti gli orchestratori via proxy
-  `/api/ai/chat`; DeepSeek fallback/selezionabile; Gemini Nano Banana
-  (immagini: logo background, card cover/icon). Chiavi solo server-side.
+- **AI**: default **MiniMax M3** (Ollama Pro Cloud, provider id
+  `ollama-minimax-m3`, modello `minimax-m3:cloud`, multimodale/vision, flat
+  rate) per tutti gli orchestratori via proxy `/api/ai/chat`; DeepSeek
+  fallback/selezionabile; Gemini Nano Banana (immagini: logo background,
+  card cover/photo/icon, flyer hero — default model `gemini-3.1-flash-image`
+  in `src/ai/providers/gemini.ts`; `gemini-2.0-flash-preview-image-generation`
+  per image-flash in `geminiFlashImage.ts`). Chiavi solo server-side.
   **Thinking mode sempre attivo** (`reasoning_effort`/`think` configurabile,
   default `'max'`, selettore Veloce/Profondo/Massimo nel badge provider,
   persistito in `pq_ui:v1` `aiReasoningEffort`), `temperature` rimosso
@@ -129,13 +141,16 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/utils/card/svgRenderer.ts` | Facade → `card/frontSvg.ts` / `card/backSvg.ts` / `card/fontEmbed.ts` / `card/svgShared.ts` (`buildCardSvg` resta nella facade) |
 | `src/utils/xml.ts` | `escapeXml` condiviso (input `unknown`, coerced) |
 | `src/utils/flyer/` | Flyer engine: `layoutEngine`, `svgRenderer`, `textFit`, `geometry`, `budgets`, `templateCatalog/Factory`, `qrRenderer`, `pdf/pngExport` |
+| `src/utils/website/` | Website builder utils: `imageInjection`, `imageNormalize`, `logoInjection`, `sanitizeGenerated`, `seoMeta`, `siteAnalyser` (+ `src/utils/websiteExport.ts` export ZIP condiviso editor+Collection) |
+| `src/utils/ai/` | Helper AI condivisi: `captureElement`, `compressForAI`, `mapAiError`, `removeBackground`, `requestId` |
+| `src/utils/quote/`, `src/utils/decorations/` | Preview immagine quote; pattern decorativi card |
 | `src/utils/watermark.ts` | Tier-aware watermark (free vs unlocked) |
 | `src/server/langfuse.ts` | TB-029: payload OTLP manuale + ingest fire-and-forget (zero deps, no-op senza chiavi, fallback `VITE_LANGFUSE_*` per dev). Hook: `traceGeneration` in `src/server/ai.ts` |
 | `src/server/langfusePrompts.ts` | TB-029 fase 2: fetch prompt remoti Langfuse per label (cache 60s, fallback builder locali) + `compilePrompt` {{var}} |
 | `src/utils/aiStats.ts` | TB-026: per-document AI cost tracker (aiStats: totalCostUsd + calls breakdown) + `withAiCall`, `incrementAiStats`, `formatAiStatsCompact` |
 | `src/utils/ai/remotePrompt.ts` | TB-029 fase 2: Prompt Management client — `prefetchRemotePrompts()` (AppShell), `compileClientPrompt` {{var}}, label per ambiente (staging locale / production prod), fallback builder locali |
 | `src/components/DocumentAiStats.tsx` | TB-026: widget riusabile "🤖 3 icone · 2 elaborazioni · $0.08" per editor e Collection |
-| `src/utils/documentSchemas.ts` | Facade sottile → `src/utils/schemas/` (split per tipo: `shared`, `qr`, `card` incl. cardGrid + grid preset, `logo`, `flyer`, `social`). Zod schemas + `createEmpty*` + `mergeWithDefaults` (+ opzionale `aiStats` per-document TB-026). API pubblica invariata |
+| `src/utils/documentSchemas.ts` | Facade sottile → `src/utils/schemas/` (split per tipo: `shared`, `qr`, `card` incl. cardGrid + grid preset, `logo`, `flyer`, `social`, `website`). Zod schemas + `createEmpty*` + `mergeWithDefaults` (+ opzionale `aiStats` per-document TB-026). API pubblica invariata |
 | `src/utils/gridUtils.ts` | Grid collision helpers (BLOCK su sovrapposizione) |
 | `db/schema.ts` | Drizzle schema (users, documents, user_settings, unlock_codes, **customers** TB-027, **intakes** TB-019) |
 | `src/utils/dataService.js` | Facade → `dataService/` (core, auth, documents, settings, ai, crm, images — solo `.js`, vincolo CJS §23). Data layer: API o localStorage (+ customers/intakes/config TB-027/019) |
@@ -153,7 +168,8 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/ai/*Orchestrator.ts` | card / flyer / logo / social / onboarding / website |
 | `src/ai/agentOrchestrator.ts` | T9: agente orchestratore con harness — 4 tools `generate_logo/card/flyer/website`, loop plan→act max 6 round su `BaseOrchestrator`, `onToolResult` per save client. **Non ancora collegato alla UI** (wiring CRM = prossimo step) |
 | `src/ai/runTrace.ts` | T7: helper trace gerarchica — `newRunId()` (32-hex) / `newSpanId()` (16-hex); campi run propagati via `RunTraceOptions` → `ChatOptions` → body `/api/ai/chat` |
-| `src/ai/prompts/registry.ts` | promptRegistry: lookup centralizzato 8 prompt (incl. website-system) |
+| `src/ai/prompts/registry.ts` | promptRegistry: lookup centralizzato prompt di sistema (incl. website-system, palette) |
+| `src/ai/providers/registry.ts` | Registry provider AI (default `ollama-minimax-m3`, fallback automatico) |
 | `src/ai/providers/gemini.ts` | `GeminiImageProvider` (Nano Banana, SDK `@google/genai`) |
 | `src/ai/cardMerge.ts` | Merge risposta AI → card (grid, style, photo-preserve) |
 | `src/components/CardEditor.tsx` + `card/` | Editor card: shell, form/ (barrel), ai/ (rail), grid controls |
@@ -164,9 +180,9 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/components/ai/AIConsole.tsx` | Rail AI unificata (collapse in `pq_ui:v1`, quickActions, `AILogPanel` + `AIProviderBadge`) |
 | `src/components/ActionBar.tsx` | Cluster azioni Salva/Esporta/Nuovo (logo, QR) |
 | `src/components/CollectionView.tsx` | Collection griglia documenti: tab, filtri, ricerca, preview SVG inline (logo/card/flyer/quote), export ZIP |
-| `src/hooks/useAI*.ts` | Hook AI: useAI, useAICard, useAIFlyer, useAILogo, useAISocial, useAIOnboarding, useAIWebsite |
+| `src/hooks/useAI*.ts` | Hook AI: useAI, useAICard, useAIFlyer, useAILogo, useAISocial, useAIOnboarding, useAIWebsite, useAIPalette, useAIDesignReview, useAIIconHero |
 | `src/hooks/useCard{PromptLibrary,AiImages}.ts` | Hook estratti da CardEditorShell: prompt library (photo/icon/cover) e generazione immagini AI (cover/photo/icona, CON-IS-001) |
-| `src/hooks/useCard{GridEditor,BackContent,AutoSave}.ts` | Hook estratti da CardEditorShell batch 2: grid state+handlers, services/socials/decorations retro, save/auto-save 30s (+ `cardHasContent`, `defaultCardTitle`). Shell 658 righe |
+| `src/hooks/useCard{GridEditor,BackContent,AutoSave,Export}.ts` | Hook estratti da CardEditorShell: grid state+handlers, services/socials/decorations retro, save/auto-save 30s (+ `cardHasContent`, `defaultCardTitle`), export |
 | `src/components/card/form/CardFormSections.tsx` | `formContent` estratto dalla shell: compone le sezioni `form/` via barrel |
 | `src/components/logo/ConceptCard.tsx` | Card concept logo AI (preview+bg, badge "AI bg ✓", rigenera) estratta da LogoAiPanel |
 | `src/utils/logo/logoAiPersistence.ts` | Persistenza chat logo AI: `storageKeyFor(docId)`, TTL 24h, quota fallback senza bgImages |
@@ -175,7 +191,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/test-setup.ts` | Setup vitest globale: cleanup RTL + reset localStorage/sessionStorage in `beforeEach` |
 | `src/hooks/useMediaQuery.ts` | Breakpoint canonici `BP_SHELL=768`/`BP_WORKSPACE=1024` + hook mobile |
 | `src/utils/uiPrefs.ts` | `pq_ui:v1` (sidebarCollapsed, aiConsoleExpanded per editor, `aiProviderDefault`, `aiVisionEnabled`, `aiAutoFallback`, `aiReasoningEffort`) |
-| `vite.config.js` | Port 8000, SPA fallback, dev proxy `/api/ai/*`, `loadEnv()` esplicito |
+| `vite.config.js` | Port 8000, SPA fallback, dev proxy `/api/ai/*` + `/api/logs`, `loadEnv()` esplicito, manualChunks vendor |
 | `vercel.json` | Build: `db:migrate && build`; niente rewrites (server.ts gestisce tutto) |
 | `docs/agent-gotchas.md` | **Dettaglio completo gotchas + roadmap fasi** (leggere prima di toccare i moduli) |
 
@@ -228,6 +244,11 @@ Tutte le `/app/*` sono servite dalla catch-all SPA in `vercel.json`.
   resta nello schema (default 1, clamp 0.7–1.5) e in preview
   `--card-font-scale` / export `fs()` / AI merge per backward compat
   documenti esistenti. `SAFE_FONT_FAMILIES` per il selettore.
+- **Reference frame unificato (v2.19, design review 2026-08-06)**: preview
+  ed export condividono `CARD_REF 640×414` logici; gerarchia tipografica
+  22/16/14, contatti retro ≥7pt stampa, floor shrink DPI-independent,
+  front export con wrap+clip. Dettagli: `docs/agent-gotchas.md` §27.1 e
+  `docs/design-criteria.md`.
 - Export: PDF 10-up, PNG, SVG, JSON — tutto client-side (pdfmake + canvas).
 - Preview/export non ancora perfettamente identici: mismatch residui
   (wrapping, font metrics) documentati in `docs/agent-gotchas.md` §6.
@@ -251,6 +272,8 @@ Tutte le `/app/*` sono servite dalla catch-all SPA in `vercel.json`.
 - `textColorMode`, `textBackdrop`, `textOffsetX/Y`, `taglineOffsetX/Y`,
   `textScale` per leggibilità su foto AI. Con `backgroundImage` settato,
   icona e `decorativeElements` sono auto-soppressi (v2.3.1).
+- **Tipografia (design review 2026-08-06, §27.2)**: tagline = 0.42× wordmark
+  fittato; backdrop per luminanza testo; font embed in export raster.
 - **Mai persistere immagini base64 solo in localStorage**: fonte primaria =
   stato sollevato al genitore (`aiStateRef` in `LogoEditor`), localStorage
   solo backup try/catch. Vedi `docs/agent-gotchas.md` §2.12.
@@ -263,8 +286,18 @@ Tutte le `/app/*` sono servite dalla catch-all SPA in `vercel.json`.
   `optimizeSvg` (regex minimale, ~30-40% più piccolo, no SVGO runtime).
   PDF/JPG usano `applyWatermarkToCanvas` (tier-aware). ICO/Favicon
   richiamano `svgToPng` internamente. Test PDF skip in jsdom (getBBox
-  mancante). Deps: `jspdf`, `svg2pdf.js` (dynamic import non necessario,
-  import statico OK — bundled lato client, no Vercel boundary).
+  mancante). Deps: `jspdf`, `svg2pdf.js` (import statico OK — bundled lato
+  client, no Vercel boundary).
+
+## Flyer Module
+
+- Engine in `src/utils/flyer/`: layout deterministico (`layoutEngine` +
+  `geometry` con metriche Arial calibrate), `textFit`, budget copy,
+  template catalog/factory, render SVG + export PDF/PNG.
+- Floor stampa tutti i formati (headline 24pt / body 10pt min), font-size
+  unitless in SVG viewBox-mm (§7), `scaledFontBounds` (fontScale non aggira
+  i minimi), body export via `renderBodyAsText` (design review 2026-08-06,
+  §27.3).
 
 ## ⚠️ Gotchas critici (sintesi — dettaglio in `docs/agent-gotchas.md`)
 
@@ -284,8 +317,11 @@ Regression test: `src/__tests__/vercelConfig.test.ts`.
 **Gemini/`@google/genai` (§2-3)**: mai import statico in
 `src/server/handler.ts` (ESM-only → `FUNCTION_INVOCATION_FAILED` su TUTTI
 gli endpoint); solo `await import('@google/genai')` dentro l'handler.
-`response_modalities` minuscolo. Chiedere
-`image_size: '512'` in richiesta (clamp server 500KB). Prompt neutri, no
+`response_modalities` minuscolo. `image_size: '1K'` uniforme su tutti gli
+endpoint (clamp 1.2MB, timeout 45s logo-background/flyer-hero); 2K mai
+(~4.4MB base64 → oltre il limite risposta Vercel 4.5MB); mai
+`image_output_options`/`output_mime_type` (400 probe live, §2.5).
+Nano Banana 2 Lite solo 1K (`resolveGeminiImageSize`). Prompt neutri, no
 metafore artistiche (filtro copyright/recitation). Path dev proxy = path
 client char-per-char. `loadEnv()` esplicito in `vite.config.js`.
 
@@ -314,7 +350,12 @@ calibrate in `geometry.ts`; `GLYPH_HEIGHT_FACTOR=1.15`;
 
 **Dev proxy (§12)**: riavviare `npm run dev` dopo modifiche a
 `vite.config.js`; cover "entrambi i lati" serializzata (mai parallela,
-502); limiti `context` proxy = server (2000).
+502); limiti `context` proxy = server (2000). Il proxy gestisce anche
+`/api/logs` (mirror dev) e il fallback Ollama chat diretto (timeout 600s,
+tools propagati in richiesta E in risposta — `tool_calls` NDJSON inoltrati
+al client stream e non-stream, history normalizzata camelCase→snake_case
+con arguments oggetto — senza → agent loop morto o 400 "Value looks like
+object", gotcha §26.18).
 
 **Build zero-warning + npm 12 (§25)**: `npm run build` deve restare
 pulito. Regole: moduli già statico-importati nel main → import statico,
@@ -323,7 +364,7 @@ captureElement); moduli grossi on-demand (pdfjs, tesseract) → tutto lazy
 (`setupPdfWorker` è async, `pdfImporter` fa `await`). Eccezione
 documentata: `crm.js` (§23 CJS) → 3 import dinamici silenziati via
 `customLogger.warn` in `vite.config.js` (non toccare il filtro). Nuovi
-vendor grossi → aggiungere a `manualChunks` (main è 712kB, limit 2500).
+vendor grossi → aggiungere a `manualChunks` (chunkSizeWarningLimit 2500).
 npm 12 blocca install-scripts → `allowScripts` name-only in package.json
 (mai pin `@versione`); nuove dipendenze con install-script → aggiungere e
 committare. Mai cancellare `package-lock.json` (drizzle `^1.0.0-beta.22`
@@ -332,49 +373,27 @@ risolverebbe rc breaking).
 ## Phase Status (sintesi — tabella completa in `docs/agent-gotchas.md` §10)
 
 Fasi 0-10 (Phase 7 polish done; Volantino/Phase 3 done), 12-15 completate.
-Phase 11 (flyer refactor/Volantino) parziale: gap test matrix. Spec attivi in
-`docs/spec/`: flyer refactor (TB-007),
-`spec-api-saas-monetization.md`. (`docs/post-tb023-known-issues.md` e
-`docs/tb023-verification.md` eliminati 2026-07-30, recuperabili in git
-history.) TB-024 (logo export
-multi-formato) ✅ completed 2026-07-27 — vedi `docs/agent-gotchas.md` §14.
-TB-025 (Collection preview SVG inline logo/card/flyer/quote) ✅ completed
-2026-07-27 — vedi `docs/agent-gotchas.md` §15. TB-026 (cost tracker
-per-document aiStats + Collection badge) ✅ completed 2026-07-27 —
-vedi `docs/agent-gotchas.md` §16. TB-027 (CRM + auto-research + auto-build) +
-TB-019 (intake pipeline → porta ingresso CRM) ✅ completed 2026-07-28 —
-vedi `docs/agent-gotchas.md` §17. TB-027c (briefContext wiring negli
-orchestratori, sequenza "Genera bozze AI" CRM, logo status load fix,
-embedding `gemini-embedding-2`) ✅ completed 2026-07-29 —
-vedi `docs/agent-gotchas.md` §18. TB-027e (dev proxy Ollama M3, research
-errori/immagini/colori, ai-fill AI reale, flyer text-only, auto-build
-dedupe, dataService SSR-safe) ✅ completed 2026-07-29 —
-vedi `docs/agent-gotchas.md` §20. TB-027h (storage locale canonico FLAT
-logo/card/flyer, fix Collection non aggiornata dopo "Genera bozze AI")
-✅ completed 2026-07-30 — vedi `docs/agent-gotchas.md` §23.
-Website Builder ✅ completed 2026-08-05 (preview SVG reale foreignObject,
-export ZIP condiviso editor+Collection, fix save quota — compressione
-immagini website + dedupe inline/array, test roundtrip) —
-vedi `docs/agent-gotchas.md` §26.12. Website backlog 2026-08-05 ✅ completed
-(test unitari orchestrator+hook, verify fixes applicati, SEO meta dal brief,
-accessibilità nel prompt verify, step progress UI, vision cache, provider
-default stale) — vedi `docs/agent-gotchas.md` §26.13. Website multi-pagina
-reale ✅ completed 2026-08-05 (`pagesHtml` per pagina, step AI `page:<nome>`,
-CSS/JS/Verify su tutte le pagine, preview+code switcher, export contenuto
-dedicato, verify rules ::before/SVG) — vedi `docs/agent-gotchas.md` §26.14.
-Verify determinismo ✅ completed 2026-08-05 (root cause "troncati" era il
-prompt slice; tool deterministico `analyze_site` precompilato per
-DeepSeek/Ollama, loop verify 2 pass, SEO meta sanitizzato+ordinato) —
-vedi `docs/agent-gotchas.md` §26.15. Verify fix-guard ✅ completed 2026-08-05
-(tool deterministico = fonte di verità: fix AI rifiutati su codice integro
-— prima il modello riscriveva il sito buono perdendo mappa/contatti;
-recheck deterministico pass 2; canonical social rimossa; sanitize meta
-esistenti) — vedi `docs/agent-gotchas.md` §26.16. Verify tools + maxTokens
-✅ completed 2026-08-05 (tools dichiarati in richiesta — prima 400 silenzioso
-e verify morto; maxTokens 16384 — JSON troncato a 8192 rifiutato da
-format:json; tool-call del modello gestiti) — vedi `docs/agent-gotchas.md`
-§26.17.
-Residuo: follow-up qualità pagine secondarie — vedi `docs/to-be-done.md`.
+Phase 11 (flyer refactor/Volantino) parziale: gap test matrix. TB-024 (logo
+export multi-formato) ✅ 2026-07-27 (§14). TB-025 (Collection preview SVG
+inline) ✅ 2026-07-27 (§15). TB-026 (cost tracker aiStats) ✅ 2026-07-27
+(§16). TB-027 (CRM + auto-research + auto-build) + TB-019 (intake pipeline)
+✅ 2026-07-28 (§17). TB-027c (briefContext wiring, "Genera bozze AI",
+embedding) ✅ 2026-07-29 (§18). TB-027e (dev proxy Ollama M3, research,
+flyer text-only, dataService SSR-safe) ✅ 2026-07-29 (§20). TB-027h
+(storage locale FLAT logo/card/flyer) ✅ 2026-07-30 (§23). Website Builder
+✅ 2026-08-05 (§26.12) + backlog (§26.13) + multi-pagina reale (§26.14) +
+verify determinismo (§26.15) + fix-guard (§26.16) + tools/maxTokens
+(§26.17). **Design review tipografica card/logo/flyer + qualità output AI**
+✅ 2026-08-06 (§27, criteri in `docs/design-criteria.md`): reference frame
+unificato `CARD_REF 640×414`, gerarchia 22/16/14, floor stampa flyer,
+tagline logo 0.42× wordmark, textBackdrop 'pill' default su logo con
+backgroundImage, logo placeholder mai salvato come successo. **AI image
+quality** (risoluzione per-uso 1K/2K, JPEG q85, Nano Banana 2 Lite,
+persistenza path-aware) ✅ 2026-08-06 — vedi §2.5.
+
+Residui attivi: vedi kanban `docs/to-be-done.md` (immagini AI pixelate —
+fix generazione+storage fatto, residua verifica Playwright; "Genera bozze
+AI" in prod da validare live; follow-up qualità pagine secondarie website).
 
 ## TODO (prossimi task)
 
@@ -397,11 +416,13 @@ task completati spuntati in to-be-done.
    (`scripts/spec-sync-check.mjs`, reminder non bloccante) segnala le spec
    ancora presenti in `docs/spec/` quando pushi codice.
 
-**Struttura docs (2026-07-30)**: documenti in `docs/` (inclusi
-`AI_ARCHITECTURE.md`, `to-be-done.md`, `done.md`, `design-criteria.md` —
-criteri tipografici card/logo/flyer con fonti, riferimento design review
-§27 gotchas), spec attivi in
-`docs/spec/`. Root solo: `AGENTS.md`, `README.md`, `DESIGN.md`,
+Spec attive in `docs/spec/` (2026-08-06): `spec-api-saas-monetization.md`,
+`spec-design-flyer-refactor-preview-ai.md` (flyer refactor TB-007).
+
+**Struttura docs**: documenti in `docs/` (inclusi `AI_ARCHITECTURE.md`,
+`to-be-done.md`, `done.md`, `design-criteria.md` — criteri tipografici
+card/logo/flyer con fonti, riferimento design review §27 gotchas), spec
+attivi in `docs/spec/`. Root solo: `AGENTS.md`, `README.md`, `DESIGN.md`,
 `REQUIREMENTS.md`.
 
 ## Responsive Patterns
@@ -432,7 +453,7 @@ criteri tipografici card/logo/flyer con fonti, riferimento design review
 | `ALLOWED_ORIGIN` | Vercel | CORS origin (default `*.vercel.app`) |
 | `OLLAMA_API_KEY` | Vercel + .env | Ollama Pro Cloud (senza → 503 solo su quel provider) |
 | `REPLICATE_API_TOKEN` | opzionale, deprecato | Fallback logo AI |
-| `REGISTRATION_ENABLED` | Vercel | TB-027: flag signup. Default `false` (CRM admin-only). `true` riattiva whitelabel |
+| `REGISTRATION_ENABLED` | Vercel | TB-027: flag signup. Default `false` (CRM admin-only). `true` riattiva whitelabel. In dev anche `VITE_REGISTRATION_ENABLED` |
 | `FIRECRAWL_API_KEY` | opzionale | TB-027: scraping sito cliente per research + RAG. Senza key, status `web: no_key`. Endpoint v2. Formati: markdown, screenshot, branding, images, json (oggetto con schema), links. Timeout 120s. `webData` persiste markdownFull/screenshot/links/json/branding/images |
 | `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL` | Vercel + .env | TB-029: tracing AI + costi per cliente (OTLP ingest manuale in `src/server/langfuse.ts`). Senza chiavi → no-op. Mai esporre secret al browser |
 
@@ -441,8 +462,8 @@ criteri tipografici card/logo/flyer con fonti, riferimento design review
 
 ## PDF Generation, Client-Side Only
 
-PDF/PNG generati interamente nel browser (pdfmake + canvas). Nessun upload
-server. Free-tier friendly.
+PDF/PNG generati interamente nel browser (pdfmake + jspdf/svg2pdf.js +
+canvas). Nessun upload server. Free-tier friendly.
 
 ## API Schema Duplication
 
@@ -464,8 +485,9 @@ statici `dist/` + SPA fallback). Import da `src/` nel server FUNZIONANO
 
 ## Streaming AI
 
-- Streaming per tutte le risposte AI (testo + tool). Dopo tool execution,
-  seconda chiamata multi-turn per la sintesi finale; usage accumulato.
+- Streaming per tutte le risposte AI (testo + tool) via SSE
+  (`/api/ai/chat/stream`). Dopo tool execution, seconda chiamata multi-turn
+  per la sintesi finale; usage accumulato.
 - Log "a blocchi": update entry stream ogni ≥80 caratteri (delta char,
   non temporale).
 
@@ -477,15 +499,16 @@ statici `dist/` + SPA fallback). Import da `src/` nel server FUNZIONANO
 2. Codice modificato → test aggiornati. Nessun "test morto".
 3. Bug fix → regression test che riproduce PRIMA del fix.
 4. Refactor → test invariati ma verdi (se rompono, il refactor è sbagliato).
-5. Coverage minima nuovi file: 60% (sotto soglia va motivata con commento).
+5. Coverage minima nuovi file: 60% (thresholds lines/functions in
+   `vitest.config.ts`; sotto soglia va motivata con commento).
 6. Mai `.skip`/`xit` per far passare CI. Se flaky, fixalo.
 7. Prima di proporre push: `npm run typecheck && npm run test` verdi.
 
 Posizione test: componenti → `src/components/__tests__/`, hook →
 `src/hooks/__tests__/`, utils → `src/utils/__tests__/`, API →
 `src/server/__tests__/` (mock DB). Framework: Vitest + RTL + jsdom.
-Test singolo:
-`npx vitest run path/to/file.test.ts`. ~200+ file di test.
+Test singolo: `npx vitest run path/to/file.test.ts`.
+E2E: Playwright, spec in `e2e/` (`npm run test:e2e`, `:ci` seriale).
 
 **E2E AI logs (TB-023):** quando tocchi hook AI (`useAI*`) o `AILogPanel`,
 mantieni `e2e/ai-log-preview.spec.ts` verde: verifica che le preview nei log
@@ -521,7 +544,7 @@ Chiavi **versionate** `nome:vN`; cambio schema → `v(N+1)` + fallback lettura
 - `unlock_codes`, `registeredUsers`, `deepseekApiKey` — dev only
 - `authToken`, `userEmail`, `username`, `userRole`, `dataRegistrazione` — sessione
 - `pq_ai_logs:v1` — ring buffer AI log in **sessionStorage**, max 100, mai base64
-- `pq_ui:v1` — preferenze UI (`uiPrefs.ts`: sidebarCollapsed, aiConsoleExpanded, aiProviderDefault, aiImageModelDefault, aiVisionEnabled, aiAutoFallback, **aiReasoningEffort**) 
+- `pq_ui:v1` — preferenze UI (`uiPrefs.ts`: sidebarCollapsed, aiConsoleExpanded, aiProviderDefault, aiImageModelDefault, aiVisionEnabled, aiAutoFallback, **aiReasoningEffort**)
 - `logoAiChat:v1` / `logoAiChat:v1:<docId>` — backup best-effort chat logo AI (TTL 24h, try/catch, senza bgImages se quota). Chiave per-documento; globale legacy solo fallback lettura
 - `cardIconPromptLibrary:v1`, `logoPromptLibrary:v1` — librerie prompt
 - `pq_customers:v1` — TB-027 CRM clienti (dev/local cache, PROD via API)
@@ -621,7 +644,8 @@ On-demand (solo se il task lo richiede): `deploy-to-vercel`,
 `redesign-existing-projects`, `brandkit`, `image-to-code`,
 `playwright-cli` (debug E2E), `full-output-enforcement` (output lungo),
 `create-specification` (nuove spec in `docs/spec/`), `frontend-design`,
-`minimalist-ui`, `industrial-brutalist-ui`, `stitch-design-taste`, ecc.
+`minimalist-ui`, `industrial-brutalist-ui`, `stitch-design-taste`,
+`firecrawl` (scraping research clienti), ecc.
 
 Le skill sono **solo per l'agente di coding**, non per l'app: l'app usa
 DeepSeek/Gemini/Ollama via proxy server-side.

@@ -36,6 +36,11 @@ PALETTE PREDEFINITE (usa questi set coerenti, NON mescolare):
 | moderno | #0F1117 | #ffffff | #FF3B3B |
 | classico | #ffffff | #1A1A1A | #E62020 |
 
+GERARCHIA TIPOGRAFICA E LEGGIBILITÀ SU COVER (obbligatoria):
+- Gerarchia dimensioni: nome PIÙ GRANDE, titolo/ruolo medio, azienda più piccola. Mai la stessa dimensione per tutti (usa grid.elements.<el>.placement.scale, es. name 1.2, title 1.0, company 0.85).
+- Se front.coverImageUrl è presente: posiziona gli elementi testo (name, title, company) sulle zone quiete/uniformi della cover (aree solide, sfocate o libere). MAI testo piccolo su zone busy (ricche di dettagli): è illeggibile — sposta la cella su un'area quieta o riduci gli elementi sopra la cover.
+- Contrasto sulla cover: cover chiara → textColor scuro; cover scura → textColor chiaro.
+
 ESEMPI NEGATIVI:
 - NON inviare photoUrl o logoUrl (base64 user-uploaded, il merge li ignora completamente)
 - NON inviare visible/enabled/opacity/rotation/zIndex (campi fuori schema, Zod strippa)

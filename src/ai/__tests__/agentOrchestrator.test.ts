@@ -22,7 +22,8 @@ const mockGenerateSite = vi.fn();
 vi.mock('../logoOrchestrator', () => ({
   LogoAIOrchestrator: class { generateLogo = mockGenerateLogo; },
 }));
-vi.mock('../cardOrchestrator', () => ({
+vi.mock('../cardOrchestrator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../cardOrchestrator')>()),
   CardAIOrchestrator: class { processPrompt = mockProcessPrompt; },
 }));
 vi.mock('../flyerOrchestrator', () => ({

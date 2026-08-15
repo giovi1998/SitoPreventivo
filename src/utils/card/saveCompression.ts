@@ -1,8 +1,8 @@
 import type { BusinessCard } from '../documentSchemas';
 import { compressDataUrl } from './imageCompress';
 
-const MAX_DIM = 512;
-const MAX_BYTES = 300_000;
+const MAX_DIM = 1200;
+const MAX_BYTES = 400_000;
 
 async function compressField(val: string | null | undefined): Promise<string | null> {
   if (!val || !val.startsWith('data:')) return val ?? null;

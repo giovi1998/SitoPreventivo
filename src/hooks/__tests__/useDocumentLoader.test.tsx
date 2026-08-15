@@ -133,4 +133,15 @@ describe('useDocumentLoader', () => {
     renderHook(() => useDocumentLoader({ view: 'logo', documentType: 'logo', contextField: 'logoDocument' }), { wrapper: wrapper('/app/logo/missing', ctx) });
     await waitFor(() => expect(getDocumentSpy).toHaveBeenCalled());
   });
+
+  it('does not render stale/empty initialDoc while loading a missing website doc', async () => {
+    mocks.params.docId = 'missing-website';
+    getDocumentSpy.mockResolvedValueOnce(null);
+    const ctx = { websiteDocument: null, setWebsiteDocument: vi.fn() };
+    const { result } = renderHook(() => useDocumentLoader({ view: 'website', documentType: 'website', contextField: 'websiteDocument' }), { wrapper: wrapper('/app/website/missing-website', ctx) });
+    // While fetching, initialDoc must be null (not undefined) so the editor can
+    // detect "doc not found" and show a fallback instead of crashing on .html.
+    await waitFor(() => expect(getDocumentSpy).toHaveBeenCalled());
+    expect(result.current.initialDoc).toBeNull();
+  });
 });

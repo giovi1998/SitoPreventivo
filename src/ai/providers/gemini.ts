@@ -13,6 +13,14 @@ export interface GeminiImageResult {
   mimeType: string;
 }
 
+// Nano Banana 2 Lite supporta SOLO la risoluzione 1K (docs Google):
+// chiedere 2K/512 fallirebbe o verrebbe ignorato.
+export const GEMINI_LITE_IMAGE_MODEL = 'gemini-3.1-flash-lite-image';
+
+export function resolveImageSize(model: string, requestedSize: string): string {
+  return model === GEMINI_LITE_IMAGE_MODEL ? '1K' : requestedSize;
+}
+
 export class GeminiImageProvider {
   private readonly ai: GoogleGenAI;
   private readonly model: string;
@@ -27,10 +35,12 @@ export class GeminiImageProvider {
 
   async generateBackground(
     prompt: string,
-    timeoutMs = 30_000,
+    timeoutMs = 45_000,
     images: Array<{ data: string; mimeType: string }> = [],
   ): Promise<GeminiImageResult> {
-    return this.generateImage(prompt, { image_size: '512', aspect_ratio: '16:9' }, timeoutMs, images);
+    // 1K (short side 1024): 2K è 2752×1536 ~3.2MB → 4.4MB base64, oltre il
+    // limite risposta Vercel 4.5MB (probe live 2026-08-07).
+    return this.generateImage(prompt, { image_size: '1K', aspect_ratio: '16:9' }, timeoutMs, images);
   }
 
   async generateCardCover(
@@ -40,8 +50,8 @@ export class GeminiImageProvider {
   ): Promise<GeminiImageResult> {
     // Business cards are landscape rectangles (~85×55mm); a 1:1 image
     // still works because preserveAspectRatio="xMidYMid slice" crops it to
-    // fill. We keep 512px to stay under the 500KB base64 clamp.
-    return this.generateImage(prompt, { image_size: '512', aspect_ratio: '1:1' }, timeoutMs, images);
+    // fill. 1K copre i 1004×650px @300dpi dell'export con margine.
+    return this.generateImage(prompt, { image_size: '1K', aspect_ratio: '1:1' }, timeoutMs, images);
   }
 
   async generateImage(
@@ -56,15 +66,11 @@ export class GeminiImageProvider {
         {
           model: this.model,
           input,
-          // Request the smallest resolution tier (512 = 0.5K) instead of
-          // the 1K default. Nano Banana output size is highly variable
-          // (400KB-2MB+) and our /ai/* endpoints clamp at 500KB (Vercel
-          // response + Postgres jsonb storage budget), so asking for 512px
-          // upfront avoids most 413 rejections instead of gambling on a
-          // random 1K/2K output and discarding it after the fact.
-          // See https://ai.google.dev/gemini-api/docs/image-generation
           generation_config: {
-            image_config: imageConfig,
+            image_config: {
+              image_size: resolveImageSize(this.model, imageConfig.image_size),
+              aspect_ratio: imageConfig.aspect_ratio,
+            },
           },
           response_modalities: ['text', 'image'],
         },

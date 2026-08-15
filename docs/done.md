@@ -3,7 +3,65 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-14
+
+- **Card centrata in agent mode + website editor mobile (T8, wayfinder
+  `qualita-oggetti-map.md`)**:
+  - `buildCardDraftPrompt` condiviso (auto-build non-agente + tool
+    `generate_card` dell'agente): prompt strutturale STRUTTURA grid +
+    TESTI + STILE — prima l'agente usava un prompt generico → card non
+    centrata (preview legacy ≠ export).
+  - `ensureCardGrid` (`schemas/card.ts`): garantisce grid mode su card
+    generata (deriva grid dal layout, `useGrid` su entrambi i lati);
+    applicata in `agentSave.ts` + `useAutoBuildGenerate.ts`. Card già in
+    grid invariate.
+  - `gridElements.ts` null-safety (`front`/`back`/`grid.elements` — l'AI
+    può salvare `grid: {}`).
+  - `useDocumentLoader` ritorna `initialDoc: null` durante fetch di doc
+    mancante → `WebsitePage` fallback "Sito non trovato" (prima crash su
+    `.html`).
+  - Website editor mobile: viewport default 375px su workspace mobile,
+    tab default `preview` se il doc ha contenuto, grid stack su
+    `@media 1023px` (era `1fr 320px` → iframe 38px invisibile).
+  - Guardia anti-regressione: e2e `AC-007` (iframe preview website
+    full-width a 390px).
+
 ## 2026-08-13
+
+- **Qualità oggetti card/flyer/logo — verifica live end-to-end + catena di
+  fix (2026-08-13)** (mappa wayfinder `docs/wayfinder/qualita-oggetti-map.md`,
+  ticket T1-T7; da `to-be-done.md` "Verifica visiva modifiche AI" e #2
+  "Immagini AI pixelate — residuo verifica"):
+  - **Verifica live ALL CHECKS PASS** su cliente demo "La Chiccheria":
+    Phase A endpoint 4/4 (1K JPEG), Phase B immagini persistite tutte
+    ≥1000px, quality card 22/16/14 + contatti 19px + 0 overflow, flyer
+    floor stampa + 0 out-of-bounds, logo ratio tagline 0.417; export reali
+    logo 1024, card 1004×650, flyer 1819×2551.
+  - **Agent mode CRM riparato** ("Genera bozze AI" non salvava nulla):
+    dev proxy Ollama droppava i `tool_calls` in risposta (stream +
+    non-stream) → loop plan→act morto; history normalizzata
+    camelCase→snake_case con arguments oggetto (era 400 Ollama);
+    `useAutoBuildGenerate` passava docs `{}` ai tool (TypeError flyer);
+    include filtrava `generate_card` ('businessCard'≠'card'); data shape
+    tool→save disallineata; logo `selected:-1` mai salvato.
+  - **Immagini AI in agent mode** (T6): `enrichAgentDocWithImages` (logo
+    bg + pill, card photo/cover, flyer hero) + compressione saveDraft
+    path-aware 1536/1024px (era 768px piatta → sotto soglia qualità).
+  - **Clamp immagini 1MB → 1.2MB** (T5): 16:9 1K JPEG varia fino a
+    ~1.05MB → 413 intermittenti su logo-background.
+  - **Pill textBackdrop disallineata** su logo horizontal+bgImage
+    (anchor middle: box dal centro invece che dal bordo sinistro).
+  - **Embeddings 502** (T7): SDK `@google/genai` ritorna `embeddings[]`
+    plurale; parsing singolare → sempre vuoto. Fix 3 siti (ai.ts, crm.ts,
+    dev proxy) + live 200.
+  - **Script di verifica robusti**: profilo Playwright persistente
+    condiviso (riuso customer/docs, zero doppia spesa AI), contact sheet
+    data-URL (era file:// → broken), soglia logo export 1024×1 (layout
+    orizzontale non quadrato), poll 20 min, click generate solo se
+    pending, login per presenza campo.
+  - Test: +20 (proxy tool_calls/normalizzazione, agentSave, hook T6/T11,
+    embeddings plurale, pill regression, clamp boundary). **3181 verdi**,
+    typecheck 0.
 
 - **RAG pipeline completa — chunking/embedding/retrieval + tracing Langfuse
   + UI (2026-08-13)** (da `to-be-done.md` "RAG avanzato"):
@@ -273,7 +331,58 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
   `src/server/__tests__/`. 2947 test verdi + typecheck + build ok.
   Commit `de7fd94`. Progetti di test eliminati (srvtest, srvtest2).
 
-## 2026-08-05
+## 2026-08-06
+
+- **AI image quality — risoluzione per-uso 1K/2K, JPEG q85, Nano Banana 2
+  Lite (2026-08-06)** (spec `spec-ai-image-quality`, gotchas §2.5):
+  - Generazione per-endpoint: card-cover/card-photo/image-flash 1K (clamp
+    500KB), flyer-hero/logo-background 2K (clamp 1.5MB, timeout 45s);
+    `image_output_options` JPEG q85 su tutte le chiamate. Dev proxy
+    allineato (dev == prod).
+  - Deviazione dalla spec: `imageOutputOptions` camelCase NON esiste nel
+    tipo SDK 2.10 (`ImageConfig_2`, interactions API) e il models API lo
+    rifiuta lato Gemini API → usato snake_case `image_output_options`
+    (wire verbatim) + cast TS, come da esempio §9 della spec stessa.
+  - Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`): registrato in
+    `AI_IMAGE_MODELS` (default resta Nano Banana 2), pricing
+    `gemini-nano-banana-lite` $0.02, forzato a 1K ovunque
+    (`resolveImageSize` / `resolveGeminiImageSize`), mapping costi
+    centralizzato `geminiImagePricingId` (3 ternari duplicati rimossi +
+    costo hardcoded in `useAIIconHero`).
+  - Fix bug latenti: retry auto-build `['512','256']` → `['1K','512']`
+    (`'256'` non valido per zod → 400 silenzioso ad ogni retry);
+    `aspectRatio` `'3:1'` rimosso dall'enum (non supportato da Gemini 3.1).
+  - Persistenza path-aware: `compressDataUrl` default 1024px/400KB;
+    background/hero 1536px/400KB; PNG con alpha resta PNG (downscale
+    iterativo, mai fallback JPEG); website 1024/300KB.
+  - Residuo: verifica Playwright densità px + live Gemini (to-be-done #2).
+
+- **Design review tipografica card / logo / flyer + qualità output AI (2026-08-06)**
+  (gotchas §27, criteri in `docs/design-criteria.md`):
+  - **Card** (§27.1): reference frame unificato `CARD_REF 640×414`
+    (export era ~22% più grande della preview); contatti retro 12.8→19px
+    logici (≥7pt stampa); floor shrink frazionari DPI-independent; front
+    export con wrap+clip; gerarchia 22/16/14; v2.19 socials/services al
+    floor 16px logici.
+  - **Logo** (§27.2): tagline = 0.42× wordmark fittato (era <40% e mai
+    fittata → clipping/inversione); TEXT_AREA_EXTRA dedup; centramento
+    verticale; backdrop per luminanza testo; font embed in export raster;
+    thumbnail merge defaults.
+  - **Flyer** (§27.3): floor stampa tutti i formati (headline 24pt/body
+    10pt min, A6 max alzati); `scaledFontBounds` (fontScale non aggira i
+    minimi); budget coerente; body export PDF/PNG ripristinato
+    (`renderBodyAsText` — spariva nel PDF); `bodyPromptMaxChars` al font
+    max ×0.85 per il prompt AI (era al min → body clippato senza ellipsis).
+  - **Auto-build AI** (§27.4-27.5): textBackdrop 'pill' default su logo
+    con backgroundImage; "text legibility zone" nel prompt immagini logo;
+    sezione gerarchia/leggibilità cover in cardSystem; logo placeholder
+    ("Brand") mai più salvato come successo (throw + badge errore).
+  - Verifica: screenshot prima/dopo (`e2e/design-review.spec.ts`, browser
+    reale) + run live AI su cliente demo "La Chiccheria"
+    (`scripts/design-review-ai-gen.mjs`) + validazione template Giovanni
+    no-AI. Test: typecheck + suite verde.
+
+
 
 - **Auto-build website PROD — timeout 60s sincrono → SSE (2026-08-05)**
   (gotchas §26.24):

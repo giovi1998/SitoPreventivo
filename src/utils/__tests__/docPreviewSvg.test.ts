@@ -98,3 +98,13 @@ describe('buildPreviewSvg website preview', () => {
     expect(buildPreviewSvg({})).toBe('');
   });
 });
+
+describe('buildPreviewSvg logo', () => {
+  it('merges defaults for partial/legacy builder objects (fix: thumbnail vuota)', () => {
+    const svg = buildPreviewSvg({ documentType: 'logo', builder: { primaryText: 'Acme' } });
+    expect(svg).not.toBe('');
+    expect(svg).toContain('Acme');
+    expect(svg).toContain('viewBox="0 0 400 160"');
+    expect(svg).not.toContain('NaN');
+  });
+});

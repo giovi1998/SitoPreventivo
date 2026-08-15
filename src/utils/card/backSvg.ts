@@ -12,6 +12,7 @@ import {
   backQrSizePx,
   effectiveBackGridForRender,
 } from './backLayout';
+import { CARD_REF } from './gridConstants';
 import { renderDecorativePattern } from '../decorations/patterns';
 import { escapeXml } from '../xml';
 import {
@@ -133,14 +134,13 @@ export function buildBackSvg(
       if (card.back.address) contactEntries.push({ key: 'Indirizzo', value: card.back.address });
       if (card.back.vatNumber) contactEntries.push({ key: 'P.IVA', value: card.back.vatNumber });
 
-      // v2.10.1: size fonts vs CARD height (pxH), matching CSS rem on a
-      // ~340px-tall preview (.card-back-key 0.58rem≈9.3px, .card-back-val
-      // 0.78rem≈12.5px). Sizing vs min(cw,ch) blew up at export DPI
-      // (cell ~300px → 48px labels). Then shrink-to-fit short cells.
-      // v2.17: match preview grid-mode rem sizes (0.68rem=10.88px,
-      // 0.8rem=12.8px on 340px reference).
-      let keySize = fs(pxH * (10.88 / 340), fontScale) * contactsScale;
-      let valSize = fs(pxH * (12.8 / 340), fontScale) * contactsScale;
+      // v2.10.1: size fonts vs CARD height (pxH), matching CSS rem on the
+      // unified 640×414 reference (CARD_REF, gridConstants). Sizing vs
+      // min(cw,ch) blew up at export DPI (cell ~300px → 48px labels).
+      // v2.18: print-minimum sizes — key 1rem=16px, val 1.1875rem=19px
+      // logical (≥6pt/7pt on 55mm print height).
+      let keySize = fs(pxH * (16 / CARD_REF.h), fontScale) * contactsScale;
+      let valSize = fs(pxH * (19 / CARD_REF.h), fontScale) * contactsScale;
       const wrappableKeys = new Set(['Email', 'Telefono']);
       // Label column = longest key glyph width + gap (never overlaps value).
       // "TELEFONO" ≈ 8 chars; uppercase sans ≈ 0.62em per char + letter-spacing.
@@ -165,9 +165,17 @@ export function buildBackSvg(
         const lines = Math.max(1, linesFor(vs, ks));
         return ks + pad * 0.25 + lines * lineGapFor(ks, vs);
       };
-      while (keySize > 8 && neededHeight(keySize, valSize) > ch) {
-        keySize *= 0.9;
-        valSize *= 0.9;
+      // v2.18: shrink floors are fractions of CARD_REF.h (DPI-independent),
+      // never absolute export px — an absolute floor produced ~2pt text at
+      // 300dpi. key floor 16/414, val floor 19/414 (print minimums).
+      const keyFloorPx = pxH * (16 / CARD_REF.h);
+      const valFloorPx = pxH * (19 / CARD_REF.h);
+      while (neededHeight(keySize, valSize) > ch && keySize > keyFloorPx && valSize > valFloorPx) {
+        const nextKey = keySize * 0.9;
+        const nextVal = valSize * 0.9;
+        if (nextKey < keyFloorPx || nextVal < valFloorPx) break;
+        keySize = nextKey;
+        valSize = nextVal;
       }
 
       const contactsAlignH = contactsEl.alignH ?? 'left';
@@ -226,10 +234,12 @@ export function buildBackSvg(
           })
           .join('   ');
         // Size vs card height (same as dedicated socials cell), then wrap.
-        let socialSize = fs(pxH * (12.16 / 340), fontScale) * contactsScale;
+        let socialSize = fs(pxH * (16 / CARD_REF.h), fontScale) * contactsScale;
         const socialLineH = (s: number) => s * 1.35;
         const remainH = Math.max(8, cy + ch - lineY - pad * 0.25);
-        while (socialSize > 6 && wrapTextAtWhitespace(socialsText, cw, socialSize, fontFamily).length * socialLineH(socialSize) > remainH) {
+        // v2.18: fractional floor (16/414 of pxH) instead of absolute 6px.
+        const socialFloorPx = pxH * (16 / CARD_REF.h);
+        while (socialSize > socialFloorPx && wrapTextAtWhitespace(socialsText, cw, socialSize, fontFamily).length * socialLineH(socialSize) > remainH) {
           socialSize *= 0.9;
         }
         const lines = wrapTextAtWhitespace(socialsText, cw, socialSize, fontFamily);
@@ -275,13 +285,13 @@ export function buildBackSvg(
       const servicesLabelText = (card.back.servicesLabel ?? '').trim();
       let labelSize = 0;
       if (servicesLabelText) {
-        // v2.14: match preview grid-mode 0.7rem = 11.2px (was 10px).
-        labelSize = fs(pxH * (11.2 / 340), fontScale) * svcScale;
+        // v2.19: preview grid-mode 0.85rem = 13.6px (floor leggibilita').
+        labelSize = fs(pxH * (13.6 / CARD_REF.h), fontScale) * svcScale;
         svcY += labelSize * 1.1;
       }
       const hasLongService = services.some((s) => s.length >= 40);
-      // v2.14: match preview grid-mode 0.85rem = 13.6px (was 13px).
-      let svcSize = fs(pxH * (13.6 / 340), fontScale) * (hasLongService ? 0.85 : 1) * svcScale;
+      // v2.19: preview grid-mode 1rem = 16px (floor leggibilita' ~6pt).
+      let svcSize = fs(pxH * (16 / CARD_REF.h), fontScale) * (hasLongService ? 0.85 : 1) * svcScale;
       // v2.5.1: tighter line-height (1.2 instead of 1.35) so 2-3
       // services + label fit a 1-row cell without shrinking too much.
       const svcLineH = (s: number) => s * 1.2;
@@ -290,10 +300,12 @@ export function buildBackSvg(
         const lineH = svcLineH(s);
         return (labelSize ? labelSize * 1.3 : 0) + services.length * lineH + pad * 0.5;
       };
-      // v2.5.1: raised floor from 6 to 14 so services stay readable even
-      // when the cell is very short (h:1). If they don't fit at 14px we
-      // accept the overflow rather than producing invisible text.
-      while (svcSize > 14 && neededH(svcSize) > sh) {
+      // v2.18: floor is now a fraction of the unified reference (19/414 of
+      // pxH) instead of absolute 14px — DPI-independent, so print size never
+      // collapses toward ~2pt at high DPI. The floor sits above the base
+      // size, so overflow is handled by the clip below, not by shrinking.
+      const svcFloorPx = pxH * (19 / CARD_REF.h);
+      while (svcSize > svcFloorPx && neededH(svcSize) > sh) {
         svcSize *= 0.92;
       }
       const blockH = (labelSize ? labelSize * 1.3 : 0) + services.length * svcLineH(svcSize) + pad * 0.5;
@@ -346,7 +358,8 @@ export function buildBackSvg(
         let svcSize = fs(Math.min(fw, fh) * 0.2, fontScale);
         const svcLineH = (s: number) => s * 1.2;
         const neededH = (s: number) => (labelSize ? labelSize * 1.4 : 0) + services.length * svcLineH(s) + pad * 0.5;
-        while (svcSize > 14 && neededH(svcSize) > fh) svcSize *= 0.92;
+        const svcFloorPx = pxH * (19 / CARD_REF.h);
+        while (svcSize > svcFloorPx && neededH(svcSize) > fh) svcSize *= 0.92;
         services.forEach((svc, idx) => {
           out += `<text x="${fx}" y="${svcY + (idx + 1) * svcLineH(svcSize)}" font-family="${fontFamily}" font-size="${svcSize}" font-weight="800" fill="${accent}" dominant-baseline="text-before-edge">· ${escapeXml(svc)}</text>`;
         });
@@ -378,14 +391,16 @@ export function buildBackSvg(
           return `${s.platform} ${value}`;
         })
         .join('   ');
-      // v2.17: match preview grid-mode 0.76rem = 12.16px (was 10.88px).
-      let socialSize = fs(pxH * (12.16 / 340), fontScale) * socialsScale;
+      // v2.19: preview grid-mode 1rem = 16px (floor leggibilita' ~6pt).
+      let socialSize = fs(pxH * (16 / CARD_REF.h), fontScale) * socialsScale;
       const socialLineH = (s: number) => s * 1.35;
       const neededSocialH = (s: number) => {
         const lines = wrapTextAtWhitespace(socialsText, sw, s, fontFamily);
         return lines.length * socialLineH(s);
       };
-      while (socialSize > 6 && neededSocialH(socialSize) > sh) {
+      // v2.18: fractional floor (16/414 of pxH) instead of absolute 6px.
+      const socialFloorPx = pxH * (16 / CARD_REF.h);
+      while (socialSize > socialFloorPx && neededSocialH(socialSize) > sh) {
         socialSize *= 0.92;
       }
       const lines = wrapTextAtWhitespace(socialsText, sw, socialSize, fontFamily);
@@ -423,8 +438,8 @@ export function buildBackSvg(
       const qrAlignH = qrEl.alignH ?? 'center';
       const qrAlignV = qrEl.alignV ?? 'center';
       // v2.15: reserve space for qrLabel under the QR using the same
-      // proportion as the preview (labelSize ~9.6px + 8px gap on 340px ref).
-      const labelReserve = card.back.qrLabel ? Math.max(20, Math.round(pxH * (18 / 340))) : 0;
+      // proportion as the preview (labelSize ~9.6px + 8px gap on the 414px ref).
+      const labelReserve = card.back.qrLabel ? Math.max(20, Math.round(pxH * (18 / CARD_REF.h))) : 0;
       const qrSize = backQrSizePx(card, qw, qh - labelReserve, pxH);
       // v2.15: apply QR nudge/scale from generic placement, mirroring photo
       // placement behavior inside the cell.
@@ -467,10 +482,10 @@ export function buildBackSvg(
       out += `<g transform="translate(${qrX + 4} ${qrY + 4}) scale(${innerScale})">${extractQrInner(qrSvg)}</g>`;
 
       // v2.15: QR label size matches preview grid-mode 0.6rem=9.6px on
-      // a 340px-tall reference, so the label stays proportional to the
-      // card instead of blowing up with the QR cell dimensions.
+      // the 414px-tall reference (CARD_REF.h), so the label stays
+      // proportional to the card instead of blowing up with the QR cell.
       if (card.back.qrLabel) {
-        const labelSize = fs(pxH * (9.6 / 340), fontScale);
+        const labelSize = fs(pxH * (9.6 / CARD_REF.h), fontScale);
         const belowY = qrY + qrSize + Math.round(labelSize * 0.4);
         out += `<text x="${qx + qw / 2}" y="${belowY + labelSize}" font-family="${fontFamily}" font-size="${labelSize}" font-weight="500" fill="${text}" text-anchor="middle" opacity="0.78">${escapeXml(card.back.qrLabel)}</text>`;
       }

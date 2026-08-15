@@ -66,8 +66,11 @@ describe('useAIHarness', () => {
     expect(result.current.visionEnabled).toBe(false);
     expect(result.current.autoFallbackEnabled).toBe(true);
     expect(result.current.totalCostUsd).toBe(0);
-    // Solo Nano Banana: gemini-2.0-flash-preview-image-generation ritirato da Google.
-    expect(result.current.availableImageModels.length).toBe(1);
+    // Nano Banana 2 + Nano Banana 2 Lite (spec ai-image-quality);
+    // gemini-2.0-flash-preview-image-generation ritirato da Google.
+    expect(result.current.availableImageModels.length).toBe(2);
+    expect(result.current.availableImageModels[0].id).toBe('gemini-3.1-flash-image');
+    expect(result.current.availableImageModels[1].id).toBe('gemini-3.1-flash-lite-image');
   });
 
   it('toggle vision calls setAiVisionEnabled and refreshes', async () => {
