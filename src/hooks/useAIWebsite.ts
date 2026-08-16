@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState } from 'react';
 import { WebsiteOrchestrator, type WebsiteProcessResult, type WebsiteRefineResult } from '../ai/websiteOrchestrator';
+import type { ElementContext } from '../utils/website/elementPicker';
 import { useAILogs } from './useAILogs';
 import { mapAiError } from '../utils/ai/mapAiError';
 import { newRequestId } from '../utils/ai/requestId';
@@ -39,7 +40,7 @@ export interface UseAIWebsiteReturn {
   refine: (
     site: { html: string; css: string; js: string; pages: string[]; pagesHtml: Record<string, string> },
     instruction: string,
-    options?: { modelId?: string; onProgress?: (msg: string) => void; visionPreviews?: string[] },
+    options?: { modelId?: string; onProgress?: (msg: string) => void; visionPreviews?: string[]; elementContext?: ElementContext[]; repairMode?: boolean },
   ) => Promise<WebsiteRefineResult>;
   reset: () => void;
   logs: ReturnType<typeof useAILogs>['logs'];
@@ -189,7 +190,7 @@ export function useAIWebsite(userEmail?: string, sessionId?: string): UseAIWebsi
     async (
       site: { html: string; css: string; js: string; pages: string[]; pagesHtml: Record<string, string> },
       instruction: string,
-      options?: { modelId?: string; onProgress?: (msg: string) => void; visionPreviews?: string[] },
+      options?: { modelId?: string; onProgress?: (msg: string) => void; visionPreviews?: string[]; elementContext?: ElementContext[]; repairMode?: boolean },
     ) => {
       const requestId = newRequestId();
       const resolvedModelId = resolveProviderId(options?.modelId);
@@ -205,6 +206,8 @@ export function useAIWebsite(userEmail?: string, sessionId?: string): UseAIWebsi
         const result = await getOrchestrator().refineSite(site, instruction, {
           modelId: resolvedModelId,
           visionPreviews: options?.visionPreviews,
+          elementContext: options?.elementContext,
+          repairMode: options?.repairMode,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);

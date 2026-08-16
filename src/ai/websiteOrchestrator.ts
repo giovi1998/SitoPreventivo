@@ -6,6 +6,7 @@ import { ensureSeoMeta, stripSocialCanonical } from '../utils/website/seoMeta';
 import { stripLogoFromHtml } from '../utils/website/logoInjection';
 import { enforceMapIframe } from '../utils/website/sanitizeGenerated';
 import { analyzeSiteCode } from '../utils/website/siteAnalyser';
+import type { ElementContext } from '../utils/website/elementPicker';
 import { providerRegistry } from './providers/registry';
 import type { AIStreamChunk, AIResponse, ChatMessage, RunTraceOptions } from './types';
 import { newSpanId } from './runTrace';
@@ -60,6 +61,125 @@ export interface WebsiteRefineResult {
   response: AIResponse;
   verifyIssues?: string[];
   verifyFixesApplied?: string[];
+}
+
+/**
+ * Prompt refine mirato: contesto = SOLO gli elementi selezionati (HTML + CSS
+ * rules + computed), non il dump completo del sito. Gli edit devono toccare
+ * esclusivamente quegli elementi.
+ */
+function buildElementRefinePrompt(ctxs: ElementContext[], instruction: string): string {
+  const blocks = ctxs.map((ctx, i) => {
+    const cssBlock = ctx.cssRules.length > 0
+      ? `\n### CSS che tocca l'elemento:\n\`\`\`css\n${ctx.cssRules.join('\n')}\n\`\`\``
+      : '';
+    const similarBlock = ctx.similarRules.length > 0
+      ? `\n### CSS di elementi simili (stesso tag, riferimento per "stesso effetto di prima"):\n\`\`\`css\n${ctx.similarRules.join('\n')}\n\`\`\``
+      : '';
+    const computedBlock = Object.keys(ctx.computed).length > 0
+      ? `\n### Stile calcolato (proprietà chiave):\n\`\`\`\n${Object.entries(ctx.computed).map(([k, v]) => `${k}: ${v}`).join('\n')}\n\`\`\``
+      : '';
+    return [
+      `## Elemento ${i + 1} di ${ctxs.length}`,
+      '',
+      `Pagina: ${ctx.page}`,
+      `Viewport preview: ${ctx.viewport}`,
+      '',
+      '### HTML dell\'elemento:',
+      '```html',
+      ctx.html,
+      '```',
+      cssBlock,
+      similarBlock,
+      computedBlock,
+    ].join('\n');
+  });
+  const parts = [...new Set(ctxs.map((c) => c.part))];
+  const pages = [...new Set(ctxs.map((c) => c.page))];
+  return [
+    ...blocks,
+    '',
+    `Istruzione di modifica: ${instruction}`,
+    '',
+    'Rispondi SOLO con un oggetto JSON con UN SOLO campo "edits": un array di modifiche PUNTUALI.',
+    'Ogni edit: { "part": "html"|"css"|"js"|"pagesHtml", "page": "nome pagina (solo per pagesHtml)", "find": "stringa ESATTA da cercare nel codice (min 3 caratteri)", "replace": "stringa sostitutiva" }.',
+    'REGOLE:',
+    '- Modifica SOLO gli elementi selezionati sopra. MAI toccare altri elementi, sezioni o pagine.',
+    `- Per modificare l'HTML di un elemento: part DEVE essere "${parts.join('" o "')}"${pages.length === 1 && parts.includes('pagesHtml') ? ` e page DEVE essere "${pages[0]}"` : ''}.`,
+    '- Per modificare lo stile di un elemento: part "css" (le regole CSS sopra), find = selettore + dichiarazioni esatte da copiare.',
+    '- Se l\'istruzione chiede "stesso effetto di prima", copia lo stile dalla sezione "CSS di elementi simili".',
+    '- find DEVE essere una stringa esatta presente nell\'HTML o nel CSS degli elementi sopra (copia-incolla).',
+    '- Se la modifica è solo testuale, find = testo vecchio, replace = testo nuovo.',
+    '- Max 10 edit. Se un edit non serve, omettilo.',
+  ].join('\n');
+}
+/** Collassa whitespace (spazi/righe/tab) a un singolo spazio. Usato per il
+ *  fallback find&replace: l'AI copia dal prompt dove il CSS è mostrato con
+ *  whitespace collassato, ma il sorgente è multi-riga. */
+function normalizeWhitespace(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+/** Prompt repair: il codice è strutturalmente rotto. L'AI riscrive le parti
+ *  rotte per intero (JSON con html/css/js), NON find&replace: su codice
+ *  corrotto i find non combaciano → loop infinito. */
+function buildRepairPrompt(
+  site: { html: string; css: string; js: string; pages: string[]; pagesHtml: Record<string, string> },
+  instruction: string,
+): string {
+  const pagesBlock = site.pages.length > 1
+    ? Object.entries(site.pagesHtml).map(([name, pHtml]) => `### HTML ${name}:${pHtml ? `\n\`\`\`html\n${stripLogoFromHtml(pHtml)}\n\`\`\`` : ' (mancante)'}`).join('\n\n')
+    : '';
+  return [
+    '## Codice corrente del sito (STRUTTURALMENTE ROTTO)',
+    '',
+    '### HTML (index):',
+    '```html',
+    stripLogoFromHtml(site.html),
+    '```',
+    '',
+    pagesBlock,
+    '### CSS:',
+    '```css',
+    site.css,
+    '```',
+    '',
+    '### JS:',
+    '```js',
+    site.js,
+    '```',
+    '',
+    `Istruzione: ${instruction}`,
+    '',
+    'Rispondi SOLO con un oggetto JSON con questi campi (tutti opzionali, includi SOLO le parti da riparare):',
+    '{ "html": "HTML index completo e corretto", "css": "CSS completo e corretto", "js": "JS completo e corretto", "pagesHtml": { "nomepagina": "HTML completo e corretto" } }',
+    'REGOLE:',
+    '- Riscrivi per INTERO la parte rotta (html/css/js/pagesHtml), non frammenti.',
+    '- Bilancia TUTTE le parentesi CSS, nessuna regola annidata dentro un\'altra regola, nessun tag HTML orfano.',
+    '- NON cambiare lo stile, i colori, i testi o la struttura: solo la sintassi.',
+    '- Le parti non incluse nel JSON restano invariate.',
+  ].join('\n');
+}
+
+/** Regex che matcherà il find nel sorgente originale tollerando differenze
+ *  di whitespace: ogni run di whitespace nel find diventa \s+. Ritorna null
+ *  se il find è troppo corto o non compilabile. */
+function buildWhitespaceFlexibleRegex(find: string): RegExp | null {
+  const trimmed = find.trim();
+  if (trimmed.length < 3) return null;
+  try {
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(escaped.replace(/\s+/g, '\\s+'), 'g');
+  } catch {
+    return null;
+  }
+}
+
+/** Estrae il selettore CSS da un frammento (es. `.contatti h2:hover {` →
+ *  `.contatti h2:hover`). Ritorna null se non è un blocco CSS. */
+function selectorOf(fragment: string): string | null {
+  const m = fragment.trim().match(/^([^{]+)\{/);
+  return m ? m[1].trim() : null;
 }
 
 export class WebsiteOrchestrator extends BaseOrchestrator {
@@ -517,6 +637,14 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       visionPreviews?: string[];
       /** TB-029: attribuzione Langfuse per-cliente. */
       customerId?: string;
+      /** Elementi selezionati nella preview: il prompt usa SOLO questi come
+       *  contesto (refine mirato), invece del dump completo del sito. */
+      elementContext?: ElementContext[];
+      /** Repair mode: il codice è strutturalmente rotto (parentesi, tag).
+       *  L'AI RISC RIVE le parti rotte per intero (niente find&replace su
+       *  codice corrotto → niente loop), il risultato è validato con
+       *  analyzeSiteCode prima di essere applicato. */
+      repairMode?: boolean;
     } & RunTraceOptions = {},
   ): Promise<WebsiteRefineResult> {
     const changes: string[] = [];
@@ -525,37 +653,41 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const pagesBlock = site.pages.length > 1
       ? Object.entries(site.pagesHtml).map(([name, pHtml]) => `### HTML ${name}:${pHtml ? `\n\`\`\`html\n${stripLogoFromHtml(pHtml)}\n\`\`\`` : ' (mancante)'}`).join('\n\n')
       : '';
-    const currentCode = [
-      '## Codice corrente del sito',
-      '',
-      '### HTML (index):',
-      '```html',
-      stripLogoFromHtml(site.html),
-      '```',
-      '',
-      pagesBlock,
-      '### CSS:',
-      '```css',
-      site.css,
-      '```',
-      '',
-      '### JS:',
-      '```js',
-      site.js,
-      '```',
-      '',
-      `Pagine: ${site.pages.join(', ')}`,
-      '',
-      `Istruzione di modifica: ${instruction}`,
-      '',
-      'Rispondi SOLO con un oggetto JSON con UN SOLO campo "edits": un array di modifiche PUNTUALI.',
-      'Ogni edit: { "part": "html"|"css"|"js"|"pagesHtml", "page": "nome pagina (solo per pagesHtml)", "find": "stringa ESATTA da cercare nel codice (min 3 caratteri)", "replace": "stringa sostitutiva" }.',
-      'REGOLE:',
-      '- MAI riscrivere il documento completo: solo frammenti piccoli (find e replace brevi).',
-      '- find DEVE essere una stringa esatta presente nel codice (copia-incolla dal codice sopra).',
-      '- Se la modifica è solo testuale (es. rinomina brand), find = testo vecchio, replace = testo nuovo.',
-      '- Max 10 edit. Se un edit non serve, omettilo.',
-    ].join('\n');
+    const currentCode = options.repairMode
+      ? buildRepairPrompt(site, instruction)
+      : options.elementContext && options.elementContext.length > 0
+      ? buildElementRefinePrompt(options.elementContext, instruction)
+      : [
+          '## Codice corrente del sito',
+          '',
+          '### HTML (index):',
+          '```html',
+          stripLogoFromHtml(site.html),
+          '```',
+          '',
+          pagesBlock,
+          '### CSS:',
+          '```css',
+          site.css,
+          '```',
+          '',
+          '### JS:',
+          '```js',
+          site.js,
+          '```',
+          '',
+          `Pagine: ${site.pages.join(', ')}`,
+          '',
+          `Istruzione di modifica: ${instruction}`,
+          '',
+          'Rispondi SOLO con un oggetto JSON con UN SOLO campo "edits": un array di modifiche PUNTUALI.',
+          'Ogni edit: { "part": "html"|"css"|"js"|"pagesHtml", "page": "nome pagina (solo per pagesHtml)", "find": "stringa ESATTA da cercare nel codice (min 3 caratteri)", "replace": "stringa sostitutiva" }.',
+          'REGOLE:',
+          '- MAI riscrivere il documento completo: solo frammenti piccoli (find e replace brevi).',
+          '- find DEVE essere una stringa esatta presente nel codice (copia-incolla dal codice sopra).',
+          '- Se la modifica è solo testuale (es. rinomina brand), find = testo vecchio, replace = testo nuovo.',
+          '- Max 10 edit. Se un edit non serve, omettilo.',
+        ].join('\n');
     options.onStep?.('refine', currentCode);
 
     const provider = providerRegistry.getProvider(options.modelId);
@@ -594,6 +726,33 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     });
 
     const content = response.content ?? '';
+    if (options.repairMode) {
+      const parsedRepair = this.parseJsonResponse(content, websiteAIRefineSchema);
+      if (!parsedRepair.ok) {
+        changes.push(`error:${parsedRepair.error}`);
+        return { site, changes, response };
+      }
+      const merged = {
+        html: parsedRepair.data.html ?? site.html,
+        css: parsedRepair.data.css ?? site.css,
+        js: parsedRepair.data.js ?? site.js,
+        pages: parsedRepair.data.pages ?? site.pages,
+        pagesHtml: { ...site.pagesHtml, ...(parsedRepair.data.pagesHtml ?? {}) },
+      };
+      // Validazione: il risultato deve essere strutturalmente sano, altrimenti
+      // la riparazione è fallita → non applicare.
+      const cssOk = analyzeSiteCode(merged.css, 'css').ok;
+      const htmlOk = analyzeSiteCode(merged.html, 'html').ok;
+      const jsOk = analyzeSiteCode(merged.js, 'js').ok;
+      if (!cssOk || !htmlOk || !jsOk) {
+        changes.push('repair:failed:risultato ancora corrotto');
+        return { site, changes, response };
+      }
+      changes.push('repair:applied');
+      this.trackUsage(response.usage, options.userEmail, options.modelId);
+      return { site: merged, changes, response };
+    }
+
     const parsed = this.parseJsonResponse(content, websiteAIRefineEditSchema);
     if (!parsed.ok) {
       changes.push(`error:${parsed.error}`);
@@ -613,6 +772,21 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     };
     let applied = 0;
     for (const edit of parsed.data.edits) {
+      // Refine mirato: gli edit HTML/pagesHtml devono toccare una parte/pagina
+      // tra quelle selezionate. CSS/JS sono globali: permessi se toccano
+      // le regole degli elementi (mostrate nel prompt). Un edit HTML altrove
+      // viola il contratto → scartato.
+      if (options.elementContext && options.elementContext.length > 0 && (edit.part === 'html' || edit.part === 'pagesHtml')) {
+        const editPart = edit.part === 'pagesHtml' ? 'pagesHtml' : edit.part;
+        const editPage = edit.part === 'pagesHtml' ? (edit.page ?? 'index') : 'index';
+        const allowed = options.elementContext.some(
+          (c) => c.part === editPart && c.page === editPage,
+        );
+        if (!allowed) {
+          changes.push(`refine:${edit.part}:skipped:fuori dagli elementi selezionati`);
+          continue;
+        }
+      }
       const target = edit.part === 'pagesHtml'
         ? (edit.page ? merged.pagesHtml[edit.page] : undefined)
         : merged[edit.part];
@@ -620,9 +794,44 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         changes.push(`refine:${edit.part}:skipped:pagina "${edit.page ?? '?'}" non trovata`);
         continue;
       }
+      // Guardia anti-selettore (refine mirato): un edit CSS non deve allargare
+      // lo stile ad altri elementi. Se il selettore del replace è più generico
+      // del selettore del find (es. `.contatti h2:hover` → `h2:hover`), lo
+      // stile toccherebbe TUTTI gli h2 → viola il contratto → scartato.
+      if (options.elementContext && options.elementContext.length > 0 && edit.part === 'css') {
+        const findSel = selectorOf(edit.find);
+        const replaceSel = selectorOf(edit.replace);
+        if (findSel && replaceSel && !replaceSel.includes(findSel)) {
+          changes.push(`refine:css:skipped:selettore allargato (${findSel} → ${replaceSel})`);
+          continue;
+        }
+      }
       const idx = target.indexOf(edit.find);
       if (idx === -1) {
-        changes.push(`refine:${edit.part}:skipped:find non trovato (${edit.find.slice(0, 40)}…)`);
+        // Fallback: l'AI copia dal prompt dove il CSS è mostrato con
+        // whitespace collassato, ma il sorgente è multi-riga. Regex con
+        // \s+ wildcard: matcherà il sorgente originale e darà indici reali
+        // (un indexOf su target normalizzato darebbe indici sbagliati →
+        // slice corrotto).
+        const re = buildWhitespaceFlexibleRegex(edit.find);
+        const matches = re ? Array.from(target.matchAll(re)) : [];
+        if (matches.length === 0) {
+          changes.push(`refine:${edit.part}:skipped:find non trovato (${edit.find.slice(0, 40)}…)`);
+          continue;
+        }
+        if (matches.length > 1) {
+          changes.push(`refine:${edit.part}:skipped:find ambiguo (${edit.find.slice(0, 40)}…)`);
+          continue;
+        }
+        const m = matches[0];
+        const normReplace = normalizeWhitespace(edit.replace);
+        const next = target.slice(0, m.index) + normReplace + target.slice(m.index + m[0].length);
+        if (edit.part === 'pagesHtml' && edit.page) merged.pagesHtml[edit.page] = next;
+        else if (edit.part === 'html') merged.html = next;
+        else if (edit.part === 'css') merged.css = next;
+        else if (edit.part === 'js') merged.js = next;
+        applied++;
+        changes.push(`refine:${edit.part}:applied:${edit.find.length}->${edit.replace.length}chars (whitespace-normalized)`);
         continue;
       }
       if (target.indexOf(edit.find, idx + 1) !== -1) {
