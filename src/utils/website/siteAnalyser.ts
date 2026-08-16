@@ -118,6 +118,14 @@ function analyzeCss(css: string, issues: string[]): void {
     issues.push(`CSS termina in modo sospetto (ultimo carattere non è "}"): possibile troncamento.`);
   }
 
+  // Regole annidate: una regola (selettore + {) dentro un'altra regola NON
+  // @-rule è sintassi rotta (es. slice su indici sbagliati). Il browser
+  // ignora la regola annidata → modifiche "applicate" ma invisibili.
+  const nested = findNestedRule(css);
+  if (nested) {
+    issues.push(`Regola annidata dentro un'altra regola (${nested}): il browser la ignora. Ripara nel tab Code.`);
+  }
+
   // Pseudo-elementi con content non vuoto.
   const pseudoRe = /::?(before|after)[^{]*\{[^}]*\}/gi;
   let p: RegExpExecArray | null;
@@ -128,6 +136,46 @@ function analyzeCss(css: string, issues: string[]): void {
       issues.push(`::${p[1]} con content non vuoto (${JSON.stringify(contentMatch[2].trim().slice(0, 20))}): vietato, usare content: "".`);
     }
   }
+}
+
+/** Rileva la prima regola annidata dentro una regola normale (non @-rule).
+ *  Ritorna il selettore annidato o null. */
+function findNestedRule(css: string): string | null {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let inComment = false;
+  let selectorStart = -1;
+  for (let i = 0; i < css.length; i++) {
+    const c = css[i];
+    if (inComment) {
+      if (c === '*' && css[i + 1] === '/') { inComment = false; i++; }
+      continue;
+    }
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"' || c === "'") inString = false;
+      continue;
+    }
+    if (c === '/' && css[i + 1] === '*') { inComment = true; i++; continue; }
+    if (c === '"' || c === "'") { inString = true; continue; }
+    if (c === '{') {
+      const selector = css.slice(selectorStart, i).trim();
+      const isAtRule = selector.startsWith('@');
+      if (stack.length > 0 && stack[stack.length - 1] !== '@' && !isAtRule) {
+        return selector.slice(0, 60);
+      }
+      stack.push(isAtRule ? '@' : 'rule');
+      selectorStart = -1;
+    } else if (c === '}') {
+      stack.pop();
+      selectorStart = -1;
+    } else if (selectorStart === -1 && !/[\s;]/.test(c)) {
+      selectorStart = i;
+    }
+  }
+  return null;
 }
 
 function analyzeJs(js: string, issues: string[]): void {

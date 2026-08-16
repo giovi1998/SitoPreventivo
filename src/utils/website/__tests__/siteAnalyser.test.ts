@@ -50,6 +50,21 @@ describe('analyzeSiteCode css', () => {
     expect(res.ok).toBe(false);
     expect(res.issues.some((i) => i.includes('content non vuoto'))).toBe(true);
   });
+
+  it('segnala regola annidata dentro un\'altra regola (bug slice)', () => {
+    // Simula il danno del fallback whitespace: .contatti h2 finito dentro
+    // .site-header { ... } → parentesi bilanciate ma regola ignorata.
+    const css = '/* header */\n.site-header {\n  padding: 1rem;\n.contatti h2 { font-size: 1.75rem; }.5rem;\n}';
+    const res = analyzeSiteCode(css, 'css');
+    expect(res.ok).toBe(false);
+    expect(res.issues.some((i) => i.includes('annidata'))).toBe(true);
+  });
+
+  it('non segnala regole annidate dentro @media/@keyframes', () => {
+    const css = '@media (max-width: 768px) { .a { color: red; } } @keyframes spin { 0% { transform: rotate(0); } 100% { transform: rotate(360deg); } }';
+    const res = analyzeSiteCode(css, 'css');
+    expect(res.ok).toBe(true);
+  });
 });
 
 describe('analyzeSiteCode js', () => {
