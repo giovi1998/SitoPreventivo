@@ -6,6 +6,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import PrivacyPage from './pages/PrivacyPage';
+import AperturaPage from './pages/AperturaPage';
 import AdminRoute from '../src/components/AdminRoute';
 import { EditorPage, CollectionPage, CustomersPage, QrPage, CardPage, LogoPage, FlyerPage, WebsitePage, SettingsRoute, AdminPage } from './pages/app';
 import SocialPage from './pages/app/SocialPage';
@@ -45,6 +46,7 @@ function AppWrapper() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/apertura" element={<AperturaPage />} />
           <Route path="/app" element={
             <ProtectedRoute>
               <App />

@@ -316,7 +316,7 @@ export default function HomePage({ user }: HomePageProps) {
               <li>Sito 1 pagina o landing</li>
               <li>Consegna 3 giorni</li>
             </ul>
-            <a href="mailto:webdevcagliari@gmail.com?subject=Apertura%20%E2%82%AC349" className="hp-price-cta">Contattaci</a>
+            <Link to="/apertura" className="hp-price-cta">Scopri il pacchetto</Link>
           </div>
 
           <div className="hp-price-card">

@@ -163,7 +163,10 @@ Ordine: validazione → portfolio → monetizzazione.
   `pq_cookie_consent:v1`, solo cookie tecnici/localStorage, link privacy),
   banner su HomePage + AppShell, link nel footer. Test: CookieBanner +
   PrivacyPage.
-- [ ] **TB-017** Landing vendita Apertura €349 (~4h, solo copy/struttura).
+- [x] **TB-017** Landing vendita Apertura €349 (~4h, solo copy/struttura).
+  ✅ 2026-08-16: `AperturaPage` (route `/apertura`) — hero offerta, 6
+  item inclusi, 4 step, FAQ, CTA mailto; link dalla card Apertura in
+  HomePage. Test: AperturaPage (4).
 - [ ] **TB-018** Portfolio 5 esempi settore (8-10h) — DEFERRED, trigger:
   1 cliente reale in outreach.
 - [ ] **TB-011** Stripe Checkout + subscription Pro (spec parziale in

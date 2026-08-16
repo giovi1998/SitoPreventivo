@@ -5,6 +5,13 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-16
 
+- **TB-017 Landing vendita Apertura €349** (da `to-be-done.md`):
+  - `src/pages/AperturaPage.tsx` + route `/apertura`: hero offerta €349,
+    6 item inclusi (logo, biglietti, 250 volantini, sito 1 pagina, post
+    social, file stampa), 4 step, FAQ, CTA `mailto:webdevcagliari@gmail.com`.
+  - Card "Apertura" in HomePage ora punta a `/apertura` (era mailto diretto).
+  - Test: `AperturaPage.test.tsx` (4).
+
 - **TB-022 Privacy policy + cookie banner** (da `to-be-done.md`):
   - `src/pages/PrivacyPage.tsx` + route `/privacy`: sezioni GDPR (titolare,
     dati raccolti, cookie/storage locale, finalità, conservazione, diritti),
