@@ -6,18 +6,18 @@ const CONTACT_URL = 'https://docs.google.com/forms/d/13GRmeh9ZYQPOIJmDahF1pLTGmk
 
 const INCLUDED = [
   { title: 'Logo', desc: 'Logo SVG vettoriale, pronto per stampa e digitale.' },
-  { title: 'Biglietti da visita', desc: '250 biglietti stampati, fronte e retro coordinati.' },
-  { title: '250 volantini stampati', desc: 'Formato A5, pronti da distribuire all\'apertura.' },
+  { title: 'Biglietti da visita', desc: 'File 300 DPI fronte e retro, pronti per la tipografia.' },
+  { title: 'Volantini', desc: 'File A5 300 DPI, pronti per la tipografia.' },
   { title: 'Sito 1 pagina', desc: 'Landing con contatti, mappa e CTA. Hosting incluso.' },
   { title: 'Post social', desc: '3 grafiche coordinate per annunciare l\'apertura.' },
-  { title: 'File pronti per la tipografia', desc: 'PDF 300 DPI e PNG web, senza watermark.' },
+  { title: 'File pronti per la tipografia', desc: 'PDF 300 DPI e PNG web, senza watermark. Stampi dove vuoi.' },
 ];
 
 const STEPS = [
   { n: '1', title: 'Compili il brief', desc: 'Nome, settore, colori, contatti. 10 minuti.' },
   { n: '2', title: 'L\'AI genera le bozze', desc: 'Logo, card, volantino e sito in un colpo solo.' },
   { n: '3', title: 'Rifinisci con noi', desc: '1 round di revisione incluso, fino a 3 giorni.' },
-  { n: '4', title: 'Stampa e consegna', desc: 'Volantini e biglietti stampati, consegnati a Cagliari.' },
+  { n: '4', title: 'Stampa e consegna', desc: 'Ricevi i file 300 DPI e li stampi dove preferisci. Consegna digitale in 3 giorni.' },
 ];
 
 const FAQ = [
@@ -26,6 +26,7 @@ const FAQ = [
   { q: 'E se non mi piace il risultato?', a: 'Rimborso fino al 50% se non sei soddisfatto (esclusi stampa e dominio già acquistati).' },
   { q: 'Come pago?', a: 'Pagamento gestito personalmente via email, prima della consegna. Nessun abbonamento.' },
   { q: 'Il sito è incluso davvero?', a: 'Sì: landing 1 pagina con contatti, mappa e CTA, hosting incluso per il primo anno.' },
+  { q: 'La stampa è inclusa?', a: 'No: ricevi i file 300 DPI pronti per la tipografia e li stampi dove preferisci. Così scegli quantità, carta e tempi senza vincoli.' },
 ];
 
 export default function AperturaPage() {
@@ -51,8 +52,9 @@ export default function AperturaPage() {
           <span className="ap-h1-accent">Noi ti facciamo il brand in 3 giorni.</span>
         </h1>
         <p className="ap-sub">
-          Logo, biglietti da visita, 250 volantini stampati e sito 1 pagina.
+          Logo, biglietti da visita, volantini e sito 1 pagina.
           Tutto coordinato, tutto incluso, consegna in 3 giorni lavorativi.
+          File pronti per la tipografia: stampi dove e quando vuoi.
         </p>
         <div className="ap-cta-row">
           <a href={CONTACT_URL} className="ap-cta">Richiedi il pacchetto →</a>

@@ -14,7 +14,7 @@ describe('AperturaPage (TB-017)', () => {
   it('lists the included items', () => {
     render(<TestRouter><AperturaPage /></TestRouter>);
     expect(screen.getByText('Logo')).toBeInTheDocument();
-    expect(screen.getByText('250 volantini stampati')).toBeInTheDocument();
+    expect(screen.getByText('Volantini')).toBeInTheDocument();
     expect(screen.getByText('Sito 1 pagina')).toBeInTheDocument();
   });
 

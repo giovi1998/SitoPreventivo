@@ -99,7 +99,7 @@ L'offerta è strutturata in due modalità complementari:
 | **Free** | per sempre | 10 documenti, watermark, 0 AI/mese | **€0** | — |
 | **Pro** | /mese | Documenti illimitati, no watermark, 1.000 prompt AI/mese, extra €0.01/prompt | **€9/mese** | Costo AI coperto + watermark rimosso |
 | **Starter** | una tantum | Documenti illimitati, no watermark, 300 DPI export (senza AI) | **€69** una tantum (o €49/anno) | €200-400 (1 anno Canva Pro) |
-| **Apertura** | una tantum | Starter + 250 volantini stampati + landing/sito 1 pagina, consegna 3 giorni | **€349** una tantum | €1.200-1.800 |
+| **Apertura** | una tantum | Starter + landing/sito 1 pagina, file 300 DPI pronti per la tipografia (stampa a parte), consegna 3 giorni | **€349** una tantum | €1.200-1.800 |
 | **Presenza** | una tantum | Apertura + sito 3-5 pagine, Google My Business, 3 grafiche social, consegna 3-5 giorni | **€690** una tantum | €3.500-5.000 |
 | **Manutenzione** | /mese | Aggiornamenti sito, 1-2 grafiche, hosting gestito | **€49/mese** | €80-150/mese (agenzia) |
 | **Custom** | una tantum | Pacchetto fuori lista concordato manualmente | su misura | — |
@@ -154,10 +154,16 @@ Il piano **Pro a €9/mese** include 1.000 prompt AI con margine enorme (costo D
 
 | Prodotto | Costo acquisto | Prezzo al cliente | Margine |
 |---|---|---|---|
-| 250 biglietti da visita | ~€15 (Stampaprint) | incluso nel pacchetto | assorbito nel prezzo |
-| 250 volantini A5 | ~€25 (Pixartprinting) | incluso nel pacchetto | assorbito nel prezzo |
+| 250 biglietti da visita | ~€15 (Stampaprint) | a parte (file 300 DPI consegnati) | — |
+| 250 volantini A5 | ~€25 (Pixartprinting) | a parte (file 300 DPI consegnati) | — |
 
-La stampa non è un centro di profitto separato — è inclusa nei pacchetti come differenziatore ("ricevi anche i materiali fisici, non solo i file").
+**Decisione 2026-08-16:** la stampa NON è inclusa nel pacchetto Apertura.
+Il cliente riceve i file 300 DPI pronti per la tipografia e stampa dove
+preferisce. Motivi: (a) ~€40 di stampa = 11% del prezzo su €349, margine
+già sottile; (b) zero logistica/ordini/errori tipografia; (c) il rimborso
+"fino al 50%" resta pulito senza materiali fisici; (d) il cliente può
+scegliere quantità e carta. La stampa resta disponibile come servizio
+aggiuntivo su richiesta (rivendita con margine), non inclusa.
 
 ---
 
@@ -184,7 +190,7 @@ A €690 (Presenza), su 7-8 ore = **€86-99/ora** — margine eccellente.
 
 | Fonte | Ricavo | Costo AI/stampa | Netto | Ore |
 |---|---|---|---|---|
-| 3 progetti "Apertura" (€349) | €1.047 | €90 (stampe) | €957 | 14h |
+| 3 progetti "Apertura" (€349) | €1.047 | €0 (stampe a parte) | €1.047 | 14h |
 | 2 progetti "Presenza" (€690) | €1.380 | €50 (stampe) | €1.330 | 16h |
 | 8 clienti in manutenzione (€49) | €392 | €96 (AI) | €296 | 12h |
 | Costi fissi | — | –€109 | –€109 | — |
