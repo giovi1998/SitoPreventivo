@@ -21,8 +21,12 @@ import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
 import { injectImagesIntoHtml } from '../utils/website/imageInjection';
 import { sanitizeGeneratedWebsite, enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss } from '../utils/website/sanitizeGenerated';
+import { analyzeSiteCode } from '../utils/website/siteAnalyser';
+import { repairCssStructure, repairHtmlStructure } from '../utils/website/repairStructure';
 import { normalizeInlineImages } from '../utils/website/imageNormalize';
 import { mergeKnowledgeIntoBrief } from '../utils/knowledgeTopK';
+import { enablePicker, extractElementContext, findElementInSource, type ElementContext } from '../utils/website/elementPicker';
+import ElementInspector from './website/ElementInspector';
 import AIConsole from './ai/AIConsole';
 import { AiFontPicker } from './ai-ui';
 import CodeEditor from './website/CodeEditor';
@@ -104,7 +108,11 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const loadedUpdatedAtRef = useRef<string | undefined>(initialWebsite?.updatedAt);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visionPreviewRef = useRef<HTMLIFrameElement | null>(null);
+  const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const disablePickerRef = useRef<(() => void) | null>(null);
   const lastVisionCacheRef = useRef<{ key: string; previews: string[] } | null>(null);
+  const [pickerMode, setPickerMode] = useState(false);
+  const [selectedElements, setSelectedElements] = useState<ElementContext[]>([]);
   // TB-030: customer caricato (per il sync website→customer on save).
   const customerRef = useRef<Record<string, unknown> | null>(null);
   const { addToast } = useToast();
@@ -312,18 +320,103 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     }
   }, [website, generate, addToast]);
 
-  const handleRefine = useCallback(async (text?: string) => {
+  const handleRepair = useCallback(async () => {
+    try {
+      const result = await refine(
+        { html: website.html, css: website.css, js: website.js, pages: website.pages, pagesHtml: website.pagesHtml || {} },
+        'Ripara la sintassi: bilancia le parentesi CSS, nessuna regola annidata, nessun tag orfano. Non cambiare lo stile.',
+        { modelId: aiModel || undefined, repairMode: true },
+      );
+      if (result.changes.some((c) => c.startsWith('repair:applied'))) {
+        setWebsite((prev) => ({
+          ...prev,
+          html: enforceMapIframe(result.site.html, prev.brief.contacts),
+          css: ensureHamburgerCss(result.site.css),
+          js: sanitizeGeneratedJs(result.site.js),
+          pages: result.site.pages,
+          pagesHtml: result.site.pagesHtml,
+          updatedAt: new Date().toISOString(),
+        }));
+        setVerifyIssues(null);
+        addToast('success', 'Codice riparato');
+      } else {
+        addToast('error', 'Riparazione fallita: il codice è ancora corrotto. Ripara a mano nel tab Code.');
+      }
+    } catch (err) {
+      addToast('error', (err as Error)?.message || 'Errore riparazione');
+    }
+  }, [website, refine, addToast]);
+
+  const handleRefine = useCallback(async (text?: string, elementContexts?: ElementContext[] | null, forceRepair = false) => {
     const prompt = text ?? refinePrompt;
     if (!prompt.trim()) {
       addToast('info', 'Scrivi cosa vuoi modificare');
+      return;
+    }
+    const ctxs = elementContexts ?? selectedElements;
+    // Blocco preventivo: se il codice è già strutturalmente rotto (parentesi
+    // sbilanciate, regole annidate, tag non bilanciati), il refine AI lavora
+    // su CSS/HTML corrotto e peggiora. Prima prova il repair deterministico
+    // locale (istantaneo, zero costi): se risolve, niente chiamata AI.
+    const preCheck = [
+      ...analyzeSiteCode(website.css, 'css').issues,
+      ...analyzeSiteCode(website.html, 'html').issues,
+      ...analyzeSiteCode(website.js, 'js').issues,
+    ];
+    if (preCheck.length > 0 && !forceRepair) {
+      const repairedCss = repairCssStructure(website.css);
+      const repairedHtml = repairHtmlStructure(website.html);
+      const cssOk = analyzeSiteCode(repairedCss, 'css').ok;
+      const htmlOk = analyzeSiteCode(repairedHtml, 'html').ok;
+      if (cssOk && htmlOk) {
+        setWebsite((prev) => ({
+          ...prev,
+          css: repairedCss,
+          html: repairedHtml,
+          updatedAt: new Date().toISOString(),
+        }));
+        setVerifyIssues(null);
+        addToast('success', 'Codice riparato automaticamente');
+        return;
+      }
+      setVerifyIssues(preCheck);
+      addToast('error', 'Ripara prima il codice nel tab Code: ' + preCheck[0]);
       return;
     }
     try {
       const result = await refine(
         { html: website.html, css: website.css, js: website.js, pages: website.pages, pagesHtml: website.pagesHtml || {} },
         prompt,
-        { modelId: aiModel || undefined, visionPreviews: await captureVisionPreviews() },
+        { modelId: aiModel || undefined, visionPreviews: await captureVisionPreviews(), elementContext: ctxs.length > 0 ? ctxs : undefined },
       );
+      // Validazione post-refine: se un edit ha corrotto il codice (es. slice
+      // su indici sbagliati → parentesi sbilanciate), NON applicare in
+      // silenzio. Rollback + messaggio chiaro. Confronto prima/dopo: se il
+      // codice era GIÀ corrotto prima del refine, il danno non è di questo
+      // edit → non bloccare (l'utente deve riparare a parte).
+      const wasBroken = {
+        css: !analyzeSiteCode(website.css, 'css').ok,
+        html: !analyzeSiteCode(website.html, 'html').ok,
+        js: !analyzeSiteCode(website.js, 'js').ok,
+      };
+      const cssCheck = analyzeSiteCode(result.site.css, 'css');
+      const htmlCheck = analyzeSiteCode(result.site.html, 'html');
+      const jsCheck = analyzeSiteCode(result.site.js, 'js');
+      const broken: string[] = [];
+      if (!cssCheck.ok && !wasBroken.css) broken.push(...cssCheck.issues);
+      if (!htmlCheck.ok && !wasBroken.html) broken.push(...htmlCheck.issues);
+      if (!jsCheck.ok && !wasBroken.js) broken.push(...jsCheck.issues);
+      if (broken.length > 0) {
+        addToast('error', `Modifica scartata: codice corrotto (${broken[0]})`);
+        return;
+      }
+      // Problemi del RISULTATO che erano già presenti prima del refine (non
+      // introdotti da questo edit): non bloccare, ma avvisa che il sito ha
+      // ancora problemi strutturali (es. riparazione parziale).
+      const preExisting: string[] = [];
+      if (!cssCheck.ok && wasBroken.css) preExisting.push(...cssCheck.issues);
+      if (!htmlCheck.ok && wasBroken.html) preExisting.push(...htmlCheck.issues);
+      if (!jsCheck.ok && wasBroken.js) preExisting.push(...jsCheck.issues);
       setWebsite((prev) => ({
         ...prev,
         html: enforceMapIframe(result.site.html, prev.brief.contacts),
@@ -334,12 +427,90 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         updatedAt: new Date().toISOString(),
       }));
       setRefinePrompt('');
-      setVerifyIssues(result.verifyIssues?.length ? result.verifyIssues : null);
-      addToast('success', 'Sito raffinato');
+      setVerifyIssues(preExisting.length > 0 ? preExisting : (result.verifyIssues?.length ? result.verifyIssues : null));
+      if (ctxs.length > 0) {
+        const stillThere = ctxs.every((ctx) => {
+          const source = ctx.part === 'pagesHtml'
+            ? (result.site.pagesHtml[ctx.page] ?? '')
+            : result.site.html;
+          return findElementInSource(source, ctx.html);
+        });
+        addToast(stillThere ? 'success' : 'info', stillThere ? 'Elementi aggiornati' : 'Elementi modificati (HTML cambiato)');
+        // Il DOM è cambiato: i contesti selezionati sono stale (find non
+        // combacerebbe più). Deseleziona per forzare una nuova selezione.
+        setSelectedElements([]);
+      } else {
+        addToast('success', 'Sito raffinato');
+      }
     } catch (err) {
       addToast('error', (err as Error)?.message || 'Errore raffinamento');
     }
-  }, [refinePrompt, website, refine, addToast]);
+  }, [refinePrompt, website, refine, addToast, selectedElements]);
+
+  const handleElementSelect = useCallback((el: Element) => {
+    const iframe = previewIframeRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+    const context = extractElementContext(el, website.css, previewPage, viewport);
+    setSelectedElements((prev) => {
+      if (prev.length >= 5) {
+        addToast('info', 'Max 5 elementi selezionati. Deseleziona per aggiungerne altri.');
+        return prev;
+      }
+      return [...prev, context];
+    });
+    // Picker resta attivo: multi-selezione. Esc o toggle per uscire.
+  }, [website.css, previewPage, addToast]);
+
+  const handleDeselect = useCallback((index?: number) => {
+    setSelectedElements((prev) => (index === undefined ? [] : prev.filter((_, i) => i !== index)));
+  }, []);
+
+  const togglePicker = useCallback(() => {
+    const iframe = previewIframeRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+    if (pickerMode) {
+      if (disablePickerRef.current) {
+        disablePickerRef.current();
+        disablePickerRef.current = null;
+      }
+      setPickerMode(false);
+      return;
+    }
+    setPickerMode(true);
+    disablePickerRef.current = enablePicker(doc, handleElementSelect);
+  }, [pickerMode, handleElementSelect]);
+
+  // Re-attach picker quando l'iframe viene ricreato (srcDoc cambia) e la
+  // modalità è ancora attiva.
+  const handlePreviewLoad = useCallback(() => {
+    if (!pickerMode) return;
+    const iframe = previewIframeRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+    if (disablePickerRef.current) disablePickerRef.current();
+    disablePickerRef.current = enablePicker(doc, handleElementSelect);
+  }, [pickerMode, handleElementSelect]);
+
+  useEffect(() => () => {
+    if (disablePickerRef.current) disablePickerRef.current();
+  }, []);
+
+  useEffect(() => {
+    if (!pickerMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (disablePickerRef.current) {
+          disablePickerRef.current();
+          disablePickerRef.current = null;
+        }
+        setPickerMode(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pickerMode]);
 
   const handleSave = useCallback(async (customName: string) => {
     const title = customName || website.title || 'Sito Web';
@@ -749,13 +920,22 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                   </div>
                 )}
                 <button className="btn-open-tab" onClick={handleOpenInNewTab} title="Apri in nuova tab">↗ Nuova tab</button>
+                <button
+                  className={`btn-picker${pickerMode ? ' active' : ''}`}
+                  onClick={togglePicker}
+                  title={pickerMode ? 'Esci dalla selezione elemento (Esc)' : 'Seleziona un elemento da modificare con AI'}
+                >
+                  🎯 {pickerMode ? 'Seleziona…' : 'Seleziona elemento'}
+                </button>
               </div>
               <div className="preview-wrapper" style={{ width: viewport }}>
                 <iframe
+                  ref={previewIframeRef}
                   sandbox="allow-scripts allow-same-origin"
                   srcDoc={fullDocument}
                   title="Anteprima sito"
                   className="preview-iframe"
+                  onLoad={handlePreviewLoad}
                 />
               </div>
             </div>
@@ -836,11 +1016,26 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                 <span>{stepLabel(currentStep)}</span>
               </div>
             )}
+            {selectedElements.length > 0 && (
+              <div className="element-inspector">
+                <div className="element-inspector__header">
+                  <span className="element-inspector__title">🎯 {selectedElements.length} elemento{selectedElements.length > 1 ? 'i' : ''} selezionat{selectedElements.length > 1 ? 'i' : 'o'}</span>
+                  <button type="button" className="element-inspector__close" onClick={() => handleDeselect()} aria-label="Deseleziona tutti">✕</button>
+                </div>
+                {selectedElements.map((ctx, i) => (
+                  <ElementInspector
+                    key={i}
+                    context={ctx}
+                    onRemove={() => handleDeselect(i)}
+                  />
+                ))}
+              </div>
+            )}
             {websiteHasContent(website) && (
               <div className="refine-section">
-                <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder="Es. Rendi i colori più scuri, cambia il font in Inter..." rows={3} />
+                <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder={selectedElements.length > 0 ? 'Es. Rendi i bottoni più visibili, cambia colore hover…' : 'Es. Rendi i colori più scuri, cambia il font in Inter...'} rows={3} />
                 <button className="btn-refine" onClick={() => handleRefine()} disabled={isProcessing || !refinePrompt.trim()}>
-                  {isProcessing ? 'Elaborazione in corso…' : 'Raffina'}
+                  {isProcessing ? 'Elaborazione in corso…' : selectedElements.length > 0 ? 'Raffina elementi' : 'Raffina'}
                 </button>
               </div>
             )}
@@ -860,6 +1055,14 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
             ))}
             {verifyIssues.length > 5 && <li>… e altri {verifyIssues.length - 5}</li>}
           </ul>
+          <button
+            type="button"
+            className="btn-repair"
+            onClick={handleRepair}
+            disabled={isProcessing}
+          >
+            {isProcessing ? 'Riparazione in corso…' : '🔧 Ripara con AI'}
+          </button>
         </div>
       )}
 
