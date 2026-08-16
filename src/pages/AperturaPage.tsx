@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import './AperturaPage.css';
 
-const CONTACT_MAILTO = 'mailto:webdevcagliari@gmail.com?subject=Apertura%20%E2%82%AC349';
+const CONTACT_URL = 'https://docs.google.com/forms/d/13GRmeh9ZYQPOIJmDahF1pLTGmkH4XOoC0nCXOb_NGOo/edit';
 
 const INCLUDED = [
   { title: 'Logo', desc: 'Logo SVG vettoriale, pronto per stampa e digitale.' },
@@ -40,7 +40,7 @@ export default function AperturaPage() {
             </svg>
             <span>Quickbrand</span>
           </Link>
-          <a href={CONTACT_MAILTO} className="ap-btn-primary">Richiedi il pacchetto</a>
+          <a href={CONTACT_URL} className="ap-btn-primary">Richiedi il pacchetto</a>
         </div>
       </header>
 
@@ -55,7 +55,7 @@ export default function AperturaPage() {
           Tutto coordinato, tutto incluso, consegna in 3 giorni lavorativi.
         </p>
         <div className="ap-cta-row">
-          <a href={CONTACT_MAILTO} className="ap-cta">Richiedi il pacchetto →</a>
+          <a href={CONTACT_URL} className="ap-cta">Richiedi il pacchetto →</a>
           <a href="#incluso" className="ap-cta-ghost">Cosa include</a>
         </div>
         <p className="ap-hero-foot">Nessun abbonamento · 1 revisione inclusa · Rimborso fino al 50%</p>
@@ -105,7 +105,7 @@ export default function AperturaPage() {
       <section className="ap-final-cta">
         <h2>Hai una data di apertura?</h2>
         <p>Pianifichiamo al contrario: brand pronto prima del grande giorno.</p>
-        <a href={CONTACT_MAILTO} className="ap-cta">Richiedi il pacchetto →</a>
+        <a href={CONTACT_URL} className="ap-cta">Richiedi il pacchetto →</a>
       </section>
 
       <footer className="ap-footer">
