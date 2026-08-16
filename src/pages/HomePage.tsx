@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import CardPreview from '../components/CardPreview';
+import CookieBanner from '../components/CookieBanner';
 import '../components/CardEditor.css';
 import { createGiovanniCardTemplate } from '../utils/documentSchemas';
 import type { Tier } from '../utils/watermark';
@@ -352,7 +353,10 @@ export default function HomePage({ user }: HomePageProps) {
       <footer className="hp-footer">
         <p>© 2026 Quickbrand · Giovanni Cidu</p>
         <p className="hp-footer-small">Pagamenti gestiti personalmente via email · Cagliari, Italia</p>
+        <p className="hp-footer-small"><Link to="/privacy" className="hp-footer-link">Privacy Policy</Link></p>
       </footer>
+
+      <CookieBanner />
 
       <style>{`
         /* ─── Palette tokens: The Classic (Red & Ink) ─── */
@@ -526,8 +530,9 @@ export default function HomePage({ user }: HomePageProps) {
         .hp-final-cta .hp-cta:hover{box-shadow:0 8px 24px rgba(230,32,32,.4)}
 
         /* ─── Footer ──────────────────────────────────── */
-        .hp-footer{padding:28px 24px;text-align:center;border-top:1px solid var(--qb-border);background:var(--qb-paper)}
-        .hp-footer p{font-size:.85rem;color:var(--qb-muted);margin:0}
+.hp-footer{padding:28px 24px;text-align:center;border-top:1px solid var(--qb-border);background:var(--qb-paper)}
+.hp-footer p{font-size:.85rem;color:var(--qb-muted);margin:0}
+.hp-footer-link{color:var(--qb-muted);text-decoration:underline}
         .hp-footer-small{font-size:.76rem;color:var(--qb-muted);opacity:.7;margin-top:4px !important}
 
         /* ─── Mobile ──────────────────────────────────── */

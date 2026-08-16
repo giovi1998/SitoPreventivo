@@ -28,12 +28,13 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   wiring `sessionId=docId` è stato aggiunto ma il CSV mostra sessioni
   vuote (trace del 21:19, dopo il fix?). Verificare che `loadedIdRef.current`
   sia valorizzato al momento della chiamata e che il body arrivi al server.
-- [ ] **`costDetails` per DeepSeek/Ollama**: chat `card-ai-chat` ha
+- [x] **`costDetails` per DeepSeek/Ollama**: chat `card-ai-chat` ha
   `costDetails: {}` — `computeCostUsd` per Ollama flat → 0 (corretto), ma
   per DeepSeek via Ollama (`deepseek-v4-flash:cloud`) il costo è 0 perché
-  il provider è `ollama` (flat). Decisione: tracciare il costo DeepSeek
-  anche quando passa da Ollama? (il modello è pay-per-token solo su
-  DeepSeek diretto; su Ollama Pro è flat).
+  il provider è `ollama` (flat). **Decisione (2026-08-16)**: con Ollama
+  Pro il costo è flat $20/mo — il costo per-token di `deepseek-v4-flash:cloud`
+  via Ollama è già incluso nell'abbonamento. Resta 0, corretto. Nessun
+  costo per-token per modelli serviti da Ollama.
 
 ### 🎯 Sprint prossima settimana (priorità utente 2026-08-01)
 
@@ -156,8 +157,12 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 Ordine: validazione → portfolio → monetizzazione.
 
-- [ ] **TB-022** Privacy policy + cookie banner (~3h). Serve prima
-  dell'outreach (form intake raccoglie PII).
+- [x] **TB-022** Privacy policy + cookie banner (~3h). Serve prima
+  dell'outreach (form intake raccoglie PII). ✅ 2026-08-16: `PrivacyPage`
+  (route `/privacy`, sezioni GDPR, contatto), `CookieBanner` (consenso in
+  `pq_cookie_consent:v1`, solo cookie tecnici/localStorage, link privacy),
+  banner su HomePage + AppShell, link nel footer. Test: CookieBanner +
+  PrivacyPage.
 - [ ] **TB-017** Landing vendita Apertura €349 (~4h, solo copy/struttura).
 - [ ] **TB-018** Portfolio 5 esempi settore (8-10h) — DEFERRED, trigger:
   1 cliente reale in outreach.

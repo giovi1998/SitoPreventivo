@@ -12,6 +12,7 @@ import { generateDOCX } from '../utils/generateDOCX';
 import PdfImportModal from './PdfImportModal';
 import SaveDialog from './SaveDialog';
 import ToastContainer from './ToastContainer';
+import CookieBanner from './CookieBanner';
 import { ToastProvider } from '../hooks/useToast';
 import ConfirmModal from './ConfirmModal';
 import OnboardingModal from './OnboardingModal';
@@ -714,6 +715,7 @@ export default function AppShell() {
         onCancel={() => setShowSaveDialog(false)}
       />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <CookieBanner />
       <ConfirmModal
         open={!!deleteTarget}
         title="Elimina preventivo"

@@ -3,6 +3,18 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-16
+
+- **TB-022 Privacy policy + cookie banner** (da `to-be-done.md`):
+  - `src/pages/PrivacyPage.tsx` + route `/privacy`: sezioni GDPR (titolare,
+    dati raccolti, cookie/storage locale, finalità, conservazione, diritti),
+    contatto `info@quickbrand.it`.
+  - `src/components/CookieBanner.tsx`: banner fisso con consenso in
+    `pq_cookie_consent:v1` (accepted/declined), solo cookie tecnici +
+    localStorage, link alla privacy. Montato su HomePage (pubblica) e
+    AppShell (app). Link "Privacy Policy" nel footer HomePage.
+  - Test: `CookieBanner.test.tsx` (4) + `PrivacyPage.test.tsx` (2).
+
 ## 2026-08-14
 
 - **Card centrata in agent mode + website editor mobile (T8, wayfinder
