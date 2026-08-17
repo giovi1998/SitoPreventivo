@@ -1,6 +1,15 @@
 # Pre-commit gate (fast, <30s):
-#   1. check-api-imports: serverless import safety (gotcha §1 ERR_MODULE_NOT_FOUND)
-#   2. lint-staged: targeted tests on staged files
+#   1. branch guard: no direct commits on master (merge commits allowed)
+#   2. check-api-imports: serverless import safety (gotcha §1 ERR_MODULE_NOT_FOUND)
+#   3. lint-staged: targeted tests on staged files
+
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "detached")
+if [ "$BRANCH" = "master" ] && [ ! -f .git/MERGE_MSG ]; then
+  echo "✋ Commit diretto su master bloccato (Branch Workflow, AGENTS.md)."
+  echo "   Crea un branch: git checkout -b fix/... o feat/..."
+  echo "   Emergenza prod: git commit --no-verify (segnala all'utente)."
+  exit 1
+fi
 
 node scripts/check-api-imports.mjs || exit 1
 

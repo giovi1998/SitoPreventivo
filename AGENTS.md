@@ -564,6 +564,28 @@ Regole push/deploy:
 3. Prima di push di feature con env var Vercel, confermare che siano
    settate nella dashboard (mancanti → 503/500 in prod).
 
+## Branch Workflow (OBBLIGATORIO)
+
+**Regola hard**: ogni task (fix, feature, refactor) lavora su un **branch
+dedicato**, mai direttamente su `master`. Il pre-commit hook rifiuta i
+commit diretti su `master` (tranne i merge commit).
+
+1. **Prima di iniziare un task**: crea il branch dal master aggiornato.
+   Naming: `fix/<descrizione>` (bug fix) o `feat/<descrizione>` (feature).
+   Esempi: `fix/collection-zip`, `feat/element-picker`.
+2. **Lavora e committa sul branch** (commit piccoli, messaggi chiari).
+3. **A fine task**: `git checkout master` → `git merge <branch>` (merge
+   commit, non rebase) → il post-merge hook cancella il branch merged
+   automaticamente (`git branch -d`, sicuro: fallisce se non merged).
+4. **Mai pushare direttamente su master** — push solo del branch, poi
+   merge locale (o PR se richiesto dall'utente).
+5. **Emergenza**: `git commit --no-verify` su master è consentito solo
+   per fix urgenti in prod, e va segnalato all'utente.
+
+Nota: il WIP non committato (working tree sporco) NON blocca la creazione
+di un branch — `git checkout -b` lo porta con sé. Se il task corrente è
+già iniziato su master, spostalo su un branch prima di continuare.
+
 ## Git Hooks (husky + lint-staged)
 
 Hook installati via `husky` 9 (`.husky/`), attivi dopo `npm install`
@@ -571,9 +593,10 @@ Hook installati via `husky` 9 (`.husky/`), attivi dopo `npm install`
 
 | Hook | Quando | Cosa fa | Durata |
 |------|--------|---------|--------|
-| `pre-commit` | `git commit` | `scripts/check-api-imports.mjs` (server entrypoint import safety, gotcha §1) + `lint-staged` (vitest related su file staged + check server su `server.ts`/`src/server/**/*.ts`) | <30s |
+| `pre-commit` | `git commit` | Guardia branch: rifiuta commit diretti su `master` (tranne merge commit) + `scripts/check-api-imports.mjs` (serverless import safety, gotcha §1) + `lint-staged` (vitest related su file staged + check server su `server.ts`/`src/server/**/*.ts`) | <30s |
 | `pre-push` | `git push` | `npm run typecheck` + `npm run test` + `npm run build` (full gate, intercetta ERR_MODULE_NOT_FOUND pre-Vercel) + `scripts/spec-sync-check.mjs` (reminder non bloccante: ultimo step spec = cancellarla + nota done.md) | ~1-3min |
 | `post-commit` | dopo `git commit` | `scripts/docs-sync-check.mjs HEAD~1..HEAD` — reminder non bloccante se `src/`/`server.ts`/`db/` cambiati ma `docs/` (incl. `docs/spec/`)/`README.md`/`AGENTS.md` no | <1s |
+| `post-merge` | dopo `git merge` | Auto-cleanup: cancella i branch merged (`git branch -d`, sicuro: fallisce se non merged) | <1s |
 
 E2E gate (manuale, non in pre-push perché lento ~5-10min):
 

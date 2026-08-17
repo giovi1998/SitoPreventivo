@@ -1,0 +1,10 @@
+# Post-merge: auto-cleanup dei branch di task merged (Branch Workflow, AGENTS.md).
+# Cancella solo branch fix/* e feat/* fully merged in master.
+# git branch -d è sicuro: fallisce se il branch non è fully merged.
+
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "detached")
+if [ "$BRANCH" = "master" ]; then
+  git branch --merged master | grep -E '^\s+(fix|feat)/' | while read -r b; do
+    git branch -d "$b" 2>/dev/null && echo "🧹 Branch merged cancellato: $b"
+  done
+fi
