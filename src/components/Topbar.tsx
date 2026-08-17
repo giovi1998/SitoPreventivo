@@ -144,6 +144,16 @@ export default function Topbar({
                 <span className="btn-label">{pdfLoading ? '...' : 'PDF'}</span>
               </button>
 
+              {/* P3 residuo (impeccable): legenda shortcut visibile. Nessuna */}
+              <button className="top-btn-ghost" title="Scorciatoie: Ctrl/Cmd+S salva, Ctrl/Cmd+P esporta PDF, Ctrl/Cmd+D esporta DOCX" aria-label="Scorciatoie disponibili">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                  <line x1="12" y1="17" x2="12" y2="17"/>
+                </svg>
+                <span className="btn-label">?</span>
+              </button>
+
               {(onImportPDF || onSaveAsTemplate || onExportDOCX) && (
                 <div style={{ position: 'relative' }} data-testid="topbar-overflow-root">
                   <button className="top-btn-ghost" onClick={() => setOverflowOpen((v) => !v)} title="Altre azioni" aria-label="Altre azioni" aria-haspopup="menu" aria-expanded={overflowOpen}>

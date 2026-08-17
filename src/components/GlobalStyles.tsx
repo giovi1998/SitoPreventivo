@@ -132,10 +132,25 @@ export default function GlobalStyles() {
 
     *{box-sizing:border-box}html{background:var(--canvas);overflow-x:hidden}
     body{margin:0;overflow-x:hidden;font-family:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:linear-gradient(135deg,var(--canvas),#eef3fb 54%,#ffffff);color:var(--ink)}
+
+    /* Craft floor (impeccable 2026-08-17): browser surfaces branded.
+       Selezione, caret e scrollbar non devono mai usare i default browser. */
+    ::selection{background:var(--accent);color:#fff}
+    :root{caret-color:var(--accent)}
+
+    /* Scrollbar sottile coerente col canvas, mai glow */
+    *::-webkit-scrollbar{width:10px;height:10px}
+    *::-webkit-scrollbar-track{background:transparent}
+    *::-webkit-scrollbar-thumb{background:var(--line);border-radius:999px;border:2px solid var(--canvas)}
+    *::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+    [data-theme="dark"] *::-webkit-scrollbar-thumb{border-color:var(--canvas)}
+
+    /* Focus ring coerente: mai default, sempre accent */
+    *:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 35%,transparent);outline-offset:2px}
+
     button,input,textarea{font:inherit}
     button{border:1px solid var(--line);background:var(--surface);border-radius:var(--radius-md);padding:.72rem .9rem;cursor:pointer;font-weight:var(--weight-extrabold);color:var(--ink);transition:transform var(--transition-fast),box-shadow var(--transition-fast),border-color var(--transition-fast)}
     button:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(8,32,51,.09)}
-    button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 35%,transparent);outline-offset:2px}
     input,textarea{width:100%;border:1px solid var(--line);border-radius:var(--radius-md);padding:.82rem;background:var(--surface);color:var(--ink);transition:border-color var(--transition-base),box-shadow var(--transition-base)}
     input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 10%,transparent)}
     textarea{min-height:84px;resize:vertical;line-height:1.45}
@@ -166,7 +181,6 @@ export default function GlobalStyles() {
     .app-shell.sidebar-collapsed{grid-template-columns:64px 1fr}
     .sidebar-collapse-btn{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;margin:4px 0 0;background:transparent;border:0;border-radius:8px;color:var(--muted);font-size:.78rem;font-weight:600;cursor:pointer;transition:background .15s,color .15s;touch-action:manipulation}
     .sidebar-collapse-btn:hover{background:rgba(255,255,255,.04);color:var(--text)}
-    .sidebar-collapse-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     .sidebar-collapse-btn svg{flex-shrink:0}
     .app-shell.sidebar-collapsed .nav-label{display:none}
     .app-shell.sidebar-collapsed .brand{justify-content:center}
