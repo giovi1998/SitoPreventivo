@@ -76,7 +76,10 @@ export default function AppShell() {
   const [quote, setQuote] = useState<PremiumQuote>(STARTER_QUOTE_PREMIUM);
   const [quotes, setQuotes] = useState<any[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [aiText, setAiText] = useState("Rendi il preventivo più professionale e aggiungi dettagli tecnici");
+  // P3 fix (impeccable): il prompt di default era in `value` — l'utente doveva
+  // ricordarsi di cancellarlo e non vedeva mai il placeholder. Ora vuoto,
+  // esempio delegato al placeholder in EditorView/AIConsole.
+  const [aiText, setAiText] = useState("");
   const [aiModel, setAiModel] = useState(() => getValidatedProviderDefault(providerRegistry));
   const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
   const [isDirty, setIsDirty] = useState(false);

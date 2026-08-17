@@ -1,6 +1,7 @@
 import type { DocumentTemplateId } from '../utils/quoteSchema';
 import { DocumentAiStats } from './DocumentAiStats';
 import { aiStatsTotalCalls, type AiStats } from '../utils/aiStats';
+import { useEffect, useState } from 'react';
 
 function formatTime(date: Date) {
   return date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -47,6 +48,20 @@ export default function Topbar({
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
+
+  // P2 fix (impeccable): topbar aveva 8-9 controlli in fila → single-focus
+  // violato nel momento di lavoro principale. Importa / Template / DOCX
+  // (azioni secondarie) vanno in overflow menu.
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const root = (document as any).querySelector?.('[data-testid="topbar-overflow-root"]');
+      if (root && !root.contains(e.target as Node)) setOverflowOpen(false);
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [overflowOpen]);
 
   const titles: Record<string, { kicker: string; title: string }> = {
     editor: { kicker: 'Editor operativo', title: 'Editor preventivo' },
@@ -109,19 +124,6 @@ export default function Topbar({
             )}
 
             <div className="action-group">
-              {onImportPDF && (
-                <button onClick={onImportPDF} className="top-btn-ghost" title="Importa PDF" aria-label="Importa PDF">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="16" y1="13" x2="8" y2="13"/>
-                    <line x1="16" y1="17" x2="8" y2="17"/>
-                    <polyline points="10 9 9 9 8 9"/>
-                  </svg>
-                  <span className="btn-label">Importa</span>
-                </button>
-              )}
-
               <button onClick={onSave} className="top-btn-save" title="Salva (Ctrl+S)" aria-label="Salva">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
@@ -130,17 +132,6 @@ export default function Topbar({
                 </svg>
                 <span className="btn-label">Salva</span>
               </button>
-
-              {onSaveAsTemplate && (
-                <button onClick={onSaveAsTemplate} className="top-btn-ghost" title="Salva come template" aria-label="Template">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                    <path d="M3 9h18"/>
-                    <path d="M9 21V9"/>
-                  </svg>
-                  <span className="btn-label">Template</span>
-                </button>
-              )}
 
               <button className="top-btn-export" onClick={onExportPDF} title="Esporta PDF (Ctrl+P)" disabled={pdfLoading} aria-label="Esporta PDF">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -151,16 +142,37 @@ export default function Topbar({
                 <span className="btn-label">{pdfLoading ? '...' : 'PDF'}</span>
               </button>
 
-              {onExportDOCX && (
-                <button onClick={onExportDOCX} className="top-btn-ghost" title="Esporta DOCX (Ctrl+D)" disabled={docxLoading} aria-label="Esporta DOCX">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="16" y1="13" x2="8" y2="13"/>
-                    <line x1="16" y1="17" x2="8" y2="17"/>
-                  </svg>
-                  <span className="btn-label">{docxLoading ? '...' : 'DOCX'}</span>
-                </button>
+              {(onImportPDF || onSaveAsTemplate || onExportDOCX) && (
+                <div style={{ position: 'relative' }} data-testid="topbar-overflow-root">
+                  <button className="top-btn-ghost" onClick={() => setOverflowOpen((v) => !v)} title="Altre azioni" aria-label="Altre azioni" aria-haspopup="menu" aria-expanded={overflowOpen}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" />
+                    </svg>
+                    <span className="btn-label">Altro</span>
+                  </button>
+                  {overflowOpen && (
+                    <div role="menu" aria-label="Altre azioni" style={{ position: 'absolute', right: 0, top: 'calc(100% + 6px)', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: '12px', minWidth: '190px', boxShadow: 'var(--shadow-md)', padding: '6px', zIndex: 20, display: 'grid', gap: '2px' }}>
+                      {onImportPDF && (
+                        <button role="menuitem" onClick={() => { setOverflowOpen(false); onImportPDF(); }} style={{ border: 'none', background: 'transparent', textAlign: 'left', padding: '10px 12px', borderRadius: '8px', fontWeight: 600, fontSize: '.85rem', color: 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                          Importa PDF
+                        </button>
+                      )}
+                      {onSaveAsTemplate && (
+                        <button role="menuitem" onClick={() => { setOverflowOpen(false); onSaveAsTemplate(); }} style={{ border: 'none', background: 'transparent', textAlign: 'left', padding: '10px 12px', borderRadius: '8px', fontWeight: 600, fontSize: '.85rem', color: 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                          Salva come template
+                        </button>
+                      )}
+                      {onExportDOCX && (
+                        <button role="menuitem" onClick={() => { setOverflowOpen(false); onExportDOCX(); }} disabled={docxLoading} style={{ border: 'none', background: 'transparent', textAlign: 'left', padding: '10px 12px', borderRadius: '8px', fontWeight: 600, fontSize: '.85rem', color: docxLoading ? 'var(--muted)' : 'var(--ink)', cursor: docxLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                          {docxLoading ? 'Esporta DOCX…' : 'Esporta DOCX'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import Topbar from '../Topbar';
 
 const baseProps = {
@@ -93,5 +93,60 @@ describe('Topbar save-status during AI processing', () => {
   it('falls back to editor title for unknown view', () => {
     render(<Topbar {...baseProps} view="unknown-thing" isDirty={false} />);
     expect(screen.getByRole('heading', { name: 'Editor preventivo' })).toBeInTheDocument();
+  });
+});
+
+describe('Topbar overflow menu (P2 fix: Importa/Template/DOCX fuori dalla barra principale)', () => {
+  const fullProps = {
+    ...baseProps,
+    onImportPDF: vi.fn(),
+    onSaveAsTemplate: vi.fn(),
+    onExportDOCX: vi.fn(),
+  };
+
+  it('renders the overflow trigger button when secondary actions exist', () => {
+    render(<Topbar {...fullProps} />);
+    expect(screen.getByRole('button', { name: 'Altre azioni' })).toBeInTheDocument();
+  });
+
+  it('does NOT render Importa/Template/DOCX as primary buttons in the action group', () => {
+    render(<Topbar {...fullProps} />);
+    const actionGroup = document.querySelector('.action-group');
+    expect(actionGroup).not.toBeNull();
+    // I bottoni primari restano Salva e PDF; gli altri vivono nell'overflow
+    expect(actionGroup?.querySelector('.top-btn-save')).not.toBeNull();
+    expect(actionGroup?.querySelector('.top-btn-export')).not.toBeNull();
+    const directLabels = Array.from(actionGroup?.querySelectorAll('.btn-label') ?? []).map((el) => el.textContent);
+    expect(directLabels).toContain('Salva');
+    expect(directLabels).toContain('PDF');
+    expect(directLabels).not.toContain('Importa');
+    expect(directLabels).not.toContain('Template');
+    expect(directLabels).not.toContain('DOCX');
+  });
+
+  it('opens the overflow menu and calls onImportPDF', () => {
+    const onImportPDF = vi.fn();
+    render(<Topbar {...fullProps} onImportPDF={onImportPDF} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Altre azioni' }));
+    const menu = screen.getByRole('menu');
+    expect(menu).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Importa PDF/ }));
+    expect(onImportPDF).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the overflow menu and calls onSaveAsTemplate', () => {
+    const onSaveAsTemplate = vi.fn();
+    render(<Topbar {...fullProps} onSaveAsTemplate={onSaveAsTemplate} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Altre azioni' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Salva come template/ }));
+    expect(onSaveAsTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the overflow menu and calls onExportDOCX', () => {
+    const onExportDOCX = vi.fn();
+    render(<Topbar {...fullProps} onExportDOCX={onExportDOCX} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Altre azioni' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Esporta DOCX/ }));
+    expect(onExportDOCX).toHaveBeenCalledTimes(1);
   });
 });

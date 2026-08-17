@@ -58,7 +58,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
           {!collapsed && (
             <div>
               <strong>Quickbrand</strong>
-              <small>Logo · Biglietti · Stampa</small>
+              <small>Preventivi · Logo · Card · Flyer · Social · Web</small>
             </div>
           )}
         </div>
@@ -78,6 +78,12 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
         <nav aria-label="Navigazione principale">
           {/* Phase 13b (REQ-DS-006): gruppi Crea / Archivio / Sistema */}
           <span className="nav-group-label" aria-hidden="true">Crea</span>
+          {user?.role === 'admin' && (
+            <button title="Nuovo preventivo" className={view === 'editor' ? 'active' : ''} aria-current={view === 'editor' ? 'page' : undefined} onClick={handleNewQuote}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+              <span className="nav-label">Editor preventivo</span>
+            </button>
+          )}
           <button title="Genera QR Code" className={view === 'qr' ? 'active' : ''} aria-current={view === 'qr' ? 'page' : undefined} onClick={() => setView('qr')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -152,12 +158,6 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
             </>
           )}
           <span className="nav-group-label" aria-hidden="true">Sistema</span>
-          {user?.role === 'admin' && (
-            <button title="Nuovo preventivo" className={view === 'editor' ? 'active' : ''} aria-current={view === 'editor' ? 'page' : undefined} onClick={handleNewQuote}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-              <span className="nav-label">Editor</span>
-            </button>
-          )}
           {user?.role !== 'admin' && (
             <button title="Impostazioni" className={view === 'settings' ? 'active' : ''} onClick={() => setView('settings')}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1.51V3a2 2 0 0 1 2 2h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06-.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9z" /></svg>
@@ -227,7 +227,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
               )}
             </button>
             <button onClick={onLogout} className="mobile-logout-btn" aria-label="Esci">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
               <span>Esci</span>
             </button>
           </div>
@@ -244,7 +244,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
                 </div>
                 <div>
                   <strong>Quickbrand</strong>
-                  <small>Logo · Biglietti · Stampa</small>
+                  <small>Preventivi · Logo · Card · Flyer · Social · Web</small>
                 </div>
               </div>
               <button className="drawer-close" onClick={() => setDrawerOpen(false)} aria-label="Chiudi menu">
@@ -254,6 +254,12 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
 
             <nav className="drawer-nav">
               <span className="nav-group-label" aria-hidden="true">CREA</span>
+              {user?.role === 'admin' && (
+                <button className={view === 'editor' ? 'active' : ''} onClick={handleNewQuote}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                  Editor preventivo
+                </button>
+              )}
               <button className={view === 'qr' ? 'active' : ''} onClick={() => nav('qr')}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -324,10 +330,6 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
                 Documenti
               </button>
               <span className="nav-group-label" aria-hidden="true">SISTEMA</span>
-              <button className={view === 'editor' ? 'active' : ''} onClick={handleNewQuote}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                Editor preventivo
-              </button>
               {user?.role !== 'admin' && (
                 <button className={view === 'settings' ? 'active' : ''} onClick={() => nav('settings')}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
