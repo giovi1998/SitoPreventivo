@@ -3,6 +3,43 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+## 2026-08-17
+
+- **Fix pannello AI non scrollabile** (da `to-be-done.md`): `.ai-console`
+  (flex child) senza `min-height: 0` cresceva col contenuto invece di
+  scrollare → rail AI card/flyer/logo non scrollabile (segnalato in PROD).
+  Fix in `AIConsole.css`: `min-height: 0; height: 100%` su `.ai-console`,
+  `min-height: 0` su `.ai-console__panel`. Pattern già corretto nel
+  website rail (era l'unico editor che scrollava).
+
+- **Fix sito web generato troncato** (da `to-be-done.md`): "Genera sito da
+  cliente" poteva produrre un sito minimale (header + mappa). Analisi
+  matrice 3 provider × 2 reasoning (`scripts/debug-matrix.ts`):
+  - `reasoningEffort: 'max'` su MiniMax M3/DeepSeek 0731: JSON HTML
+    troncato o output povero (DeepSeek 'max' = 5 sezioni vs 'high' = 7).
+  - Fix: `reasoningEffort: 'high'` sugli step html + pagine secondarie in
+    `websiteOrchestrator.ts` (allineato allo step CSS, dove 'max' era già
+    stato tolto per tempo/qualità). Validato 7/7 generazioni reali Pad
+    Thai complete (6-8 sezioni + footer), 49 test orchestratore verdi.
+  - Nota: il costo `$0.0001` NON è indicatore di fallback (default
+    `trackUsage || 0.0001` su Ollama flat) — indizio falso scartato.
+
+- **Revert `817cddd`** (system prompt "preserva tutti gli elementi del
+  brief" — experiment non riuscito): il commit aveva rotto 7 test
+  (`system.test.ts` compact 2536>2500 chars + regex, flyerSystem,
+  logoSystem, socialSystem, websiteSystem, cardSystem) e allungato i
+  prompt oltre i limiti. Revert `556ff08` su branch
+  `fix/revert-prompts-817cddd` → merge in master (fast-forward). 131/131
+  test prompt verdi. Da riprovare con prompt più corti se si vuole
+  mantenere il vincolo "preserva tutti gli elementi".
+
+- **Fix preview viewport mobile su desktop** (segnalato 2026-08-17):
+  `viewport` inizializzato una volta al mount con `matchMedia(MQ_WORKSPACE)`
+  → finestra aperta <1024px restava `375px` anche allargata a desktop
+  ("dopo rigenera vedo mobile"). Fix in `WebsiteEditor.tsx`:
+  `viewportTouchedRef` + `useEffect` che segue `isMobileWorkspace` finché
+  l'utente non sceglie un viewport manualmente.
+
 ## 2026-08-16
 
 - **TB-017 Landing vendita Apertura €349** (da `to-be-done.md`):

@@ -284,8 +284,11 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         // superare i 10k token e Ollama con format:json rifiuta il JSON
         // troncato (400 "can't find closing '}' symbol").
         maxTokens: 16384,
-        // Struttura del sito: ragionamento pieno ('max').
-        reasoningEffort: 'max',
+        // 'max' su MiniMax M3 consuma il budget num_predict nel thinking →
+        // JSON troncato → parse fail → fallback silenzioso (sito "in
+        // costruzione" + mappa, esattamente il bug segnalato 2026-08-17).
+        // 'high' basta: output lungo su prompt medio (come lo step CSS).
+        reasoningEffort: 'high',
         customerId: options.customerId,
         ...runTrace('html'),
       },
@@ -355,7 +358,9 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
             {
               responseFormat: { type: 'json_object' },
               maxTokens: 16384,
-              reasoningEffort: 'max',
+              // 'high' come step html: 'max' mangia il budget nel thinking →
+              // JSON troncato → pagina persa (best-effort, ma meglio no).
+              reasoningEffort: 'high',
               customerId: options.customerId,
               ...runTrace(`page:${page}`),
             },

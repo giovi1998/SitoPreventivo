@@ -3,6 +3,10 @@
   flex-direction: column;
   border-left: 1px solid var(--line, #c8d0df);
   background: var(--surface, #fff);
+  /* Scroll interno del panel: senza min-height:0 un flex child cresce col
+   * contenuto invece di scrollare (rail editor card/flyer/logo). */
+  min-height: 0;
+  height: 100%;
 }
 
 .ai-console__toggle {
@@ -61,6 +65,7 @@
   padding: 1rem;
   gap: 1rem;
   overflow-y: auto;
+  min-height: 0;
   background: var(--bg-soft, #f8fafc);
 }
 
