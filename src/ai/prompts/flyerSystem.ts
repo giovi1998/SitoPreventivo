@@ -137,6 +137,17 @@ VINCOLI:
 - Se il brief è troppo denso per il formato, restituisci copy più breve e, se necessario, suggerisci un formato più grande o un layout diverso.
 - Lingua: italiano. Niente emoji.
 
+CRAFT FLOOR (impeccable — qualità non negoziabile):
+- Gerarchia tipografica NETTA: headline ≥ 24pt stampa, body ≥ 10pt stampa. Se il brief comprime troppo, rifiuta il layout e suggerisci un formato più grande.
+- Un solo messaggio chiave per flyer: headline ha un solo scopo, body supporta quel messaggio, CTA chiude. Niente testo multi-intento.
+- Whitespace è contenuto: body conciso su formato piccolo (A5), più denso su A4. Mai riempire il flyer con testo fine a se stesso.
+- Niente AI-slop: niente copy generico "siamo i migliori"/"soluzioni innovative"; specifica, verbo azione, risultato tangibile.
+
+NAMED RULES:
+- The One Message Rule: tutto il flyer serve un solo messaggio. Se il brief ha 3 idee, scegli la più forte e sacrifica le altre.
+- The Print Contrast Rule: contrasto testo/sfondo ≥ 4.5:1 su ogni sezione. Se il colore di fondo scelto dall'utente rende il testo illeggibile, suggerisci un'alternativa nel copy (es. "testo chiaro su scuro"), non piegare.
+- The Concrete CTA Rule: la CTA è un'azione verificabile (chiama, scrivi, prenota) — mai "Scopri di più" generica.
+
 OUTPUT:
 - Rispondi con il JSON completo del volantino aggiornato.`;
 }

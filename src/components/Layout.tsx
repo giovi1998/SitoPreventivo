@@ -50,9 +50,11 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
       {!isMobileWorkspace && (
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-logo">
+          <div className="brand-logo" aria-hidden="true">
             <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
-              <path d="M8 10h16M8 16h12M8 22h8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              <rect x="4" y="11" width="24" height="15" rx="3" stroke="currentColor" strokeWidth="2.4" fill="none" />
+              <path d="M11 11V9a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" fill="none" />
+              <rect x="4" y="17" width="24" height="2.4" fill="currentColor" opacity="0.85" />
             </svg>
           </div>
           {!collapsed && (
@@ -239,8 +241,12 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
           <aside className="mobile-drawer" role="dialog" aria-modal="true" aria-label="Menu di navigazione" onClick={e => e.stopPropagation()}>
             <div className="drawer-header">
               <div className="brand">
-                <div className="brand-logo">
-                  <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><path d="M8 10h16M8 16h12M8 22h8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>
+                <div className="brand-logo" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+                    <rect x="4" y="11" width="24" height="15" rx="3" stroke="currentColor" strokeWidth="2.4" fill="none" />
+                    <path d="M11 11V9a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" fill="none" />
+                    <rect x="4" y="17" width="24" height="2.4" fill="currentColor" opacity="0.85" />
+                  </svg>
                 </div>
                 <div>
                   <strong>Quickbrand</strong>

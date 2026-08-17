@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Quickbrand "Il Kit": logo valigetta. Segnale: il kit è raccolto e pronto. -->
+  <rect x="4" y="11" width="24" height="15" rx="3" stroke="currentColor" stroke-width="2.4" fill="none"/>
+  <!-- handle: apertura in alto -->
+  <path d="M11 11V9a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3v2" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+  <!-- fascia centrale -->
+  <rect x="4" y="17" width="24" height="2.4" fill="currentColor" opacity="0.85"/>
+</svg>

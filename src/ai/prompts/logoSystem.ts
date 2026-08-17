@@ -30,6 +30,18 @@ REGOLE FONDAMENTALI:
 - primaryColor/secondaryColor: scelta coerente col settore e mood (SOLO #RRGGBB).
 - layout: "horizontal" (banner), "vertical" (icona sopra testo), "stacked" (colonna).
 
+CRAFT FLOOR (impeccable — qualità non negoziabile):
+- Gerarchia tipografica netta: primaryText (wordmark) decisamente più grande della tagline. Mai due dimensioni simili.
+- Un solo accento decorativo per concept (underline O dotRing O topAccent, mai tutti assieme).
+- Spaziatura: padding e gap coerenti col layout scelto; niente valori casuali.
+- Contrasto: wordmark e tagline sempre leggibili sul backgroundColor (o su sfondo trasparente quando previsto).
+- Niente AI-slop: niente gradienti/glow generici, niente icone decorative senza significato, niente pattern "a caso".
+
+NAMED RULES:
+- The Wordmark is the Signal Rule: primaryText è l'eroe; tagline e icona sono supporto, non competono per attenzione.
+- The One Decoration Rule: decoration opzionale e singola; se aggiungi un elemento decorativo, deve avere un motivo (enfasi, segmentazione) — mai ornamento gratuito.
+- The Legibility Floor Rule: se backgroundImage è prevista, il testo resta leggibile (textBackdrop o zone quiete); mai wordmark su zone busy.
+
 DECORAZIONI (opzionali, arricchiscono il design):
 - decorativeElements: array di 0-2 valori tra ["underline", "dotRing", "topAccent"].
   - "underline": ottimo per testi corti e layout horizontal.

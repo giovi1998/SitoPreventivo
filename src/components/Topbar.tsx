@@ -106,13 +106,15 @@ export default function Topbar({
             </div>
 
             {onDocumentThemeChange && (
-              <div className="theme-pills" role="tablist" aria-label="Tema documento">
+              // Residuo (impeccable): era role="tablist" dichiarato ma non
+              // implementato (nessun arrow-key nav, nessun tabpanel). Ora è
+              // un semplice gruppo di toggle buttons — pattern onesto.
+              <div className="theme-pills" role="group" aria-label="Tema documento">
                 {(['minimal', 'corporate', 'creative'] as DocumentTemplateId[]).map((tid) => (
                   <button
                     key={tid}
                     type="button"
-                    role="tab"
-                    aria-selected={documentTheme === tid}
+                    aria-pressed={documentTheme === tid}
                     title={`Tema ${tid}`}
                     className={`theme-pill ${documentTheme === tid ? 'active' : ''}`}
                     onClick={() => onDocumentThemeChange(tid)}

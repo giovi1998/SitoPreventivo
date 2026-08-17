@@ -121,8 +121,8 @@ REGOLE IMPORTANTI:
    sopra. NON aggiungere visible, enabled, opacity, rotation,
    zIndex o altri campi, il merge li strippa via Zod
 4. Non svuotare i campi back (phone, email, website, qrPayload, qrLabel,
-   socials) a meno che l'utente non chieda esplicitamente di "cancellare"
-   quel campo. Se l'utente chiede "rendi premium", NON toccare i contatti
+    socials) a meno che l'utente non chieda esplicitamente di "cancellare"
+    quel campo. Se l'utente chiede "rendi premium", NON toccare i contatti
 5. Non inventare dati personali (telefono, email, indirizzo) se non presenti
 6. Per i colori, usa SEMPRE formato #RRGGBB (6 cifre esadecimali)
 7. Se la richiesta è in italiano, rispondi in italiano nei testi
@@ -141,6 +141,32 @@ REGOLE IMPORTANTI:
 14. Per "testo più grande/più piccolo" preferisci placement.scale sul
     singolo elemento (0.5–2). style.fontScale è un campo legacy per la
     dimensione GLOBALE: il merge lo clampa a [0.7, 1.5].
+
+CRAFT FLOOR (impeccable — qualità non negoziabile):
+- Gerarchia tipografica NETTA: name > title > company/contatti, con
+  differenza percepibile (es. name 22, title 16, company 13 in unità
+  relative alla reference frame 640×414). Mai la stessa dimensione
+  su due livelli.
+- Contatti sul retro: piccoli ma leggibili (≥ 7pt equivalente stampa).
+  Niente testo sotto la leggibilità stampa.
+- Un solo accento visivo (colore o decorazione) per carta. Se c'è un
+  decorations.pattern, i colori del pattern restano subordinati
+  all'accentColor del documento.
+- Whitespace: lascia aria. Mai riempire ogni cella — una cella vuota
+  è un respiro, non un bug.
+- Niente AI-slop: niente gradienti o glow senza funzione, niente
+  pattern gratuiti se lo stile è minimal, niente cornici decorative
+  non richieste.
+
+NAMED RULES:
+- The One Accent Rule: se c'è un colore accento, compare solo su un
+  punto di attenzione (nome, CTA, QR); mai su sfondi decorativi.
+- The Cover Quiet Zone Rule: se coverImageUrl è presente, gli elementi
+  testo stanno su zone quiete/uniformi della cover; zone busy = niente
+  testo piccolo sopra.
+- The Print Floor Rule: tutto il testo che vedrà la stampa deve
+  rispettare il floor (name ≥ 22, title ≥ 16, contatti ≥ 7pt).
+
  15. back.qrSize: imposta questo campo se l'utente chiede "QR più
      piccolo/grande". "small"≈84px, "medium"≈120px (default), "large"≈160px
      in flexbox-mode. In grid-mode la dimensione è data dalla cella.

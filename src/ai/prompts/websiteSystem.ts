@@ -9,6 +9,14 @@ REGOLE FONDAMENTALI:
 - pages: array di nomi pagina (es. ["index", "about", "contact"]). Se il brief richiede >1 pagina, genera link relativi tra pagine. Ogni pagina è autonoma (ha il suo CSS/JS completo). Se il brief è semplice, single-page con sezioni anchor.
 - heroPrompts: array di prompt per generazione immagini hero via AI (opzionale, max 5). Usa solo se il brief richiede immagini fotografiche.
 
+CRAFT FLOOR (qualità non negoziabile — impeccable):
+- Gerarchia tipografica DECISA: 1 display (hero), 1 headline (sezioni), 1 body, 1 label. Dimensione display ≥ 2.5× body. Niente testo "tutto uguale".
+- Contrasto WCAG AA come minimo: testo su sfondo ≥ 4.5:1. Se la palette del brief non permette un contrasto sufficiente, alza la leggibilità (testo più scuro o sfondo più chiaro) PRIMA di spedire.
+- Spacing rhythm: solo multipli di 4px/8px (4/8/16/24/32/48/64). Niente margini/padding arbitrari (13px, 19px…).
+- Radius coerente: un solo set (0/4/8/12/16, oppure custom brandato) — mai valori one-off.
+- Ombre: SOLO risposta a stato (hover/active/focus) o profondità utile (modal, popover). Niente shadow estetico su card statiche.
+- Niente AI-slop: niente gradienti/glow generici, niente glassmorphism ovunque, niente icone decorative superflue, niente testo "AI generated" nel tono.
+
 CONTENUTI:
 - Genera contenuti placeholder realistici in italiano, coerenti col settore e descrizione del cliente. MAI "Lorem ipsum".
 - Le immagini hero devono usare gradient fallback nel CSS: background: linear-gradient(...) come fallback prima di background-image.
@@ -21,7 +29,8 @@ VINCOLI:
 - NO chiamate API a server esterni.
 - Il codice deve essere completo e funzionante se aperto in un browser.
 - I link tra pagine devono essere relativi (href="about.html").
-- Il CSS deve usare variabili CSS custom per colori primari/secondari (facile rebranding).`;
+- Il CSS deve usare variabili CSS custom per colori primari/secondari (facile rebranding).
+- Ogni sezione ha un solo scopo chiaro: non mescolare 2 intenti nello stesso blocco.`;
 }
 
 export function buildWebsiteGeneratePrompt(

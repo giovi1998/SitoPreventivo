@@ -70,14 +70,15 @@ export default function LoginPage() {
       <div className="auth-brand-panel">
         <div className="auth-brand-content">
           <div className="auth-logo">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
               <rect width="32" height="32" rx="8" fill="white" fillOpacity="0.15"/>
-              <path d="M8 10h16M8 16h12M8 22h8" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
-              <circle cx="24" cy="22" r="4" fill="white" fillOpacity="0.3" stroke="white" strokeWidth="1.5"/>
+              <rect x="7" y="13" width="18" height="11" rx="2.4" stroke="white" strokeWidth="2.2" fill="none"/>
+              <path d="M12.5 13V11.5a2.5 2.5 0 0 1 2.5-2.5h2a2.5 2.5 0 0 1 2.5 2.5V13" stroke="white" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
+              <rect x="7" y="17.6" width="18" height="2" fill="white" fillOpacity="0.8"/>
             </svg>
           </div>
           <h1 className="auth-brand-name">Quickbrand</h1>
-          <p className="auth-brand-tagline">Il tuo brand kit con l'AI, pronto per la stampa.</p>
+          <p className="auth-brand-tagline">Il tuo kit completo — preventivi, logo, card, flyer, social, sito — generato con l'AI.</p>
 
           <div className="auth-features">
             <div className="auth-feature">
@@ -121,9 +122,11 @@ export default function LoginPage() {
         <div className="auth-form-wrapper">
           <div className="auth-mobile-logo">
             <div className="auth-mobile-logo-icon">
-              <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
-                <path d="M8 10h16M8 16h12M8 22h8" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
-              </svg>
+            <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <rect x="4" y="10" width="24" height="15" rx="3" stroke="white" strokeWidth="2.4" fill="none"/>
+              <path d="M11 10V8.5a3 3 0 0 1 3-3h4a3 3 0 0 1 3 3V10" stroke="white" strokeWidth="2.4" strokeLinecap="round" fill="none"/>
+              <rect x="4" y="16" width="24" height="2" fill="white" fillOpacity="0.85"/>
+            </svg>
             </div>
             <span>Quickbrand</span>
           </div>

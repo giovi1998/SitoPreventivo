@@ -168,7 +168,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/ai/*Orchestrator.ts` | card / flyer / logo / social / onboarding / website |
 | `src/ai/agentOrchestrator.ts` | T9: agente orchestratore con harness — 4 tools `generate_logo/card/flyer/website`, loop plan→act max 6 round su `BaseOrchestrator`, `onToolResult` per save client. **Non ancora collegato alla UI** (wiring CRM = prossimo step) |
 | `src/ai/runTrace.ts` | T7: helper trace gerarchica — `newRunId()` (32-hex) / `newSpanId()` (16-hex); campi run propagati via `RunTraceOptions` → `ChatOptions` → body `/api/ai/chat` |
-| `src/ai/prompts/registry.ts` | promptRegistry: lookup centralizzato prompt di sistema (incl. website-system, palette) |
+| `src/ai/prompts/registry.ts` | promptRegistry: lookup centralizzato prompt di sistema (incl. website-system, palette). I 4 prompt principali (card/flyer/logo/website) includono il "CRAFT FLOOR" impeccable + Named Rules (gerarchia tipografica netta, WCAG 4.5:1, spacing rhythm, anti AI-slop) |
 | `src/ai/providers/registry.ts` | Registry provider AI (default `ollama-minimax-m3`, fallback automatico) |
 | `src/ai/providers/gemini.ts` | `GeminiImageProvider` (Nano Banana, SDK `@google/genai`) |
 | `src/ai/cardMerge.ts` | Merge risposta AI → card (grid, style, photo-preserve) |
