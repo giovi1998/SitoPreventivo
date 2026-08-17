@@ -503,16 +503,24 @@ export default function AppShell() {
     setQuote((c) => ({ ...c, legalClauses: c.legalClauses.filter((cl) => cl.id !== id) }));
   };
 
+  // P0 fix (impeccable critique 2026-08-17): shortcut window-scope era fuori
+  // contesto — Ctrl+P esportava il PDF anche dentro /app/logo o /app/qr, e su
+  // Mac mancava metaKey. Ora: gate su view==='editor', accetta Ctrl o Cmd,
+  // salta se il focus è in input/textarea (l'utente sta scrivendo).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!e.ctrlKey) return;
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (view !== 'editor') return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       if (e.key === 's') { e.preventDefault(); saveCurrentQuote(); }
       if (e.key === 'p') { e.preventDefault(); exportPDF(); }
       if (e.key === 'd') { e.preventDefault(); exportDOCX(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [quote]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quote, view]);
 
   const openQuote = (saved: any) => {
     const migrated = migrateFromLegacy(saved);

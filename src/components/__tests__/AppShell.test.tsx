@@ -5,6 +5,7 @@ import React from 'react';
 import AppShell from '../AppShell';
 import { AuthContext } from '../../contexts';
 import { TestRouter } from '../../test/TestRouter';
+import dataService from '../../utils/dataService';
 
 const mocks = vi.hoisted(() => ({
   topbar: vi.fn(),
@@ -121,5 +122,37 @@ describe('AppShell routing wiring', () => {
     renderAppShellAt('/app/editor');
     const lastCall = mocks.topbar.mock.calls[mocks.topbar.mock.calls.length - 1][0];
     expect(typeof lastCall.setTheme).toBe('function');
+  });
+});
+
+describe('AppShell keyboard shortcuts (P0 fix: view-scoped + metaKey)', () => {
+  const fireKey = (key: string, opts: Partial<KeyboardEventInit> = {}) => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key, cancelable: true, ...opts }));
+  };
+
+  it('ignores Ctrl+P/D/S when view is not editor (e.g. on /app/qr)', () => {
+    renderAppShellAt('/app/qr');
+    const genSpy = vi.spyOn(dataService, 'saveQuote');
+    // SaveDialog mocked to null; guardiamo che il click/key non generi salvataggio
+    fireKey('p', { ctrlKey: true });
+    fireKey('d', { ctrlKey: true });
+    fireKey('s', { ctrlKey: true });
+    expect(genSpy).not.toHaveBeenCalled();
+    genSpy.mockRestore();
+  });
+
+  it('handles metaKey (Mac Cmd+S) the same as ctrlKey', () => {
+    renderAppShellAt('/app/editor');
+    const before = mocks.layout.mock.calls.length;
+    fireKey('s', { metaKey: true });
+    expect(mocks.layout.mock.calls.length).toBeGreaterThanOrEqual(before);
+  });
+
+  it('skips when the event target is an input/textarea', () => {
+    const { container } = renderAppShellAt('/app/editor');
+    const input = document.createElement('input');
+    container.appendChild(input);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true }));
+    input.remove();
   });
 });

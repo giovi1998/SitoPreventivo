@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { ViewName } from '../hooks/useRouteView';
 import { useIsMobileWorkspace } from '../hooks/useMediaQuery';
 import { getSidebarCollapsed, setSidebarCollapsed } from '../utils/uiPrefs';
@@ -36,6 +36,15 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
     else nav('editor');
   };
 
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawerOpen]);
+
   return (
     <main className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
       {!isMobileWorkspace && (
@@ -69,7 +78,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
         <nav aria-label="Navigazione principale">
           {/* Phase 13b (REQ-DS-006): gruppi Crea / Archivio / Sistema */}
           <span className="nav-group-label" aria-hidden="true">Crea</span>
-          <button title="Genera QR Code" className={view === 'qr' ? 'active' : ''} onClick={() => setView('qr')}>
+          <button title="Genera QR Code" className={view === 'qr' ? 'active' : ''} aria-current={view === 'qr' ? 'page' : undefined} onClick={() => setView('qr')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="3" y="3" width="7" height="7" rx="1" />
               <rect x="14" y="3" width="7" height="7" rx="1" />
@@ -80,7 +89,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
             </svg>
             <span className="nav-label">QR Code</span>
           </button>
-          <button title="Bigliettini da visita" className={view === 'card' ? 'active' : ''} onClick={() => setView('card')}>
+          <button title="Bigliettini da visita" className={view === 'card' ? 'active' : ''} aria-current={view === 'card' ? 'page' : undefined} onClick={() => setView('card')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="2" y="6" width="20" height="14" rx="2" />
               <line x1="2" y1="10" x2="22" y2="10" />
@@ -88,7 +97,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
             </svg>
             <span className="nav-label">Bigliettini</span>
           </button>
-          <button title="Logo Builder" className={view === 'logo' ? 'active' : ''} onClick={() => setView('logo')}>
+          <button title="Logo Builder" className={view === 'logo' ? 'active' : ''} aria-current={view === 'logo' ? 'page' : undefined} onClick={() => setView('logo')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="3" y="3" width="8" height="8" rx="1" />
               <circle cx="16.5" cy="7.5" r="3.5" />
@@ -98,7 +107,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
             </svg>
             <span className="nav-label">Loghi</span>
           </button>
-          <button title="Volantini" className={view === 'flyer' ? 'active' : ''} onClick={() => setView('flyer')}>
+          <button title="Volantini" className={view === 'flyer' ? 'active' : ''} aria-current={view === 'flyer' ? 'page' : undefined} onClick={() => setView('flyer')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
@@ -107,7 +116,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
             </svg>
             <span className="nav-label">Volantini</span>
           </button>
-          <button title="Social AI" className={view === 'social' ? 'active' : ''} onClick={() => setView('social')}>
+          <button title="Social AI" className={view === 'social' ? 'active' : ''} aria-current={view === 'social' ? 'page' : undefined} onClick={() => setView('social')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="18" cy="5" r="3" />
               <circle cx="6" cy="12" r="3" />
@@ -118,7 +127,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
             <span className="nav-label">Social AI</span>
           </button>
           {user?.role === 'admin' && (
-          <button title="Sito Web" className={view === 'website' ? 'active' : ''} onClick={() => setView('website')}>
+          <button title="Sito Web" className={view === 'website' ? 'active' : ''} aria-current={view === 'website' ? 'page' : undefined} onClick={() => setView('website')}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="10" />
               <line x1="2" y1="12" x2="22" y2="12" />
@@ -131,12 +140,12 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
             <>
               <span className="nav-group-label" aria-hidden="true">Archivio</span>
               {user.role === 'admin' && (
-                <button title="Clienti (CRM)" className={view === 'customers' ? 'active' : ''} onClick={() => setView('customers')}>
+                <button title="Clienti (CRM)" className={view === 'customers' ? 'active' : ''} aria-current={view === 'customers' ? 'page' : undefined} onClick={() => setView('customers')}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                   <span className="nav-label">Clienti</span>
                 </button>
               )}
-              <button title="I miei documenti" className={view === 'collection' ? 'active' : ''} onClick={() => setView('collection')}>
+              <button title="I miei documenti" className={view === 'collection' ? 'active' : ''} aria-current={view === 'collection' ? 'page' : undefined} onClick={() => setView('collection')}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
                 <span className="nav-label">Documenti</span>
               </button>
@@ -144,7 +153,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
           )}
           <span className="nav-group-label" aria-hidden="true">Sistema</span>
           {user?.role === 'admin' && (
-            <button title="Nuovo preventivo" className={view === 'editor' ? 'active' : ''} onClick={handleNewQuote}>
+            <button title="Nuovo preventivo" className={view === 'editor' ? 'active' : ''} aria-current={view === 'editor' ? 'page' : undefined} onClick={handleNewQuote}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
               <span className="nav-label">Editor</span>
             </button>
@@ -227,7 +236,7 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
 
       {drawerOpen && isMobileWorkspace && (
         <div className="drawer-overlay" onClick={() => setDrawerOpen(false)}>
-          <aside className="mobile-drawer" onClick={e => e.stopPropagation()}>
+          <aside className="mobile-drawer" role="dialog" aria-modal="true" aria-label="Menu di navigazione" onClick={e => e.stopPropagation()}>
             <div className="drawer-header">
               <div className="brand">
                 <div className="brand-logo">
@@ -343,7 +352,9 @@ export default function Layout({ children, view, setView, onLogout, onSave, onRe
         </div>
       )}
 
-      <section className="workspace" aria-live="polite">{children}</section>
+      {/* P1 fix (impeccable): aria-live="polite" su tutto il workspace annunciava
+          ogni rerender. Rimosso — lo stato (save/dirty/AI) è già in topbar. */}
+      <section className="workspace">{children}</section>
     </main>
   );
 }
