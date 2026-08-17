@@ -66,11 +66,13 @@ describe('Docs consistency (Phase 7, REQ-010/011/012/013)', () => {
     expect(md).toMatch(/userSettings_/i);
   });
 
-  it('DESIGN.md documents QREditor, CardEditor and LogoEditor components', () => {
+  it('DESIGN.md documents the app design system: tokens, components and sections', () => {
     const md = readDoc('DESIGN.md');
-    expect(md).toMatch(/QREditor/);
-    expect(md).toMatch(/CardEditor/);
-    expect(md).toMatch(/LogoEditor/);
+    expect(md).toMatch(/## Overview/i);
+    expect(md).toMatch(/## Colors/i);
+    expect(md).toMatch(/## Typography/i);
+    expect(md).toMatch(/Creative North Star/i);
+    expect(md).toMatch(/accent/i);
   });
 
   it('README.md does NOT link to the public /docs/logo-ai page (Phase 7 polish, private docs)', () => {

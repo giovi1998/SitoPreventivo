@@ -1,0 +1,325 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-17T00:00:00.000Z",
+  "title": "Design System: Quickbrand",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Rosso segnale",
+        "canonical": "#E62020",
+        "tonalRamp": ["#7a0a0a", "#a80f0f", "#d41414", "#E62020", "#f24545", "#f76b6b", "#fb9b9b", "#fcd4d4"]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Rosso segnale soft",
+        "canonical": "#FCE8E8",
+        "tonalRamp": ["#5b0a0a", "#8e1010", "#c01818", "#f24545", "#f76b6b", "#fb9b9b", "#fcd4d4", "#FCE8E8"]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Canvas ghiaccio",
+        "canonical": "#F6F8FC",
+        "tonalRamp": ["#0f1520", "#1f2a3a", "#3d4c63", "#647086", "#94a3b8", "#c8d0df", "#eef3fb", "#F6F8FC"]
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "Navy profondo",
+        "canonical": "#082033",
+        "tonalRamp": ["#020a0f", "#051623", "#082033", "#0a2a42", "#104b77", "#1d6ca5", "#2e93d4", "#58b9ff"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Inchiostro scuro",
+        "canonical": "#07111f",
+        "tonalRamp": ["#020407", "#04101a", "#07111f", "#0d1a2b", "#14263a", "#1b3550", "#26486d", "#3a6899"]
+      },
+      "ink-sec": {
+        "role": "neutral",
+        "displayName": "Inchiostro secondario",
+        "canonical": "#344054",
+        "tonalRamp": ["#0a0f15", "#162130", "#263548", "#344054", "#48607e", "#5f82ab", "#83a3c3", "#adc0d0"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "#647086",
+        "tonalRamp": ["#101318", "#1c222e", "#343c4c", "#647086", "#7c8ba3", "#96a2b7", "#b6bfcc", "#d6dae2"]
+      },
+      "muted-lt": {
+        "role": "neutral",
+        "displayName": "Muted leggero",
+        "canonical": "#94a3b8",
+        "tonalRamp": ["#1a202c", "#2a3247", "#3e4a5f", "#647086", "#7a8ba3", "#94a3b8", "#b8c3d3", "#dde3eb"]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Linea",
+        "canonical": "#c8d0df",
+        "tonalRamp": ["#232834", "#343a4c", "#4a5166", "#647086", "#7c8ba3", "#94a3b8", "#b4bdc9", "#c8d0df"]
+      },
+      "line-lt": {
+        "role": "neutral",
+        "displayName": "Linea chiara",
+        "canonical": "#f1f5f9",
+        "tonalRamp": ["#2a2f38", "#3d4552", "#5a6072", "#7c8494", "#9aa4b4", "#b6bdc9", "#d4d8e0", "#f1f5f9"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Superficie bianca",
+        "canonical": "#FFFFFF",
+        "tonalRamp": ["#0a0d12", "#141821", "#1f2430", "#2d3242", "#4a4f62", "#6a7080", "#949cab", "#e4e7ee"]
+      },
+      "surface-sun": {
+        "role": "neutral",
+        "displayName": "Superficie solare",
+        "canonical": "#F8FAFC",
+        "tonalRamp": ["#0b0e13", "#151922", "#202431", "#2e3343", "#4c5065", "#6c7283", "#969cab", "#e6e8ef"]
+      },
+      "surface-hov": {
+        "role": "neutral",
+        "displayName": "Superficie hover",
+        "canonical": "#f1f5f9",
+        "tonalRamp": ["#282d37", "#3a4052", "#575d74", "#7c8494", "#9aa4b4", "#b6bdc9", "#d4d8e0", "#f1f5f9"]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Successo",
+        "canonical": "#11845b",
+        "tonalRamp": ["#04150e", "#092b1c", "#0d4a30", "#11845b", "#1ea875", "#34c98f", "#6ee0b0", "#b7f1d0"]
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "Warning",
+        "canonical": "#a66200",
+        "tonalRamp": ["#1c0b00", "#3a1a00", "#663000", "#a66200", "#c88400", "#e8a92b", "#f4c768", "#fde6b0"]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Pericolo",
+        "canonical": "#dc2626",
+        "tonalRamp": ["#290404", "#570808", "#8b0d0d", "#dc2626", "#f03e3e", "#f76b6b", "#fb9b9b", "#fecaca"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Titoli di sezione e header di pagina. Peso massimo, tracking negativo."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Titoli interni ai pannelli e ai moduli principali."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Nomi di sezione dentro card e blocchi."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Testo operativo, massa, dettagli."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Microcopy, hint, badge, categorie, stati."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Raw output AI, log, codice e chiavi."
+      }
+    },
+    "shadows": [
+      {
+        "name": "soft-hover",
+        "value": "0 10px 22px rgba(8,32,51,.09)",
+        "purpose": "Lift discreto su hover di bottoni e card."
+      },
+      {
+        "name": "panel-shadow",
+        "value": "0 8px 24px rgba(19,35,58,.08)",
+        "purpose": "Profondità leggera su card e pannelli attivi."
+      },
+      {
+        "name": "modal-shadow",
+        "value": "0 20px 60px rgba(0,0,0,.15)",
+        "purpose": "Dialoghi, overlay e superfici in primo piano."
+      },
+      {
+        "name": "document-shadow",
+        "value": "0 24px 80px rgba(35,44,62,.12)",
+        "purpose": "Profondità più marcata riservata alla pagina stampabile."
+      }
+    ],
+    "motion": [
+      {
+        "name": "transition-fast",
+        "value": "0.15s ease",
+        "purpose": "Transizioni rapide su hover, focus e piccoli stati."
+      },
+      {
+        "name": "transition-base",
+        "value": "0.2s ease",
+        "purpose": "Transizioni standard su border, background e piccole elevation."
+      },
+      {
+        "name": "transition-slow",
+        "value": "0.3s ease",
+        "purpose": "Transizioni più ampie per modali, shell e cambi di layout."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "shell",
+        "value": "1023px"
+      },
+      {
+        "name": "mobile",
+        "value": "767px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Azione primaria, sempre su accent rosso segnale.",
+      "html": "<button class=\"ds-btn-primary\">Salva preventivo</button>",
+      "css": ".ds-btn-primary { background: var(--accent); color: #ffffff; border: 1px solid color-mix(in srgb, var(--accent) 82%, #052258); border-radius: var(--radius-md); padding: 0.72rem 0.9rem; font-weight: 800; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; } .ds-btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); transform: translateY(-1px); box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent); } .ds-btn-primary:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Azione secondaria discreta.",
+      "html": "<button class=\"ds-btn-ghost\">Annulla</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 9px 16px; font-weight: 700; transition: color 0.15s ease, border-color 0.15s ease; } .ds-btn-ghost:hover { color: var(--ink); border-color: var(--accent); } .ds-btn-ghost:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Field Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo operativo standard.",
+      "html": "<input class=\"ds-input\" placeholder=\"Nome cliente\" />",
+      "css": ".ds-input { width: 100%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: var(--radius-md); padding: 0.82rem; transition: border-color 0.2s ease, box-shadow 0.2s ease; } .ds-input::placeholder { color: var(--muted-lt); } .ds-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent); outline: none; }"
+    },
+    {
+      "name": "Surface Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Contenitore operativo standard per documenti e collezioni.",
+      "html": "<div class=\"ds-card\"><strong>Preventivo #12</strong><p>Cliente: Rossi srl</p></div>",
+      "css": ".ds-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 20px; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; } .ds-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(19,35,58,.08); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }"
+    },
+    {
+      "name": "Topbar Glass",
+      "kind": "custom",
+      "refersTo": "topbar-glass",
+      "description": "Barra operativa principale con vetro controllato.",
+      "html": "<div class=\"ds-topbar\"><strong>Quickbrand</strong><span>Editor</span></div>",
+      "css": ".ds-topbar { height: 68px; background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 0 28px; }"
+    },
+    {
+      "name": "Document Header",
+      "kind": "custom",
+      "refersTo": "document-header",
+      "description": "Intestazione della pagina stampabile / documento.",
+      "html": "<div class=\"ds-doc-header\"><h2>Preventivo Servizio Web</h2><p>Cliente: Rossi srl</p></div>",
+      "css": ".ds-doc-header { padding: 20px 0; border-bottom: 1px solid var(--line-lt); } .ds-doc-header h2 { margin: 0; font-size: 2rem; font-weight: 700; color: var(--accent); letter-spacing: -0.03em; } .ds-doc-header p { margin: 6px 0 0; color: var(--ink-sec); font-size: 0.95rem; }"
+    },
+    {
+      "name": "AI Log Panel",
+      "kind": "custom",
+      "refersTo": "ai-log",
+      "description": "Pannello log AI in tempo reale, sempre monospace.",
+      "html": "<div class=\"ds-ai-log\"><div class=\"ds-ai-log-title\">Log AI</div><div class=\"ds-ai-log-entry\">Generazione completata</div><div class=\"ds-ai-log-entry ds-ai-log-entry--error\">Timeout provider</div></div>",
+      "css": ".ds-ai-log { margin-top: 12px; padding: 10px; background: #0f172a; border-radius: 10px; border: 1px solid #1e293b; max-height: 200px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; } .ds-ai-log-title { display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; font-weight: 800; margin-bottom: 6px; } .ds-ai-log-entry { padding: 3px 0; color: #94a3b8; line-height: 1.4; border-bottom: 1px solid #1e293b; } .ds-ai-log-entry:last-child { border-bottom: none; } .ds-ai-log-entry--error { color: #f87171; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Il Kit",
+    "overview": "Quickbrand è la valigetta del brand raccolta e pronta all'uso. Non è un editor generico decorato — è l'insieme di strumenti che, dal brief, costruisce preventivo, card, logo, flyer, social e sito in una sola sessione. Il sistema visivo deve comunicare ordine, operatività e fiducia: strutture chiare, superfici piane a riposo, accenti solo quando servono per guidare l'azione o lo stato.\n\nIl mood è operativo e fiducioso: tool-first, niente fronzoli. Ogni pannello è uno stadio di produzione; il colore accento appare come un segnale tattile (il pulsante che agisce, lo stato che chiama). Non c'è spazio per l'estetica generica da AI-slop: niente gradienti gratuiti fuori dal contesto documentale, niente glows, niente decorazioni inutili. Il vetro esiste solo dove serve (topbar, modal) per far respirare gli strumenti.",
+    "keyCharacteristics": [
+      "Piatto a riposo, ombra solo come risposta allo stato",
+      "Accento rosso segnale riservato a trigger primari, badge e selezioni",
+      "Superfici bianche con toni al ghiaccio, sidebar in navy profondo come ancora",
+      "Tipografia da interfaccia pro: sans peso alto, mai decorativa, letter-spacing negativo sui titoli",
+      "Raggio medio, coerente tra editor e dialog — pill solo per elementi circolari o di stato",
+      "Vetri e sfocature controllate, mai ornamento"
+    ],
+    "rules": [
+      {
+        "name": "The Rosso segnale è un verbo.",
+        "body": "L'accento rosso appare solo su azione, selezione, stato o output decisivo; mai come sfondo decorativo.",
+        "section": "colors"
+      },
+      {
+        "name": "The Navy resta solo.",
+        "body": "Il navy profondo (#082033) è riservato alla sidebar e ai gradienti strutturali; non diventa colore di fondo dei pannelli.",
+        "section": "colors"
+      },
+      {
+        "name": "The Canvas è ghiaccio, mai grigio neutro.",
+        "body": "Lo sfondo resta aperto, freddo ma vivo; niente tonalità sporche o warm senza causa.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono = raw rule.",
+        "body": "Mono font non si usa mai per copy utente; solo per output tecnico, log e token.",
+        "section": "typography"
+      },
+      {
+        "name": "The Label è maiuscolo per gerarchia.",
+        "body": "Se un testo è label/hint, deve essere maiuscolo, peso 800, letterSpacing ≥ 0.08em.",
+        "section": "typography"
+      },
+      {
+        "name": "The Spaziatura negativa non si estende al body.",
+        "body": "Letter-spacing negativo resta ai titoli; nel body solo segnale, non stile.",
+        "section": "typography"
+      },
+      {
+        "name": "The Documento è il fulcro.",
+        "body": "Ogni layout deve lasciare il documento visibile e centrale; gli editor sono supporto, non frame.",
+        "section": "layout"
+      },
+      {
+        "name": "The Sidebar non è un pannello.",
+        "body": "Resta struttura stabile e di navigazione, non spazio per contenuti extra.",
+        "section": "layout"
+      },
+      {
+        "name": "The Shadow reagisce.",
+        "body": "Se non c'è stato, non c'è ombra: piatta a riposo, elevata solo su hover/focus/attivo.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Vetri solo sul controllo.",
+        "body": "Il backdrop blur esiste su topbar e modali; i pannelli di editor rimangono opachi.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Documento può avere più depth.",
+        "body": "Il PDF/documento è stampabile: lì la profondità può essere più forte, perché simula la pagina reale.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do mantenere l'accento rosso solo su azione, selezione, stato o output decisivo.",
+      "Do tenere le superfici piane a riposo e aggiungere ombra solo quando serve a segnalare interazione o stato.",
+      "Do usare letter-spacing negativo solo sui titoli; nel testo corrente resta leggibile e normale.",
+      "Do mantenere i documenti al centro visuale; gli editor devono restare al servizio del documento.",
+      "Do rispettare il raggio medio coerente: radius-md su button/input/nav, radius-lg su card e modali, radius-sm su micro-controllo.",
+      "Do usare glass solo su topbar e modali; gli editor restano opachi.",
+      "Do rendere ogni stato di input visibile: focus è sempre border + ring, non solo colore.",
+      "Do seguire il token system di GlobalStyles.tsx; i nuovi colori non sono mai inventati alla superficie."
+    ],
+    "donts": [
+      "Don't introdurre gradienti generici o sfumature AI-slop fuori dal contesto documentale o strutturale.",
+      "Don't usare glows, box-shadow decorative pesanti o backdrop-filter diffusi come ornamento.",
+      "Don't rendere il sistema corporate sterile: non spingere neutrali freddi e anonimi su pannelli operativi.",
+      "Don't riempire di pill, badge o box rumorosi che interrompono la scansione.",
+      "Don't rendere i testi label in minuscolo o maiuscolo incoerente: la gerarchia deve rimanere chiara.",
+      "Don't separare i colori tra frontmatter e prose senza una ragione; il frontmatter è normativo."
+    ]
+  }
+}

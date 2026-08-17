@@ -423,7 +423,7 @@ Spec attive in `docs/spec/` (2026-08-06): `spec-api-saas-monetization.md`,
 `to-be-done.md`, `done.md`, `design-criteria.md` — criteri tipografici
 card/logo/flyer con fonti, riferimento design review §27 gotchas), spec
 attivi in `docs/spec/`. Root solo: `AGENTS.md`, `README.md`, `DESIGN.md`,
-`REQUIREMENTS.md`.
+`REQUIREMENTS.md`, `PRODUCT.md` (impeccable product truth).
 
 ## Responsive Patterns
 
@@ -660,15 +660,15 @@ skill** (`.agents/skills/<name>/SKILL.md`):
   `user_id=userEmail`, tag feature, usage e costi. Mai chiudere un task
   AI senza aver verificato che le trace arrivino.
 
-On-demand (solo se il task lo richiede): `deploy-to-vercel`,
-`vercel-cli-with-tokens`, `vercel-optimize`, `gpt-taste` /
-`design-taste-frontend` / `high-end-visual-design` (design UI premium),
-`muapi-nano-banana` (prompt `imagePrompt` AI), `imagegen-frontend-*`,
-`redesign-existing-projects`, `brandkit`, `image-to-code`,
-`playwright-cli` (debug E2E), `full-output-enforcement` (output lungo),
-`create-specification` (nuove spec in `docs/spec/`), `frontend-design`,
-`minimalist-ui`, `industrial-brutalist-ui`, `stitch-design-taste`,
-`firecrawl` (scraping research clienti), ecc.
+ On-demand (solo se il task lo richiede): `deploy-to-vercel`,
+`vercel-cli-with-tokens`, `vercel-optimize`, `high-end-visual-design`
+(design UI premium), `muapi-nano-banana` (prompt `imagePrompt` AI),
+`imagegen-frontend-*`, `redesign-existing-projects`, `brandkit`,
+`image-to-code`, `playwright-cli` (debug E2E), `full-output-enforcement`
+(output lungo), `create-specification` (nuove spec in `docs/spec/`),
+`frontend-design`, `minimalist-ui`, `industrial-brutalist-ui`,
+`firecrawl` (scraping research clienti), `impeccable` (design review
+e refinement UI), ecc.
 
 Le skill sono **solo per l'agente di coding**, non per l'app: l'app usa
 DeepSeek/Gemini/Ollama via proxy server-side.
