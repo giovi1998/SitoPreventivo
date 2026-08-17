@@ -72,6 +72,9 @@ export const customers = pgTable("customers", {
   // TB-029 fase 3: A/B testing prompt per cliente {promptName: label}
   // es. {"card-system": "experiment"} → override label in /api/ai/prompt.
   promptLabels: jsonb("prompt_labels"),
+  // TB-032: versione prompt per cliente {promptName: version} — override
+  // su label in /api/ai/prompt (test prompt×modello).
+  promptVersions: jsonb("prompt_versions"),
   // TB-019+ landing: risposte form per futura landing page (webAnswers JSONB).
   webAnswers: jsonb("web_answers"),
   notes: text(),

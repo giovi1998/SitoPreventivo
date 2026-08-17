@@ -1000,21 +1000,27 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
     const name = (url.searchParams.get('name') || '').trim();
     const label = (url.searchParams.get('label') || '').trim() || 'production';
     const customerId = (url.searchParams.get('customerId') || '').trim() || undefined;
+    // TB-032: versione esatta (per test prompt×modello), assente = label.
+    const versionRaw = (url.searchParams.get('version') || '').trim();
+    const version = versionRaw && /^\d+$/.test(versionRaw) ? Number(versionRaw) : undefined;
     if (!name) return json(req, res, 400, { error: 'Parametro name mancante' });
     try {
       let effectiveLabel = label;
+      let effectiveVersion = version;
       if (customerId) {
-        // Best-effort: DB non raggiungibile → label richiesta, mai bloccare
-        // il prompt (il fallback builder locale resta l'ultimo muro).
+        // Best-effort: DB non raggiungibile → label/version richiesti, mai
+        // bloccare il prompt (il fallback builder locale resta l'ultimo muro).
         try {
           const [cust] = await (await getDb()).select().from(customersTable).where(eq(customersTable.id, customerId));
           const labels = (cust?.promptLabels ?? {}) as Record<string, string> | null;
           if (labels?.[name]) effectiveLabel = labels[name];
+          const versions = (cust?.promptVersions ?? {}) as Record<string, number> | null;
+          if (versions?.[name]) effectiveVersion = Number(versions[name]);
         } catch {
-          // DB down → label default
+          // DB down → label/version default
         }
       }
-      const data = await fetchRemotePrompt(name, effectiveLabel);
+      const data = await fetchRemotePrompt(name, effectiveLabel, effectiveVersion);
       return json(req, res, 200, { data });
     } catch (err) {
       return json(req, res, 404, { error: (err as Error)?.message || 'Prompt non trovato' });
@@ -1037,6 +1043,8 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
           .min(1)
           .max(20),
         label: z.string().min(1).max(50).optional(),
+        // TB-032: descrizione della versione (commitMessage Langfuse).
+        commitMessage: z.string().max(300).optional(),
       }),
       body
     );
@@ -1050,6 +1058,7 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
           type: 'chat',
           prompt: v.data.prompt,
           ...(v.data.label ? { labels: [v.data.label] } : {}),
+          ...(v.data.commitMessage ? { commitMessage: v.data.commitMessage } : {}),
         }),
       });
       if (!up.ok) return json(req, res, up.status, { error: `Langfuse ${up.status}` });
@@ -1077,6 +1086,64 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
       const data = await up.json();
       // Langfuse risponde paginato ({data: [...]}) → normalizza a array.
       return json(req, res, 200, { data: Array.isArray((data as { data?: unknown }).data) ? (data as { data: unknown[] }).data : data });
+    } catch (err) {
+      return json(req, res, 502, { error: `Langfuse error: ${String((err as Error)?.message ?? err).slice(0, 200)}` });
+    }
+  }
+
+  // TB-032: versioni di un prompt (per la vista A/B in Clienti). Admin-only.
+  // Lista versioni: GET /prompts (numeri + labels). Dettaglio per versione:
+  // GET /prompts/{name}?version=N (content, commitMessage, labels).
+  if (path === '/ai/prompts/versions' && method === 'GET') {
+    const url = new URL(req.url || '/', 'http://localhost');
+    if (url.searchParams.get('adminEmail') !== 'admin@gmail.com') {
+      return json(req, res, 403, { error: "Accesso riservato all'amministratore" });
+    }
+    const name = (url.searchParams.get('name') || '').trim();
+    if (!name) return json(req, res, 400, { error: 'Parametro name mancante' });
+    const pk = process.env.LANGFUSE_PUBLIC_KEY || process.env.VITE_LANGFUSE_PUBLIC_KEY;
+    const sk = process.env.LANGFUSE_SECRET_KEY || process.env.VITE_LANGFUSE_SECRET_KEY;
+    const base = process.env.LANGFUSE_BASE_URL || process.env.VITE_LANGFUSE_BASE_URL;
+    if (!pk || !sk || !base) return json(req, res, 503, { error: 'Langfuse non configurato' });
+    try {
+      const list = await fetch(`${base}/api/public/v2/prompts`, {
+        headers: { Authorization: `Basic ${Buffer.from(`${pk}:${sk}`).toString('base64')}` },
+      });
+      if (!list.ok) return json(req, res, list.status, { error: `Langfuse ${list.status}` });
+      const listBody = (await list.json()) as { data?: Array<{ name?: string; versions?: number[]; labels?: string[] }> };
+      const found = (listBody.data ?? []).find((p) => p.name === name);
+      const versions = Array.isArray(found?.versions) ? found.versions : [];
+      // Dettaglio per versione (commitMessage + content per anteprima).
+      const rows: Array<{ version: number; labels: string[]; commitMessage?: string | null; content?: string; length?: number }> = [];
+      for (const v of versions) {
+        try {
+          const det = await fetch(`${base}/api/public/v2/prompts/${encodeURIComponent(name)}?version=${v}`, {
+            headers: { Authorization: `Basic ${Buffer.from(`${pk}:${sk}`).toString('base64')}` },
+          });
+          if (!det.ok) continue;
+          const body = (await det.json()) as {
+            version?: number;
+            labels?: string[];
+            commitMessage?: string | null;
+            prompt?: string | Array<{ content: string }>;
+          };
+          const content = Array.isArray(body.prompt)
+            ? body.prompt[0]?.content
+            : typeof body.prompt === 'string'
+              ? body.prompt
+              : undefined;
+          rows.push({
+            version: Number(body.version ?? v),
+            labels: Array.isArray(body.labels) ? body.labels : [],
+            commitMessage: body.commitMessage ?? null,
+            content,
+            length: content?.length,
+          });
+        } catch {
+          // versione non leggibile → salta (best-effort)
+        }
+      }
+      return json(req, res, 200, { data: { name, versions: rows.sort((a, b) => a.version - b.version) } });
     } catch (err) {
       return json(req, res, 502, { error: `Langfuse error: ${String((err as Error)?.message ?? err).slice(0, 200)}` });
     }

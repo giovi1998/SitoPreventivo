@@ -23,7 +23,33 @@ function isLocalhost(): boolean {
 // Prompt diversi per ambiente: staging in locale, production in prod.
 export const RESOLVED_LABEL: string = isLocalhost() ? 'staging' : 'production';
 
-export async function getRemoteSystemPrompt(name: string, vars: PromptVars = {}, customerId?: string): Promise<string | null> {
+// TB-032: versione prompt fissata per un cliente (promptVersions). In
+// locale i customers vivono in localStorage (pq_customers:v1); in prod il
+// server la risolve da DB via customerId — il param è ridondante ma copre
+// il dev proxy (che non ha DB).
+export function getCustomerPromptVersion(customerId: string, promptId: string): number | undefined {
+  try {
+    if (typeof localStorage === 'undefined') return undefined;
+    const raw = localStorage.getItem('pq_customers:v1');
+    if (!raw) return undefined;
+    const list = JSON.parse(raw);
+    const found = Array.isArray(list)
+      ? list.find((c: Record<string, unknown>) => c.id === customerId)
+      : (list as Record<string, unknown>)[customerId];
+    const versions = (found as Record<string, unknown> | undefined)?.promptVersions as Record<string, number> | undefined;
+    const v = versions?.[promptId];
+    return typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getRemoteSystemPrompt(
+  name: string,
+  vars: PromptVars = {},
+  customerId?: string,
+  version?: number,
+): Promise<string | null> {
   const localFallback = (): string | null => {
     if (promptRegistry.hasPrompt(name)) return promptRegistry.getPrompt(name);
     return null;
@@ -32,8 +58,10 @@ export async function getRemoteSystemPrompt(name: string, vars: PromptVars = {},
   try {
     // TB-029 fase 3: customerId → il server fa override label con
     // promptLabels del cliente (A/B testing per cliente).
+    // TB-032: version esplicita (override su label) per test prompt×modello.
     const customerParam = customerId ? `&customerId=${encodeURIComponent(customerId)}` : '';
-    const res = await fetch(`/api/ai/prompt?name=${encodeURIComponent(name)}&label=${RESOLVED_LABEL}${customerParam}`);
+    const versionParam = version !== undefined ? `&version=${version}` : '';
+    const res = await fetch(`/api/ai/prompt?name=${encodeURIComponent(name)}&label=${RESOLVED_LABEL}${customerParam}${versionParam}`);
     if (!res.ok) return localFallback();
     const body = (await res.json()) as {
       data?: { prompt?: Array<{ role: string; content: string }>; fallback?: boolean };
@@ -69,20 +97,25 @@ export const REMOTE_PROMPT_PILOT: string[] = [
 const appliedRemote = new Set<string>();
 
 // Prefetch dei prompt pilota: chiamato all'avvio app e quando si apre un
-// cliente (customerId → override label A/B). Fallimento = silenzioso.
+// cliente (customerId → override label A/B + versione TB-032).
+// Fallimento = silenzioso.
 export async function prefetchRemotePrompts(customerId?: string): Promise<void> {
   await Promise.all(
     REMOTE_PROMPT_PILOT.map(async (id) => {
       if (appliedRemote.has(id)) return;
       try {
-        const remote = await getRemoteSystemPrompt(id, {}, customerId);
+        // TB-032: versione del cliente (promptVersions) passata al server,
+        // che la usa come override (come promptLabels). Il server la legge
+        // anche da DB via customerId; il param esplicito copre il dev proxy.
+        const version = customerId ? getCustomerPromptVersion(customerId, id) : undefined;
+        const remote = await getRemoteSystemPrompt(id, {}, customerId, version);
         if (remote == null) return;
         const isQuote = id === 'quote-system';
         promptRegistry.register(id, (ctx) =>
           isQuote
             ? compileClientPrompt(remote, { compact: (ctx?.compact ?? true) === true })
             : remote,
-          `Prompt remoto Langfuse (label ${RESOLVED_LABEL}${customerId ? `, cliente ${customerId}` : ''})`
+          `Prompt remoto Langfuse (label ${RESOLVED_LABEL}${customerId ? `, cliente ${customerId}` : ''}${version ? `, v${version}` : ''})`
         );
         appliedRemote.add(id);
       } catch {

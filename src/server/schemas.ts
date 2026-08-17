@@ -222,6 +222,8 @@ export const UpdateCustomerSchema = z.object({
   googleMapsUrl: z.string().max(500).optional(),
   // TB-029 fase 3: A/B testing prompt per cliente {promptName: label}
   promptLabels: z.record(z.string(), z.string().min(1).max(50)).optional(),
+  // TB-032: versione prompt per cliente {promptName: version}
+  promptVersions: z.record(z.string(), z.number().int().min(1).max(9999)).optional(),
   // TB-030 guard anti-loop: true = il PATCH viene dal sync (website→customer),
   // non ri-triggerare il sync customer→website. Mai persistito.
   skipSync: z.boolean().optional(),

@@ -96,4 +96,23 @@ describe('getRemoteSystemPrompt (prod=production, local=staging)', () => {
     const got = promptRegistry.getPrompt('card-system');
     expect(got).toBe('PROMPT MODIFICATO SU LANGFUSE');
   });
+
+  it('getCustomerPromptVersion legge promptVersions da pq_customers:v1 (dev locale)', async () => {
+    localStorage.setItem('pq_customers:v1', JSON.stringify([{ id: 'cust_1', promptVersions: { 'card-system': 3 } }, { id: 'cust_2' }]));
+    const { getCustomerPromptVersion } = await import('../remotePrompt');
+    expect(getCustomerPromptVersion('cust_1', 'card-system')).toBe(3);
+    expect(getCustomerPromptVersion('cust_2', 'card-system')).toBeUndefined();
+    expect(getCustomerPromptVersion('cust_1', 'flyer-system')).toBeUndefined();
+  });
+
+  it('version param aggiunto alla URL quando fornito', async () => {
+    const calls: any[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push(String(url));
+      return { ok: true, json: async () => ({ data: { name: 'card-system', version: 4, prompt: [{ role: 'system', content: 'V4' }], fallback: false } }) };
+    }));
+    const out = await getRemoteSystemPrompt('card-system', {}, 'cust_1', 4);
+    expect(calls[0]).toContain('version=4');
+    expect(out).toBe('V4');
+  });
 });

@@ -547,6 +547,59 @@ describe('TB-027 CustomerDetail', () => {
     });
   });
 
+  it('TB-032: sezione versioni prompt — lista v1..v4 con descrizione, anteprima e "usa per cliente"', async () => {
+    (dataService.getCustomer as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { ...baseCustomer, promptVersions: { 'card-system': 3 } },
+    });
+    const originalFetch = globalThis.fetch;
+    (globalThis as any).fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/api/ai/prompts/versions')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: {
+              name: 'card-system',
+              versions: [
+                { version: 1, labels: [], commitMessage: null, content: 'V1', length: 2 },
+                { version: 2, labels: ['staging'], commitMessage: null, content: 'V2', length: 2 },
+                { version: 3, labels: ['production'], commitMessage: null, content: 'V3', length: 2 },
+                { version: 4, labels: ['experiment', 'latest'], commitMessage: 'A/B: più rigido sui servizi', content: 'V4 LUNGO', length: 9 },
+              ],
+            },
+          }),
+        };
+      }
+      return { ok: false, status: 404 };
+    });
+    renderDetail();
+    await waitFor(() => {
+      expect(screen.getByTestId('crm-prompt-versions-section')).toBeTruthy();
+    });
+    // "usa v3" visibile dal promptVersions del customer
+    expect(screen.getByText('usa v3')).toBeTruthy();
+    // Apri le versioni della card
+    fireEvent.click(screen.getByTestId('crm-versions-toggle-card-system'));
+    await waitFor(() => {
+      expect(screen.getByText('A/B: più rigido sui servizi')).toBeTruthy();
+    });
+    expect(screen.getByText(/experiment, latest/)).toBeTruthy();
+    // Anteprima contenuto
+    fireEvent.click(screen.getByTestId('crm-versions-detail-card-system-4'));
+    await waitFor(() => {
+      expect(screen.getByText(/V4 LUNGO/)).toBeTruthy();
+    });
+    // "Usa" v2 → updateCustomer con promptVersions
+    fireEvent.click(screen.getByTestId('crm-versions-use-card-system-2'));
+    await waitFor(() => {
+      expect(dataService.updateCustomer).toHaveBeenCalledWith(
+        'cust_1',
+        expect.objectContaining({ promptVersions: expect.objectContaining({ 'card-system': 2 }) })
+      );
+    });
+    (globalThis as any).fetch = originalFetch;
+  });
+
   it('log logo caricato: base64 troncato a 60 char + (N bytes)', async () => {
     sessionStorage.clear();
     (dataService.getCustomer as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ data: baseCustomer });

@@ -334,6 +334,7 @@ export default defineConfig(({ mode }) => {
               '/api/ai/chat',
               '/api/ai/chat/stream',
               '/api/ai/prompt',
+              '/api/ai/prompts/versions',
               '/api/ai/embeddings',
               '/api/logs',
             ];
@@ -733,6 +734,51 @@ export default defineConfig(({ mode }) => {
                       : null;
                   if (!prompt) return json(res, 502, { error: 'Prompt vuoto' });
                   return json(res, 200, { data: { name: String(body.name ?? name), version: Number(body.version ?? 0), prompt, fallback: false } });
+                } catch (err) {
+                  return json(res, 502, { error: `Langfuse error: ${String(err?.message || err).slice(0, 120)}` });
+                }
+              }
+
+              // ─── /api/ai/prompts/versions (TB-032, dev mirror) ─────
+              // Lista versioni + dettaglio (commitMessage, anteprima) per la
+              // vista A/B in Clienti. Stesso flusso del server handler.
+              if (url === '/api/ai/prompts/versions' && req.method === 'GET') {
+                const q = new URL(req.url, 'http://localhost');
+                if (q.searchParams.get('adminEmail') !== 'admin@gmail.com') {
+                  return json(res, 403, { error: "Accesso riservato all'amministratore" });
+                }
+                const name = (q.searchParams.get('name') || '').trim();
+                if (!name) return json(res, 400, { error: 'Parametro name mancante' });
+                const pk = process.env.LANGFUSE_PUBLIC_KEY || process.env.VITE_LANGFUSE_PUBLIC_KEY;
+                const sk = process.env.LANGFUSE_SECRET_KEY || process.env.VITE_LANGFUSE_SECRET_KEY;
+                const base = process.env.LANGFUSE_BASE_URL || process.env.VITE_LANGFUSE_BASE_URL;
+                if (!pk || !sk || !base) return json(res, 503, { error: 'Langfuse non configurato' });
+                const auth = `Basic ${Buffer.from(`${pk}:${sk}`).toString('base64')}`;
+                try {
+                  const listRes = await fetch(`${base}/api/public/v2/prompts`, { headers: { Authorization: auth }, signal: AbortSignal.timeout(3000) });
+                  if (!listRes.ok) return json(res, listRes.status, { error: `Langfuse ${listRes.status}` });
+                  const listBody = await listRes.json();
+                  const found = (listBody.data ?? []).find((p) => p.name === name);
+                  const versions = Array.isArray(found?.versions) ? found.versions : [];
+                  const rows = [];
+                  for (const v of versions) {
+                    try {
+                      const detRes = await fetch(`${base}/api/public/v2/prompts/${encodeURIComponent(name)}?version=${v}`, { headers: { Authorization: auth }, signal: AbortSignal.timeout(3000) });
+                      if (!detRes.ok) continue;
+                      const body = await detRes.json();
+                      const content = Array.isArray(body.prompt) ? body.prompt[0]?.content : typeof body.prompt === 'string' ? body.prompt : undefined;
+                      rows.push({
+                        version: Number(body.version ?? v),
+                        labels: Array.isArray(body.labels) ? body.labels : [],
+                        commitMessage: body.commitMessage ?? null,
+                        content,
+                        length: content?.length,
+                      });
+                    } catch {
+                      // versione non leggibile → salta (best-effort)
+                    }
+                  }
+                  return json(res, 200, { data: { name, versions: rows.sort((a, b) => a.version - b.version) } });
                 } catch (err) {
                   return json(res, 502, { error: `Langfuse error: ${String(err?.message || err).slice(0, 120)}` });
                 }
