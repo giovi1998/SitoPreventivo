@@ -37,7 +37,7 @@ const brief = {
   notes: '',
 };
 
-const htmlOk = '<html><head><meta charset="UTF-8"><title>Panetteria</title></head><body><h1>Ciao</h1></body></html>';
+const htmlOk = '<html><head><meta charset="UTF-8"><title>Panetteria</title></head><body><header class="nav"><div class="nav-inner"><div class="brand">Nome</div><button class="menu-toggle" aria-label="Apri menu">Menu</button><ul class="nav-links"><li><a href="index.html">Home</a></li></ul></div></header><main><h1>Ciao</h1><section id="contatti"><h2>Contatti</h2><form><input type="email" placeholder="Email"></form></section></main><footer><p><span class="current-year">2026</span></p></footer></body></html>';
 const usage = (p = 100, c = 50) => ({ prompt_tokens: p, completion_tokens: c, total_tokens: p + c });
 
 const PROVIDERS = [
@@ -68,10 +68,9 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
         JSON.stringify({ html: htmlOk, pages: ['index'] }), // html
         JSON.stringify({ css: 'body { color: #000; }' }),   // css
         JSON.stringify({ js: 'console.log(1);' }),          // js
-        JSON.stringify({ issues: [] }),                     // verify
       ];
       let n = 0;
-      const state = { verifyHasTools: true, verifyHasToolCalls: true, verifyHasAnalyzeInPrompt: false };
+      const state = { requestsWithTools: 0, requestsWithToolCalls: 0 };
       vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init?: RequestInit) => {
         const u = String(url);
         n++;
@@ -80,12 +79,9 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
         // inclusi — limite 300s Hobby (sincrone = 60s, auto-build PROD).
         const isStreamRequest = !!body?.stream;
         if (isStreamRequest) {
-          if (n === 4) {
-            state.verifyHasTools = Array.isArray(body?.tools) && body.tools.length > 0;
-            state.verifyHasToolCalls = body.messages.some((m: any) => m.tool_calls);
-            state.verifyHasAnalyzeInPrompt = body.messages.some((m: any) => m.role === 'user' && String(m.content).includes('RISULTATI ANALISI'));
-          }
-          const contentPayload = JSON.stringify(queue[n - 1] ?? JSON.stringify({ issues: [] }));
+          if (Array.isArray(body?.tools) && body.tools.length > 0) state.requestsWithTools++;
+          if (body.messages.some((m: any) => m.tool_calls)) state.requestsWithToolCalls++;
+          const contentPayload = JSON.stringify(queue[n - 1] ?? JSON.stringify({ fixes: {} }));
           const sseBody = [
             `data: {"choices":[{"delta":{"content":${contentPayload}}}]}`,
             `data: {"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`,
@@ -95,7 +91,7 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
           return new Response(sseBody, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
         }
         return new Response(JSON.stringify({
-          choices: [{ message: { content: queue[n - 1] ?? JSON.stringify({ issues: [] }) } }],
+          choices: [{ message: { content: queue[n - 1] ?? JSON.stringify({ fixes: {} }) } }],
           usage: usage(),
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       });
@@ -114,24 +110,25 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
       expect(result.site.pages).toEqual(['index']);
       expect(result.changes).toContain('verify:ok');
       expect(result.verifyIssues).toBeUndefined();
-      // NESSUN tools/tool_calls nella richiesta verify (formato Ollama vs
-      // DeepSeek diverge → 400): i risultati analyze_site sono nel prompt
-      // user. Questa è la garanzia anti-400.
-      expect(state.verifyHasTools).toBe(false);
-      expect(state.verifyHasToolCalls).toBe(false);
-      expect(state.verifyHasAnalyzeInPrompt).toBe(true);
+      // NESSUN tools/tool_calls nelle richieste AI: il fix agent lavora su
+      // prompt testuale (solo parti rotte), mai tool_calls → niente 400
+      // Ollama/DeepSeek (formato tool diverge). Codice integro → verify
+      // zero-AI: 3 chiamate totali (html, css, js), nessun fix agent.
+      expect(state.requestsWithTools).toBe(0);
+      expect(state.requestsWithToolCalls).toBe(0);
+      expect(n).toBe(3);
     });
 
-    it(`${label}: verify con issue → fix applicato solo su parte rotta`, async () => {
-      // css rotto (parentesi non chiuse) → fix CSS; html/js integri → rifiutati
-      const brokenCss = '.nav { display: flex;';
-      const fixedCss = '.nav { display: flex; }';
+    it(`${label}: verify con issue → fix agent (solo parte rotta), recheck ok`, async () => {
+      // CSS con ::after content emoji: repair deterministico NON lo risolve
+      // (parentesi bilanciate) → serve il fix agent (una sola chiamata).
+      const brokenCss = '.btn::after { content: "\\1F366"; }';
+      const fixedCss = '.btn::after { content: ""; }';
       const queue = [
         JSON.stringify({ html: htmlOk, pages: ['index'] }), // html
         JSON.stringify({ css: brokenCss }),                  // css
         JSON.stringify({ js: 'console.log(1);' }),           // js
-        JSON.stringify({ issues: ['css rotto'], fixes: { css: fixedCss } }), // verify pass1
-        JSON.stringify({ issues: [] }),                      // verify recheck → ok
+        JSON.stringify({ fixes: { css: fixedCss } }),        // fix agent
       ];
       let n = 0;
       vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init?: RequestInit) => {
@@ -140,7 +137,7 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
         const body = init?.body ? JSON.parse(String(init.body)) : null;
         // Tutti gli step su SSE (vedi test sopra)
         if (!!body?.stream) {
-          const contentPayload = JSON.stringify(queue[n - 1] ?? JSON.stringify({ issues: [] }));
+          const contentPayload = JSON.stringify(queue[n - 1] ?? JSON.stringify({ fixes: {} }));
           const sseBody = [
             `data: {"choices":[{"delta":{"content":${contentPayload}}}]}`,
             'data: [DONE]',
@@ -149,7 +146,7 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
           return new Response(sseBody, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
         }
         return new Response(JSON.stringify({
-          choices: [{ message: { content: queue[n - 1] ?? JSON.stringify({ issues: [] }) } }],
+          choices: [{ message: { content: queue[n - 1] ?? JSON.stringify({ fixes: {} }) } }],
           usage: usage(),
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       });
@@ -161,6 +158,9 @@ describe('generateSite flusso completo — matrice 3 provider', () => {
       expect(result.verifyFixesApplied).toEqual(['css']);
       expect(result.changes).toContain('verify:css:fixed');
       expect(result.changes).toContain('verify:ok');
+      expect(result.verifyIssues).toBeUndefined();
+      // html(1) + css(2) + js(3) + fix agent(4): una sola chiamata AI verify
+      expect(n).toBe(4);
     });
   }
 });

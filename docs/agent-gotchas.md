@@ -2229,3 +2229,19 @@ flyer ≥10pt, headline ≥24pt, tagline ≥40% wordmark). Baseline screenshot:
   salvava il placeholder come "done". Fix: `generateLogoDraft` lancia su
   quel flag → badge errore + retry. Regression test
   `useAutoBuildGenerate.test.ts` ("logo fallback placeholder → error").
+
+### 26.28 Verify refactor — fix agent mirato + repair deterministico + regressione struttura (TB-032, 2026-08-17)
+
+**Problema (to-be-done "Verify agent alternativo")**: il verify AI riceveva il dump COMPLETO del sito (50-60K token) e, anche dopo §26.15-26.17, restava sorgente di falsi fix: modello lento (194s con think:max), costo alto (2 chiamate per loop), e il check di qualità non copriva la STRUTTURA (mappa/contatti/form) — un "fix" poteva tagliare il form senza che nessuno se ne accorgesse (fix-guard §26.16 guardava solo sintassi + lunghezza).
+
+**Fix (il deterministico sostituisce l'AI dove può, il fix agent è mirato)**: 
+1. **Verify zero-AI su codice integro**: nalyzeSiteCode + nuova nalyzeSiteRegression (struttura obbligatoria) calcolati lato client. Codice integro = erify:ok con ZERO chiamate AI (prima: 1-2 sempre).
+2. **Repair deterministico locale prima dell'AI** (epairCssStructure/epairHtmlStructure, già esistenti): parentesi CSS sbilanciate e tag orfani si sistemano in millisecondi, zero costi (erify:repair:css/erify:repair:html). Se risolve, il fix agent non serve.
+3. **Fix agent dedicato** (uildWebsiteFixPrompt): riceve SOLO le parti dichiarate rotte dal tool (mai il dump completo) → un modello che non vede il codice integro non può riscriverlo né perdere sezioni. Una chiamata, easoningEffort: 'high', schema {fixes:{html?,css?,js?}}. Guardia anti-distruzione invariata (§26.16): fixato deterministicamente integro e ≥60% della parte rotta.
+4. **Sezione regressione** (nalyzeSiteRegression): nav, menu-toggle (hamburger mobile), footer con .current-year, mappa Google (se il brief ha indirizzo), form contatti, href relativi tra pagine. Parser HTML minimale lato client (stack tag); su HTML strutturalmente rotto la regressione salta (già segnalato da analyzeSiteCode). Mappa/form/contatti non possono più sparire da un fix.
+5. **Recheck finale 100% deterministico**: issue residue REALI nel pannello (mai inventate dal modello). Parte vuota (es. CSS fallito in step 3) → issue residua nel pannello, niente chiamata AI inutile.
+6. **website-verify prompt/registry rimossi** (dead code): nessun consumatore; il fix agent usa uildWebsiteFixPrompt.
+
+**Costi**: sito integro = 3 chiamate AI totali (html/css/js, prima 4-5); sito riparabile deterministicamente = 3; non riparabile = 4 (1 fix agent). Tempo verify: 0s (integro) invece di 30-194s.
+
+**Test**: siteAnalyser 24 (10 regressione), orchestrator 40 (zero-AI, repair, fix agent mirato, parti integre mai inviate, recheck), matrice 3 provider 6 (niente tools/tool_calls — garanzia anti-400, 3-4 chiamate). Gate: typecheck + 3300 test verdi.

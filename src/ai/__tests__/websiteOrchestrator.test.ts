@@ -46,7 +46,7 @@ const usage = (promptTokens = 100, completionTokens = 50) => ({
   totalTokens: promptTokens + completionTokens,
 });
 
-const htmlNoHead = '<html><head><meta charset="UTF-8"><title>Home</title></head><body><h1>Benvenuto</h1></body></html>';
+const htmlNoHead = '<html><head><meta charset="UTF-8"><title>Home</title></head><body><header class="nav"><div class="nav-inner"><div class="brand">Nome</div><button class="menu-toggle" aria-label="Apri menu">Menu</button><ul class="nav-links"><li><a href="index.html">Home</a></li></ul></div></header><main><h1>Benvenuto</h1><section id="contatti"><h2>Contatti</h2><form><input type="email" placeholder="Email"></form></section></main><footer><p>&copy; <span class="current-year">2026</span> Nome</p></footer></body></html>';
 
 function setupMockProvider() {
   fakeProvider = {
@@ -181,74 +181,88 @@ describe('WebsiteOrchestrator.generateSite', () => {
     expect(result.changes).toContain('fallback:html:ok');
   });
 
-  it('verify issues + fixes: applica le correzioni al codice finale', async () => {
-    chatResponses.push(
-      { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
-      { content: JSON.stringify({ css: '.a { display: flex;' }), usage: usage() },  // CSS rotto (parentesi non chiusa)
-      { content: JSON.stringify({ js: 'console.log("old");' }), usage: usage() },
-      {
-        content: JSON.stringify({
-          issues: ['css rotto'],
-          fixes: { css: '.a { display: flex; }' },
-        }),
-        usage: usage(),
-      },
-      { content: JSON.stringify({ issues: [] }), usage: usage() }, // recheck → ok
-    );
-    const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
-    // Solo il CSS era rotto (tool ok=false) → solo il fix CSS applicato
-    expect(result.site.css).toBe('.a { display: flex; }');
-    expect(result.verifyIssues).toBeUndefined(); // recheck pulito → nessun problema residuo
-    expect(result.verifyFixesApplied).toEqual(['css']);
-    expect(result.changes).toContain('verify:css:fixed');
-  });
-
-  it('verify: messaggio user include i risultati analyze_site, nessun tool_calls', async () => {
-    fakeProvider.supportsTools = true;
+  it('verify: codice integro → verify:ok senza NESSUNA chiamata AI verify', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
       { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
-      { content: JSON.stringify({ js: '' }), usage: usage() },
-      { content: JSON.stringify({ issues: [] }), usage: usage() },
+      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
     );
-    let verifyUserContent = '';
-    let verifyMessages: any[] = [];
+    const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
+    expect(result.changes).toContain('verify:ok');
+    expect(result.verifyIssues).toBeUndefined();
+    expect(result.verifyFixesApplied).toBeUndefined();
+    // Solo 3 chiamate stream (html/css/js): il verify determinista è zero-AI
+    expect(fakeProvider.stream).toHaveBeenCalledTimes(3);
+  });
+
+  it('verify: CSS con parentesi non chiuse → repair deterministico locale (zero AI) → verify:ok', async () => {
+    chatResponses.push(
+      { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
+      { content: JSON.stringify({ css: '.a { display: flex;' }), usage: usage() },  // CSS rotto
+      { content: JSON.stringify({ js: 'console.log("old");' }), usage: usage() },
+    );
+    const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
+    // repairCssStructure bilancia la parentesi (formato con newline) → zero chiamate AI verify
+    expect(result.site.css).toContain('.a { display: flex;');
+    expect(result.changes).toContain('verify:repair:css');
+    expect(result.changes).toContain('verify:ok');
+    expect(result.verifyIssues).toBeUndefined();
+    expect(fakeProvider.stream).toHaveBeenCalledTimes(3);
+  });
+
+  it('verify: JS rotto (stringa non chiusa) → fix agent chiamato con SOLO la parte rotta', async () => {
+    chatResponses.push(
+      { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
+      { content: JSON.stringify({ css: 'body { color: red; }' }), usage: usage() },
+      { content: JSON.stringify({ js: "const a = 'anchor.getAttribu" }), usage: usage() },  // JS rotto
+      { content: JSON.stringify({ fixes: { js: "const a = 'anchor.getAttribute';" } }), usage: usage() },  // fix agent
+    );
+    let fixPrompt = '';
     fakeProvider.stream.mockImplementation(async function* (messages: any[]) {
-      const userMsg = messages.find((m: any) => m.role === 'user' && String(m.content).includes('RISULTATI ANALISI'));
-      if (userMsg) {
-        verifyUserContent = String(userMsg.content);
-        verifyMessages = messages;
-      }
-      const r = chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+      const userMsg = messages.find((m: any) => m.role === 'user' && String(m.content).includes('ISSUE DETERMINISTICHE'));
+      if (userMsg) fixPrompt = String(userMsg.content);
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ fixes: {} }), usage: usage() };
       const content = typeof r.content === 'string' ? r.content : '';
       if (content) yield { type: 'content' as const, content };
       yield { type: 'done' as const, usage: r.usage };
     });
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
-    expect(result.changes).toContain('verify:ok');
-    // I risultati deterministici sono nel prompt user (non tool_calls):
-    // nessun formato tool da validare → nessun 400 Ollama/DeepSeek.
-    expect(verifyUserContent).toContain('analyze_site("html")');
-    expect(verifyUserContent).toContain('analyze_site("css")');
-    expect(verifyUserContent).toContain('analyze_site("js")');
-    // Nessun messaggio con tool_calls né opzioni tools nella chiamata verify
-    expect(verifyMessages.some((m: any) => m.toolCalls)).toBe(false);
-    const verifyStreamOpts = fakeProvider.stream.mock.calls.find((c: any[]) =>
-      c[0].some((m: any) => String(m.content).includes('RISULTATI ANALISI'))
-    )?.[1];
-    expect(verifyStreamOpts?.tools).toBeUndefined();
-    expect(verifyStreamOpts?.responseFormat).toEqual({ type: 'json_object' });
-    expect(result.site.html).toContain('Benvenuto');
+    expect(result.site.js).toBe("const a = 'anchor.getAttribute';");
+    expect(result.verifyFixesApplied).toEqual(['js']);
+    expect(result.changes).toContain('verify:js:fixed');
+    // Il prompt del fix agent contiene il JS rotto (completo) ma NON il CSS integro
+    expect(fixPrompt).toContain('const a');
+    expect(fixPrompt).not.toContain('color: red');
+    expect(fixPrompt).not.toContain('Benvenuto');
+    // Recheck deterministico pulito → nessun problema residuo
+    expect(result.verifyIssues).toBeUndefined();
+    expect(result.changes).toContain('verify:recheck:ok');
   });
 
-  it('verify: errore → best-effort, sito comunque restituito', async () => {
-    fakeProvider.supportsTools = true;
+  it('verify: fix agent propone fix ancora rotto → rifiutato, issue residue REALI nel pannello', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
       { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
-      { content: JSON.stringify({ js: '' }), usage: usage() },
+      { content: JSON.stringify({ js: "const a = 'anchor.getAttribu" }), usage: usage() },
+      { content: JSON.stringify({ fixes: { js: "const b = 'ancora rotto" } }), usage: usage() },  // fix invalido
     );
-    // stream: html(1), css(2), js(3), verify(4) fallisce
+    const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
+    // Fix con stringa non chiusa → analyzeSiteCode lo rifiuta → JS originale preservato
+    expect(result.site.js).toBe("const a = 'anchor.getAttribu");
+    expect(result.changes.some((c) => c.startsWith('verify:js:fixed'))).toBe(false);
+    // Recheck deterministico: stringa ancora non chiusa → issue REALE nel pannello
+    expect(result.verifyIssues?.length).toBeGreaterThan(0);
+    expect(result.verifyIssues![0]).toContain('stringa non chiusa');
+    expect(result.changes.some((c) => c.startsWith('verify:recheck:'))).toBe(true);
+  });
+
+  it('verify: fix agent error → best-effort, sito comunque restituito', async () => {
+    chatResponses.push(
+      { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
+      { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
+      { content: JSON.stringify({ js: "const a = 'anchor.getAttribu" }), usage: usage() },
+    );
+    // stream: html(1), css(2), js(3), fix agent(4) fallisce
     let streamCalls = 0;
     fakeProvider.stream.mockImplementation(async function* () {
       streamCalls++;
@@ -256,25 +270,68 @@ describe('WebsiteOrchestrator.generateSite', () => {
         yield { type: 'error', error: 'Ollama (400): can\'t find closing \'}\' symbol' };
         return;
       }
-      const r = chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ fixes: {} }), usage: usage() };
       const content = typeof r.content === 'string' ? r.content : '';
       if (content) yield { type: 'content' as const, content };
       yield { type: 'done' as const, usage: r.usage };
     });
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
     expect(result.site.html).toContain('Benvenuto');
-    expect(result.site.css).toBe('body{}');
+    expect(result.site.js).toBe("const a = 'anchor.getAttribu");
     expect(result.changes.some((c) => c.startsWith('verify:error:'))).toBe(true);
+    // JS ancora rotto → issue residue reali (pannello, non crash)
+    expect(result.verifyIssues?.length).toBeGreaterThan(0);
+  });
+
+  it('verify: regression — manca il form → fix agent con l\'html, lo aggiunge, recheck ok', async () => {
+    const htmlNoForm = '<html><head><meta charset="UTF-8"><meta name="description" content="Gelateria artigianale a Cagliari con gusti del giorno"><meta property="og:title" content="Home"><meta property="og:description" content="Gelateria artigianale a Cagliari con gusti del giorno"><meta property="og:type" content="website"><meta property="og:site_name" content="Gelateria Chiccheria"><title>Home</title></head><body><header class="nav"><div class="nav-inner"><button class="menu-toggle" aria-label="Menu">M</button><ul class="nav-links"><li><a href="index.html">Home</a></li></ul></div></header><main><h1>Benvenuto</h1></main><footer><p><span class="current-year">2026</span></p></footer></body></html>';
+    chatResponses.push(
+      { content: JSON.stringify({ html: htmlNoForm, pages: ['index'] }), usage: usage() },
+      { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
+      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
+      { content: JSON.stringify({ fixes: { html: htmlNoForm.replace('<h1>Benvenuto</h1>', '<h1>Benvenuto</h1><form><input type="email"></form>') } }), usage: usage() },
+    );
+    const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
+    expect(result.site.html).toContain('<form>');
+    expect(result.verifyFixesApplied).toEqual(['html']);
+    expect(result.changes).toContain('verify:html:fixed');
     expect(result.verifyIssues).toBeUndefined();
+    expect(result.changes).toContain('verify:recheck:ok');
+  });
+
+  it('verify: parte vuota (CSS fallito) → issue residua nel pannello, niente fix agent inutile', async () => {
+    chatResponses.push(
+      { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
+      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
+    );
+    // stream: html(1), css(2) fallisce → css='', js(3), niente fix agent (parte vuota)
+    let streamCalls = 0;
+    fakeProvider.stream.mockImplementation(async function* () {
+      streamCalls++;
+      if (streamCalls === 2) {
+        yield { type: 'error', error: 'Ollama (502): This operation was aborted' };
+        return;
+      }
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ fixes: {} }), usage: usage() };
+      const content = typeof r.content === 'string' ? r.content : '';
+      if (content) yield { type: 'content' as const, content };
+      yield { type: 'done' as const, usage: r.usage };
+    });
+    const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
+    expect(result.site.html).toContain('Benvenuto');
+    expect(result.site.css).toBe('');
+    expect(result.changes.some((c) => c.startsWith('error:css:'))).toBe(true);
+    // CSS vuoto = problema REALE segnalato, senza chiamata AI inutile (3 stream)
+    expect(result.verifyIssues?.some((i) => i.includes('vuoto'))).toBe(true);
+    expect(fakeProvider.stream).toHaveBeenCalledTimes(3);
   });
 
   it('CSS fallito (timeout/502) → sito generato senza CSS, changes error:css', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
       { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
-      { content: JSON.stringify({ issues: [] }), usage: usage() },
     );
-    // stream: html(1), css(2) fallisce, js(3), verify(4)
+    // stream: html(1), css(2) fallisce, js(3), niente verify AI (CSS vuoto = issue residua)
     let streamCalls = 0;
     fakeProvider.stream.mockImplementation(async function* () {
       streamCalls++;
@@ -282,7 +339,7 @@ describe('WebsiteOrchestrator.generateSite', () => {
         yield { type: 'error', error: 'Ollama (502): Ollama error: This operation was aborted' };
         return;
       }
-      const r = chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ fixes: {} }), usage: usage() };
       const content = typeof r.content === 'string' ? r.content : '';
       if (content) yield { type: 'content' as const, content };
       yield { type: 'done' as const, usage: r.usage };
@@ -292,14 +349,12 @@ describe('WebsiteOrchestrator.generateSite', () => {
     expect(result.site.css).toBe('');
     expect(result.site.js).toBe('console.log(1);');
     expect(result.changes.some((c) => c.startsWith('error:css:'))).toBe(true);
-    expect(result.changes).toContain('verify:ok');
   });
 
-  it('JS fallito → sito generato senza JS, changes error:js', async () => {
+  it('JS fallito → sito generato senza JS, changes error:js, issue residua', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
       { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
-      { content: JSON.stringify({ issues: [] }), usage: usage() },
     );
     let streamCalls = 0;
     fakeProvider.stream.mockImplementation(async function* () {
@@ -308,7 +363,7 @@ describe('WebsiteOrchestrator.generateSite', () => {
         yield { type: 'error', error: 'Ollama (502): aborted' };
         return;
       }
-      const r = chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ fixes: {} }), usage: usage() };
       const content = typeof r.content === 'string' ? r.content : '';
       if (content) yield { type: 'content' as const, content };
       yield { type: 'done' as const, usage: r.usage };
@@ -318,6 +373,8 @@ describe('WebsiteOrchestrator.generateSite', () => {
     expect(result.site.css).toBe('body{}');
     expect(result.site.js).toBe('');
     expect(result.changes.some((c) => c.startsWith('error:js:'))).toBe(true);
+    // JS vuoto = problema REALE segnalato nel pannello, niente chiamata AI inutile
+    expect(result.verifyIssues?.some((i) => i.includes('vuoto'))).toBe(true);
   });
 
   it('pagina secondaria fallita → index ok, changes error:page:about', async () => {
@@ -325,9 +382,8 @@ describe('WebsiteOrchestrator.generateSite', () => {
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index', 'about'] }), usage: usage() },
       { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
       { content: JSON.stringify({ js: '' }), usage: usage() },
-      { content: JSON.stringify({ issues: [] }), usage: usage() },
     );
-    // stream: html(1), page:about(2) fallisce, css(3), js(4), verify(5)
+    // stream: html(1), page:about(2) fallisce, css(3), js(4), niente verify AI (JS vuoto)
     let streamCalls = 0;
     fakeProvider.stream.mockImplementation(async function* () {
       streamCalls++;
@@ -335,7 +391,7 @@ describe('WebsiteOrchestrator.generateSite', () => {
         yield { type: 'error', error: 'Ollama (502): aborted' };
         return;
       }
-      const r = chatResponses.shift() ?? { content: JSON.stringify({ issues: [] }), usage: usage() };
+      const r = chatResponses.shift() ?? { content: JSON.stringify({ fixes: {} }), usage: usage() };
       const content = typeof r.content === 'string' ? r.content : '';
       if (content) yield { type: 'content' as const, content };
       yield { type: 'done' as const, usage: r.usage };
@@ -344,163 +400,83 @@ describe('WebsiteOrchestrator.generateSite', () => {
     expect(result.site.html).toContain('Benvenuto');
     expect(result.site.pagesHtml['about']).toBeUndefined();
     expect(result.changes.some((c) => c.startsWith('error:page:about'))).toBe(true);
-    expect(result.changes).toContain('verify:ok');
   });
 
-  it('verify: fix AI su parte VALIDA viene rifiutato (tool = fonte di verità)', async () => {
-    fakeProvider.supportsTools = true;
+  it('verify: fix agent su HTML integro MAI chiamato (parti integre mai inviate)', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
       { content: JSON.stringify({ css: 'body { color: red; }' }), usage: usage() },
       { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
-      {
-        content: JSON.stringify({
-          issues: ['HTML troncato', 'CSS troncato', 'JS troncato'],
-          fixes: { html: '<h1>PERSA LA MAPPA</h1>', css: 'body{}', js: '// perso' },
-        }),
-        usage: usage(),
-      },
-      { content: JSON.stringify({ issues: ['ancora troncato'] }), usage: usage() },
     );
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
-    // I fix dell'AI erano RISCITTURE distruttive: `<h1>PERSA LA MAPPA</h1>`
-    // è HTML valido ma corto (<50% dell'originale → perde mappa/contatti) →
-    // rifiutato. CSS/JS identici all'originale → niente changes.
+    // Tutto integro → verify:ok senza fix agent: il codice AI buono resta IDENTICO
     expect(result.site.html).toContain('Benvenuto');
-    expect(result.site.html).not.toContain('PERSA LA MAPPA');
     expect(result.site.css).toBe('body { color: red; }');
     expect(result.site.js).toBe('console.log(1);');
     expect(result.verifyFixesApplied).toBeUndefined();
-    expect(result.changes.some((c) => c.startsWith('verify:html:fixed'))).toBe(false);
-    // Recheck deterministico: tutto integro → nessun problema residuo
-    expect(result.verifyIssues).toBeUndefined();
-    expect(result.changes).toContain('verify:recheck:ok');
+    expect(result.changes).toContain('verify:ok');
+    expect(fakeProvider.stream).toHaveBeenCalledTimes(3);
   });
 
-  it('verify: fix applicato SOLO sulla parte realmente rotta (css non bilanciato)', async () => {
-    fakeProvider.supportsTools = true;
+  it('verify: fix agent chiamato solo per la parte rotta (CSS non bilanciato)', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
-      { content: JSON.stringify({ css: '.nav { display: flex;' }), usage: usage() },
+      { content: JSON.stringify({ css: '.nav .brand .inner::before' }), usage: usage() },  // CSS con pseudo non bilanciato
       { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
-      {
-        content: JSON.stringify({
-          issues: ['CSS troncato', 'HTML troncato'],
-          fixes: { html: '<h1>FIX HTML</h1>', css: '.nav { display: flex; }', js: '// x' },
-        }),
-        usage: usage(),
-      },
-      { content: JSON.stringify({ issues: ['css rotto'] }), usage: usage() },
+      { content: JSON.stringify({ fixes: { css: '.nav .brand .inner::before { content: ""; }' } }), usage: usage() },  // fix agent
     );
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
-    // CSS aveva parentesi non chiuse → fix CSS (valido + lungo) applicato
-    expect(result.site.css).toBe('.nav { display: flex; }');
+    // CSS integro e HTML/JS mai toccati → fix solo su CSS
+    expect(result.site.css).toBe('.nav .brand .inner::before { content: ""; }');
     expect(result.verifyFixesApplied).toEqual(['css']);
     expect(result.changes).toContain('verify:css:fixed');
-    // HTML integro ma fix `<h1>FIX HTML</h1>` troppo corto (<50%) → rifiutato,
-    // contenuto originale preservato
     expect(result.site.html).toContain('Benvenuto');
-    expect(result.site.html).not.toContain('FIX HTML');
-    expect(result.changes.some((c) => c.startsWith('verify:html:fixed'))).toBe(false);
-    // Recheck: css fixato ora bilanciato → tutto ok
+    // Recheck deterministico pulito → nessun problema residuo
     expect(result.verifyIssues).toBeUndefined();
     expect(result.changes).toContain('verify:recheck:ok');
   });
 
-  it('verify issues senza fixes: codice invariato, recheck deterministico pulito', async () => {
+  it('verify issues senza fixes: codice invariato, issue residua deterministica', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
       { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
-      { content: JSON.stringify({ js: '' }), usage: usage() },
-      { content: JSON.stringify({ issues: ['manca alt'] }), usage: usage() },
-      { content: JSON.stringify({ issues: [] }), usage: usage() },
+      { content: JSON.stringify({ js: "const a = 'aperta" }), usage: usage() },  // JS rotto
+      { content: JSON.stringify({ fixes: {} }), usage: usage() },  // fix agent senza fixes
     );
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
     expect(result.site.html).toContain('og:title');
     expect(result.site.css).toBe('body{}');
     expect(result.verifyFixesApplied).toBeUndefined();
-    expect(result.changes.some((c) => c.startsWith('verify:1issues'))).toBe(true);
-    // Codice integro secondo il tool → nessun problema residuo mostrato
-    expect(result.verifyIssues).toBeUndefined();
+    // Codice ancora rotto secondo il tool → issue REALE nel pannello
+    expect(result.verifyIssues?.some((i) => i.includes('stringa non chiusa'))).toBe(true);
   });
 
-  it('verify: risultati analyze_site nel messaggio user, nessun tool_calls né tools (niente 400)', async () => {
-    fakeProvider.supportsTools = true;
+  it('verify: issue deterministiche nel prompt del fix agent, niente tool_calls né tools (niente 400)', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
       { content: JSON.stringify({ css: 'body { color: red; }' }), usage: usage() },
-      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
-      { content: JSON.stringify({ issues: [] }), usage: usage() },
+      { content: JSON.stringify({ js: "const a = 'aperta" }), usage: usage() },
+      { content: JSON.stringify({ fixes: { js: "const a = 'chiusa';" } }), usage: usage() },
     );
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
-    expect(result.changes).toContain('verify:ok');
-    expect(result.verifyIssues).toBeUndefined();
-    // La chiamata verify (stream, con RISULTATI ANALISI nel prompt) NON deve
-    // avere tool_calls/tools: il formato tool di Ollama (arguments object,
-    // tool_name) diverge da DeepSeek → i tool_calls precompilati causavano
-    // il 400. Ora i risultati sono nel prompt user.
-    const verifyCall = fakeProvider.stream.mock.calls.find((c: any[]) =>
-      c[0].some((m: any) => String(m.content).includes('RISULTATI ANALISI'))
+    expect(result.changes).toContain('verify:js:fixed');
+    // La chiamata fix agent (stream, con ISSUE DETERMINISTICHE nel prompt)
+    // NON deve avere tool_calls/tools: il formato tool di Ollama diverge
+    // da DeepSeek → i tool_calls precompilati causavano il 400.
+    const fixCall = fakeProvider.stream.mock.calls.find((c: any[]) =>
+      c[0].some((m: any) => String(m.content).includes('ISSUE DETERMINISTICHE'))
     );
-    expect(verifyCall).toBeDefined();
-    const messages = verifyCall![0];
+    expect(fixCall).toBeDefined();
+    const messages = fixCall![0];
     expect(messages.some((m: any) => m.toolCalls)).toBe(false);
-    expect(verifyCall![1].tools).toBeUndefined();
-    expect(verifyCall![1].responseFormat).toEqual({ type: 'json_object' });
-    // Il messaggio user contiene i risultati deterministici
+    expect(fixCall![1].tools).toBeUndefined();
+    expect(fixCall![1].responseFormat).toEqual({ type: 'json_object' });
+    // Il prompt contiene SOLO la parte rotta (JS), mai html/css integri
     const userMsg = messages.find((m: any) => m.role === 'user');
-    expect(String(userMsg.content)).toContain('RISULTATI ANALISI DETERMINISTICA');
-    expect(String(userMsg.content)).toContain('analyze_site("html")');
-  });
-
-  it('verify loop: secondo pass recheck deterministico → ok (issue del modello scartate)', async () => {
-    chatResponses.push(
-      { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
-      { content: JSON.stringify({ css: '.a { display: flex;' }), usage: usage() }, // CSS rotto
-      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
-      { content: JSON.stringify({ issues: ['contrasto basso'], fixes: { css: '.a { display: flex; }' } }), usage: usage() },
-      { content: JSON.stringify({ issues: ['ancora un problema'] }), usage: usage() },
-    );
-    const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
-    expect(result.site.css).toBe('.a { display: flex; }');
-    expect(result.changes).toContain('verify:css:fixed');
-    // Il codice fixato è integro secondo il tool → le issue del modello
-    // ("ancora un problema") vengono scartate, nessun pannello allarmi
-    expect(result.verifyIssues).toBeUndefined();
-    expect(result.changes).toContain('verify:recheck:ok');
-  });
-
-  it('verify loop: recheck deterministico fallito → issue residue REALI nel pannello', async () => {
-    chatResponses.push(
-      { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
-      { content: JSON.stringify({ css: '.a { display: flex;' }), usage: usage() },
-      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
-      { content: JSON.stringify({ issues: ['css troncato'], fixes: { css: '.a { display: flex; color: red' } }), usage: usage() },
-      { content: JSON.stringify({ issues: ['css ancora rotto'] }), usage: usage() },
-    );
-    const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
-    // Il fix del modello era ANCHE lui rotto (parentesi non chiusa) → rifiutato
-    expect(result.changes.some((c) => c.startsWith('verify:css:fixed'))).toBe(false);
-    // Il recheck deterministico trova ancora parentesi non chiuse → issue REALI
-    expect(result.changes.some((c) => c.startsWith('verify:recheck:'))).toBe(true);
-    expect(result.verifyIssues?.length).toBeGreaterThan(0);
-    expect(result.verifyIssues![0]).toContain('parentesi');
-    expect(result.site.css).toBe('.a { display: flex;');
-  });
-
-  it('verify loop: secondo pass pulito → verify:ok (fix risolti)', async () => {
-    chatResponses.push(
-      { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
-      { content: JSON.stringify({ css: '.a { display: flex;' }), usage: usage() }, // CSS rotto
-      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
-      { content: JSON.stringify({ issues: ['contrasto basso'], fixes: { css: '.a { display: flex; }' } }), usage: usage() },
-      { content: JSON.stringify({ issues: [] }), usage: usage() },
-    );
-    const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
-    expect(result.changes).toContain('verify:css:fixed');
-    expect(result.changes).toContain('verify:ok');
-    expect(result.verifyIssues).toBeUndefined(); // recheck pulito → problemi risolti, niente pannello
-    expect(result.verifyFixesApplied).toEqual(['css']);
+    expect(String(userMsg.content)).toContain('ISSUE DETERMINISTICHE');
+    expect(String(userMsg.content)).toContain('const a');
+    expect(String(userMsg.content)).not.toContain('Benvenuto');
+    expect(String(userMsg.content)).not.toContain('color: red');
   });
 
   it('html non JSON → fallbackResult con nome attività', async () => {
@@ -511,12 +487,11 @@ describe('WebsiteOrchestrator.generateSite', () => {
     expect(result.site.pages).toEqual(['index']);
   });
 
-  it('onStep/onStepResult chiamati per i 4 step', async () => {
+  it('onStep/onStepResult chiamati per i 4 step (verify = check deterministico zero-AI)', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },
-      { content: JSON.stringify({ css: '' }), usage: usage() },
-      { content: JSON.stringify({ js: '' }), usage: usage() },
-      { content: JSON.stringify({ issues: [] }), usage: usage() },
+      { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
+      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
     );
     const steps: string[] = [];
     await orch.generateSite(baseBrief, {
@@ -530,10 +505,9 @@ describe('WebsiteOrchestrator.generateSite', () => {
   it('multi-pagina: genera HTML dedicato per le pagine secondarie', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index', 'about'] }), usage: usage() },
-      { content: JSON.stringify({ html: '<html><head><title>Chi siamo</title></head><body><h1>Chi siamo</h1><nav class="nav"><div class="nav-inner"><div class="brand">Nome</div><ul class="nav-links"><li><a href="index.html">Home</a></li></ul></div></nav></body></html>' }), usage: usage() },
+      { content: JSON.stringify({ html: '<html><head><meta charset="UTF-8"><title>Chi siamo</title></head><body><header class="nav"><div class="nav-inner"><div class="brand">Nome</div><button class="menu-toggle" aria-label="Apri menu">Menu</button><ul class="nav-links"><li><a href="index.html">Home</a></li></ul></div></header><main><h1>Chi siamo</h1></main><footer><p><span class="current-year">2026</span></p></footer></body></html>' }), usage: usage() },
       { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
-      { content: JSON.stringify({ js: '' }), usage: usage() },
-      { content: JSON.stringify({ issues: [] }), usage: usage() },
+      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
     );
     const steps: string[] = [];
     const result = await orch.generateSite(baseBrief, {
@@ -552,9 +526,8 @@ describe('WebsiteOrchestrator.generateSite', () => {
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index', 'about', 'contact'] }), usage: usage() },
       { content: 'non-json', usage: usage() },
       { content: JSON.stringify({ html: '<h1>Contatti</h1>' }), usage: usage() },
-      { content: JSON.stringify({ css: '' }), usage: usage() },
-      { content: JSON.stringify({ js: '' }), usage: usage() },
-      { content: JSON.stringify({ issues: [] }), usage: usage() },
+      { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
+      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
     );
     const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
     expect(result.changes).toContain('error:page:about');

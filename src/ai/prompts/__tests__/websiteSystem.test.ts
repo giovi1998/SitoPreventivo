@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteVerifyPrompt, buildWebsitePagePrompt, sanitizeMapAddress } from '../websiteSystem';
+import { buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteFixPrompt, buildWebsitePagePrompt, sanitizeMapAddress } from '../websiteSystem';
 
 const baseBrief = {
   businessName: 'Gelateria Chiccheria',
@@ -127,19 +127,31 @@ describe('websiteSystem prompts (maps + socials)', () => {
     expect(prompt).toContain('NON usare emoji');
   });
 
-  it('verify prompt: check accessibilità + divieti ::before/::after con contenuto e SVG', () => {
-    const prompt = buildWebsiteVerifyPrompt('<h1>x</h1>', 'h1{}', '');
-    expect(prompt).toContain('ACCESSIBILITÀ');
-    expect(prompt).toContain('aria-label');
-    expect(prompt).toContain('contrasto');
-    expect(prompt).toContain('::before');
-    expect(prompt).toContain('content: ""');
-    expect(prompt).toContain('tag <svg>');
-  });
-
   it('CSS prompt: pseudo-elementi solo con content vuoto, no SVG', () => {
     const prompt = buildWebsiteCssPrompt('<div class="hero"></div>', 'modern', {});
     expect(prompt).toContain('content: "" obbligatorio');
     expect(prompt).toContain('NON stilizzare MAI tag <svg>');
+  });
+
+  it('fix prompt: contiene SOLO le parti rotte elencate, mai le integre', () => {
+    const prompt = buildWebsiteFixPrompt([
+      { name: 'js', issue: 'JS ha una stringa non chiusa', code: "const a = 'aperta" },
+    ]);
+    expect(prompt).toContain('ISSUE DETERMINISTICHE');
+    expect(prompt).toContain("const a = 'aperta");
+    expect(prompt).toContain('Parte: JS');
+    expect(prompt).not.toContain('HTML:');
+    expect(prompt).not.toContain('CSS:');
+    expect(prompt).toContain('"fixes"');
+  });
+
+  it('fix prompt: più parti rotte elencate insieme', () => {
+    const prompt = buildWebsiteFixPrompt([
+      { name: 'css', issue: 'CSS ha 2 parentesi non chiuse', code: '.a { color: red;' },
+      { name: 'js', issue: 'JS ha una stringa non chiusa', code: 'const x = "abc' },
+    ]);
+    expect(prompt).toContain('Parte: CSS');
+    expect(prompt).toContain('Parte: JS');
+    expect(prompt).toContain('.a { color: red;');
   });
 });

@@ -473,59 +473,35 @@ Rispondi SOLO con JSON: { "js": "..." }
 IL CAMPO "js" DEVE CONTENERE ALMENO 30 RIGHE DI JAVASCRIPT. NON PUÒ ESSERE VUOTO.`;
 }
 
-export function buildWebsiteVerifyPrompt(
-  html: string,
-  css: string,
-  js: string,
+export function buildWebsiteFixPrompt(
+  parts: Array<{ name: 'html' | 'css' | 'js'; issue: string; code: string }>,
 ): string {
-  return `# Verifica coerenza sito web
-
-Il codice sotto è COMPLETO e INTEGRALE (mai troncato: se noti che termina a metà paragrafo/regola, segnalalo come problema REALE del sito, non del prompt).
-
-Nel prompt troverai anche i RISULTATI dell'analisi deterministica analyze_site (una per parte: html, css, js): controlla tag bilanciati, parentesi CSS/JS (troncamenti e sintassi rotta), ::before/::after con content non vuoto, img senza alt, iframe senza title, emoji nel testo. Usali come fonte di verità per le issue: se l'analisi segnala un problema, riportalo; se non segnala nulla su un punto, NON inventare problemi di troncamento.
-
-HTML (completo):
-\`\`\`html
-${html}
-\`\`\`
-
-CSS (completo):
-\`\`\`css
-${css}
-\`\`\`
-
-JS (completo):
-\`\`\`js
-${js}
-\`\`\`
-
-Controlla che HTML, CSS e JS siano coerenti:
-1. Ogni classe CSS usata nell'HTML esiste nel CSS?
-2. Ogni id usato nel JS esiste nell'HTML?
-3. Ci sono errori evidenti (tag non chiusi, sintassi CSS/JS errata, codice troncato)?
-4. Il CSS copre tutte le sezioni dell'HTML?
-5. Il JS ha funzioni che referenziano elementi che non esistono nell'HTML?
-
-Controlla l'ACCESSIBILITÀ (WCAG AA):
-6. Ogni <img> ha l'attributo alt (mai vuoto se l'immagine è informativa)?
-7. Ogni <form> ha label associate (aria-label, aria-labelledby o <label>)?
-8. Icone/bottoni solo icona hanno aria-label o testo accessibile?
-9. Ogni <iframe> ha title?
-10. Il contrasto testo/sfondo rispetta 4.5:1 (testo normale) o 3:1 (grande)?
-11. Gli elementi interattivi sono raggiungibili da tastiera (link/button nativi, mai div con onClick senza role/tabindex)?
-
-Controlla le REGOLE DI STILE:
-12. NON deve esserci NESSUN ::before / ::after con content contenente testo, icone o emoji (content: "" obbligatorio, solo gradienti geometrici). Se c'è, rimuovilo.
-13. NON devono esserci tag <svg> né elementi SVG da nessuna parte, a meno che il brief non li richieda esplicitamente. Se ci sono SVG non richiesti, rimuovili e sostituiscili con testo/gradienti.
-14. NON devono esserci emoji nel testo visibile (titoli, bottoni, brand, footer).
-15. NON deve esserci nessun contenuto duplicato: se un paragrafo, un titolo o una sezione compare due volte, segnalalo.
-16. I meta tag nel <head> devono seguire l'ordine: charset, viewport, poi gli altri (og:*, description, canonical). I contenuti dei meta non devono contenere emoji né a capo.
-
-IMPORTANTE:
-- Se il codice è valido e rispetta tutto, rispondi con "issues": [].
-- Segnala SOLO problemi reali: NON inventare problemi di troncamento se il codice è integro.
-- Per ogni problema fornisci la correzione in "fixes" (html, css o js — solo le parti che cambiano).
-- Controlla che i tuoi fixes NON introducano nuovi problemi (tag rotti, parentesi non chiuse, duplicati).
-
-Rispondi SOLO con JSON: { "issues": ["..."], "fixes": { "html"?: "...", "css"?: "...", "js"?: "..." } }`;
+  const blocks = parts.map((p) => [
+    `## Parte: ${p.name.toUpperCase()}`,
+    '',
+    `Problema deterministico: ${p.issue}`,
+    '',
+    `Codice ${p.name.toUpperCase()} (il frammento da riparare, COMPLETO per questa parte):`,
+    '```' + p.name,
+    p.code,
+    '```',
+  ].join('\n'));
+  return [
+    '# Ripara il codice del sito (fix agent)',
+    '',
+    'Ricevi SOLO le parti che l\'analisi deterministica ha dichiarato ROTTE.',
+    'Le ISSUE DETERMINISTICHE sotto sono la fonte di verità (calcolate lato client, mai inventate).',
+    'Le parti non elencate sotto sono integre e NON vanno toccate (non le vedi: non esiste alcun problema lì).',
+    '',
+    ...blocks,
+    '',
+    'Rispondi SOLO con un oggetto JSON con UN SOLO campo "fixes":',
+    '{ "fixes": { "html"?: "...", "css"?: "...", "js"?: "..." } }',
+    'REGOLE:',
+    '- Includi SOLO le parti elencate sopra (quelle rotte).',
+    '- Riscrivi per INTERO la parte elencata, sintatticamente corretta (parentesi/tag bilanciati, nessuna regola annidata, nessuna stringa aperta).',
+    '- NON cambiare stile, colori, testi, struttura o sezioni: correggi SOLO la sintassi.',
+    '- Se il problema è strutturale (manca una sezione obbligatoria), aggiungi SOLO la sezione mancante senza toccare il resto.',
+    '- NON riscrivere il codice se pensi che manchi altro: le parti integre non ti vengono mostrate e restano invariate.',
+  ].join('\n');
 }

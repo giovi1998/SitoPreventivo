@@ -4,7 +4,7 @@ import { buildFlyerSystemPrompt, buildFlyerCopyPrompt } from './flyerSystem';
 import { buildLogoSystemPrompt } from './logoSystem';
 import { buildSocialSystemPrompt } from './socialSystem';
 import { buildOnboardingSystemPrompt } from './onboardingSystem';
-import { buildWebsiteSystemPrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteJsPrompt, buildWebsiteVerifyPrompt, buildWebsitePagePrompt } from './websiteSystem';
+import { buildWebsiteSystemPrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteJsPrompt, buildWebsitePagePrompt } from './websiteSystem';
 
 export type PromptContext = Record<string, unknown>;
 export type PromptBuilder = (ctx?: PromptContext) => string;
@@ -110,5 +110,4 @@ promptRegistry.register('website-system', () => buildWebsiteSystemPrompt(), 'Web
 promptRegistry.register('website-html', () => buildWebsiteHtmlPrompt({} as any, 'modern'), 'Website HTML agent prompt');
 promptRegistry.register('website-css', () => buildWebsiteCssPrompt('', 'modern', {}), 'Website CSS agent prompt');
 promptRegistry.register('website-js', () => buildWebsiteJsPrompt(''), 'Website JS agent prompt');
-promptRegistry.register('website-verify', () => buildWebsiteVerifyPrompt('', '', ''), 'Website verify agent prompt');
 promptRegistry.register('website-page', () => buildWebsitePagePrompt('index', {} as any, ''), 'Website page agent prompt');

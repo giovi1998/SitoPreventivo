@@ -3,6 +3,16 @@
 Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
+
+- **TB-032 Verify agent alternativo — fix agent mirato + repair deterministico + regressione struttura** (da 	o-be-done.md "Verify agent alternativo"; gotchas §26.28):
+  - **Verify zero-AI su codice integro**: nalyzeSiteCode + nuova nalyzeSiteRegression (struttura obbligatoria: nav, menu-toggle, footer, .current-year, mappa, form, href relativi) → codice integro = erify:ok con ZERO chiamate AI (prima 1-2 sempre).
+  - **Repair deterministico locale pre-AI**: epairCssStructure/epairHtmlStructure sistemano parentesi CSS/tag orfani in millisecondi (erify:repair:css|html).
+  - **Fix agent mirato** (uildWebsiteFixPrompt): riceve SOLO le parti rotte dal tool, mai il dump completo → il modello non può riscrivere codice integro né perdere sezioni. Una chiamata, easoningEffort: 'high', guardia anti-distruzione §26.16 invariata (integro + ≥60%).
+  - **Recheck 100% deterministico**: issue residue REALI nel pannello; parte vuota (es. CSS fallito) → issue residua, niente chiamata inutile.
+  - **website-verify prompt/registry rimossi** (dead code).
+  - Costi: 3 chiamate AI (integro) invece di 4-5; verify 0s invece di 30-194s.
+  - Test: siteAnalyser 24, orchestrator 40, matrice provider 6 (niente tools/tool_calls, garanzia anti-400). Gate: typecheck + 3300 verdi.
+
 ## 2026-08-17
 
 - **Fix pannello AI non scrollabile** (da `to-be-done.md`): `.ai-console`

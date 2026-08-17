@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { promptRegistry } from './prompts/registry';
-import { buildWebsiteGeneratePrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteJsPrompt, buildWebsiteVerifyPrompt, buildWebsitePagePrompt } from './prompts/websiteSystem';
+import { buildWebsiteGeneratePrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteJsPrompt, buildWebsiteFixPrompt, buildWebsitePagePrompt } from './prompts/websiteSystem';
 import { ensureSeoMeta, stripSocialCanonical } from '../utils/website/seoMeta';
 import { stripLogoFromHtml } from '../utils/website/logoInjection';
 import { enforceMapIframe } from '../utils/website/sanitizeGenerated';
-import { analyzeSiteCode } from '../utils/website/siteAnalyser';
+import { analyzeSiteCode, analyzeSiteRegression } from '../utils/website/siteAnalyser';
+import { repairCssStructure, repairHtmlStructure } from '../utils/website/repairStructure';
 import type { ElementContext } from '../utils/website/elementPicker';
 import { providerRegistry } from './providers/registry';
 import type { AIStreamChunk, AIResponse, ChatMessage, RunTraceOptions } from './types';
@@ -458,13 +459,16 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     changes.push(`js:${js.length}chars`);
     options.onStepResult?.('js', jsResponse?.content ?? '', stepMeta(jsStart, jsResponse ?? { usage: undefined } as AIResponse));
 
-    // ─── Step 5: Verify (non-stream, sessione fresca) ─────────────
-    // Loop di verifica (max 2 pass). I risultati del tool deterministico
-    // analyze_site vengono passati NEL PROMPT come messaggio user (NON
-    // come tool_calls precompilati: il formato richiesto da Ollama —
-    // arguments object + tool_name — diverge da DeepSeek e causava 400
-    // "can't find closing '}' symbol"). Al primo giro vengono applicati i
-    // fixes; al secondo si verifica che non restino problemi reali.
+    // ─── Step 5: Verify (check deterministico + fix agent mirato) ───────
+    // TB-032: la fonte di verità è l'analisi deterministica (analyze_site),
+    // MAI il modello. Pipeline:
+    // 1. check zero-AI: struttura html/css/js + sezione regressione (nav,
+    //    mappa, form) — codice integro = verify:ok, ZERO costi AI.
+    // 2. repair deterministico locale (CSS/HTML, istantaneo) se possibile.
+    // 3. fix agent chiamato UNA volta con SOLO le parti rotte (mai il dump
+    //    completo: un modello che vede solo il frammento rotto non può
+    //    riscrivere codice integro né perdere sezioni).
+    // 4. recheck deterministico finale → issue residue REALI nel pannello.
     const verifyStart = Date.now();
     let verifyIssues: string[] | undefined;
     let verifyFixesApplied: string[] | undefined;
@@ -472,117 +476,134 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     let currentJs = js;
     let verifyCost = 0;
     let lastVerifyResponse: AIResponse | null = null;
-    for (let pass = 0; pass < 2; pass++) {
-      // Fonte di verità deterministico (sempre calcolato lato client)
-      const toolResults: Array<{ part: string; result: { ok: boolean; issues: string[] } }> = [
-        { part: 'html', result: analyzeSiteCode(allPagesHtml, 'html') },
-        { part: 'css', result: analyzeSiteCode(currentCss, 'css') },
-        { part: 'js', result: analyzeSiteCode(currentJs, 'js') },
-      ];
-      const analyzeSummary = toolResults
-        .map((tr) => `analyze_site("${tr.part}"): ${JSON.stringify(tr.result)}`)
-        .join('\n');
-      const verifyMessages: ChatMessage[] = [
-        { role: 'system', content: promptRegistry.getPrompt('website-system') },
-        { role: 'user', content: `${buildWebsiteVerifyPrompt(allPagesHtml, currentCss, currentJs)}\n\nRISULTATI ANALISI DETERMINISTICA (fonte di verità, calcolati lato client):\n${analyzeSummary}` },
-      ];
-      options.onStep?.('verify', `pass ${pass + 1} (con analyze_site)`);
-      let verifyResponse: AIResponse | null = null;
-      let verifyError: unknown = null;
-      try {
-        // handleStream (SSE) — vedi nota step pagine: limite 300s Hobby.
-        const verifyResult = await this.executeWithFallback(
-          primaryProviderId,
-          verifyMessages,
-          {
-            responseFormat: { type: 'json_object' },
-            maxTokens: 16384,
-            // reasoning 'high' (non 'max'): il verify lavora su prompt da
-            // 50-60K token e con think:max impiegava 194s — 'high' basta.
-            reasoningEffort: 'high',
-            customerId: options.customerId,
-            ...runTrace(`verify:pass${pass + 1}`),
-          },
-          { onStream: streamSink, onFallback: (id, reason) => changes.push(`fallback:${id}:${reason.slice(0, 80)}`) },
-        );
-        verifyResponse = verifyResult.response;
-      } catch (err) {
-        verifyError = err;
-      }
-      if (!verifyResponse) {
-        // Verify è best-effort: un suo errore NON deve perdere il sito
-        // già generato (html/css/js/pages restano quelli buoni).
-        changes.push(`verify:error:${verifyError instanceof Error ? verifyError.message.slice(0, 120) : 'unknown'}`);
-        break;
-      }
-      verifyCost += this.trackUsage(verifyResponse.usage, options.userEmail, options.modelId) || 0;
-      lastVerifyResponse = verifyResponse;
-      const verifyParsed = this.parseJsonResponse(verifyResponse.content ?? '', z.object({
-        issues: z.array(z.string()).default([]),
-        fixes: z.object({
-          html: z.string().optional(),
-          css: z.string().optional(),
-          js: z.string().optional(),
-        }).optional(),
-      }));
-      if (!verifyParsed.ok) {
-        if (pass === 0) changes.push(`verify:error:${verifyParsed.error}`);
-        break;
-      }
-      const { issues, fixes } = verifyParsed.data;
 
-      // Applica i fixes dell'AI con guardia anti-distruzione:
-      // 1. il fixato deve essere deterministicamente integro
-      //    (analyzeSiteCode(fix).ok) — fixes di qualità/accessibilità
-      //    (title iframe, aria-label, emoji) passano anche su codice valido;
-      // 2. il fixato non deve perdere sezioni: lunghezza ≥50% dell'originale
-      //    (una riscrittura che taglia mappa/contatti/form viene bloccata).
-      const applyVerifyFixes = (): void => {
-        if (fixes?.html && fixes.html !== html && analyzeSiteCode(fixes.html, 'html').ok && fixes.html.length >= html.length * 0.6) {
-          html = enforceMapIframe(fixes.html, brief.contacts);
-          changes.push('verify:html:fixed');
-          (verifyFixesApplied ??= []).push('html');
-        }
-        if (fixes?.css && fixes.css !== currentCss && analyzeSiteCode(fixes.css, 'css').ok && fixes.css.length >= currentCss.length * 0.6) {
-          currentCss = fixes.css;
-          changes.push('verify:css:fixed');
-          (verifyFixesApplied ??= []).push('css');
-        }
-        if (fixes?.js && fixes.js !== currentJs && analyzeSiteCode(fixes.js, 'js').ok && fixes.js.length >= currentJs.length * 0.6) {
-          currentJs = fixes.js;
-          changes.push('verify:js:fixed');
-          (verifyFixesApplied ??= []).push('js');
-        }
+    const runCheck = () => {
+      const htmlRes = analyzeSiteCode(allPagesHtml, 'html');
+      const cssRes = analyzeSiteCode(currentCss, 'css');
+      const jsRes = analyzeSiteCode(currentJs, 'js');
+      const reg = analyzeSiteRegression(html, brief.contacts);
+      return {
+        htmlIssues: htmlRes.issues,
+        cssIssues: cssRes.issues,
+        jsIssues: jsRes.issues,
+        regIssues: reg.issues,
       };
+    };
 
-      if (issues.length === 0) {
-        if (pass === 1) verifyIssues = undefined; // recheck pulito: problemi risolti, niente pannello
-        changes.push('verify:ok');
-        break;
+    options.onStep?.('verify', 'check deterministico zero-AI + fix agent mirato');
+    let check = runCheck();
+
+    // Repair deterministico locale prima di qualunque chiamata AI: parentesi
+    // CSS sbilanciate e tag HTML orfani si sistemano in millisecondi,
+    // zero costi. Se risolve, il fix agent non serve proprio.
+    if (check.cssIssues.length > 0 && currentCss.trim() !== '') {
+      const repairedCss = repairCssStructure(currentCss);
+      if (repairedCss !== currentCss && analyzeSiteCode(repairedCss, 'css').ok) {
+        currentCss = repairedCss;
+        changes.push('verify:repair:css');
+        check = runCheck();
       }
-      if (pass === 0) {
-        verifyIssues = issues;
-        changes.push(`verify:${issues.length}issues:${issues.slice(0, 3).join(' | ')}`);
-        applyVerifyFixes();
-      } else {
-        // Secondo pass: applica i fixes ANCHE qui (il primo fix può essere
-        // stato parziale) e verifica coi recheck deterministico.
-        applyVerifyFixes();
-        const recheck = [
-          analyzeSiteCode(allPagesHtml, 'html'),
-          analyzeSiteCode(currentCss, 'css'),
-          analyzeSiteCode(currentJs, 'js'),
+    }
+    if (check.htmlIssues.length > 0) {
+      const repairedHtml = repairHtmlStructure(html);
+      if (repairedHtml !== html && analyzeSiteCode(repairedHtml, 'html').ok) {
+        html = repairedHtml;
+        changes.push('verify:repair:html');
+        check = runCheck();
+      }
+    }
+
+    const allIssues = [...check.regIssues, ...check.htmlIssues, ...check.cssIssues, ...check.jsIssues];
+    if (allIssues.length === 0) {
+      changes.push('verify:ok');
+    } else {
+      // Fix agent mirato: SOLO le parti rotte e non vuote, mai l'integro.
+      const parts: Array<{ name: 'html' | 'css' | 'js'; issue: string; code: string }> = [];
+      if (check.htmlIssues.length > 0 && html.trim() !== '') parts.push({ name: 'html', issue: check.htmlIssues[0], code: html });
+      if (check.cssIssues.length > 0 && currentCss.trim() !== '') parts.push({ name: 'css', issue: check.cssIssues[0], code: currentCss });
+      if (check.jsIssues.length > 0 && currentJs.trim() !== '') parts.push({ name: 'js', issue: check.jsIssues[0], code: currentJs });
+      if (check.regIssues.length > 0) {
+        const htmlPart = parts.find((p) => p.name === 'html');
+        if (htmlPart) htmlPart.issue += ` | ${check.regIssues[0]}`;
+        else parts.push({ name: 'html', issue: check.regIssues[0], code: html });
+      }
+      verifyIssues = allIssues.slice(0, 8);
+      changes.push(`verify:${allIssues.length}issues:${allIssues.slice(0, 3).join(' | ')}`);
+      if (parts.length > 0) {
+        const fixMessages: ChatMessage[] = [
+          { role: 'system', content: promptRegistry.getPrompt('website-system') },
+          { role: 'user', content: buildWebsiteFixPrompt(parts) },
         ];
-        if (recheck.every((r) => r.ok)) {
-          verifyIssues = undefined;
-          changes.push('verify:recheck:ok');
-          break;
+        options.onStep?.('verify', 'fix agent (solo parti rotte)');
+        let fixResponse: AIResponse | null = null;
+        let fixError: unknown = null;
+        try {
+          // handleStream (SSE) — vedi nota step pagine: limite 300s Hobby.
+          const fixResult = await this.executeWithFallback(
+            primaryProviderId,
+            fixMessages,
+            {
+              responseFormat: { type: 'json_object' },
+              maxTokens: 16384,
+              // 'high' basta per riparare sintassi su frammenti piccoli.
+              reasoningEffort: 'high',
+              customerId: options.customerId,
+              ...runTrace('verify:fix'),
+            },
+            { onStream: streamSink, onFallback: (id, reason) => changes.push(`fallback:${id}:${reason.slice(0, 80)}`) },
+          );
+          fixResponse = fixResult.response;
+        } catch (err) {
+          fixError = err;
         }
-        // Fonte di verità finale = issue DETERMINISTICHE residue (non le
-        // inventate dal modello): il pannello mostra problemi reali.
-        verifyIssues = recheck.flatMap((r) => r.issues);
-        changes.push(`verify:recheck:${verifyIssues.length}issues`);
-        break;
+        if (!fixResponse) {
+          // Fix agent best-effort: un suo errore NON deve perdere il sito.
+          changes.push(`verify:error:${fixError instanceof Error ? fixError.message.slice(0, 120) : 'unknown'}`);
+        } else {
+          verifyCost += this.trackUsage(fixResponse.usage, options.userEmail, options.modelId) || 0;
+          lastVerifyResponse = fixResponse;
+          const fixParsed = this.parseJsonResponse(fixResponse.content ?? '', z.object({
+            fixes: z.object({
+              html: z.string().optional(),
+              css: z.string().optional(),
+              js: z.string().optional(),
+            }).optional(),
+          }));
+          // Applica i fixes con guardia anti-distruzione (stessa del loop
+          // storico §26.16): il fixato deve essere deterministicamente
+          // integro e non deve perdere sezioni (≥60% della parte rotta).
+          if (fixParsed.ok && fixParsed.data?.fixes) {
+            const fixes = fixParsed.data.fixes;
+            if (fixes.html && fixes.html !== html && analyzeSiteCode(fixes.html, 'html').ok && fixes.html.length >= html.length * 0.6) {
+              html = enforceMapIframe(fixes.html, brief.contacts);
+              changes.push('verify:html:fixed');
+              (verifyFixesApplied ??= []).push('html');
+            }
+            if (fixes.css && fixes.css !== currentCss && analyzeSiteCode(fixes.css, 'css').ok && fixes.css.length >= currentCss.length * 0.6) {
+              currentCss = fixes.css;
+              changes.push('verify:css:fixed');
+              (verifyFixesApplied ??= []).push('css');
+            }
+            if (fixes.js && fixes.js !== currentJs && analyzeSiteCode(fixes.js, 'js').ok && fixes.js.length >= currentJs.length * 0.6) {
+              currentJs = fixes.js;
+              changes.push('verify:js:fixed');
+              (verifyFixesApplied ??= []).push('js');
+            }
+          }
+        }
+      }
+
+      // Recheck finale: fonte di verità = issue DETERMINISTICHE residue
+      // (mai quelle inventate dal modello). Pulito → niente pannello.
+      const recheck = runCheck();
+      const residual = [...recheck.regIssues, ...recheck.htmlIssues, ...recheck.cssIssues, ...recheck.jsIssues];
+      if (residual.length === 0) {
+        verifyIssues = undefined;
+        changes.push('verify:recheck:ok');
+        changes.push('verify:ok');
+      } else {
+        verifyIssues = residual.slice(0, 8);
+        changes.push(`verify:recheck:${residual.length}issues`);
       }
     }
     css = currentCss;

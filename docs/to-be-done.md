@@ -111,15 +111,6 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   raffinamento quando si vede il risultato reale: qualità delle pagine
   secondarie (contenuti), nav identica, asset condivisi. Base fatta
   (→ done.md).
-- [ ] **Website Builder — verify agent alternativo (idee 2026-08-05)**:
-  il modello continua a generare false positive ("troncato") e fix
-  dannosi; il tool deterministico `analyze_site` è già la fonte di verità.
-  Opzioni future se la qualità resta insufficiente: (a) **agent di fix
-  dedicato** che riceve SOLO le issue del tool (mai il codice intero) e
-  riscrive la parte indicata; (b) validazione HTML reale con parser
-  (es. DOMParser in browser / regex più rigorosa) invece dello stack
-  custom; (c) sezione HTML di regressione nel verify (mappa/contatti/
-  form devono esistere — oggi il tool non la controlla).
 - [ ] **Card flusso completo in clienti**: auto-build → Genera bozze AI →
   preview/editor senza errori quota/JSON/vision. Verificare E2E con
   Playwright su cliente reale.
