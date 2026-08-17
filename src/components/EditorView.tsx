@@ -204,7 +204,7 @@ export default function EditorView({
           value={aiText}
           onChange={(e) => setAiText(e.target.value)}
           aria-label="Prompt modifica AI"
-          placeholder='Es. "Rendi il preventivo più premium, aggiungi FAQ, applica sconto 10%..."'
+          placeholder='Es. "Rendi il preventivo più premium, aggiungi dettagli tecnici, applica sconto 10%..."'
           rows={3}
         />
         <AiActionGrid groupLabel="Azioni rapide">
