@@ -152,16 +152,8 @@ REGOLE IMPORTANTI:
      - finance/legale/studio → "full-overlay" + blu navy
      - wellness/bellezza/moda → "wave-split" + verde/bianco
      - default/uncategorized → "blob-corner" o ometti
-      Se l'utente ha bloccato la decorazione (userLocked), NON modificarla.
+     Se l'utente ha bloccato la decorazione (userLocked), NON modificarla.
      Per "togli decorazione" → decorations.pattern = null.
- 17. PRESERVA TUTTI GLI ELEMENTI ESISTENTI: ogni elemento presente nel
-     bigliettino (logo, foto, contatti, servizi, social, QR, decorazioni)
-     DEVE restare nel JSON di risposta. NON rimuoverlo, svuotarlo o
-     sostituirlo a meno che l'utente non lo chieda esplicitamente.
-     Esempio: se c'è un logo, non toglierlo né sostituirlo.
- 18. TUTTI GLI ELEMENTI DEL BRIEF DEVONO ESSERCI: se il brief o il
-     contesto cliente menziona un elemento (logo, foto, servizio,
-     contatto, social), il bigliettino DEVE contenerlo. Non ometterlo.
 
 ESEMPI COMUNI MODIFICA (rispondi SEMPRE con JSON completo):
 - "rendi premium": accent color sofisticato (navy #1e3a5f, bordeaux #8b0000, o teal #01696F), layout "split" se c'è foto o "centered" se non c'è, font Inter, borderStyle "accent-strip-left"

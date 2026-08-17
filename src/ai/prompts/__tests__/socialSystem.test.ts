@@ -17,12 +17,6 @@ describe('socialSystem (cross-module)', () => {
     expect(p).toContain('1500');
   });
 
-  it('system prompt orders to preserve ALL source document elements', () => {
-    const p = buildSocialSystemPrompt();
-    expect(p).toMatch(/PRESERVA TUTTI GLI ELEMENTI DEL DOCUMENTO SORGENTE/i);
-    expect(p).toMatch(/a meno che l'utente non lo chieda esplicitamente/i);
-  });
-
   it('generate prompt for card embeds name+title+company', () => {
     const p = buildSocialGeneratePrompt(
       { type: 'card', sourceId: 'CARD-1', data: { name: 'Giovanni', title: 'Sviluppatore', company: 'HPE', accentColor: '#01696F', services: ['Web', 'API'] } },

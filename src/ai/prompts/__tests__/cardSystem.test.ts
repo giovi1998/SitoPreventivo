@@ -137,20 +137,4 @@ describe('buildCardSystemPrompt', () => {
     expect(p).toMatch(/quieta|uniforme|zone libere|aree solide/i);
     expect(p).toMatch(/busy|ricche di dettagli|dettagliate/i);
   });
-
-  // ─── Preservazione elementi (brief → output) ────────────────
-  it('orders to preserve ALL existing elements (logo, foto, contatti, servizi, social, QR, decorazioni)', () => {
-    const p = buildCardSystemPrompt();
-    expect(p).toMatch(/PRESERVA TUTTI GLI ELEMENTI ESISTENTI/i);
-    expect(p).toMatch(/logo/i);
-    expect(p).toMatch(/NON rimuoverlo|non rimuoverlo|non toglierlo/i);
-    expect(p).toMatch(/a meno che l'utente non lo chieda esplicitamente/i);
-  });
-
-  it('orders that ALL brief elements must be present in the output (es. logo non modificabile)', () => {
-    const p = buildCardSystemPrompt();
-    expect(p).toMatch(/TUTTI GLI ELEMENTI DEL BRIEF DEVONO ESSERCI/i);
-    expect(p).toMatch(/logo/i);
-    expect(p).toMatch(/DEVE contenerlo|deve contenerlo/i);
-  });
 });

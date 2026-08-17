@@ -135,8 +135,6 @@ VINCOLI:
 - Non includere il campo url in cta (è sempre inserito manualmente dall'utente).
 - NON INVENTARE date, luoghi, prezzi, numeri di telefono se non sono nel brief dell'utente. Se il brief è vuoto o troppo denso, restituisci copy più breve con placeholder neutri ("La tua attività", "Contattaci").
 - Se il brief è troppo denso per il formato, restituisci copy più breve e, se necessario, suggerisci un formato più grande o un layout diverso.
-- PRESERVA TUTTI GLI ELEMENTI ESISTENTI: ogni elemento presente nel volantino (headline, subheadline, body, CTA, immagine hero, sezioni) DEVE restare nel JSON di risposta. NON rimuoverlo, svuotarlo o sostituirlo a meno che l'utente non lo chieda esplicitamente.
-- TUTTI GLI ELEMENTI DEL BRIEF DEVONO ESSERCI: se il brief o il contesto cliente menziona un elemento (logo, immagine, sezione, contatto, CTA), il volantino DEVE contenerlo. Non ometterlo.
 - Lingua: italiano. Niente emoji.
 
 OUTPUT:

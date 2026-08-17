@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWebsiteSystemPrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteVerifyPrompt, buildWebsitePagePrompt, sanitizeMapAddress } from '../websiteSystem';
+import { buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteVerifyPrompt, buildWebsitePagePrompt, sanitizeMapAddress } from '../websiteSystem';
 
 const baseBrief = {
   businessName: 'Gelateria Chiccheria',
@@ -141,12 +141,5 @@ describe('websiteSystem prompts (maps + socials)', () => {
     const prompt = buildWebsiteCssPrompt('<div class="hero"></div>', 'modern', {});
     expect(prompt).toContain('content: "" obbligatorio');
     expect(prompt).toContain('NON stilizzare MAI tag <svg>');
-  });
-
-  it('system prompt orders to preserve ALL brief elements (nome, CTA, contatti, social, sezioni)', () => {
-    const prompt = buildWebsiteSystemPrompt();
-    expect(prompt).toMatch(/PRESERVA TUTTI GLI ELEMENTI DEL BRIEF/i);
-    expect(prompt).toMatch(/a meno che l'utente non lo chieda esplicitamente/i);
-    expect(prompt).toMatch(/se il brief fornisce un logo o un nome, usalo/i);
   });
 });

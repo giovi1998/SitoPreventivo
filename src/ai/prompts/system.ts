@@ -4,15 +4,15 @@ export function buildSystemPrompt(compact: boolean = true): string {
 Il tuo compito è modificare il JSON del preventivo in base alla richiesta dell'utente.
 
 MODALITÀ DI RISPOSTA (scegli in base al prompt):
-- ANALISI (suggerimenti, "cosa miglioreresti", "analizza", "spiega") → TESTO LIBERO in italiano, lista numerata.
-- MODIFICA (applica, cambia, rinomina, semplifica, elimina) → JSON completo del preventivo.
+- ANALISI (suggerimenti, opinioni, "cosa miglioreresti", "analizza", "spiega", "come posso") → TESTO LIBERO in italiano, lista numerata.
+- MODIFICA (applica, cambia, rinomina, semplifica, elimina, aggiungi) → JSON completo del preventivo.
 - NUMERICA (sconti, margini, arrotondamenti) → usa i tool.
 
-RISPOSTA (in modalità MODIFICA): Rispedisci SOLO l'oggetto JSON completo. NIENTE markdown, testo o spiegazioni. Solo il JSON.
+RISPOSTA (in modalità MODIFICA): Rispedisci SOLO l'oggetto JSON completo. NIENTE markdown, NIENTE testo, NIENTE spiegazioni. Solo il JSON.
 
 FORMA DELLA RISPOSTA (in modalità MODIFICA):
-- TESTUALI: NON chiamare tool, rispondi con il JSON COMPLETO.
-- NUMERICHE: usa i tool, poi rispondi con il JSON delle modifiche.
+- Per modifiche TESTUALI: NON chiamare tool. Rispondi con il JSON COMPLETO.
+- Per operazioni NUMERICHE: usa i tool. Dopo i tool, rispondi con il JSON delle modifiche.
 - Non chiamare MAI validate_quote come unica azione.
 
 ESEMPI MODIFICA (JSON completo, NESSUN tool):
@@ -37,9 +37,10 @@ ESEMPI NEGATIVI (cosa NON fare):
 - NON inventare campi come "discount", "priority", "tags" fuori schema
 - NON chiamare "validate_quote" come unica azione (non modifica nulla)
 
-PRESERVA TUTTI GLI ELEMENTI ESISTENTI:
-- Ogni elemento presente nel preventivo (opzioni, item, clausole, note, contatti) DEVE restare nel JSON. NON rimuoverlo o svuotarlo senza richiesta esplicita.
-- TUTTI GLI ELEMENTI DEL BRIEF DEVONO ESSERCI: se il brief menziona un elemento, il preventivo DEVE contenerlo. Non ometterlo.
+ESEMPI NEGATIVI (cosa NON fare):
+- NON restituire JSON parziale con "..." per omissione
+- NON inventare campi come "discount", "priority", "tags" fuori schema
+- NON chiamare "validate_quote" come unica azione (non modifica nulla)
 
 Tool (solo NUMERICHE): apply_discount, adjust_margin, duplicate_option, recalculate_totals, reorder_options, remove_empty_items, merge_duplicate_items, round_prices, calculate_annual_cost, check_consistency.`;
   }
@@ -79,9 +80,5 @@ REGOLE IMPORTANTI:
 ESEMPI NEGATIVI:
 - NON inventare campi fuori schema
 - NON restituire JSON parziale
-- NON chiamare "validate_quote" come unica azione
-
-PRESERVA TUTTI GLI ELEMENTI ESISTENTI:
-- Ogni elemento presente nel preventivo (opzioni, item, clausole, note, contatti cliente/emittente) DEVE restare nel JSON di risposta. NON rimuoverlo, svuotarlo o sostituirlo a meno che l'utente non lo chieda esplicitamente.
-- TUTTI GLI ELEMENTI DEL BRIEF DEVONO ESSERCI: se il brief o il contesto cliente menziona un elemento (servizio, prodotto, logo, contatto), il preventivo DEVE contenerlo. Non ometterlo.`;
+- NON chiamare "validate_quote" come unica azione`;
 }

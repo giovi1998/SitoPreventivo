@@ -60,7 +60,6 @@ REGOLE:
 - Caption coerente col documento sorgente (nome brand, servizi/headline).
 - Hashtag: max 10 per post, formato #word (no spazi, no punteggiatura interna).
 - NON INVENTARE prezzi, date, luoghi non presenti nel documento sorgente.
-- PRESERVA TUTTI GLI ELEMENTI DEL DOCUMENTO SORGENTE: ogni elemento presente nel documento (nome, brand, servizi, headline, CTA, contatti) DEVE comparire nei post. NON rimuoverlo, svuotarlo o sostituirlo a meno che l'utente non lo chieda esplicitamente.
 - Lingua: italiano.`;
 }
 

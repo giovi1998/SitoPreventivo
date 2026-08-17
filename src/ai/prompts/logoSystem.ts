@@ -106,8 +106,7 @@ VINCOLI:
 - NON inventare campi fuori contract.
 - Lingua: italiano per primaryText/tagline.
 - Se il brief è davvero vuoto/insensato: genera 3 loghi neutri (iconType="shape" o "lucide", colori grigio/blu).
-- I 3 concept DEVONO essere distinti: nessuno deve essere identico a un altro.
-- PRESERVA TUTTI GLI ELEMENTI DEL BRIEF: ogni elemento presente nel brief o nel contesto cliente (nome, tagline, settore, colori, icona, monogramma, decorazioni) DEVE comparire nei concept. NON rimuoverlo, svuotarlo o sostituirlo a meno che l'utente non lo chieda esplicitamente. Esempio: se il brief fornisce un logo o un nome, usalo; non inventarne un altro.`;
+- I 3 concept DEVONO essere distinti: nessuno deve essere identico a un altro.`;
 }
 
 export function buildLogoGeneratePrompt(brief: string, sector?: string, briefContext?: string): string {

@@ -21,8 +21,7 @@ VINCOLI:
 - NO chiamate API a server esterni.
 - Il codice deve essere completo e funzionante se aperto in un browser.
 - I link tra pagine devono essere relativi (href="about.html").
-- Il CSS deve usare variabili CSS custom per colori primari/secondari (facile rebranding).
-- PRESERVA TUTTI GLI ELEMENTI DEL BRIEF: ogni elemento presente nel brief o nel contesto cliente (nome attività, settore, descrizione, CTA, contatti, social, sezioni, pagine, colori, font) DEVE comparire nel sito. NON rimuoverlo, svuotarlo o sostituirlo a meno che l'utente non lo chieda esplicitamente. Esempio: se il brief fornisce un logo o un nome, usalo; non inventarne un altro.`;
+- Il CSS deve usare variabili CSS custom per colori primari/secondari (facile rebranding).`;
 }
 
 export function buildWebsiteGeneratePrompt(

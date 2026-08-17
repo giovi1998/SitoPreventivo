@@ -60,11 +60,4 @@ describe('logoSystem (v2 ready)', () => {
     expect(p).toMatch(/text legibility zone|zona centrale/i);
     expect(p).toMatch(/wordmark|testo bianco/i);
   });
-
-  it('system prompt orders to preserve ALL brief elements (nome, tagline, settore, colori, icona)', () => {
-    const p = buildLogoSystemPrompt();
-    expect(p).toMatch(/PRESERVA TUTTI GLI ELEMENTI DEL BRIEF/i);
-    expect(p).toMatch(/a meno che l'utente non lo chieda esplicitamente/i);
-    expect(p).toMatch(/se il brief fornisce un logo o un nome, usalo/i);
-  });
 });

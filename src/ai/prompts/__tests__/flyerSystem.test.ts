@@ -70,13 +70,6 @@ describe('flyerSystem prompts (phase 3)', () => {
       expect(s.toLowerCase()).toContain('telefono');
     });
 
-    it('system prompt orders to preserve ALL existing elements and ALL brief elements', () => {
-      const s = buildFlyerSystemPrompt();
-      expect(s).toMatch(/PRESERVA TUTTI GLI ELEMENTI ESISTENTI/i);
-      expect(s).toMatch(/TUTTI GLI ELEMENTI DEL BRIEF DEVONO ESSERCI/i);
-      expect(s).toMatch(/a meno che l'utente non lo chieda esplicitamente/i);
-    });
-
     it('copy prompt embeds bodyCharBudget as a hard limit', () => {
       const p = buildFlyerCopyPrompt('x', 'formale', { layout: 'classic', size: 'A5', bodyCharBudget: 500 });
       expect(p).toContain('500 caratteri');
