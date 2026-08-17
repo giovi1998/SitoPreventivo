@@ -11,7 +11,7 @@ import { withAiCall } from '../utils/aiStats';
 import { DocumentAiStats } from './DocumentAiStats';
 import AIProviderBadge from './ai/AIProviderBadge';
 import { getValidatedProviderDefault, setAiProviderDefault, getAiVisionEnabled, getAiImageModelDefault } from '../utils/uiPrefs';
-import { MQ_WORKSPACE } from '../hooks/useMediaQuery';
+import { MQ_WORKSPACE, useIsMobileWorkspace } from '../hooks/useMediaQuery';
 import { providerSupportsVision } from '../utils/resolveProviderId';
 import { providerRegistry } from '../ai/providers/registry';
 import { captureElementAsBase64 } from '../utils/ai/captureElement';
@@ -31,6 +31,7 @@ import AIConsole from './ai/AIConsole';
 import { AiFontPicker } from './ai-ui';
 import CodeEditor from './website/CodeEditor';
 import { buildWebsiteFullDocument, exportWebsiteZip } from '../utils/websiteExport';
+import './ElementPickerPanel.css';
 import './WebsiteEditor.css';
 
 interface WebsiteEditorProps {
@@ -95,10 +96,23 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [exporting, setExporting] = useState(false);
   // Default mobile viewport su workspace mobile: l'iframe mostra subito il
-  // rendering 375px invece del desktop 100% schiacciato.
+  // rendering 375px invece del desktop 100% schiacciato. Segue il breakpoint
+  // (useEffect sotto) finché l'utente non sceglie un viewport manualmente:
+  // altrimenti una finestra aperta <1024px resterebbe 375px anche allargata
+  // a desktop (bug segnalato 2026-08-17: "dopo rigenera vedo mobile su desktop").
   const [viewport, setViewport] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia(MQ_WORKSPACE).matches ? '375px' : '100%',
   );
+  const viewportTouchedRef = useRef(false);
+  const isMobileWorkspace = useIsMobileWorkspace();
+  useEffect(() => {
+    if (viewportTouchedRef.current) return;
+    setViewport(isMobileWorkspace ? '375px' : '100%');
+  }, [isMobileWorkspace]);
+  const handleViewportChange = useCallback((value: string) => {
+    viewportTouchedRef.current = true;
+    setViewport(value);
+  }, []);
   const [refinePrompt, setRefinePrompt] = useState('');
   const [verifyIssues, setVerifyIssues] = useState<string[] | null>(null);
   const [aiModel, setAiModel] = useState(() => getValidatedProviderDefault(providerRegistry));
@@ -902,7 +916,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
             <div className="website-preview-panel">
               <div className="viewport-controls">
                 {VIEWPORT_OPTIONS.map((opt) => (
-                  <button key={opt.value} className={`viewport-btn${viewport === opt.value ? ' active' : ''}`} onClick={() => setViewport(opt.value)}>
+                  <button key={opt.value} className={`viewport-btn${viewport === opt.value ? ' active' : ''}`} onClick={() => handleViewportChange(opt.value)}>
                     {opt.icon} {opt.label}
                   </button>
                 ))}
