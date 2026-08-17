@@ -13,6 +13,10 @@ import { useDocumentSave } from '../../hooks/useDocumentSave';
 import { computeFlyerLayout, getFlyerCopyBudget } from '../../utils/flyer';
 import { generateFlyerPdf, generateFlyerPng } from '../../utils/flyerGenerator';
 import SaveDialog from '../SaveDialog';
+import { useElementPicker, type PickedElement } from '../ElementPickerPanel';
+import PickedElementsList from '../PickedElementsList';
+import PickerHint from '../PickerHint';
+import { analyzeFlyer } from '../../utils/quality/flyerAnalyzer';
 import { logger } from '../../utils/logger';
 import { compressDataUrl } from '../../utils/card/imageCompress';
 import {
@@ -132,6 +136,8 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
   const [previewFocus, setPreviewFocus] = React.useState(false);
   const [showDebug, setShowDebug] = React.useState(false);
   const [mobileTab, setMobileTab] = React.useState<'ai' | 'manual' | null>(null);
+  const [flyerVerifyIssues, setFlyerVerifyIssues] = React.useState<string[] | null>(null);
+  const flyerPreviewRef = React.useRef<HTMLDivElement | null>(null);
   const loadedIdRef = React.useRef<string | undefined>(initialFlyer?.id);
   const [aiPrompt, setAiPrompt] = React.useState('');
   const [aiTone, setAiTone] = React.useState<FlyerTone>('formale');
@@ -338,6 +344,60 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
 
   const handleAiReset = React.useCallback(() => { ai.reset(); addToast('info', 'Sessione AI azzerata'); }, [ai, addToast]);
 
+  // Verify flyer: warning layout (truncation/overflow) + campi vuoti + contrasto.
+  const runFlyerVerify = React.useCallback(() => {
+    const res = analyzeFlyer(flyer);
+    setFlyerVerifyIssues(res.issues.length > 0 ? res.issues : null);
+    if (res.issues.length === 0) addToast('success', 'Volantino ok: nessun problema rilevato');
+  }, [flyer, addToast]);
+
+  // Repair flyer: tronca il copy al budget reale (deterministico, zero AI).
+  const repairFlyer = React.useCallback(() => {
+    const res = analyzeFlyer(flyer);
+    if (res.issues.length === 0) { addToast('info', 'Nessun problema da riparare'); return; }
+    const budget = getFlyerCopyBudget(flyer);
+    const truncate = (text: string, max: number | undefined): string => {
+      if (!max || max <= 0 || text.length <= max) return text;
+      return text.slice(0, max - 1).trimEnd() + '…';
+    };
+    const next = {
+      ...flyer,
+      content: {
+        ...flyer.content,
+        headline: truncate(flyer.content.headline, budget.headlineMaxChars),
+        subheadline: truncate(flyer.content.subheadline, budget.subheadlineMaxChars),
+        body: truncate(flyer.content.body, budget.bodyMaxChars),
+        cta: { ...flyer.content.cta, label: truncate(flyer.content.cta.label, budget.ctaMaxChars) },
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    setFlyer(next);
+    setFlyerVerifyIssues(null);
+    addToast('success', 'Copy troncato al budget del formato');
+  }, [flyer, addToast]);
+
+  const handleFlyerPick = React.useCallback((el: Element): PickedElement | null => {
+    const tag = el.tagName.toLowerCase();
+    const text = (el.textContent ?? '').trim().slice(0, 60);
+    const cls = (el.getAttribute('class') ?? '').slice(0, 40);
+    const label = cls ? `${tag}.${cls}` : tag;
+    return { label, html: el.outerHTML.slice(0, 300), context: `${label}${text ? `: "${text}"` : ''}` };
+  }, []);
+  const picker = useElementPicker(flyerPreviewRef.current, handleFlyerPick);
+
+  // Live refresh: quando il flyer cambia (copy/style/layout), re-estrai
+  // html/label/context dal DOM vivo — altrimenti la lista resta stale.
+  React.useEffect(() => {
+    if (picker.selected.length === 0) return;
+    picker.refreshLive((el) => {
+      const tag = el.tagName.toLowerCase();
+      const text = (el.textContent ?? '').trim().slice(0, 60);
+      const cls = (el.getAttribute('class') ?? '').slice(0, 40);
+      const label = cls ? `${tag}.${cls}` : tag;
+      return { label, html: el.outerHTML.slice(0, 300), context: `${label}${text ? `: "${text}"` : ''}` };
+    });
+  }, [flyer, picker]);
+
   const handleSaveHeroPrompt = React.useCallback(() => {
     const text = heroPrompt.trim();
     if (!text) { addToast('info', 'Scrivi un prompt hero prima di salvarlo.'); return; }
@@ -479,6 +539,34 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
         </button>
       }
     >
+      <div className="flyer-verify-row">
+        <button type="button" className="btn-verify" onClick={runFlyerVerify}>🔍 Verifica</button>
+        <button type="button" className="btn-repair" onClick={repairFlyer}>🔧 Ripara</button>
+      </div>
+      {picker.pickerMode && (
+        <PickerHint
+          message="Selezione attiva: i click sono catturati. Clicca un elemento del volantino per selezionarlo."
+          detail="Esc o il bottone 🎯 per uscire."
+        />
+      )}
+      <PickedElementsList
+        selected={picker.selected}
+        onRemove={picker.remove}
+        onClear={picker.clear}
+      />
+      {flyerVerifyIssues && flyerVerifyIssues.length > 0 && (
+        <div className="verify-issues-panel verify-issues-panel--static">
+          <div className="verify-issues-header">
+            <span>⚠️ {flyerVerifyIssues.length} problemi rilevati</span>
+            <button type="button" className="verify-issues-close" onClick={() => setFlyerVerifyIssues(null)} aria-label="Chiudi">✕</button>
+          </div>
+          <ul className="verify-issues-list">
+            {flyerVerifyIssues.slice(0, 5).map((issue, i) => (
+              <li key={i}>{issue}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <FlyerAiPanel {...aiPanelProps} bare onCollapse={() => {}} showResetInRail={false} />
     </AIConsole>
   );
@@ -548,12 +636,16 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
       )}
 
       {/* Preview column */}
-      <FlyerPreviewPanel
-        flyer={flyer} plan={layoutPlan} tier={tier} previewFocus={previewFocus}
-        showDebug={showDebug} setShowDebug={setShowDebug}
-        setPreviewFocus={setPreviewFocus}
-        onCollapse={() => {}}
-      />
+      <div ref={flyerPreviewRef}>
+        <FlyerPreviewPanel
+          flyer={flyer} plan={layoutPlan} tier={tier} previewFocus={previewFocus}
+          showDebug={showDebug} setShowDebug={setShowDebug}
+          setPreviewFocus={setPreviewFocus}
+          onCollapse={() => {}}
+          pickerMode={picker.pickerMode}
+          onTogglePicker={picker.toggle}
+        />
+      </div>
 
       <SaveDialog
         open={showSaveDialog}

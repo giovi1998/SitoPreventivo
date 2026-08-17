@@ -289,6 +289,12 @@
   min-height: 320px;
 }
 
+.builder-preview-toolbar {
+  align-self: flex-end;
+  display: flex;
+  gap: 6px;
+}
+
 .builder-preview-svg {
   width: 100%;
   max-width: 480px;

@@ -79,17 +79,25 @@ export function useCardGridEditor({ card, setCard, addToast }: UseCardGridEditor
   }, [gridEditorSide, card, setCard]);
 
   const patchElementPlacement = useCallback((element: keyof CardGrid['elements'], patch: { x?: number; y?: number; scale?: number }) => {
-    const targetGrid = gridEditorSide === 'back' ? (card.backGrid ?? deriveGridFromLayout(card, 'back')) : (card.grid ?? deriveGridFromLayout(card, 'front'));
-    const el = targetGrid.elements[element];
-    if (!el) return;
-    const prevPlacement = el.placement ?? el.photoPlacement ?? { x: 0, y: 0, scale: 1 };
-    const next: typeof prevPlacement = {
-      x: patch.x ?? prevPlacement.x,
-      y: patch.y ?? prevPlacement.y,
-      scale: patch.scale ?? prevPlacement.scale,
-    };
-    patchGrid({ ...targetGrid, elements: { ...targetGrid.elements, [element]: { ...el, placement: next } } });
-  }, [card, gridEditorSide, patchGrid]);
+    // Update FUNZIONALE: durante il drag (pointermove ~60Hz) più chiamate
+    // nello stesso tick userebbero `card` stale dal closure → gli update
+    // intermedi si sovrascrivono → il drag "non si aggiorna" (salta).
+    setCard((prev) => {
+      const targetGrid = gridEditorSide === 'back' ? (prev.backGrid ?? deriveGridFromLayout(prev, 'back')) : (prev.grid ?? deriveGridFromLayout(prev, 'front'));
+      const el = targetGrid.elements[element];
+      if (!el) return prev;
+      const prevPlacement = el.placement ?? el.photoPlacement ?? { x: 0, y: 0, scale: 1 };
+      const next: typeof prevPlacement = {
+        x: patch.x ?? prevPlacement.x,
+        y: patch.y ?? prevPlacement.y,
+        scale: patch.scale ?? prevPlacement.scale,
+      };
+      const patched: CardGrid = { ...targetGrid, elements: { ...targetGrid.elements, [element]: { ...el, placement: next } } };
+      return gridEditorSide === 'back'
+        ? { ...prev, backGrid: patched, updatedAt: new Date().toISOString() }
+        : { ...prev, grid: patched, updatedAt: new Date().toISOString() };
+    });
+  }, [gridEditorSide, setCard]);
 
   const handleAfterMove = useCallback((info: { element: string; dx: number; dy: number; applied: boolean; reason?: 'collision' | 'border' }) => {
     logGridChange('move', { element: info.element, applied: info.applied, reason: info.reason, payload: { dx: info.dx, dy: info.dy } });

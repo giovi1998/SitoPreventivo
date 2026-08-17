@@ -24,6 +24,10 @@ import { useDocumentSave } from '../hooks/useDocumentSave';
 import { compressDataUrl } from '../utils/card/imageCompress';
 import { withAiCall } from '../utils/aiStats';
 import { DocumentAiStats } from './DocumentAiStats';
+import { useElementPicker, type PickedElement } from './ElementPickerPanel';
+import PickedElementsList from './PickedElementsList';
+import PickerHint from './PickerHint';
+import { analyzeLogo } from '../utils/quality/logoAnalyzer';
 
 interface LogoEditorProps {
   userEmail: string;
@@ -75,6 +79,8 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedIdRef = useRef<string | undefined>(initialLogo?.id);
   const loadedUpdatedAtRef = useRef<string | undefined>(initialLogo?.updatedAt);
+  const [logoVerifyIssues, setLogoVerifyIssues] = useState<string[] | null>(null);
+  const logoPreviewRef = useRef<HTMLDivElement | null>(null);
   const { addToast } = useToast();
 
   // When the URL-driven document changes, reset local state to the new logo.
@@ -347,6 +353,51 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
     else addToast('info', 'Nuovo logo creato.');
   }, [logo, addToast, onReset]);
 
+  // Verify logo: analisi deterministica (testo vuoto, contrasto, backdrop).
+  const runLogoVerify = useCallback(() => {
+    const res = analyzeLogo(logo);
+    setLogoVerifyIssues(res.issues.length > 0 ? res.issues : null);
+    if (res.issues.length === 0) addToast('success', 'Logo ok: nessun problema rilevato');
+  }, [logo, addToast]);
+
+  // Repair logo: deterministico — aggiunge textBackdrop se manca con
+  // backgroundImage, ripristina colori validi se non hex.
+  const repairLogo = useCallback(() => {
+    const res = analyzeLogo(logo);
+    if (res.issues.length === 0) { addToast('info', 'Nessun problema da riparare'); return; }
+    const b = logo.builder;
+    const patch: Partial<LogoBuilder> = {};
+    if (b.backgroundImage && !b.textBackdrop) patch.textBackdrop = 'pill';
+    if (b.primaryColor && !/^#[0-9a-fA-F]{3,6}$/.test(b.primaryColor)) patch.primaryColor = '#01696F';
+    if (b.secondaryColor && !/^#[0-9a-fA-F]{3,6}$/.test(b.secondaryColor)) patch.secondaryColor = '#0A8A8F';
+    if (Object.keys(patch).length === 0) { addToast('info', 'Problemi non riparabili automaticamente: correggi a mano.'); return; }
+    setLogo(deepSetBuilder(logo, patch));
+    setLogoVerifyIssues(null);
+    addToast('success', 'Logo riparato (backdrop/colori)');
+  }, [logo, addToast]);
+
+  const handleLogoPick = useCallback((el: Element): PickedElement | null => {
+    const tag = el.tagName.toLowerCase();
+    const text = (el.textContent ?? '').trim().slice(0, 60);
+    const cls = (el.getAttribute('class') ?? '').slice(0, 40);
+    const label = cls ? `${tag}.${cls}` : tag;
+    return { label, html: el.outerHTML.slice(0, 300), context: `${label}${text ? `: "${text}"` : ''}` };
+  }, []);
+  const picker = useElementPicker(logoPreviewRef.current, handleLogoPick);
+
+  // Live refresh: quando il logo cambia (testo/icona/colori), re-estrai
+  // html/label/context dal DOM vivo — altrimenti la lista resta stale.
+  useEffect(() => {
+    if (picker.selected.length === 0) return;
+    picker.refreshLive((el) => {
+      const tag = el.tagName.toLowerCase();
+      const text = (el.textContent ?? '').trim().slice(0, 60);
+      const cls = (el.getAttribute('class') ?? '').slice(0, 40);
+      const label = cls ? `${tag}.${cls}` : tag;
+      return { label, html: el.outerHTML.slice(0, 300), context: `${label}${text ? `: "${text}"` : ''}` };
+    });
+  }, [logo, picker]);
+
   // Phase 13b (REQ-UX-004/005): cluster azioni uniforme — Salva primary,
   // Esporta secondary con menu (SVG/PNG/PDF/ICO/Favicon), Nuovo ghost.
   // TB-024: aggiunti PDF vettoriale, favicon set ZIP, ICO, JPG sfondo, SVG ottimizzato.
@@ -414,7 +465,18 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
 
       <div id="logo-tab-panel" role="tabpanel" aria-labelledby={tab === 'builder' ? 'tab-builder' : 'tab-ai'}>
         {tab === 'builder' ? (
-          <BuilderPanel logo={logo} onPatch={onPatch} onTemplate={onTemplate} tier={tier} userEmail={userEmail} onAiCall={(kind, costUsd) => setLogo((prev) => withAiCall(prev, kind, costUsd))} />
+          <div ref={logoPreviewRef}>
+            <BuilderPanel
+              logo={logo}
+              onPatch={onPatch}
+              onTemplate={onTemplate}
+              tier={tier}
+              userEmail={userEmail}
+              onAiCall={(kind, costUsd) => setLogo((prev) => withAiCall(prev, kind, costUsd))}
+              pickerMode={picker.pickerMode}
+              onTogglePicker={picker.toggle}
+            />
+          </div>
         ) : (
           <LogoAiPanel
             key={`${aiPanelResetKey}-${initialLogo?.id ?? 'new'}`}
@@ -432,6 +494,35 @@ export default function LogoEditor({ userEmail, initialLogo, tier = 'unlocked', 
           />
         )}
       </div>
+
+      <div className="logo-verify-row">
+        <button type="button" className="btn-verify" onClick={runLogoVerify}>🔍 Verifica</button>
+        <button type="button" className="btn-repair" onClick={repairLogo}>🔧 Ripara</button>
+      </div>
+      {picker.pickerMode && (
+        <PickerHint
+          message="Selezione attiva: i click sono catturati. Clicca un elemento del logo per selezionarlo."
+          detail="Esc o il bottone 🎯 per uscire."
+        />
+      )}
+      <PickedElementsList
+        selected={picker.selected}
+        onRemove={picker.remove}
+        onClear={picker.clear}
+      />
+      {logoVerifyIssues && logoVerifyIssues.length > 0 && (
+        <div className="verify-issues-panel verify-issues-panel--static">
+          <div className="verify-issues-header">
+            <span>⚠️ {logoVerifyIssues.length} problemi rilevati</span>
+            <button type="button" className="verify-issues-close" onClick={() => setLogoVerifyIssues(null)} aria-label="Chiudi">✕</button>
+          </div>
+          <ul className="verify-issues-list">
+            {logoVerifyIssues.slice(0, 5).map((issue, i) => (
+              <li key={i}>{issue}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <SaveDialog
         open={showSaveDialog}

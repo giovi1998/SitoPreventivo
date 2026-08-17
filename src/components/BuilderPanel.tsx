@@ -29,6 +29,9 @@ interface BuilderPanelProps {
   userEmail?: string;
   /** TB-026: notifica il genitore di una chiamata AI (per aiStats). */
   onAiCall?: (kind: 'background', costUsd: number) => void;
+  /** Modalità picker elemento (toggle nella toolbar preview). */
+  pickerMode?: boolean;
+  onTogglePicker?: () => void;
 }
 
 const LUCIDE_NAME_TO_COMPONENT: Record<string, React.ComponentType<any>> = {
@@ -111,7 +114,7 @@ function PreviewIcon({ builder }: { builder: LogoBuilder }) {
   return <IconComp size={20} aria-hidden="true" />;
 }
 
-export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlocked', userEmail, onAiCall }: BuilderPanelProps) {
+export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlocked', userEmail, onAiCall, pickerMode = false, onTogglePicker }: BuilderPanelProps) {
   const b = logo.builder;
   const [search, setSearch] = useState('');
   const debouncedBuilder = useDebouncedValue(b, 200);
@@ -593,6 +596,18 @@ export default function BuilderPanel({ logo, onPatch, onTemplate, tier = 'unlock
       </section>
 
       <aside className="builder-preview" aria-label="Anteprima logo">
+        {onTogglePicker && (
+          <div className="builder-preview-toolbar">
+            <button
+              type="button"
+              className={`btn-picker${pickerMode ? ' active' : ''}`}
+              onClick={onTogglePicker}
+              title={pickerMode ? 'Esci dalla selezione (Esc)' : 'Seleziona un elemento da modificare con AI'}
+            >
+              🎯 {pickerMode ? 'Seleziona…' : 'Elemento'}
+            </button>
+          </div>
+        )}
         <div
           className="builder-preview-svg"
           aria-label="Anteprima logo SVG"

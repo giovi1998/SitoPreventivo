@@ -35,6 +35,9 @@ export interface CardPreviewSurfaceProps {
    * (foto/QR) e onPatchPlacement è fornito, la preview abilita il drag. */
   selectedElement?: { side: 'front' | 'back'; key: string } | null;
   onPatchPlacement?: (key: string, patch: { x?: number; y?: number; scale?: number }) => void;
+  /** Modalità picker elemento (toggle nella toolbar preview). */
+  pickerMode?: boolean;
+  onTogglePicker?: () => void;
 }
 
 export default function CardPreviewSurface({
@@ -46,6 +49,8 @@ export default function CardPreviewSurface({
   heading,
   selectedElement,
   onPatchPlacement,
+  pickerMode = false,
+  onTogglePicker,
 }: CardPreviewSurfaceProps) {
   // Phase 2.2 REQ-C01: scaling che riserva spazio (no overflow). Usa `zoom`
   // CSS dove supportato, fallback a transform scale.
@@ -122,6 +127,19 @@ export default function CardPreviewSurface({
             </svg>
             <span>{showGrid ? 'Griglia ON' : 'Griglia OFF'}</span>
           </button>
+          {onTogglePicker && (
+            <button
+              type="button"
+              className={`card-grid-toggle ${pickerMode ? 'active' : ''}`}
+              onClick={onTogglePicker}
+              title={pickerMode ? 'Esci dalla selezione (Esc)' : 'Seleziona un elemento da modificare con AI'}
+              aria-label={pickerMode ? 'Esci dalla selezione' : 'Seleziona elemento'}
+              aria-pressed={pickerMode}
+            >
+              🎯
+              <span>{pickerMode ? 'Seleziona…' : 'Elemento'}</span>
+            </button>
+          )}
         </div>
       </div>
       <div

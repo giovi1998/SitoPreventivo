@@ -14,10 +14,14 @@ interface FlyerPreviewPanelProps {
   setShowDebug: (v: boolean) => void;
   setPreviewFocus: (v: boolean) => void;
   onCollapse: () => void;
+  /** Modalità picker elemento (toggle nella toolbar preview). */
+  pickerMode?: boolean;
+  onTogglePicker?: () => void;
 }
 
 export function FlyerPreviewPanel({
   flyer, plan, tier, previewFocus, showDebug, setShowDebug, setPreviewFocus, onCollapse,
+  pickerMode = false, onTogglePicker,
 }: FlyerPreviewPanelProps): React.ReactElement {
   const densityLabel: Record<typeof plan.density, string> = {
     low: 'Spazio ok',
@@ -29,6 +33,18 @@ export function FlyerPreviewPanel({
   return (
     <section className={`preview-wrap ${previewFocus ? 'preview-focus' : ''}`} aria-label="Anteprima volantino">
       <div className="preview-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
+        {onTogglePicker && (
+          <button
+            type="button"
+            className={`preview-debug-toggle ${pickerMode ? 'active' : ''}`}
+            onClick={onTogglePicker}
+            title={pickerMode ? 'Esci dalla selezione (Esc)' : 'Seleziona un elemento da modificare con AI'}
+            aria-label={pickerMode ? 'Esci dalla selezione' : 'Seleziona elemento'}
+            aria-pressed={pickerMode}
+          >
+            🎯 {pickerMode ? 'Seleziona…' : 'Elemento'}
+          </button>
+        )}
         <button type="button" className="preview-debug-toggle" onClick={() => setShowDebug(!showDebug)} aria-pressed={showDebug}>
           {showDebug ? 'Nascondi debug' : 'Debug'}
         </button>

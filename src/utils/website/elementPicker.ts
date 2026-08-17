@@ -29,6 +29,7 @@ export interface ElementContext {
 
 const PICKER_STYLE_ID = 'website-picker-style';
 const PICKER_HIGHLIGHT = 'website-picker-highlight';
+const PICKER_SCOPE_CLASS = 'element-picker-scope';
 
 const COMPUTED_PROPS = [
   'color', 'background-color', 'background-image', 'font-family', 'font-size',
@@ -40,15 +41,28 @@ const COMPUTED_PROPS = [
 ];
 
 /**
- * Attiva la modalità picker sul documento dell'iframe. Ritorna una funzione
+ * Attiva la modalità picker su un documento (preview iframe) o su un
+ * elemento container (DOM in-page: card/flyer/logo). Ritorna una funzione
  * per disattivarla (rimuove listener e stili). `onSelect` riceve l'elemento
  * cliccato; il click è consumato (preventDefault + stopPropagation).
+ *
+ * Con un container, i listener sono SCOPED: i click fuori dal container
+ * (toolbar, bottoni, drag handles) NON vengono intercettati — altrimenti
+ * il bottone 🎯 stesso non potrebbe spegnere il picker e il drag&drop
+ * della preview morirebbe (click post-pointerup bloccato).
  */
-export function enablePicker(doc: Document, onSelect: (el: Element) => void): () => void {
-  const style = doc.createElement('style');
+export function enablePicker(target: Document | HTMLElement, onSelect: (el: Element) => void): () => void {
+  const isDoc = target instanceof Document;
+  const root: Document = isDoc ? target : (target.ownerDocument ?? document);
+  const container = isDoc ? null : (target as HTMLElement);
+
+  const style = root.createElement('style');
   style.id = PICKER_STYLE_ID;
-  style.textContent = `* { cursor: crosshair !important; }`;
-  doc.head.appendChild(style);
+  style.textContent = container
+    ? `.${PICKER_SCOPE_CLASS}, .${PICKER_SCOPE_CLASS} * { cursor: crosshair !important; }`
+    : `* { cursor: crosshair !important; }`;
+  root.head.appendChild(style);
+  if (container) container.classList.add(PICKER_SCOPE_CLASS);
 
   let highlighted: HTMLElement | null = null;
   let previousOutline = '';
@@ -62,15 +76,22 @@ export function enablePicker(doc: Document, onSelect: (el: Element) => void): ()
     }
   };
 
+  const inScope = (e: Event): boolean => {
+    if (!container) return true;
+    const t = e.target as Node | null;
+    return !!(t && container.contains(t));
+  };
+
   const onMouseOver = (e: MouseEvent) => {
-    const target = e.target as HTMLElement | null;
-    if (!target || target === highlighted) return;
+    if (!inScope(e)) return;
+    const t = e.target as HTMLElement | null;
+    if (!t || t === highlighted) return;
     clearHighlight();
-    highlighted = target;
-    previousOutline = target.style.outline;
-    previousOutlineOffset = target.style.outlineOffset;
-    target.style.outline = `2px solid #4f46e5`;
-    target.style.outlineOffset = '1px';
+    highlighted = t;
+    previousOutline = t.style.outline;
+    previousOutlineOffset = t.style.outlineOffset;
+    t.style.outline = `2px solid #4f46e5`;
+    t.style.outlineOffset = '1px';
   };
 
   const onMouseOut = (e: MouseEvent) => {
@@ -78,24 +99,35 @@ export function enablePicker(doc: Document, onSelect: (el: Element) => void): ()
   };
 
   const onClick = (e: MouseEvent) => {
+    if (!inScope(e)) return;
     e.preventDefault();
     e.stopPropagation();
-    const el = doc.elementFromPoint(e.clientX, e.clientY);
+    // elementFromPoint non esiste in jsdom: fallback al target del click
+    // (equivalente nei browser reali per un click diretto).
+    let el: Element | null = null;
+    try {
+      el = root.elementFromPoint ? root.elementFromPoint(e.clientX, e.clientY) : null;
+    } catch {
+      el = null;
+    }
+    if (!el) el = e.target as Element | null;
     if (el) {
       clearHighlight();
       onSelect(el);
     }
   };
 
-  doc.addEventListener('mouseover', onMouseOver, true);
-  doc.addEventListener('mouseout', onMouseOut, true);
-  doc.addEventListener('click', onClick, true);
+  const scopeRoot: Document | HTMLElement = target;
+  scopeRoot.addEventListener('mouseover', onMouseOver as EventListener, true);
+  scopeRoot.addEventListener('mouseout', onMouseOut as EventListener, true);
+  scopeRoot.addEventListener('click', onClick as EventListener, true);
 
   return () => {
     clearHighlight();
-    doc.removeEventListener('mouseover', onMouseOver, true);
-    doc.removeEventListener('mouseout', onMouseOut, true);
-    doc.removeEventListener('click', onClick, true);
+    scopeRoot.removeEventListener('mouseover', onMouseOver as EventListener, true);
+    scopeRoot.removeEventListener('mouseout', onMouseOut as EventListener, true);
+    scopeRoot.removeEventListener('click', onClick as EventListener, true);
+    if (container) container.classList.remove(PICKER_SCOPE_CLASS);
     style.remove();
   };
 }

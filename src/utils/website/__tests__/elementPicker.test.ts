@@ -1,7 +1,49 @@
 import { describe, it, expect } from 'vitest';
-import { extractElementContext, matchingCssRules, matchingSimilarRules, stripPseudo, findElementInSource } from '../elementPicker';
+import { enablePicker, extractElementContext, matchingCssRules, matchingSimilarRules, stripPseudo, findElementInSource } from '../elementPicker';
 
 describe('elementPicker', () => {
+  describe('enablePicker scoped (container)', () => {
+    it('intercetta click DENTRO il container, ignora quelli fuori', () => {
+      const container = document.createElement('div');
+      const inside = document.createElement('button');
+      inside.textContent = 'dentro';
+      container.appendChild(inside);
+      const outside = document.createElement('button');
+      outside.textContent = 'fuori';
+      document.body.appendChild(container);
+      document.body.appendChild(outside);
+
+      const picked: Element[] = [];
+      const disable = enablePicker(container, (el) => picked.push(el));
+
+      // Click dentro il container → selezionato, preventDefault applicato.
+      const evtIn = new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 });
+      inside.dispatchEvent(evtIn);
+      expect(picked.length).toBe(1);
+
+      // Click fuori dal container → NON intercettato (drag&drop/toolbar ok).
+      const evtOut = new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 });
+      outside.dispatchEvent(evtOut);
+      expect(picked.length).toBe(1);
+
+      disable();
+      document.body.removeChild(container);
+      document.body.removeChild(outside);
+    });
+
+    it('rimuove la classe scope e lo stile al disable', () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const disable = enablePicker(container, () => {});
+      expect(container.classList.contains('element-picker-scope')).toBe(true);
+      expect(document.getElementById('website-picker-style')).not.toBeNull();
+      disable();
+      expect(container.classList.contains('element-picker-scope')).toBe(false);
+      expect(document.getElementById('website-picker-style')).toBeNull();
+      document.body.removeChild(container);
+    });
+  });
+
   describe('matchingCssRules', () => {
     it('trova regole che matchano l\'elemento', () => {
       const el = document.createElement('button');
