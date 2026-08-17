@@ -13,6 +13,9 @@
 // Tags: ogni prompt riceve `environment:<label>` (production/staging —
 // all'inizio identici tra ambienti, possono divergere) + `quickbrand`
 // (dominio). I tags si filtrano in Langfuse (Prompt Management).
+//
+// TB-032: --message "descrizione" → commitMessage sulla versione caricata
+// (le versioni senza descrizione sono indistinguibili nei test A/B).
 import { buildCardSystemPrompt } from '../src/ai/prompts/cardSystem';
 import { buildSystemPrompt } from '../src/ai/prompts/system';
 import { buildFlyerSystemPrompt } from '../src/ai/prompts/flyerSystem';
@@ -45,6 +48,10 @@ const labelArg = (labelIdx !== -1 && args[labelIdx + 1] && !args[labelIdx + 1].s
   ? args[labelIdx + 1]
   : args.find((a) => a.startsWith('--label='))?.split('=')[1] ?? 'production';
 const dryRun = args.includes('--dry-run');
+const msgIdx = args.indexOf('--message');
+const commitMessage = (msgIdx !== -1 && args[msgIdx + 1] && !args[msgIdx + 1].startsWith('--'))
+  ? args[msgIdx + 1]
+  : args.find((a) => a.startsWith('--message='))?.split('=').slice(1).join('=') ?? undefined;
 
 const pk = process.env.LANGFUSE_PUBLIC_KEY || process.env.VITE_LANGFUSE_PUBLIC_KEY;
 const sk = process.env.LANGFUSE_SECRET_KEY || process.env.VITE_LANGFUSE_SECRET_KEY;
@@ -60,7 +67,7 @@ const auth = `Basic ${Buffer.from(`${pk}:${sk}`).toString('base64')}`;
 async function main() {
   for (const p of PROMPTS) {
     if (dryRun) {
-      console.log(`[dry-run] ${p.name} (${p.type}, ${p.prompt[0].content.length} chars) → label ${labelArg}, tags [${tagsForLabel(labelArg).join(', ')}]`);
+      console.log(`[dry-run] ${p.name} (${p.type}, ${p.prompt[0].content.length} chars) → label ${labelArg}, tags [${tagsForLabel(labelArg).join(', ')}]${commitMessage ? `, message "${commitMessage}"` : ''}`);
       continue;
     }
     const res = await fetch(`${base}/api/public/v2/prompts`, {
@@ -72,6 +79,7 @@ async function main() {
         prompt: p.prompt,
         labels: [labelArg],
         tags: tagsForLabel(labelArg),
+        ...(commitMessage ? { commitMessage } : {}),
       }),
     });
     if (!res.ok) {

@@ -322,3 +322,146 @@ describe('Admin prompt CRUD (carica / cancella / lista)', () => {
     expect(delRes.statusCode).toBe(200);
   });
 });
+
+describe('TB-032 versioni prompt (test prompt×modello)', () => {
+  beforeEach(() => {
+    resetApiTests();
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk-test';
+    process.env.LANGFUSE_SECRET_KEY = 'sk-test';
+    process.env.LANGFUSE_BASE_URL = 'https://cloud.langfuse.com';
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('version param → fetch versione esatta, labels+commitMessage nel data', async () => {
+    const calls: any[] = [];
+    globalAny.fetch = vi.fn(async (url: string, init: any) => {
+      if (String(url).includes('/api/public/otel/v1/traces')) return { ok: true, status: 200 };
+      calls.push(String(url));
+      return {
+        ok: true, status: 200,
+        json: async () => ({
+          name: 'card-system', version: 2,
+          labels: ['staging'],
+          commitMessage: 'Fix grid collisioni',
+          prompt: [{ role: 'system', content: 'V2' }],
+        }),
+      };
+    });
+    const req = { method: 'GET', url: '/api/ai/prompt?name=card-system&label=production&version=2', headers: { 'x-forwarded-for': '1.1.1.1' }, body: {} };
+    const res: any = await callApiHandler(req);
+    expect(res.statusCode).toBe(200);
+    expect(calls[0]).toContain('label=production');
+    expect(calls[0]).toContain('version=2');
+    expect(res.body.data.version).toBe(2);
+    expect(res.body.data.commitMessage).toBe('Fix grid collisioni');
+    expect(res.body.data.labels).toContain('staging');
+  });
+
+  it('promptVersions del cliente fa override versione → version=3 + label experiment', async () => {
+    const { mockDbState } = await import('./helpers/apiTest');
+    mockDbState.selectResults.push([{ id: 'cust_42', promptLabels: { 'card-system': 'experiment' }, promptVersions: { 'card-system': 3 } }]);
+    const calls: any[] = [];
+    globalAny.fetch = vi.fn(async (url: string, init: any) => {
+      if (String(url).includes('/api/public/otel/v1/traces')) return { ok: true, status: 200 };
+      calls.push(String(url));
+      return { ok: true, status: 200, json: async () => ({ name: 'card-system', version: 3, prompt: [{ role: 'system', content: 'V3' }] }) };
+    });
+    const req = {
+      method: 'GET',
+      url: '/api/ai/prompt?name=card-system&label=production&customerId=cust_42',
+      headers: { 'x-forwarded-for': '1.1.1.1' },
+      body: {},
+    };
+    const res: any = await callApiHandler(req);
+    expect(res.statusCode).toBe(200);
+    expect(calls[0]).toContain('label=experiment');
+    expect(calls[0]).toContain('version=3');
+    expect(res.body.data.version).toBe(3);
+  });
+
+  it('commitMessage propagato al body Langfuse nel POST', async () => {
+    const calls: any[] = [];
+    globalAny.fetch = vi.fn(async (url: string, init: any) => {
+      if (String(url).includes('/api/public/otel/v1/traces')) return { ok: true, status: 200 };
+      calls.push({ url: String(url), init });
+      if (String(url).endsWith('/api/public/v2/prompts') && init.method === 'POST') {
+        return { ok: true, status: 200, json: async () => ({ name: 'card-system', version: 5 }) };
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
+    });
+    const req = {
+      method: 'POST',
+      url: '/api/ai/prompts',
+      headers: { origin: 'http://localhost', 'x-forwarded-for': '1.1.1.1' },
+      body: {
+        adminEmail: 'admin@gmail.com',
+        name: 'card-system',
+        prompt: [{ role: 'system', content: 'Nuovo template' }],
+        label: 'staging',
+        commitMessage: 'Test A/B: più rigido sui servizi',
+      },
+    };
+    const res: any = await callApiHandler(req);
+    expect(res.statusCode).toBe(200);
+    const call = calls.find((c) => c.url.endsWith('/api/public/v2/prompts'));
+    const body = JSON.parse(call!.init.body);
+    expect(body.commitMessage).toBe('Test A/B: più rigido sui servizi');
+  });
+
+  it('promptVersions accettato in PATCH customers', async () => {
+    const { mockDbState } = await import('./helpers/apiTest');
+    mockDbState.selectResults.push([{ id: 'cust_42' }]);
+    const req = {
+      method: 'PATCH',
+      url: '/api/customers/cust_42',
+      headers: { origin: 'http://localhost', 'x-forwarded-for': '1.1.1.1' },
+      body: { adminEmail: 'admin@gmail.com', promptVersions: { 'card-system': 3 } },
+    };
+    const res: any = await callApiHandler(req);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('GET /ai/prompts/versions: lista versioni + dettaglio (commitMessage, anteprima)', async () => {
+    const calls: string[] = [];
+    globalAny.fetch = vi.fn(async (url: string, init: any) => {
+      if (String(url).includes('/api/public/otel/v1/traces')) return { ok: true, status: 200 };
+      const u = String(url);
+      calls.push(u);
+      if (u.endsWith('/api/public/v2/prompts')) {
+        return { ok: true, status: 200, json: async () => ({ data: [{ name: 'card-system', versions: [2, 3, 4], labels: ['production'] }] }) };
+      }
+      const m = u.match(/\/prompts\/card-system\?version=(\d+)$/);
+      if (m) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            name: 'card-system', version: Number(m[1]),
+            labels: m[1] === '4' ? ['experiment', 'latest'] : ['production'],
+            commitMessage: m[1] === '4' ? 'A/B: più rigido sui servizi' : null,
+            prompt: [{ role: 'system', content: `CONTENUTO V${m[1]}` }],
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ data: [] }) };
+    });
+    const req = {
+      method: 'GET',
+      url: '/api/ai/prompts/versions?name=card-system&adminEmail=admin@gmail.com',
+      headers: { 'x-forwarded-for': '1.1.1.1' },
+      body: {},
+    };
+    const res: any = await callApiHandler(req);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.name).toBe('card-system');
+    expect(res.body.data.versions.map((v: any) => v.version)).toEqual([2, 3, 4]);
+    const v4 = res.body.data.versions.find((v: any) => v.version === 4);
+    expect(v4.labels).toContain('experiment');
+    expect(v4.commitMessage).toBe('A/B: più rigido sui servizi');
+    expect(v4.content).toBe('CONTENUTO V4');
+    expect(v4.length).toBeGreaterThan(0);
+    // 1 list + 3 detail
+    expect(calls.length).toBe(4);
+  });
+});

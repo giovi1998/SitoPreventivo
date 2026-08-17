@@ -18,6 +18,10 @@ export interface ResolvedPrompt {
   version: number;
   prompt: LangfusePromptMessage[];
   fallback: boolean;
+  /** Label della versione risolta (es. "experiment"). */
+  labels?: string[];
+  /** Descrizione della versione (commitMessage Langfuse). */
+  commitMessage?: string | null;
 }
 
 // Substitution {{var}} → valore. Chiave assente → placeholder letterale
@@ -60,21 +64,22 @@ function baseUrl() {
   return process.env.LANGFUSE_BASE_URL || process.env.VITE_LANGFUSE_BASE_URL || '';
 }
 
-export async function fetchRemotePrompt(name: string, label = 'production'): Promise<ResolvedPrompt> {
-  const key = `${name}:${label}`;
+export async function fetchRemotePrompt(name: string, label = 'production', version?: number): Promise<ResolvedPrompt> {
+  const key = `${name}:${label}${version !== undefined ? `:v${version}` : ''}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.ts < TTL_MS) return hit.data;
 
   const fallbackMessages = localPromptFallback(name);
   if (!publicKey() || !secretKey() || !baseUrl()) {
     if (!fallbackMessages) throw new Error(`Prompt non registrato: ${name}`);
-    const data: ResolvedPrompt = { name, version: 0, prompt: fallbackMessages, fallback: true };
+    const data: ResolvedPrompt = { name, version: version ?? 0, prompt: fallbackMessages, fallback: true };
     cache.set(key, { ts: Date.now(), data });
     return data;
   }
 
   try {
-    const res = await fetch(`${baseUrl()}/api/public/v2/prompts/${name}?label=${label}`, {
+    const query = version !== undefined ? `?label=${label}&version=${version}` : `?label=${label}`;
+    const res = await fetch(`${baseUrl()}/api/public/v2/prompts/${name}${query}`, {
       headers: {
         Authorization: `Basic ${Buffer.from(`${publicKey()}:${secretKey()}`).toString('base64')}`,
       },
@@ -85,6 +90,8 @@ export async function fetchRemotePrompt(name: string, label = 'production'): Pro
       name?: string;
       version?: number;
       prompt?: string | Array<{ role: string; content: string }>;
+      labels?: string[];
+      commitMessage?: string | null;
     };
     const prompt = Array.isArray(body.prompt)
       ? body.prompt
@@ -97,13 +104,15 @@ export async function fetchRemotePrompt(name: string, label = 'production'): Pro
       version: Number(body.version ?? 0),
       prompt,
       fallback: false,
+      labels: Array.isArray(body.labels) ? body.labels : undefined,
+      commitMessage: typeof body.commitMessage === 'string' ? body.commitMessage : null,
     };
     cache.set(key, { ts: Date.now(), data });
     return data;
   } catch {
     // Fallback ai builder locali: Langfuse down non deve mai rompere i prompt.
     if (!fallbackMessages) throw new Error(`Prompt non registrato: ${name}`);
-    const data: ResolvedPrompt = { name, version: 0, prompt: fallbackMessages, fallback: true };
+    const data: ResolvedPrompt = { name, version: version ?? 0, prompt: fallbackMessages, fallback: true };
     cache.set(key, { ts: Date.now(), data });
     return data;
   }

@@ -20,6 +20,11 @@ const AB_TEST_PROMPTS = [
   { id: 'card-system', label: 'Card' },
   { id: 'quote-system', label: 'Preventivo' },
   { id: 'flyer-system', label: 'Flyer' },
+  { id: 'logo-system', label: 'Logo' },
+  { id: 'social-system', label: 'Social' },
+  { id: 'onboarding-system', label: 'Onboarding' },
+  { id: 'website-system', label: 'Sito web' },
+  { id: 'palette-system', label: 'Palette' },
 ].filter((p) => REMOTE_PROMPT_PILOT.includes(p.id));
 
 type Customer = Record<string, unknown> & {
@@ -47,6 +52,134 @@ type Customer = Record<string, unknown> & {
   aiSuggestedFields?: Record<string, unknown> | null;
   updatedAt?: string | null;
 };
+
+// TB-032: vista versioni prompt Langfuse per questo cliente (A/B test
+// prompt×modello). Fetch per-prompt con list + anteprima lazy.
+interface PromptVersionRow {
+  version: number;
+  labels: string[];
+  commitMessage?: string | null;
+  content?: string;
+  length?: number;
+}
+
+function PromptVersionsSection({ customer, onVersionChange, flashSaved }: {
+  customer: Customer;
+  onVersionChange: (promptId: string, version: number) => void;
+  flashSaved: (key: string) => void;
+}) {
+  const [versions, setVersions] = useState<Record<string, PromptVersionRow[]>>({});
+  const [open, setOpen] = useState<string | null>(null);
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [detail, setDetail] = useState<PromptVersionRow | null>(null);
+
+  const loadVersions = useCallback(async (promptId: string) => {
+    if (versions[promptId]) return;
+    setLoading((p) => ({ ...p, [promptId]: true }));
+    try {
+      const res = await fetch(`/api/ai/prompts/versions?name=${encodeURIComponent(promptId)}&adminEmail=admin@gmail.com`);
+      if (!res.ok) return;
+      const body = (await res.json()) as { data?: { name: string; versions: Array<{ version: number; labels: string[]; commitMessage?: string | null; content?: string; length?: number }> } };
+      const v = body.data?.versions ?? [];
+      setVersions((prev) => ({
+        ...prev,
+        [promptId]: v.map((row) => ({
+          version: row.version,
+          labels: Array.isArray(row.labels) ? row.labels : [],
+          commitMessage: row.commitMessage ?? null,
+          content: row.content,
+          length: row.length ?? row.content?.length,
+        })),
+      }));
+    } catch {
+      // silenzioso
+    } finally {
+      setLoading((p) => ({ ...p, [promptId]: false }));
+    }
+  }, [versions]);
+
+  return (
+    <section className="crm-section" data-testid="crm-prompt-versions-section">
+      <h3>Versioni prompt</h3>
+      <p className="crm-note">
+        Versioni Langfuse per prompt (label + descrizione). Seleziona "usa per questo cliente" per fissare una versione
+        (override su label) nei test prompt×modello. La descrizione si imposta nel sync o nella dashboard Langfuse.
+      </p>
+      {AB_TEST_PROMPTS.map(({ id, label }) => {
+        const rows = versions[id];
+        const currentVersion = (customer as Customer & { promptVersions?: Record<string, number> })?.promptVersions?.[id];
+        return (
+          <div key={id} className="crm-ab-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="crm-ab-name">{label}</span>
+              <button
+                type="button"
+                className="crm-provider-select"
+                style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+                onClick={() => {
+                  if (open === id) { setOpen(null); return; }
+                  setOpen(id);
+                  void loadVersions(id);
+                }}
+                data-testid={`crm-versions-toggle-${id}`}
+              >
+                {open === id ? 'Nascondi versioni' : 'Vedi versioni'}
+              </button>
+              {currentVersion && (
+                <span className="crm-note" style={{ fontSize: 12 }}>usa v{currentVersion}</span>
+              )}
+            </div>
+            {open === id && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {loading[id] && <span className="crm-note">Caricamento…</span>}
+                {rows?.length === 0 && !loading[id] && <span className="crm-note">Nessuna versione trovata</span>}
+                {rows?.map((row) => (
+                  <div key={row.version} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', background: '#f6f7f9', borderRadius: 6 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>v{row.version}</span>
+                    {row.labels.length > 0 && (
+                      <span className="crm-note" style={{ fontSize: 12 }}>{row.labels.join(', ')}</span>
+                    )}
+                    <span className="crm-note" style={{ fontSize: 12, flex: 1 }}>
+                      {row.commitMessage || `— ${row.length != null ? `${row.length} ch` : ''}`}
+                    </span>
+                    <button
+                      type="button"
+                      className="crm-provider-select"
+                      style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+                      onClick={() => setDetail(row)}
+                      data-testid={`crm-versions-detail-${id}-${row.version}`}
+                    >
+                      Anteprima
+                    </button>
+                    <button
+                      type="button"
+                      className="crm-provider-select"
+                      style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+                      onClick={() => { onVersionChange(id, row.version); flashSaved(`ver_${id}`); }}
+                      data-testid={`crm-versions-use-${id}-${row.version}`}
+                    >
+                      {currentVersion === row.version ? '✓ in uso' : 'Usa'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {detail && (
+        <div style={{ marginTop: 8, padding: 8, background: '#f6f7f9', borderRadius: 6, maxHeight: 240, overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>v{detail.version} · {detail.labels.join(', ') || 'nessuna label'}</span>
+            <button type="button" className="crm-provider-select" style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }} onClick={() => setDetail(null)}>Chiudi</button>
+          </div>
+          {detail.commitMessage && <p className="crm-note" style={{ marginBottom: 4 }}>{detail.commitMessage}</p>}
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, lineHeight: 1.4 }}>{detail.content?.slice(0, 3000) ?? '—'}</pre>
+        </div>
+      )}
+    </section>
+  );
+}
 
 type Doc = Record<string, unknown> & {
   id: string;
@@ -782,6 +915,19 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
           })}
         </section>
       )}
+
+      <PromptVersionsSection
+        customer={customer}
+        flashSaved={flashSaved}
+        onVersionChange={async (promptId, version) => {
+          const prev = { ...((customer as Customer & { promptVersions?: Record<string, number> })?.promptVersions || {}) };
+          prev[promptId] = version;
+          await dataService.updateCustomer(customer.id, { promptVersions: prev });
+          await load();
+          // Ri-carica i prompt con la versione fissata per questo cliente.
+          void prefetchRemotePrompts(customer.id);
+        }}
+      />
 
       <section className="crm-section">
         <h3>Modello AI per immagini</h3>

@@ -85,6 +85,9 @@ export const customersTable = pgTable('customers', {
   aiSuggestedFields: jsonb('ai_suggested_fields'),
   // TB-029 fase 3: A/B testing prompt per cliente {promptName: label}
   promptLabels: jsonb('prompt_labels'),
+  // TB-032: versione prompt per cliente {promptName: version} — override
+  // su label in /api/ai/prompt (test prompt×modello).
+  promptVersions: jsonb('prompt_versions'),
   webAnswers: jsonb('web_answers'),
   notes: text(),
   assignedTo: varchar('assigned_to', { length: 255 }),
