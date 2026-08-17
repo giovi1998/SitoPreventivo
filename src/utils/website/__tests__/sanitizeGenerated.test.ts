@@ -23,6 +23,14 @@ describe('sanitizeGeneratedCss', () => {
     expect(out).not.toContain('linear-gradient');
   });
 
+  it('PRESERVA i ::before/::after del menu-toggle (icona hamburger legittima)', () => {
+    const css = `.hero::before { content: "🍦"; }\n.menu-toggle::before { content: ""; width: 22px; height: 2px; background: currentColor; }\n.menu-toggle::after { content: ""; transform: rotate(45deg); }`;
+    const out = sanitizeGeneratedCss(css);
+    expect(out).not.toContain('.hero::before');
+    expect(out).toContain('.menu-toggle::before');
+    expect(out).toContain('.menu-toggle::after');
+  });
+
   it('rimuove ::before/::after su brand/logo con content non vuoto (gelato visibile)', () => {
     const css = `.brand::before { content: "🍦"; position: absolute; }\n.brand::after { content: url(data:image/png;base64,xxx); }`;
     const out = sanitizeGeneratedCss(css);
@@ -107,16 +115,33 @@ describe('enforceMapIframe', () => {
 });
 
 describe('ensureHamburgerCss', () => {
-  it('appende regola hamburger se mancante', () => {
+  it('appende fallback hamburger 2 barre con transizione ad X se mancante', () => {
     const css = `.nav { padding: 1rem; }`;
     const out = ensureHamburgerCss(css);
     expect(out).toContain('.menu-toggle::before');
-    expect(out).toContain('box-shadow');
+    expect(out).toContain('.menu-toggle::after');
+    expect(out).toContain('rotate(45deg)');
+    expect(out).toContain('nav-open .menu-toggle');
+    expect(out).toContain('@media (max-width: 768px)');
   });
 
-  it('non duplica se già presente', () => {
-    const css = `.menu-toggle::before { content: ""; width: 22px; height: 2px; background: #000; }`;
+  it('non duplica se ::before/::after già presente', () => {
+    const css = `.menu-toggle::before { content: ""; width: 22px; height: 2px; background: #000; }\n.menu-toggle::after { content: ""; }`;
     expect(ensureHamburgerCss(css)).toBe(css);
+  });
+
+  it('non duplica se background-image già presente', () => {
+    const css = `.menu-toggle { background-image: linear-gradient(#000,#000), linear-gradient(#000,#000), linear-gradient(#000,#000); }`;
+    expect(ensureHamburgerCss(css)).toBe(css);
+  });
+
+  it('non duplica se span figli già presenti', () => {
+    const css = `.menu-toggle span { display: block; }`;
+    expect(ensureHamburgerCss(css)).toBe(css);
+  });
+
+  it('non tocca CSS vuoto', () => {
+    expect(ensureHamburgerCss('')).toBe('');
   });
 });
 

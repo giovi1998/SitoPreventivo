@@ -17,11 +17,13 @@ const LOGO_SELECTOR_RE = /\b(brand|logo|site-logo|brand-mark)\b[^{}]*::(?:before
 
 export function sanitizeGeneratedCss(css: string): string {
   if (!css) return css;
-  // Rimuove TUTTI i blocchi ::before/::after: l'AI li usa per emoji/icone
-  // decorative (vietate dal prompt) e il verify li flagga sempre. Le icone
-  // hamburger legittime vengono aggiunte DOPO da ensureHamburgerCss.
+  // Rimuove i blocchi ::before/::after decorativi: l'AI li usa per
+  // emoji/icone (vietate dal prompt) e il verify li flagga sempre.
+  // ECCEZIONE: .menu-toggle::before/::after è l'icona hamburger legittima
+  // (il prompt la chiede esplicitamente: "disegna via CSS ::before/::after
+  // con box-shadow o gradienti") — senza, resta il fallback spoglio.
   const blockRe = /([^{}]*::(?:before|after)[^{}]*)\{([^{}]*)\}/gi;
-  return css.replace(blockRe, '');
+  return css.replace(blockRe, (_m, selector: string) => (/menu-toggle/.test(selector) ? _m : ''));
 }
 
 export function sanitizeGeneratedHtml(html: string): string {
@@ -69,9 +71,10 @@ export function ensureResponsiveGallery(css: string): string {
 }
 
 /**
- * Garantisce l'icona hamburger: se il CSS non disegna le 3 barre sul
- * .menu-toggle, appende la regola ::before (3 barre via box-shadow).
- * Senza, il bottone resta vuoto/invisibile su mobile (l'AI omette il CSS).
+ * Garantisce un'icona hamburger di qualità: se il CSS non disegna le barre
+ * sul .menu-toggle (né ::before/::after, né background-image, né span
+ * figli), appende un fallback completo: 2 barre con transizione ad X su
+ * .nav-open. Senza, il bottone resta vuoto/invisibile su mobile.
  */
 export function ensureHamburgerCss(css: string): string {
   if (!css) return css;
@@ -79,7 +82,40 @@ export function ensureHamburgerCss(css: string): string {
     || /\.menu-toggle[^{]*\{[^}]*\b(background-image|content)[^}]*\}/i.test(css)
     || /\.menu-toggle[^{]*\bspan\b/i.test(css);
   if (hasHamburgerRule) return css;
-  return `${css}\n\n/* sicurezza: icona hamburger (3 barre) se il CSS non la disegna */\n.menu-toggle { position: relative; width: 40px; height: 40px; background: transparent; border: none; cursor: pointer; display: none; }\n.menu-toggle::before { content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 22px; height: 2px; background: currentColor; box-shadow: 0 -7px 0 currentColor, 0 7px 0 currentColor; }\n@media (max-width: 768px) { .menu-toggle { display: block; } }\n`;
+  return `${css}
+
+/* sicurezza: icona hamburger (2 barre con transizione ad X) se il CSS non la disegna */
+.menu-toggle {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: none;
+}
+.menu-toggle::before,
+.menu-toggle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.menu-toggle::before { margin-top: -5px; }
+.menu-toggle::after { margin-top: 5px; }
+.nav-open .menu-toggle::before { margin-top: 0; transform: translate(-50%, -50%) rotate(45deg); }
+.nav-open .menu-toggle::after { margin-top: 0; transform: translate(-50%, -50%) rotate(-45deg); }
+@media (max-width: 768px) {
+  .menu-toggle { display: block; }
+}
+`;
 }
 
 export function sanitizeGeneratedWebsite(html: string, css: string): { html: string; css: string } {
