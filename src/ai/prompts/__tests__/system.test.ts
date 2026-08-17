@@ -41,4 +41,10 @@ describe('buildSystemPrompt', () => {
     const p = buildSystemPrompt(true);
     expect(p.length).toBeLessThanOrEqual(2500);
   });
+  it('compact prompt orders to preserve ALL existing elements and ALL brief elements', () => {
+    const p = buildSystemPrompt(true);
+    expect(p).toMatch(/PRESERVA TUTTI GLI ELEMENTI ESISTENTI/i);
+    expect(p).toMatch(/TUTTI GLI ELEMENTI DEL BRIEF DEVONO ESSERCI/i);
+    expect(p).toMatch(/senza richiesta esplicita|a meno che l'utente non lo chieda esplicitamente/i);
+  });
 });
