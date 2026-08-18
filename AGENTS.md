@@ -108,7 +108,7 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
   (Ollama flat = pricing custom). Identity client: `userEmail` auto-iniettata
   dai provider (localStorage), `customerId` propagato via `ChatOptions`
   fino all'auto-build CRM, `kind` per orchestratore (`aiKind`). Spec:
-  `docs/spec/spec-langfuse-observability.md`. Env:
+  chiusa 2026-08-17 (implementazione completa, nota in `docs/done.md`). Env:
   `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL`
   (+ `VITE_*` fallback per dev locale).
   **Prompt Management (fase 2)**: 8 prompt (`card-system`, `quote-system`,
