@@ -33,7 +33,9 @@ export const PRICING: Record<string, ProviderPricing> = {
   'ollama-qwen3.5-397b': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-glm-5.2': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-glm-5.1': { input: 0, output: 0, unit: 'flat_monthly' },
-  'ollama-kimi-k3': { input: 0, output: 0, unit: 'flat_monthly' },
+  // kimi-k3:cloud NON è flat — richiede Pro/Max MA consuma extra usage
+  // credits pay-per-token oltre il flat (prezzi ufficiali ollama.com 2026-08)
+  'ollama-kimi-k3': { input: 3.0, output: 15.0, unit: 'per_1m_tokens' },
   'ollama-kimi-k2.7-code': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-mistral-large-3': { input: 0, output: 0, unit: 'flat_monthly' },
   'ollama-gemma4-31b': { input: 0, output: 0, unit: 'flat_monthly' },

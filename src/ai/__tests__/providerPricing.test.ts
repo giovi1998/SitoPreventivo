@@ -13,7 +13,14 @@ describe('providerPricing calculateCostUsd (spec TB-023 §6.1)', () => {
     expect(calculateCostUsd('ollama-minimax-m3', usage)).toBe(0);
     expect(calculateCostUsd('ollama-deepseek-v4-pro', usage)).toBe(0);
     expect(calculateCostUsd('ollama-qwen-3.5', usage)).toBe(0);
+    expect(calculateCostUsd('ollama-kimi-k2.7-code', usage)).toBe(0);
     expect(OLLAMA_PRO_FLAT_MONTHLY).toBe(20);
+  });
+
+  it('ollama-kimi-k3: pay-per-token extra usage (3.0 in / 15.0 out per 1M)', () => {
+    // (100k/1M)*3.0 + (50k/1M)*15.0 = 0.3 + 0.75 = 1.05
+    const cost = calculateCostUsd('ollama-kimi-k3', { promptTokens: 100_000, completionTokens: 50_000 });
+    expect(cost).toBe(1.05);
   });
 
   it('Gemini per-image: 1 immagine → perImage value', () => {
