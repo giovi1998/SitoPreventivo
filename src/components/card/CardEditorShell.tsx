@@ -663,15 +663,8 @@ export default function CardEditorShell({ userEmail, initialCard, tier, onReset,
                 </div>
               ),
             },
-            {
-              id: 'ai',
-              label: 'AI',
-              content: (
-                <div className="card-ai-mobile-content">
-                  {aiPanel}
-                </div>
-              ),
-            },
+            // Nessun tab "AI": l'entry mobile unica è il FAB + bottom sheet
+            // (2026-08-18, doppia entry tab+FAB segnalata dall'utente).
           ]}
         />
       ) : null}

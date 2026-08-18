@@ -76,12 +76,14 @@ describe('Responsive (mobile <1024px) + AI always-accessible', () => {
     })) as any;
   }
 
-  it('on mobile: shows tab layout (Anteprima/Modifica/AI) instead of 3-col', () => {
+  it('on mobile: shows tab layout (Anteprima/Modifica) instead of 3-col, AI solo via FAB', () => {
     setMobile();
     renderEditor();
     expect(screen.getByTestId('card-editor-tabs')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Anteprima/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Modifica/i })).toBeInTheDocument();
+    // 2026-08-18: nessun tab "AI" — doppia entry tab+FAB rimossa, resta il FAB.
+    expect(screen.queryByRole('tab', { name: /^AI$/i })).not.toBeInTheDocument();
   });
 
   it('on mobile: AI is always accessible via FAB button', () => {
