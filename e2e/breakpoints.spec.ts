@@ -193,6 +193,15 @@ test.describe('Breakpoint migration 767/1023', () => {
     const box = await iframe.boundingBox();
     expect(box).not.toBeNull();
     expect(box!.width).toBeGreaterThan(300);
+
+    // Regressione 2026-08-18: la riga viewport-controls (3 viewport +
+    // Nuova tab + picker) sbordava a 390px → "Seleziona elemento" fuori
+    // schermo. Con flex-wrap il picker resta dentro il viewport.
+    const picker = page.locator('.btn-picker');
+    await expect(picker).toBeVisible();
+    const pickerBox = await picker.boundingBox();
+    expect(pickerBox).not.toBeNull();
+    expect(pickerBox!.x + pickerBox!.width, 'picker dentro viewport').toBeLessThanOrEqual(390);
   });
 
   test('website AI rail: panel scrollabile come gli altri editor (overflow-y auto, non hidden)', async ({ page }) => {
