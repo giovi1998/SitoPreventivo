@@ -33,10 +33,9 @@ test.describe('Flyer hero AI entry point', () => {
     // Manual panel must NOT have AI generate button.
     await expect(manual.getByRole('button', { name: /Genera hero AI/i })).not.toBeVisible();
 
-    // AI panel must have generate button.
-    await ai.locator('.panel-kicker').first().click();
-    await page.waitForTimeout(300);
-    await ai.getByText('Hero Image').first().click();
+    // AI panel must have generate button. (Phase 14: la rail AIConsole non ha
+    // più un .panel-kicker dentro la section — Hero Image è un button collapsible)
+    await ai.getByRole('button', { name: /Hero Image/i }).first().click();
     await page.waitForTimeout(300);
     await expect(ai.getByRole('button', { name: /Genera hero AI/i })).toBeVisible();
   });
@@ -58,11 +57,10 @@ test.describe('Flyer hero AI entry point', () => {
     await expect(manual.getByText('Immagine hero').first()).not.toBeVisible();
     await expect(manual.getByLabel(/Carica immagine hero/i)).not.toBeVisible();
 
-    // No hero section in AI panel.
+    // No hero section in AI panel (niente .panel-kicker: Hero Image non deve
+    // esistere proprio come button collapsible nella rail).
     const ai = aiPanel(page);
-    await ai.locator('.panel-kicker').first().click();
-    await page.waitForTimeout(300);
-    await expect(ai.getByText('Hero Image').first()).not.toBeVisible();
+    await expect(ai.getByRole('button', { name: /Hero Image/i })).not.toBeVisible();
     await expect(ai.getByRole('button', { name: /Genera hero AI/i })).not.toBeVisible();
   });
 });

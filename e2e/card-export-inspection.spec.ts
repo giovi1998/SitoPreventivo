@@ -79,7 +79,9 @@ test.describe('Card export inspection', () => {
     const phoneKey = parsed.texts.find((t) => t.text === 'TELEFONO' || t.text.includes('TELEFONO'));
     expect(phoneKey, 'TELEFONO key must exist').toBeTruthy();
     expect(phoneKey!.fontSize / H, 'TELEFONO too small').toBeGreaterThan(0.015);
-    expect(phoneKey!.fontSize / H, 'TELEFONO too large (cell-based regression)').toBeLessThan(0.04);
+    // v2.18: cap allineato a layoutAudit.ts (0.045) — key retro = 16/414 ×
+    // fontScale 1.05 (Giovanni) ≈ 0.0406, floor shrink può dare ~0.0409.
+    expect(phoneKey!.fontSize / H, 'TELEFONO too large (cell-based regression)').toBeLessThan(0.045);
 
     const emailVal = parsed.texts.find((t) => t.text.includes('webdevcaglian') || t.text.includes('@gmail'));
     expect(emailVal, 'email value must exist').toBeTruthy();
@@ -88,7 +90,9 @@ test.describe('Card export inspection', () => {
     const social = parsed.texts.find((t) => t.text.includes('LinkedIn'));
     expect(social, 'LinkedIn social must exist').toBeTruthy();
     expect(social!.fontSize / H).toBeGreaterThan(0.012);
-    expect(social!.fontSize / H).toBeLessThan(0.04);
+    // v2.19: cap allineato a layoutAudit.ts (0.045) — social base 16/414 ×
+    // fontScale 1.05 ≈ 0.0406.
+    expect(social!.fontSize / H).toBeLessThan(0.045);
 
     const qr = parsed.qrRects[0];
     expect(qr.x).toBeGreaterThan(parsed.width * 0.4);

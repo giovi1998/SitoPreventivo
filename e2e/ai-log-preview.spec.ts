@@ -219,8 +219,11 @@ test.describe('AI log preview images are not black', () => {
 
     const textarea = page.locator('textarea[aria-label="Brief AI"]').first();
     await textarea.fill('Cena di degustazione, 5 portate, venerdi 20:30, posti limitati');
-    await page.waitForTimeout(200);
-    await page.getByText('✨ Genera copy').first().click({ force: true });
+    // Il bottone resta disabled finché aiPrompt è vuoto — aspettare che il
+    // fill abbia triggerato il re-render React prima del click (fix flaky).
+    const generateBtn = page.getByRole('button', { name: /Genera copy/i }).last();
+    await expect(generateBtn).toBeEnabled({ timeout: 10000 });
+    await generateBtn.click();
 
     await openLogPanel(page);
     await page.waitForSelector('.ai-log-entry', { state: 'attached', timeout: 20000 });
