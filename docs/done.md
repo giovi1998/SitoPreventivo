@@ -6,6 +6,12 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-18
 
+- **Guardia anti-regressione qualità asset in CI** (wayfinder qualita-oggetti T9; residuo "Immagini AI pixelate — verifica Playwright"):
+  - Nuovo spec `e2e/ai-image-quality-guard.spec.ts` (4 test, zero chiamate AI): porta le soglie Phase B di `scripts/ai-image-quality-verify.mjs` nel gate critico — gerarchia card name>title≥company (floor 20/12px), contatti retro ≥17px (~7pt stampa), zero overflow celle grid; flyer headline ≥8.4mm (24pt) / body ≥3.4mm (10pt) e zero testi fuori viewBox; logo tagline 0.30-0.55× wordmark (§27.2); card photo/flyer hero/logo background persistiti ≥1000px long side (JPEG 1280×960 via canvas, separa l'era 512/768px).
+  - Fixture FLAT seedate in localStorage (gotcha §23). qrLabel flyer esente dal floor body (fine print 5-7pt by design, `layoutEngine.ts`) — escluso via `clip-path="url(#clip-qrLabel)"`.
+  - Gotcha scoperto: il seed back richiede `back.useGrid: true`, altrimenti la preview ignora `backGrid` persistita e deriva il preset default (services h:1 → overflow falso positivo).
+  - Spec aggiunto a `scripts/e2e-gate.mjs` (CRITICAL). Gate completo: 28/28 verdi.
+
 - **Fix element picker website — cross-realm `instanceof Document`** (da report utente "Elementpicker in sitoweb non funziona"; gotchas §26.29):
   - `enablePicker(target)` discriminava iframe-doc vs container con `target instanceof Document`, ma il `contentDocument` di un iframe è cross-realm → in Chrome `instanceof` falliva → Document trattato come container → `classList.add` su Document → TypeError, picker morto (click senza effetto).
   - Fix: check strutturale `target.nodeType === 9` (DOCUMENT_NODE), cross-realm-safe. Regola generale: mai `instanceof Element|Document` su oggetti potenzialmente in iframe.

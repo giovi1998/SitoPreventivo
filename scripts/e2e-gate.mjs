@@ -16,6 +16,7 @@ const CRITICAL = [
   'e2e/card-grid-export-roundtrip.spec.ts',
   'e2e/flyer-hero-entrypoint.spec.ts',
   'e2e/ai-log-preview.spec.ts',
+  'e2e/ai-image-quality-guard.spec.ts',
 ];
 
 const args = process.argv.slice(2);

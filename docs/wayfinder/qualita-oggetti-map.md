@@ -40,6 +40,7 @@ con report verde, problemi visivi trovati fixati, residui tipografici
 - [T4 — Residui tipografici §27.1/§27.4 card e logo](tickets/t04-residui-tipografici-card-logo.md) — safe margin wontfix-migrazione, socials 16px ok (7pt = domanda aperta), thumbnail front-only wontfix YAGNI, no-grid congelato legacy.
 - [T7 — 502 /api/ai/embeddings: SDK ritorna `embeddings[]` plurale](tickets/t07-embeddings-502-sdk-plurale.md) — parsing singolare→plurale+fallback in 3 siti (ai.ts, crm.ts, dev proxy); live 200.
 - [T8 — Card non centrata in agent mode + website editor mobile rotto](tickets/t08-grid-centering-website-mobile.md) — `buildCardDraftPrompt` condiviso (agente+auto-build), `ensureCardGrid` (grid derivata, useGrid su entrambi i lati), null-safety `gridElements`, `useDocumentLoader` null + fallback "Sito non trovato", website editor mobile (viewport 375px, tab preview, grid stack @1023px); guardia AC-007.
+- [T9 - Guardia anti-regressione permanente: soglie asset/tipografiche in CI](tickets/t09-guardia-qualita-asset-ci.md) - `e2e/ai-image-quality-guard.spec.ts` (4 test fixture-based, zero AI) porta le soglie Phase B dello script manuale nel gate critico (28/28): gerarchia card, floor contatti/flyer, ratio tagline logo, immagini persistite >=1000px.
 
 ## Not yet specified
 
@@ -54,11 +55,6 @@ con report verde, problemi visivi trovati fixati, residui tipografici
 - **Verifica "Genera bozze AI" in PROD** (to-be-done #3): molti dei
   blocker trovati qui erano dev-only (proxy), ma il fix Zod max_tokens
   (faacc42) e l'agent wiring vanno validati live in produzione.
-- **Guardia anti-regressione permanente** (to-be-done #2): soglia px/cm
-  dell'asset nel render come test Playwright in `e2e/` (oggi gli script
-  sono manuali, fuori CI). **Coperta da AC-007** (e2e/breakpoints.spec.ts:
-  iframe preview website full-width su mobile) — chiudere quando il resto
-  della guardia (soglie asset card/flyer/logo) entra in CI.
 
 ## Out of scope
 
