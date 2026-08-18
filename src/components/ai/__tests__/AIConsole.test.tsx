@@ -88,4 +88,15 @@ describe('AIConsole (REQ-AI-001/003/006)', () => {
     expect(screen.getAllByRole('button', { name: 'Nuova sessione' })).toHaveLength(1);
     expect(document.querySelectorAll('.ai-console__quick')).toHaveLength(1);
   });
+
+  it('forceExpanded ignora la preferenza persistita collapsed (regression 2026-08-18: bottom sheet website vuota)', () => {
+    // Bug: sheet mobile website renderizzava il toggle nascosto via CSS e
+    // basta, perché pq_ui:v1 aveva website=false → pannello bianco.
+    localStorage.setItem('pq_ui:v1', JSON.stringify({ version: 1, aiConsoleExpanded: { website: false } }));
+    render(<AIConsole {...baseProps} editorKind="website" forceExpanded />);
+    expect(screen.getByRole('button', { name: /Comprimi AI Assist/i })).toBeInTheDocument();
+    expect(document.querySelector('.ai-console__panel')).not.toBeNull();
+    // Lo stato persistito NON viene sovrascritto dal forceExpanded.
+    expect(getAiConsoleExpanded('website')).toBe(false);
+  });
 });

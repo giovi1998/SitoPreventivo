@@ -3,6 +3,7 @@
  * dimensione del file (era 1752 righe). Gli @import sono nello STESSO
  * ordine delle sezioni originali, così la cascade CSS è identica. */
 @import './card/cardBase.css';
+@import './aiFabSheet.css';
 @import './card/cardResponsive.css';
 @import './card/cardGridForm.css';
 @import './card/cardAiLayout.css';

@@ -28,10 +28,13 @@ import { mergeKnowledgeIntoBrief } from '../utils/knowledgeTopK';
 import { enablePicker, extractElementContext, findElementInSource, type ElementContext } from '../utils/website/elementPicker';
 import ElementInspector from './website/ElementInspector';
 import AIConsole from './ai/AIConsole';
+import CardAIFab from './CardAIFab';
+import CardAIBottomSheet from './CardAIBottomSheet';
 import { AiFontPicker } from './ai-ui';
 import CodeEditor from './website/CodeEditor';
 import { buildWebsiteFullDocument, exportWebsiteZip } from '../utils/websiteExport';
 import './ElementPickerPanel.css';
+import './aiFabSheet.css';
 import './WebsiteEditor.css';
 
 interface WebsiteEditorProps {
@@ -127,6 +130,9 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const lastVisionCacheRef = useRef<{ key: string; previews: string[] } | null>(null);
   const [pickerMode, setPickerMode] = useState(false);
   const [selectedElements, setSelectedElements] = useState<ElementContext[]>([]);
+  // Mobile: pannello AI in bottom sheet (pattern card) invece del drawer
+  // fixed — la rail resta solo desktop.
+  const [aiSheetOpen, setAiSheetOpen] = useState(false);
   // TB-030: customer caricato (per il sync website→customer on save).
   const customerRef = useRef<Record<string, unknown> | null>(null);
   const { addToast } = useToast();
@@ -756,6 +762,58 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     return normalizeInlineImages(buildWebsiteFullDocument(pageHtml, website.css, website.js, website.brief.font), 200_000);
   }, [website, previewPage]);
 
+  // Pannello AI condiviso: rail desktop + bottom sheet mobile (pattern card).
+  const aiConsolePanel = (
+    <AIConsole
+      title="AI Assist"
+      isProcessing={isProcessing}
+      logs={logs}
+      tier={tier}
+      onSubmitPrompt={(text) => handleRefine(text)}
+      editorKind="website"
+      defaultExpanded={true}
+      hidePrompt
+      forceExpanded={isMobileWorkspace}
+      lastCostUsd={lastCostUsd}
+      providerId={aiModel}
+      onProviderChange={handleProviderChange}
+      onClearLogs={resetAI}
+    >
+      <button className="btn-generate" onClick={handleGenerate} disabled={isProcessing}>
+        {isProcessing ? 'Generando…' : websiteHasContent(website) ? 'Rigenera Sito' : 'Genera sito con AI'}
+      </button>
+      {isProcessing && currentStep && (
+        <div className="website-step-indicator" role="status">
+          <span className="website-step-indicator__spinner" aria-hidden="true" />
+          <span>{stepLabel(currentStep)}</span>
+        </div>
+      )}
+      {selectedElements.length > 0 && (
+        <div className="element-inspector">
+          <div className="element-inspector__header">
+            <span className="element-inspector__title">🎯 {selectedElements.length} elemento{selectedElements.length > 1 ? 'i' : ''} selezionat{selectedElements.length > 1 ? 'i' : 'o'}</span>
+            <button type="button" className="element-inspector__close" onClick={() => handleDeselect()} aria-label="Deseleziona tutti">✕</button>
+          </div>
+          {selectedElements.map((ctx, i) => (
+            <ElementInspector
+              key={i}
+              context={ctx}
+              onRemove={() => handleDeselect(i)}
+            />
+          ))}
+        </div>
+      )}
+      {websiteHasContent(website) && (
+        <div className="refine-section">
+          <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder={selectedElements.length > 0 ? 'Es. Rendi i bottoni più visibili, cambia colore hover…' : 'Es. Rendi i colori più scuri, cambia il font in Inter...'} rows={3} />
+          <button className="btn-refine" onClick={() => handleRefine()} disabled={isProcessing || !refinePrompt.trim()}>
+            {isProcessing ? 'Elaborazione in corso…' : selectedElements.length > 0 ? 'Raffina elementi' : 'Raffina'}
+          </button>
+        </div>
+      )}
+    </AIConsole>
+  );
+
   return (
     <div className="website-editor">
       <header className="website-editor-header">
@@ -1006,56 +1064,28 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
           )}
         </div>
 
-        <div className="website-rail">
-          <AIConsole
-            title="AI Assist"
-            isProcessing={isProcessing}
-            logs={logs}
-            tier={tier}
-            onSubmitPrompt={(text) => handleRefine(text)}
-            editorKind="website"
-            defaultExpanded={true}
-            hidePrompt
-            lastCostUsd={lastCostUsd}
-            providerId={aiModel}
-            onProviderChange={handleProviderChange}
-            onClearLogs={resetAI}
-          >
-            <button className="btn-generate" onClick={handleGenerate} disabled={isProcessing}>
-              {isProcessing ? 'Generando…' : websiteHasContent(website) ? 'Rigenera Sito' : 'Genera sito con AI'}
-            </button>
-            {isProcessing && currentStep && (
-              <div className="website-step-indicator" role="status">
-                <span className="website-step-indicator__spinner" aria-hidden="true" />
-                <span>{stepLabel(currentStep)}</span>
-              </div>
-            )}
-            {selectedElements.length > 0 && (
-              <div className="element-inspector">
-                <div className="element-inspector__header">
-                  <span className="element-inspector__title">🎯 {selectedElements.length} elemento{selectedElements.length > 1 ? 'i' : ''} selezionat{selectedElements.length > 1 ? 'i' : 'o'}</span>
-                  <button type="button" className="element-inspector__close" onClick={() => handleDeselect()} aria-label="Deseleziona tutti">✕</button>
-                </div>
-                {selectedElements.map((ctx, i) => (
-                  <ElementInspector
-                    key={i}
-                    context={ctx}
-                    onRemove={() => handleDeselect(i)}
-                  />
-                ))}
-              </div>
-            )}
-            {websiteHasContent(website) && (
-              <div className="refine-section">
-                <textarea value={refinePrompt} onChange={(e) => setRefinePrompt(e.target.value)} placeholder={selectedElements.length > 0 ? 'Es. Rendi i bottoni più visibili, cambia colore hover…' : 'Es. Rendi i colori più scuri, cambia il font in Inter...'} rows={3} />
-                <button className="btn-refine" onClick={() => handleRefine()} disabled={isProcessing || !refinePrompt.trim()}>
-                  {isProcessing ? 'Elaborazione in corso…' : selectedElements.length > 0 ? 'Raffina elementi' : 'Raffina'}
-                </button>
-              </div>
-            )}
-          </AIConsole>
-        </div>
+        {!isMobileWorkspace && (
+          <div className="website-rail">
+            {aiConsolePanel}
+          </div>
+        )}
       </div>
+
+      {isMobileWorkspace && (
+        <>
+          <CardAIFab
+            onClick={() => setAiSheetOpen((v) => !v)}
+            unreadCount={!aiSheetOpen && logs.length > 0 ? logs.length : 0}
+          />
+          <CardAIBottomSheet
+            isOpen={aiSheetOpen}
+            onClose={() => setAiSheetOpen(false)}
+            ariaLabel="Pannello AI"
+          >
+            {aiConsolePanel}
+          </CardAIBottomSheet>
+        </>
+      )}
 
       {verifyIssues && verifyIssues.length > 0 && (
         <div className="verify-issues-panel">

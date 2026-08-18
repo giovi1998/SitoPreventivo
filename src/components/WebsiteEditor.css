@@ -641,10 +641,18 @@
     flex: 0 0 auto;
     border-left: none;
     border-top: 1px solid var(--border);
-    max-height: 260px;
-    overflow-y: auto;
     background: var(--bg-secondary, #f8f9fa);
     padding-bottom: 0;
+  }
+}
+
+/* Tablet (768-1023): rail inline con altezza limitata. Su phone (<=767)
+   vale il drawer condiviso di AIConsole.css (fixed bottom, 70vh) —
+   questi cap per specificità lo schiacciavano a 160px (bug 2026-08-18). */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .website-rail {
+    max-height: 260px;
+    overflow-y: auto;
   }
   .website-rail .ai-console {
     height: auto;
@@ -673,5 +681,13 @@
   }
   .preview-iframe {
     height: 400px;
+  }
+  /* 390px: 3 viewport + Nuova tab + picker non ci stanno in riga —
+     wrap su due righe, altrimenti "Seleziona elemento" esce dallo schermo. */
+  .viewport-controls {
+    flex-wrap: wrap;
+  }
+  .btn-open-tab {
+    margin-left: 0;
   }
 }

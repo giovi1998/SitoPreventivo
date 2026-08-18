@@ -44,6 +44,12 @@ export interface AIConsoleProps {
    * viene mai chiamato in questo modo.
    */
   hidePrompt?: boolean;
+  /**
+   * Forza expanded ignorando la preferenza persistita (bottom sheet mobile:
+   * l'apertura dello sheet È l'azione di espansione — un toggle nascosto
+   * via CSS con stato collapsed persistito renderebbe il pannello vuoto).
+   */
+  forceExpanded?: boolean;
   /** Optional className for the host */
   className?: string;
   /** TB-023: costo USD ultima operazione AI */
@@ -78,6 +84,7 @@ export default function AIConsole({
   editorKind,
   suggestedPrompt,
   hidePrompt = false,
+  forceExpanded = false,
   className = '',
   lastCostUsd,
   totalCostUsd,
@@ -96,6 +103,9 @@ export default function AIConsole({
     }
     return defaultExpanded;
   });
+  // Il forceExpanded vale solo per il render: lo stato persistito resta
+  // quello scelto dall'utente per il rail desktop.
+  const isExpanded = forceExpanded || expanded;
   const [prompt, setPrompt] = useState(suggestedPrompt ?? '');
   const [logOpen, setLogOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -111,7 +121,7 @@ export default function AIConsole({
 
   // AI-first entry (REQ-AI-003): prompt suggerito + focus quando espansa.
   useEffect(() => {
-    if (expanded && suggestedPrompt && textareaRef.current) {
+    if (isExpanded && suggestedPrompt && textareaRef.current) {
       setPrompt((current) => (current.trim() ? current : suggestedPrompt));
       textareaRef.current.focus();
     }
@@ -138,24 +148,24 @@ export default function AIConsole({
   );
 
   return (
-    <div className={`ai-console ${expanded ? 'ai-console--expanded' : 'ai-console--collapsed'} ${className}`}>
+    <div className={`ai-console ${isExpanded ? 'ai-console--expanded' : 'ai-console--collapsed'} ${className}`}>
       <button
         type="button"
         className="ai-console__toggle"
         onClick={toggleExpanded}
-        aria-label={expanded ? 'Comprimi AI Assist' : 'Espandi AI Assist'}
-        aria-expanded={expanded}
+        aria-label={isExpanded ? 'Comprimi AI Assist' : 'Espandi AI Assist'}
+        aria-expanded={isExpanded}
       >
-        {!expanded && (
+        {!isExpanded && (
           <span className="ai-console__toggle-label">
             {title}
             {isProcessing && <span className="ai-console__pulse" />}
           </span>
         )}
-        <span className={`ai-console__chevron ${expanded ? 'ai-console__chevron--left' : ''}`}>›</span>
+        <span className={`ai-console__chevron ${isExpanded ? 'ai-console__chevron--left' : ''}`}>›</span>
       </button>
 
-      {expanded && (
+      {isExpanded && (
         <div className="ai-console__panel">
           <header className="ai-console__header">
             <div className="ai-console__header-left">

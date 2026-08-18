@@ -1,5 +1,7 @@
-/* Responsive tabs + FAB + bottom sheet */
-/* Phase 2.2 refactor: estratto da CardEditor.css (split per dimensione). */
+/* Responsive tabs */
+/* Phase 2.2 refactor: estratto da CardEditor.css (split per dimensione).
+ * FAB AI + bottom sheet: spostati in ../aiFabSheet.css (condiviso con
+ * website editor, 2026-08-18). */
 
 /* ─── Responsive: mobile <900px shows tabs, 3-col not rendered ─── */
 @media (max-width: 1023px) {
@@ -57,71 +59,6 @@
     border-radius: 8px;
     padding: 12px;
   }
-}
-
-/* ─── FAB AI (mobile only) ────────────────────── */
-.card-ai-fab {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
-  cursor: pointer;
-  z-index: 90;
-  display: grid;
-  place-items: center;
-  transition: transform 0.15s;
-}
-
-.card-ai-fab:hover {
-  transform: scale(1.05);
-}
-
-.card-ai-fab-badge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  background: #ef4444;
-  color: white;
-  border-radius: 999px;
-  min-width: 22px;
-  height: 22px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-  padding: 0 4px;
-  border: 2px solid var(--surface);
-}
-
-/* ─── Bottom sheet (mobile AI panel) ──────────── */
-.card-ai-bottom-sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 200;
-  display: flex;
-  align-items: flex-end;
-  animation: fadeIn 0.15s ease;
-}
-
-.card-ai-bottom-sheet-content {
-  background: var(--surface);
-  width: 100%;
-  max-height: 85vh;
-  border-radius: 16px 16px 0 0;
-  padding: 16px;
-  overflow-y: auto;
-  animation: slideUp 0.2s ease;
-}
-
-@keyframes slideUp {
-  from { transform: translateY(100%); }
   to { transform: translateY(0); }
 }
 
