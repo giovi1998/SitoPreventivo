@@ -15,6 +15,7 @@ import CustomerResearchSection from './CustomerResearchSection';
 import CustomerWebDataPanel from './CustomerWebDataPanel';
 import CustomerKnowledgePanel from './CustomerKnowledgePanel';
 import { prefetchRemotePrompts, REMOTE_PROMPT_PILOT } from '../../utils/ai/remotePrompt';
+import { getAiReasoningEffort, setAiReasoningEffort } from '../../utils/uiPrefs';
 
 const AB_TEST_PROMPTS = [
   { id: 'card-system', label: 'Card' },
@@ -236,6 +237,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
   const [paletteCost, setPaletteCost] = useState<number | null>(null);
   const [aiProvider, setAiProvider] = useState<string>(() => providerRegistry.getDefaultId());
+  const [aiReasoning, setAiReasoning] = useState<'low' | 'high' | 'max'>(() => getAiReasoningEffort());
   const [aiFillCost, setAiFillCost] = useState<number | null>(null);
 
   const [imageGenModel, setImageGenModel] = useState<string>('gemini-3.1-flash-image');
@@ -582,8 +584,8 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
 
   const handleGenerateAll = async () => {
     if (!customer) return;
-    logger.appendLog('info', `Generazione bozze AI in corso (provider: ${aiProvider})…`, undefined, { docs: docs.length, provider: aiProvider });
-    const summary = await autoGen.generateAll(docs, customer, { providerId: aiProvider, customerId: customerId, agentMode: true });
+    logger.appendLog('info', `Generazione bozze AI in corso (provider: ${aiProvider}, reasoning: ${aiReasoning})…`, undefined, { docs: docs.length, provider: aiProvider });
+    const summary = await autoGen.generateAll(docs, customer, { providerId: aiProvider, customerId: customerId, reasoningEffort: aiReasoning, agentMode: true });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const perDoc = docs
@@ -615,8 +617,8 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
 
   const handleGenerateOne = async (doc: Doc) => {
     if (!customer) return;
-    logger.appendLog('info', `Rigenero bozza ${doc.documentType} (provider: ${aiProvider})…`, undefined, { docId: doc.id, provider: aiProvider });
-    const genError = await autoGen.generateOne(doc, customer, { providerId: aiProvider, customerId: customerId });
+    logger.appendLog('info', `Rigenero bozza ${doc.documentType} (provider: ${aiProvider}, reasoning: ${aiReasoning})…`, undefined, { docId: doc.id, provider: aiProvider });
+    const genError = await autoGen.generateOne(doc, customer, { providerId: aiProvider, customerId: customerId, reasoningEffort: aiReasoning });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const freshDoc = freshDocs.find((x) => x.id === doc.id);
@@ -870,12 +872,28 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
 
       <section className="crm-section">
         <h3>Provider AI</h3>
-        <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)} data-testid="crm-ai-provider" className="crm-provider-select">
-          {providers.map((p) => (
-            <option key={p.id} value={p.id}>{p.name} ({p.model})</option>
-          ))}
-        </select>
-        <p className="crm-note">Provider usato per palette e "Genera bozze AI". Gemini è solo per immagini, non disponibile qui.</p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={aiProvider} onChange={(e) => setAiProvider(e.target.value)} data-testid="crm-ai-provider" className="crm-provider-select">
+            {providers.map((p) => (
+              <option key={p.id} value={p.id}>{p.name} ({p.model})</option>
+            ))}
+          </select>
+          <label className="crm-note" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            Ragionamento:
+            <select
+              value={aiReasoning}
+              onChange={(e) => { const v = e.target.value as 'low' | 'high' | 'max'; setAiReasoning(v); setAiReasoningEffort(v); }}
+              data-testid="crm-ai-reasoning"
+              className="crm-provider-select"
+              style={{ margin: 0 }}
+            >
+              <option value="low">Veloce</option>
+              <option value="high">Profondo</option>
+              <option value="max">Massimo</option>
+            </select>
+          </label>
+        </div>
+        <p className="crm-note">Provider e ragionamento usati per palette e "Genera bozze AI" (logo/card/flyer; il sito usa 'high' per qualità — gotcha §26.27). Gemini è solo per immagini, non disponibile qui.</p>
       </section>
 
       {/* TB-029 fase 3: A/B testing prompt per cliente. Ogni riga seleziona

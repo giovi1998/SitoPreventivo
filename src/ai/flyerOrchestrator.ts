@@ -105,7 +105,7 @@ export class FlyerAIOrchestrator extends ToolAwareOrchestrator<Flyer> {
     flyer: Flyer,
     brief: string,
     tone: FlyerTone,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string } & RunTraceOptions
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string; reasoningEffort?: 'low' | 'high' | 'max' } & RunTraceOptions
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
       const budget = getFlyerCopyBudget(flyer);
@@ -133,7 +133,7 @@ Usa TUTTE le informazioni del brief (attività, settore, servizi, colori e stile
   async refineCopy(
     flyer: Flyer,
     action: FlyerRefineAction,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string } & RunTraceOptions
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string; reasoningEffort?: 'low' | 'high' | 'max' } & RunTraceOptions
   ): Promise<FlyerProcessResult> {
     return this.runPrompt(flyer, () => {
       const currentJson = JSON.stringify({
@@ -159,7 +159,7 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
   private async runPrompt(
     flyer: Flyer,
     buildPrompt: () => string,
-    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string } & RunTraceOptions,
+    options?: { modelId?: string; onStream?: (chunk: AIStreamChunk) => void; requestId?: string; imagePreviewBase64?: string; customerId?: string; sessionId?: string; reasoningEffort?: 'low' | 'high' | 'max' } & RunTraceOptions,
     changeLabel?: string
   ): Promise<FlyerProcessResult> {
     const primaryProviderId = options?.modelId || providerRegistry.getDefaultId();
@@ -194,7 +194,9 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
       primaryProviderId,
       session.messages,
       {
-        reasoningEffort: 'max',
+        // reasoningEffort assente → il provider usa la preferenza utente
+        // (getAiReasoningEffort, badge AI — default 'max').
+        reasoningEffort: options?.reasoningEffort,
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : { type: 'json_object' },
         requestId: options?.requestId,
@@ -251,7 +253,7 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
 
         const followUpProvider = providerRegistry.getProvider(finalProviderId);
         const followUp = await followUpProvider.chat(session.messages, {
-          reasoningEffort: 'max',
+          reasoningEffort: options?.reasoningEffort,
           responseFormat: { type: 'json_object' },
         });
 

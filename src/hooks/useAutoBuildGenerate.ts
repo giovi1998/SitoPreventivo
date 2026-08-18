@@ -55,6 +55,9 @@ export interface AutoBuildGenerateOptions {
   providerId?: string;
   /** TB-029: customerId per attribuzione Langfuse delle chiamate AI. */
   customerId?: string;
+  /** TB-032: override reasoning per gli orchestratori (badge Clienti).
+   *  Assente → il provider usa la preferenza utente (getAiReasoningEffort). */
+  reasoningEffort?: 'low' | 'high' | 'max';
   /** T7: trace gerarchica agente — se assenti, il hook genera runId/rootSpanId. */
   runTrace?: RunTraceOptions;
   /** T11: usa l'agente orchestratore (harness tools) invece della sequenza fissa. */
@@ -275,6 +278,7 @@ async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: Aut
     modelId: options?.providerId,
     customerId: options?.customerId,
     sessionId: doc.id,
+    reasoningEffort: options?.reasoningEffort,
     ...options?.runTrace,
   });
   const selected = result.selected >= 0 ? result.concepts[result.selected] : result.concepts[0];
@@ -448,6 +452,7 @@ async function generateCardDraft(
     modelId: options?.providerId,
     customerId: options?.customerId,
     sessionId: doc.id,
+    reasoningEffort: options?.reasoningEffort,
     ...options?.runTrace,
   });
   const cost = result.costUsd ?? textCost(result.response?.usage as TokenUsage | undefined);
@@ -509,7 +514,7 @@ async function generateFlyerDraft(
     flyerInput,
     brief,
     tone,
-    { modelId: options?.providerId, customerId: options?.customerId, sessionId: doc.id, ...options?.runTrace },
+    { modelId: options?.providerId, customerId: options?.customerId, sessionId: doc.id, reasoningEffort: options?.reasoningEffort, ...options?.runTrace },
   );
   if (!result.applied) throw new Error('Flyer AI: copy non valido');
   let aiStats = incrementAiStats(doc.data?.aiStats as AiStats | undefined, 'flyerCopy', textCost(result.response?.usage));

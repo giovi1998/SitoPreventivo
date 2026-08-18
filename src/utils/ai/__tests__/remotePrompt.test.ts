@@ -115,4 +115,23 @@ describe('getRemoteSystemPrompt (prod=production, local=staging)', () => {
     expect(calls[0]).toContain('version=4');
     expect(out).toBe('V4');
   });
+
+  it('prefetch con customerId RI-REGISTRA i prompt con la versione del cliente (override su avvio app)', async () => {
+    localStorage.setItem('pq_customers:v1', JSON.stringify([{ id: 'cust_1', promptVersions: { 'card-system': 3 } }]));
+    const { prefetchRemotePrompts } = await import('../remotePrompt');
+    const { promptRegistry } = await import('../../../ai/prompts/registry');
+    // Primo prefetch senza cliente (avvio app) → label ambiente
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('version=3')) {
+        return { ok: true, json: async () => ({ data: { name: 'card-system', version: 3, prompt: [{ role: 'system', content: 'PROMPT V3 CLIENTE' }], fallback: false } }) };
+      }
+      return { ok: true, json: async () => ({ data: { name: 'card-system', version: 2, prompt: [{ role: 'system', content: 'PROMPT AMBIENTE' }], fallback: false } }) };
+    }));
+    await prefetchRemotePrompts();
+    expect(promptRegistry.getPrompt('card-system')).toBe('PROMPT AMBIENTE');
+    // Apertura cliente → il prefetch con customerId DEVE ri-registrare (prima
+    // appliedRemote lo skippava → i test prompt×modello usavano la label ambiente)
+    await prefetchRemotePrompts('cust_1');
+    expect(promptRegistry.getPrompt('card-system')).toBe('PROMPT V3 CLIENTE');
+  });
 });

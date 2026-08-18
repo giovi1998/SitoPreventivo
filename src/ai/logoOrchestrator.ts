@@ -72,6 +72,8 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       /** TB-029: sessione Langfuse (docId). */
       sessionId?: string;
       imagePreviewBase64?: string;
+      /** TB-032: override reasoning (badge AI/Clienti); assente = preferenza utente. */
+      reasoningEffort?: 'low' | 'high' | 'max';
     } & RunTraceOptions = {},
   ): Promise<LogoProcessResult> {
     const changes: string[] = [];
@@ -111,7 +113,9 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       provider,
       messages,
       {
-        reasoningEffort: 'max',
+        // reasoningEffort assente → il provider usa la preferenza utente
+        // (getAiReasoningEffort, badge AI — default 'max').
+        reasoningEffort: options.reasoningEffort,
         responseFormat: { type: 'json_object' },
         sessionId: options.sessionId,
         runId: options.runId,

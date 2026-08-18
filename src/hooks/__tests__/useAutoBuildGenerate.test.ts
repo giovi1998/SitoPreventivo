@@ -541,6 +541,16 @@ describe('useAutoBuildGenerate', () => {
       expect(mocks.generateCopy.mock.calls[0][3]).toEqual(expect.objectContaining({ modelId: 'deepseek-v4-flash' }));
     });
 
+    it('TB-032: reasoningEffort propagato a logo/card/flyer (badge Clienti)', async () => {
+      const { result } = renderHook(() => useAutoBuildGenerate());
+      await act(async () => {
+        await result.current.generateAll(makeDocs(), customer, { providerId: 'deepseek-v4-flash', reasoningEffort: 'high' });
+      });
+      expect(mocks.generateLogo.mock.calls[0][2]).toEqual(expect.objectContaining({ reasoningEffort: 'high' }));
+      expect(mocks.processPrompt.mock.calls[0][2].reasoningEffort).toBe('high');
+      expect(mocks.generateCopy.mock.calls[0][3]).toEqual(expect.objectContaining({ reasoningEffort: 'high' }));
+    });
+
     it('generateOne passa providerId come modelId', async () => {
       const doc: AutoBuildDoc = { id: 'logo_1', documentType: 'logo', title: 'Logo', data: { briefContext: 'bar', builder: {} } };
       const { result } = renderHook(() => useAutoBuildGenerate());

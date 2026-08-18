@@ -386,7 +386,7 @@ describe('TB-027 CustomerDetail', () => {
       expect(autoGenMocks.generateAll).toHaveBeenCalledTimes(1);
     });
     expect(autoGenMocks.generateAll.mock.calls[0][0]).toHaveLength(1);
-    expect(autoGenMocks.generateAll.mock.calls[0][2]).toEqual({ providerId: 'ollama-minimax-m3', customerId: 'cust_1', agentMode: true });
+    expect(autoGenMocks.generateAll.mock.calls[0][2]).toEqual({ providerId: 'ollama-minimax-m3', customerId: 'cust_1', agentMode: true, reasoningEffort: 'max' });
   });
 
   it('pulsante "Genera bozze AI" disabilitato senza draft pending', async () => {
@@ -443,7 +443,7 @@ describe('TB-027 CustomerDetail', () => {
       expect(autoGenMocks.generateOne).toHaveBeenCalledTimes(1);
     });
     expect(autoGenMocks.generateOne.mock.calls[0][0].id).toBe('card_1');
-    expect(autoGenMocks.generateOne.mock.calls[0][2]).toEqual({ providerId: 'ollama-minimax-m3', customerId: 'cust_1' });
+    expect(autoGenMocks.generateOne.mock.calls[0][2]).toEqual({ providerId: 'ollama-minimax-m3', customerId: 'cust_1', reasoningEffort: 'max' });
   });
 
   it('mostra thumbnail SVG inline per draft logo', async () => {

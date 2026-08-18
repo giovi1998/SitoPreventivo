@@ -168,6 +168,24 @@ describe('elementPicker', () => {
       expect(ctx.computed['--font']).toBe('"Playful"');
     });
 
+    it('computed safe su elemento in iframe (cross-realm): non lancia, contesto comunque estratto', () => {
+      // L'elemento vive nel document di un iframe: window.getComputedStyle
+      // lancia in Chrome cross-realm → il picker website moriva silenzioso.
+      const iframe = document.createElement('iframe');
+      iframe.sandbox = 'allow-scripts allow-same-origin';
+      document.body.appendChild(iframe);
+      const doc = iframe.contentDocument!;
+      doc.open();
+      doc.write('<html><body><button class="menu-toggle" style="display:none">Menu</button></body></html>');
+      doc.close();
+      const el = doc.querySelector('button')!;
+      const ctx = extractElementContext(el, '.menu-toggle { display: none; }', 'index', '100%');
+      expect(ctx.part).toBe('html');
+      expect(ctx.html).toContain('menu-toggle');
+      expect(ctx.cssRules).toContain('.menu-toggle { display: none; }');
+      document.body.removeChild(iframe);
+    });
+
     it('outerHTML senza artefatti picker (outline/outlineOffset inline)', () => {
       const el = document.createElement('div');
       el.className = 'brand';

@@ -271,8 +271,18 @@ export function stripPseudo(selector: string): string {
 }
 
 function computedStyle(el: Element): Record<string, string> {
-  const cs = window.getComputedStyle(el);
   const out: Record<string, string> = {};
+  // Cross-realm safety: l'elemento può vivere nel document di un iframe
+  // (preview website) — window.getComputedStyle lancia in quel caso.
+  const doc = el.ownerDocument ?? document;
+  const win = doc.defaultView;
+  let cs: CSSStyleDeclaration | null = null;
+  try {
+    cs = win ? win.getComputedStyle(el) : null;
+  } catch {
+    cs = null;
+  }
+  if (!cs) return out;
   for (const prop of COMPUTED_PROPS) {
     const value = cs.getPropertyValue(prop);
     if (value) out[prop] = value;

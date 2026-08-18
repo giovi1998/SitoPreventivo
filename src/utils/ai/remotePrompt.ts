@@ -99,10 +99,16 @@ const appliedRemote = new Set<string>();
 // Prefetch dei prompt pilota: chiamato all'avvio app e quando si apre un
 // cliente (customerId → override label A/B + versione TB-032).
 // Fallimento = silenzioso.
+//
+// Con customerId il prefetch è FORZATO (ignora appliedRemote): i prompt
+// applicati all'avvio app (label ambiente) devono essere ri-registrati con
+// la versione/label del cliente, altrimenti l'override non avrebbe mai
+// effetto (bug: AppliedRemote skippava il re-fetch → i test prompt×modello
+// usavano sempre la label ambiente).
 export async function prefetchRemotePrompts(customerId?: string): Promise<void> {
   await Promise.all(
     REMOTE_PROMPT_PILOT.map(async (id) => {
-      if (appliedRemote.has(id)) return;
+      if (!customerId && appliedRemote.has(id)) return;
       try {
         // TB-032: versione del cliente (promptVersions) passata al server,
         // che la usa come override (come promptLabels). Il server la legge

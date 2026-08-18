@@ -78,6 +78,8 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       sessionId?: string;
       /** TB-023: anteprima base64 screenshot preview per vision/analysis. */
       imagePreviewBase64?: string;
+      /** TB-032: override reasoning (badge AI/Clienti); assente = preferenza utente. */
+      reasoningEffort?: 'low' | 'high' | 'max';
     } & RunTraceOptions,
   ): Promise<CardProcessResult> {
     const primaryProviderId = options?.modelId || providerRegistry.getDefaultId();
@@ -138,7 +140,9 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
       primaryProviderId,
       session.messages,
       {
-        reasoningEffort: 'max',
+        // reasoningEffort assente → il provider usa la preferenza utente
+        // (getAiReasoningEffort, badge AI — default 'max').
+        reasoningEffort: options?.reasoningEffort,
         tools: toolsDefs,
         responseFormat: wantsTools ? undefined : (wantsAnalysis ? undefined : { type: 'json_object' }),
         requestId: options?.requestId,
@@ -207,7 +211,7 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         });
 
         const followUp = await provider.chat(session.messages, {
-          reasoningEffort: 'max',
+          reasoningEffort: options?.reasoningEffort,
           responseFormat: { type: 'json_object' },
         });
 
