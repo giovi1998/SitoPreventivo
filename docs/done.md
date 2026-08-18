@@ -4,6 +4,13 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
 
+## 2026-08-18
+
+- **Fix element picker website — cross-realm `instanceof Document`** (da report utente "Elementpicker in sitoweb non funziona"; gotchas §26.29):
+  - `enablePicker(target)` discriminava iframe-doc vs container con `target instanceof Document`, ma il `contentDocument` di un iframe è cross-realm → in Chrome `instanceof` falliva → Document trattato come container → `classList.add` su Document → TypeError, picker morto (click senza effetto).
+  - Fix: check strutturale `target.nodeType === 9` (DOCUMENT_NODE), cross-realm-safe. Regola generale: mai `instanceof Element|Document` su oggetti potenzialmente in iframe.
+  - Regression test: `elementPicker.test.ts` (iframe sandboxed + enablePicker + click bottone → selezionato). Verifica live Playwright su sito test: click su `h2.hero-title` → "1 elemento selezionato" + contesto estratto + toggle pulito, 0 errori console.
+
 - **TB-032 Verify agent alternativo — fix agent mirato + repair deterministico + regressione struttura** (da 	o-be-done.md "Verify agent alternativo"; gotchas §26.28):
   - **Verify zero-AI su codice integro**: nalyzeSiteCode + nuova nalyzeSiteRegression (struttura obbligatoria: nav, menu-toggle, footer, .current-year, mappa, form, href relativi) → codice integro = erify:ok con ZERO chiamate AI (prima 1-2 sempre).
   - **Repair deterministico locale pre-AI**: epairCssStructure/epairHtmlStructure sistemano parentesi CSS/tag orfani in millisecondi (erify:repair:css|html).

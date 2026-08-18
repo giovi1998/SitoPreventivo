@@ -2245,3 +2245,17 @@ flyer ≥10pt, headline ≥24pt, tagline ≥40% wordmark). Baseline screenshot:
 **Costi**: sito integro = 3 chiamate AI totali (html/css/js, prima 4-5); sito riparabile deterministicamente = 3; non riparabile = 4 (1 fix agent). Tempo verify: 0s (integro) invece di 30-194s.
 
 **Test**: siteAnalyser 24 (10 regressione), orchestrator 40 (zero-AI, repair, fix agent mirato, parti integre mai inviate, recheck), matrice 3 provider 6 (niente tools/tool_calls — garanzia anti-400, 3-4 chiamate). Gate: typecheck + 3300 test verdi.
+
+### 26.29 Element picker website — cross-realm `instanceof Document` (2026-08-18)
+
+**Bug (report utente: "Elementpicker in sitoweb non funziona non seleziona gli elementi")**: click su 🎯 "Seleziona elemento" nel Website Editor non faceva nulla in Chrome — niente crosshair, niente selezione. Root cause: `enablePicker(target: Document | HTMLElement)` in `src/utils/website/elementPicker.ts` usava `target instanceof Document` per distinguere iframe-doc (website) da container in-page (card/flyer/logo). In un browser reale il `iframe.contentDocument` è **cross-realm**: il suo prototipo è il `Document` del realm iframe, NON del realm principale → `instanceof Document` ritorna `false` → il picker trattava il Document come HTMLElement container → `container.classList.add(...)` su un Document → **TypeError**, picker morto. (jsdom condivide il realm → i test non lo riproducevano.)
+
+**Fix**: check strutturale cross-realm-safe invece di `instanceof`:
+
+```ts
+const isDoc = target.nodeType === 9; // DOCUMENT_NODE
+```
+
+`nodeType` è una proprietà dati (number), legge identica in entrambi i realm. `instanceof` su oggetti cross-realm è sempre inaffidabile: stesso pattern già fixato per `getComputedStyle` in §639903e (commit 2026-08-18 "picker website cross-realm getComputedStyle"). Regola: **mai `instanceof Element|Document|HTMLElement` su oggetti che possano vivere in un iframe (contentDocument)** — usa `nodeType`/`ownerDocument`/`tagName`.
+
+**Test**: `elementPicker.test.ts` — nuovo regression "funziona su contentDocument di iframe (cross-realm, non instanceof Document)": iframe sandboxed, `enablePicker(doc, cb)` + click su un bottone nel doc → elemento selezionato. Verifica live Playwright 2026-08-18: iframe `about:srcdoc`, picker attivo → click su `h2.hero-title` → "1 elemento selezionato" + contesto `<h2 class="hero-title">Pane Artigianale</h2>` + badge `index 100%` + toggle on/off pulito, 0 errori console.

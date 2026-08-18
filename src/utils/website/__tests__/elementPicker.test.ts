@@ -3,8 +3,32 @@ import { enablePicker, extractElementContext, matchingCssRules, matchingSimilarR
 
 describe('elementPicker', () => {
   describe('enablePicker scoped (container)', () => {
-    it('intercetta click DENTRO il container, ignora quelli fuori', () => {
-      const container = document.createElement('div');
+    it('funziona su contentDocument di iframe (cross-realm, non instanceof Document)', () => {
+      // Regression: il picker website moriva in Chrome perché il
+      // contentDocument dell'iframe non è instanceof Document nel realm
+      // principale → enablePicker lo trattava come container → TypeError.
+      const iframe = document.createElement('iframe');
+      iframe.sandbox = 'allow-scripts allow-same-origin';
+      document.body.appendChild(iframe);
+      const doc = iframe.contentDocument!;
+      doc.open();
+      doc.write('<html><head></head><body><button class="menu-toggle">Menu</button></body></html>');
+      doc.close();
+      const btn = doc.querySelector('button')!;
+
+      const picked: Element[] = [];
+      const disable = enablePicker(doc, (el) => picked.push(el));
+
+      const evt = new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 });
+      btn.dispatchEvent(evt);
+      expect(picked.length).toBe(1);
+      expect(picked[0]).toBe(btn);
+
+      disable();
+      document.body.removeChild(iframe);
+    });
+
+    it('intercetta click DENTRO il container, ignora quelli fuori', () => {      const container = document.createElement('div');
       const inside = document.createElement('button');
       inside.textContent = 'dentro';
       container.appendChild(inside);

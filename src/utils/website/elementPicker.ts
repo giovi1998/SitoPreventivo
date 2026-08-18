@@ -52,8 +52,11 @@ const COMPUTED_PROPS = [
  * della preview morirebbe (click post-pointerup bloccato).
  */
 export function enablePicker(target: Document | HTMLElement, onSelect: (el: Element) => void): () => void {
-  const isDoc = target instanceof Document;
-  const root: Document = isDoc ? target : (target.ownerDocument ?? document);
+  // Cross-realm safety: il contentDocument di un iframe NON è instanceof
+  // Document nel realm principale (Chrome) → il picker website moriva
+  // trattando il Document come container (classList.add su Document).
+  const isDoc = target.nodeType === 9;
+  const root: Document = isDoc ? (target as Document) : (target.ownerDocument ?? document);
   const container = isDoc ? null : (target as HTMLElement);
 
   const style = root.createElement('style');
