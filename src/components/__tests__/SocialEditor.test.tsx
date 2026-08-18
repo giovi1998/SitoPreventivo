@@ -86,6 +86,20 @@ describe('SocialEditor (spec 12 UI integration)', () => {
     expect(screen.getByText('Volantino')).toBeDefined();
   });
 
+  it('fallback image prompt: usa i dati sorgente, mai vago (GEMINI_NO_IMAGE_IN_RESPONSE)', async () => {
+    const { buildFallbackImagePrompt } = await import('../SocialEditor');
+    const cardPrompt = buildFallbackImagePrompt(
+      { type: 'card', sourceId: 'c1', data: { name: 'Mattia', title: 'Chef', company: 'Thai Food', accentColor: '#fff', services: ['Pad Thai', 'Cucina thai'] } },
+      'instagram',
+    );
+    expect(cardPrompt).toContain('Pad Thai');
+    expect(cardPrompt).toContain('No text');
+    expect(cardPrompt).not.toContain('coerente col brand');
+    const nullPrompt = buildFallbackImagePrompt(null, 'facebook');
+    expect(nullPrompt).toContain('Professional social media photo');
+    expect(nullPrompt).toContain('No text');
+  });
+
   it('shows empty state with CTAs when no documents available (v2.1 fix)', () => {
     renderWithRouter(
       <SocialEditor userEmail="t@e.com" cardDocuments={[]} flyerDocuments={[]} />

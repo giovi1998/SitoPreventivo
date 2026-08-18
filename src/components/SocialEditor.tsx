@@ -22,6 +22,21 @@ const TONES: { value: SocialTone; label: string }[] = [
   { value: 'promotional', label: 'Promozionale' },
 ];
 
+// Fallback concreto quando l'AI non emette imagePrompt: Gemini rifiuta
+// prompt vaghi/meta ("visual coerente col brand" → GEMINI_NO_IMAGE_IN_RESPONSE).
+// Il soggetto deve venire dai dati sorgente (servizi/headline), in inglese.
+export function buildFallbackImagePrompt(source: SocialSource | null, platform: SocialPlatform): string {
+  const subject = source
+    ? source.type === 'card'
+      ? [source.data.services?.[0], source.data.title, source.data.company].filter(Boolean).join(', ')
+      : [source.data.headline, source.data.subheadline].filter(Boolean).join(', ')
+    : '';
+  const base = subject
+    ? `Professional social media photo for a business: ${subject}. Clean composition, natural light, high quality photography`
+    : 'Professional social media photo, clean modern composition, natural light, high quality photography';
+  return `${base}. No text, no logos, no watermarks. Platform: ${platform}.`;
+}
+
 export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments }: Props) {
   const { generate, generatePostImage, posts, postImages, isProcessing, logs, reset, lastCostUsd } = useAISocial(userEmail);
   const { addToast } = useToast();
@@ -43,6 +58,7 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
   const [sourceType, setSourceType] = useState<'card' | 'flyer'>('card');
   const [sourceId, setSourceId] = useState<string>('');
   const [tone, setTone] = useState<SocialTone>('promotional');
+  const [lastSource, setLastSource] = useState<SocialSource | null>(null);
 
   const hasSources = cardDocuments.length > 0 || flyerDocuments.length > 0;
 
@@ -89,6 +105,7 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
     try {
       const result = await generate(source, tone);
       if (result.applied) {
+        setLastSource(source);
         addToast('success', `3 post generati per ${result.posts.length} piattaforme.`);
       } else {
         addToast('error', 'AI non ha generato post validi. Riprova.');
@@ -103,7 +120,7 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
   };
 
   const handleGenerateImage = async (platform: SocialPlatform, imagePrompt?: string) => {
-    const prompt = imagePrompt?.trim() || `Visual social per ${platform}, coerente col brand del documento sorgente`;
+    const prompt = imagePrompt?.trim() || buildFallbackImagePrompt(lastSource, platform);
     setImageLoading(platform);
     try {
       await generatePostImage(platform, prompt);

@@ -47,7 +47,7 @@ Output: SOLO JSON valido con questo contract:
       "caption": "string (max 500/1000/1500 per piattaforma)",
       "hashtags": ["#word", ...] (max 10 per post),
       "tone": "professional" | "casual" | "promotional",
-      "imagePrompt": "string (max 500, IN INGLESE: descrizione visuale concreta per generare l'immagine del post — soggetto, setting, luce, stile. Niente testo nell'immagine, niente loghi)"
+      "imagePrompt": "string OBBLIGATORIA (max 500, IN INGLESE): descrizione visuale CONCRETA per generare la foto del post — soggetto specifico tratto dai servizi/prodotti della sorgente, setting, luce, stile fotografico. Esempio per un ristorante thai: 'Steaming pad thai noodles with shrimp and peanuts on a rustic wooden table, warm restaurant lighting, shallow depth of field, professional food photography'. MAI testo scritto, loghi o watermark nell'immagine. MAI descrizioni vaghe tipo 'visual coerente col brand'"
     }
   ]
 }
