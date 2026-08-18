@@ -152,11 +152,13 @@ test.describe('Screenshot pannello AI aperto — mobile 390px', () => {
     await shot(page, 'flyer-mobile');
   });
 
-  test('social mobile: drawer AI con bottone Genera', async ({ page }) => {
+  test('social mobile: FAB -> bottom sheet con bottone Genera', async ({ page }) => {
     await setup(page);
     await page.goto('/app/social');
-    const panel = await openRailConsole(page);
-    await expect(panel.getByRole('button').first()).toBeVisible();
+    // 2026-08-19: Social usa lo stesso pattern card/website (FAB + bottom sheet)
+    // per ritraere il pannello AI su mobile, invece del drawer condiviso.
+    const sheet = await openFabSheet(page);
+    await expect(sheet.getByRole('button').first()).toBeVisible();
     await shot(page, 'social-mobile');
   });
 

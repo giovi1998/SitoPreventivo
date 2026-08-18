@@ -17,6 +17,7 @@ export interface AIHarnessConsoleProps {
   editorKind?: 'editor' | 'card' | 'flyer' | 'logo' | 'social';
   suggestedPrompt?: string;
   hidePrompt?: boolean;
+  forceExpanded?: boolean;
   className?: string;
   /** TB-023: callback extra quando l'utente cambia provider dal badge. */
   onProviderChange?: (providerId: string) => void;

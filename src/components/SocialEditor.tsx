@@ -8,7 +8,11 @@ import AIConsole from './ai/AIHarnessConsole';
 import { AiSelect, AiGenerateButton } from './ai-ui';
 import { AuthContext } from '../contexts';
 import dataService from '../utils/dataService';
+import CardAIFab from './CardAIFab';
+import CardAIBottomSheet from './CardAIBottomSheet';
+import { useIsMobileWorkspace } from '../hooks/useMediaQuery';
 import './SocialEditor.css';
+import './aiFabSheet.css';
 
 interface Props {
   userEmail: string;
@@ -43,6 +47,8 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
   const { user } = useContext(AuthContext);
   const [tier, setTier] = useState<'free' | 'unlocked'>('free');
   const [imageLoading, setImageLoading] = useState<string | null>(null);
+  const [aiSheetOpen, setAiSheetOpen] = useState(false);
+  const isMobileWorkspace = useIsMobileWorkspace();
 
   useEffect(() => {
     if (user?.role === 'admin') {
@@ -139,6 +145,60 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
     a.click();
   };
 
+  const aiConsolePanel = (
+    <AIConsole
+      editorKind="social"
+      isProcessing={isProcessing}
+      logs={logs}
+      tier={tier}
+      onSubmitPrompt={() => {}}
+      hidePrompt
+      forceExpanded={isMobileWorkspace}
+    >
+      <section className="social-editor-form" aria-label="Configurazione post">
+        <h2 className="social-form-title">Configura generazione</h2>
+        <p className="social-form-hint">L'AI legge il contenuto del documento scelto e scrive 3 caption ottimizzate per piattaforma.</p>
+        <AiSelect
+          label="Tipo sorgente"
+          value={sourceType}
+          onChange={(e) => { setSourceType(e.target.value as 'card' | 'flyer'); setSourceId(''); }}
+          options={[
+            { value: 'card', label: 'Bigliettino' },
+            { value: 'flyer', label: 'Volantino' },
+          ]}
+        />
+        <AiSelect
+          label="Documento sorgente"
+          value={sourceId}
+          onChange={(e) => setSourceId(e.target.value)}
+          options={[
+            { value: '', label: '— Seleziona —' },
+            ...availableSources.map((s) => ({ value: s.id, label: s.label })),
+          ]}
+        />
+        <AiSelect
+          label="Tono"
+          value={tone}
+          onChange={(e) => setTone(e.target.value as SocialTone)}
+          options={TONES.map((t) => ({ value: t.value, label: t.label }))}
+        />
+        <div className="social-editor-actions">
+          <AiGenerateButton
+            isProcessing={isProcessing}
+            loadingText="Generando…"
+            onClick={handleGenerate}
+            disabled={!sourceId}
+          >
+            Genera 3 post
+          </AiGenerateButton>
+          <button type="button" className="social-reset-btn" onClick={reset} disabled={isProcessing}>
+            Reset
+          </button>
+        </div>
+      </section>
+    </AIConsole>
+  );
+
   return (
     <div className="social-editor">
       <header className="social-editor-header">
@@ -167,7 +227,7 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
       )}
 
       {hasSources && (
-        <div className="social-editor-grid social-editor-grid--with-rail">
+        <div className={`social-editor-grid ${isMobileWorkspace ? '' : 'social-editor-grid--with-rail'}`}>
           <div className="social-results">
             {posts.length === 3 ? (
               <div className="social-posts-grid">
@@ -219,63 +279,32 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
               </div>
             ) : (
               <p className="social-results-hint">
-                Configura la generazione dalla rail AI Assist a destra: l'AI legge il documento scelto e scrive 3 caption ottimizzate per piattaforma.
+                {isMobileWorkspace
+                  ? "Configura la generazione dal pannello AI in basso: l'AI legge il documento scelto e scrive 3 caption ottimizzate per piattaforma."
+                  : "Configura la generazione dalla rail AI Assist a destra: l'AI legge il documento scelto e scrive 3 caption ottimizzate per piattaforma."}
               </p>
             )}
           </div>
 
-          {/* Phase 14 (REQ-AI-002): un solo modello — l'AI sta nella rail a destra */}
-          <AIConsole
-            editorKind="social"
-            isProcessing={isProcessing}
-            logs={logs}
-            tier={tier}
-            onSubmitPrompt={() => {}}
-            hidePrompt
-          >
-            <section className="social-editor-form" aria-label="Configurazione post">
-              <h2 className="social-form-title">Configura generazione</h2>
-              <p className="social-form-hint">L'AI legge il contenuto del documento scelto e scrive 3 caption ottimizzate per piattaforma.</p>
-              <AiSelect
-                label="Tipo sorgente"
-                value={sourceType}
-                onChange={(e) => { setSourceType(e.target.value as 'card' | 'flyer'); setSourceId(''); }}
-                options={[
-                  { value: 'card', label: 'Bigliettino' },
-                  { value: 'flyer', label: 'Volantino' },
-                ]}
-              />
-              <AiSelect
-                label="Documento sorgente"
-                value={sourceId}
-                onChange={(e) => setSourceId(e.target.value)}
-                options={[
-                  { value: '', label: '— Seleziona —' },
-                  ...availableSources.map((s) => ({ value: s.id, label: s.label })),
-                ]}
-              />
-              <AiSelect
-                label="Tono"
-                value={tone}
-                onChange={(e) => setTone(e.target.value as SocialTone)}
-                options={TONES.map((t) => ({ value: t.value, label: t.label }))}
-              />
-              <div className="social-editor-actions">
-                <AiGenerateButton
-                  isProcessing={isProcessing}
-                  loadingText="Generando…"
-                  onClick={handleGenerate}
-                  disabled={!sourceId}
-                >
-                  Genera 3 post
-                </AiGenerateButton>
-                <button type="button" className="social-reset-btn" onClick={reset} disabled={isProcessing}>
-                  Reset
-                </button>
-              </div>
-            </section>
-          </AIConsole>
+          {/* Phase 14 (REQ-AI-002): rail a destra su desktop, FAB+bottom sheet su mobile (pattern card/website) */}
+          {!isMobileWorkspace && aiConsolePanel}
         </div>
+      )}
+
+      {hasSources && isMobileWorkspace && (
+        <>
+          <CardAIFab
+            onClick={() => setAiSheetOpen((v) => !v)}
+            unreadCount={!aiSheetOpen && logs.length > 0 ? logs.length : 0}
+          />
+          <CardAIBottomSheet
+            isOpen={aiSheetOpen}
+            onClose={() => setAiSheetOpen(false)}
+            ariaLabel="Pannello AI"
+          >
+            {aiConsolePanel}
+          </CardAIBottomSheet>
+        </>
       )}
     </div>
   );
