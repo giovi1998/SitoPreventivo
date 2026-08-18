@@ -4,14 +4,16 @@ import {
   type SocialPost,
   type SocialProcessResult,
 } from '../ai/socialOrchestrator';
-import type { SocialSource, SocialTone } from '../ai/prompts/socialSystem';
+import type { SocialSource, SocialTone, SocialPlatform } from '../ai/prompts/socialSystem';
 import { useAILogs } from './useAILogs';
 import { newRequestId } from '../utils/ai/requestId';
 import dataService from '../utils/dataService';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
-import { calculateCostUsd } from '../ai/providerPricing';
-import { getAiVisionEnabled } from '../utils/uiPrefs';
+import { calculateCostUsd, geminiImagePricingId } from '../ai/providerPricing';
+import { getAiVisionEnabled, getAiImageModelDefault } from '../utils/uiPrefs';
 import { captureElementAsBase64 } from '../utils/ai/captureElement';
+import { mapAiError } from '../utils/ai/mapAiError';
+import { IMAGE_TOKEN_COST } from '../ai/costs';
 
 export interface UseAISocialReturn {
   generate: (
@@ -19,9 +21,13 @@ export interface UseAISocialReturn {
     tone: SocialTone,
     options?: { onProgress?: (msg: string) => void },
   ) => Promise<SocialProcessResult>;
+  /** Genera l'immagine AI di un post via /api/ai/image-flash (1:1, kind custom). */
+  generatePostImage: (platform: SocialPlatform, prompt: string) => Promise<string>;
   reset: () => void;
   logs: ReturnType<typeof useAILogs>['logs'];
   posts: SocialPost[];
+  /** Immagini generate per piattaforma (data URL). */
+  postImages: Partial<Record<SocialPlatform, string>>;
   isProcessing: boolean;
   availableModels: { id: string; name: string; model: string; supportsStreaming: boolean; supportsTools: boolean; supportsVision: boolean }[];
   lastCostUsd: number;
@@ -30,6 +36,7 @@ export interface UseAISocialReturn {
 export function useAISocial(userEmail?: string, sessionId?: string): UseAISocialReturn {
   const orchestratorRef = useRef<SocialAIOrchestrator | null>(null);
   const [posts, setPosts] = useState<SocialPost[]>([]);
+  const [postImages, setPostImages] = useState<Partial<Record<SocialPlatform, string>>>({});
   const [lastCostUsd, setLastCostUsd] = useState(0);
   const { logs, isProcessing, startStream, appendStream, finalizeStream, info, success, error, clear } = useAILogs('useAISocial');
 
@@ -102,15 +109,58 @@ export function useAISocial(userEmail?: string, sessionId?: string): UseAISocial
     [info, startStream, appendStream, finalizeStream, success, error, userEmail, sessionId]
   );
 
+  const generatePostImage = useCallback(
+    async (platform: SocialPlatform, prompt: string): Promise<string> => {
+      const requestId = newRequestId();
+      info(`Immagine post ${platform}…`, prompt.slice(0, 300), { requestId });
+      try {
+        const imageModel = getAiImageModelDefault();
+        const res = await fetch(`${import.meta.env?.VITE_API_BASE || ''}/api/ai/image-flash`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
+          body: JSON.stringify({
+            prompt: prompt.slice(0, 1000),
+            kind: 'custom',
+            aspectRatio: '1:1',
+            size: '1K',
+            imageModel,
+            userEmail: userEmail || undefined,
+            ...(sessionId ? { sessionId } : {}),
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: `Immagine AI (${res.status})` }));
+          throw new Error(err.error || `Immagine AI ${res.status}`);
+        }
+        const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
+        const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
+        const costUsd = calculateCostUsd(geminiImagePricingId(imageModel), undefined, 1);
+        if (userEmail && userEmail !== 'admin@gmail.com') {
+          dataService.trackTokens(userEmail, IMAGE_TOKEN_COST, costUsd).catch(() => {});
+        }
+        setLastCostUsd((c) => c + costUsd);
+        setPostImages((prev) => ({ ...prev, [platform]: dataUrl }));
+        success(`Immagine ${platform} generata`, `${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd, hasImage: true, imagePreviewBase64: dataUrl });
+        return dataUrl;
+      } catch (err) {
+        const hint = mapAiError(err);
+        error(hint, undefined, { requestId });
+        throw new Error(hint);
+      }
+    },
+    [info, success, error, userEmail, sessionId]
+  );
+
   const reset = useCallback(() => {
     getOrchestrator().resetSession();
     setPosts([]);
+    setPostImages({});
     clear();
   }, [clear]);
 
   const availableModels = getOrchestrator().getProviderList();
 
-  return { generate, reset, logs, posts, isProcessing, availableModels, lastCostUsd };
+  return { generate, generatePostImage, reset, logs, posts, postImages, isProcessing, availableModels, lastCostUsd };
 }
 
 async function captureSocialPreview(source: SocialSource): Promise<string | undefined> {

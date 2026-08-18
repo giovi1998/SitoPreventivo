@@ -20,6 +20,8 @@ export const socialPostSchema = z.object({
   caption: z.string().max(2000),
   hashtags: z.array(z.string()).max(10),
   tone: z.enum(['professional', 'casual', 'promotional']),
+  /** Prompt visuale per la generazione immagine del post (Gemini image-flash). */
+  imagePrompt: z.string().max(500).optional(),
 });
 export type SocialPost = z.infer<typeof socialPostSchema>;
 

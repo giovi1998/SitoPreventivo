@@ -6,6 +6,12 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-18
 
+- **Fix scroll rail AI website editor** (da report utente "non posso scrollare l'AI nella pagina sitoweb"): `.website-rail .ai-console__panel` aveva `overflow: hidden` (override del base `overflow-y: auto`) + children `flex-shrink: 0` + log `flex: 1 overflow-y: auto` → solo il log scrollava, contenuto oltre l'altezza clippato e irraggiungibile. Fix in `WebsiteEditor.css`: panel scrolla intero come gli altri editor (overflow-y: auto + min-height: 0), override log rimosso. Regression test e2e in `breakpoints.spec.ts` (overflow-y computed = auto).
+
+- **Immagini AI per i post social** (richiesta utente "mettere le immagini alla pagina social"): `socialPostSchema.imagePrompt` opzionale (≤500 char, in inglese, niente testo/loghi nell'immagine) generato insieme alle 3 caption; `useAISocial.generatePostImage(platform, prompt)` → `/api/ai/image-flash` kind custom 1:1 (costo trackato, log con preview); `SocialEditor` con bottone "Genera immagine" per post card, preview + download JPG. Reset pulisce anche le immagini. Test: schema (2), hook (2), UI (2) — 17 verdi.
+
+- **Mappa wayfinder "Coerenza azioni + layout tutti gli editor"** (`docs/wayfinder/coerenza-editor-map.md` + 5 ticket c01-c05): audit funzionale + layout di card/flyer/logo/website/preventivo/QR/social/Collection con skill impeccable (modo Operate).
+
 - **Guardia anti-regressione qualità asset in CI** (wayfinder qualita-oggetti T9; residuo "Immagini AI pixelate — verifica Playwright"):
   - Nuovo spec `e2e/ai-image-quality-guard.spec.ts` (4 test, zero chiamate AI): porta le soglie Phase B di `scripts/ai-image-quality-verify.mjs` nel gate critico — gerarchia card name>title≥company (floor 20/12px), contatti retro ≥17px (~7pt stampa), zero overflow celle grid; flyer headline ≥8.4mm (24pt) / body ≥3.4mm (10pt) e zero testi fuori viewBox; logo tagline 0.30-0.55× wordmark (§27.2); card photo/flyer hero/logo background persistiti ≥1000px long side (JPEG 1280×960 via canvas, separa l'era 512/768px).
   - Fixture FLAT seedate in localStorage (gotcha §23). qrLabel flyer esente dal floor body (fine print 5-7pt by design, `layoutEngine.ts`) — escluso via `clip-path="url(#clip-qrLabel)"`.

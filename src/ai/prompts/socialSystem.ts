@@ -46,7 +46,8 @@ Output: SOLO JSON valido con questo contract:
       "platform": "instagram" | "facebook" | "linkedin",
       "caption": "string (max 500/1000/1500 per piattaforma)",
       "hashtags": ["#word", ...] (max 10 per post),
-      "tone": "professional" | "casual" | "promotional"
+      "tone": "professional" | "casual" | "promotional",
+      "imagePrompt": "string (max 500, IN INGLESE: descrizione visuale concreta per generare l'immagine del post — soggetto, setting, luce, stile. Niente testo nell'immagine, niente loghi)"
     }
   ]
 }
@@ -60,7 +61,9 @@ REGOLE:
 - Caption coerente col documento sorgente (nome brand, servizi/headline).
 - Hashtag: max 10 per post, formato #word (no spazi, no punteggiatura interna).
 - NON INVENTARE prezzi, date, luoghi non presenti nel documento sorgente.
-- Lingua: italiano.`;
+- imagePrompt: visuale coerente col brand/servizi della sorgente, in inglese,
+  fotografico o illustrato, SENZA testo scritto né loghi nell'immagine.
+- Lingua caption: italiano.`;
 }
 
 export function buildSocialGeneratePrompt(

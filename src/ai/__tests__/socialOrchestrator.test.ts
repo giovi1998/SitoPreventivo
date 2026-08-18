@@ -43,6 +43,29 @@ describe('socialPackOutputSchema (spec 12)', () => {
     });
     expect(parsed.success).toBe(false);
   });
+
+  it('accepts optional imagePrompt per post (social images)', () => {
+    const parsed = socialPackOutputSchema.safeParse({
+      posts: [
+        { platform: 'instagram', caption: 'Ciao', hashtags: [], tone: 'casual', imagePrompt: 'flat lay of artisan pastries, warm light' },
+        { platform: 'facebook', caption: 'x', hashtags: [], tone: 'promotional' },
+        { platform: 'linkedin', caption: 'x', hashtags: [], tone: 'professional' },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.posts[0].imagePrompt).toContain('pastries');
+  });
+
+  it('rejects imagePrompt over 500 chars', () => {
+    const parsed = socialPackOutputSchema.safeParse({
+      posts: [
+        { platform: 'instagram', caption: 'x', hashtags: [], tone: 'casual', imagePrompt: 'a'.repeat(501) },
+        { platform: 'facebook', caption: 'x', hashtags: [], tone: 'promotional' },
+        { platform: 'linkedin', caption: 'x', hashtags: [], tone: 'professional' },
+      ],
+    });
+    expect(parsed.success).toBe(false);
+  });
 });
 
 describe('SocialAIOrchestrator (spec 12)', () => {

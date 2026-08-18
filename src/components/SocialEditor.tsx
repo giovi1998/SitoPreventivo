@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import type { BusinessCard, Flyer } from '../utils/documentSchemas';
 import { useAISocial } from '../hooks/useAISocial';
-import type { SocialSource, SocialTone } from '../ai/prompts/socialSystem';
+import type { SocialSource, SocialTone, SocialPlatform } from '../ai/prompts/socialSystem';
 import { useToast } from '../hooks/useToast';
 import AIConsole from './ai/AIHarnessConsole';
 import { AiSelect, AiGenerateButton } from './ai-ui';
@@ -23,10 +23,11 @@ const TONES: { value: SocialTone; label: string }[] = [
 ];
 
 export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments }: Props) {
-  const { generate, posts, isProcessing, logs, reset, lastCostUsd } = useAISocial(userEmail);
+  const { generate, generatePostImage, posts, postImages, isProcessing, logs, reset, lastCostUsd } = useAISocial(userEmail);
   const { addToast } = useToast();
   const { user } = useContext(AuthContext);
   const [tier, setTier] = useState<'free' | 'unlocked'>('free');
+  const [imageLoading, setImageLoading] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.role === 'admin') {
@@ -101,6 +102,26 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
     navigator.clipboard.writeText(caption).then(() => addToast('success', 'Caption copiata.'));
   };
 
+  const handleGenerateImage = async (platform: SocialPlatform, imagePrompt?: string) => {
+    const prompt = imagePrompt?.trim() || `Visual social per ${platform}, coerente col brand del documento sorgente`;
+    setImageLoading(platform);
+    try {
+      await generatePostImage(platform, prompt);
+      addToast('success', `Immagine ${platform} generata.`);
+    } catch (err) {
+      addToast('error', 'Errore immagine: ' + ((err as Error)?.message ?? 'unknown'));
+    } finally {
+      setImageLoading(null);
+    }
+  };
+
+  const downloadImage = (platform: string, dataUrl: string) => {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `social-${platform}.jpg`;
+    a.click();
+  };
+
   return (
     <div className="social-editor">
       <header className="social-editor-header">
@@ -141,6 +162,27 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
                         {post.platform}
                       </span>
                     </header>
+                    {postImages[post.platform] ? (
+                      <div className="social-post-image">
+                        <img src={postImages[post.platform]} alt={`Immagine post ${post.platform}`} />
+                        <button
+                          type="button"
+                          className="social-image-download"
+                          onClick={() => downloadImage(post.platform, postImages[post.platform]!)}
+                        >
+                          Scarica immagine
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="social-image-btn"
+                        onClick={() => handleGenerateImage(post.platform, post.imagePrompt)}
+                        disabled={isProcessing || imageLoading !== null}
+                      >
+                        {imageLoading === post.platform ? 'Generazione immagine…' : 'Genera immagine'}
+                      </button>
+                    )}
                     <p className="social-post-caption">{post.caption}</p>
                     {post.hashtags.length > 0 && (
                       <p className="social-post-hashtags">{post.hashtags.join(' ')}</p>
