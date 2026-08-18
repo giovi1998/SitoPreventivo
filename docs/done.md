@@ -15,6 +15,13 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-17
 
+- **Spec chiusa: Langfuse Observability (2026-08-17)**: spec
+  `docs/spec/spec-langfuse-observability.md` cancellata — implementazione
+  completa (tracing TB-029, prompt management fase 2 con label ambiente,
+  A/B per-cliente `promptLabels` + `promptVersions` TB-032, admin CRUD,
+  media multi-modale). Nota: `spec-design-flyer-refactor-preview-ai.md`
+  resta attiva (Phase 11 parziale, gap test matrix).
+
 - **Fix pannello AI non scrollabile** (da `to-be-done.md`): `.ai-console`
   (flex child) senza `min-height: 0` cresceva col contenuto invece di
   scrollare → rail AI card/flyer/logo non scrollabile (segnalato in PROD).
