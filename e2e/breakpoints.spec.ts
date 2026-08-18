@@ -195,6 +195,38 @@ test.describe('Breakpoint migration 767/1023', () => {
     expect(box!.width).toBeGreaterThan(300);
   });
 
+  test('website AI rail: panel scrollabile come gli altri editor (overflow-y auto, non hidden)', async ({ page }) => {
+    // Regressione 2026-08-18: `.website-rail .ai-console__panel` aveva
+    // `overflow: hidden` + children flex-shrink:0 → contenuto oltre
+    // l'altezza rail clippato e irraggiungibile (report utente: "l'AI
+    // nella pagina sito rimane fissa, non scrolla").
+    await loginAndGo(page, '/app/editor');
+    await page.evaluate(() => {
+      localStorage.setItem('userRole', 'admin'); // route /app/website è AdminEditorRoute
+      const docs = [{
+        id: 'web-rail-scroll',
+        documentType: 'website',
+        title: 'Sito test scroll rail',
+        status: 'BOZZA',
+        userEmail: 'breakpoints-test@example.com',
+        html: '<html><body><h1>Test</h1></body></html>',
+        css: '',
+        js: '',
+        pages: ['index'],
+        pagesHtml: {},
+        source: 'ai',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }];
+      localStorage.setItem('precisionQuote_documents:v1', JSON.stringify(docs));
+    });
+    await page.goto('/app/website/web-rail-scroll');
+    const panel = page.locator('.website-rail .ai-console__panel');
+    await expect(panel).toBeVisible({ timeout: 15000 });
+    const overflowY = await panel.evaluate((el) => getComputedStyle(el).overflowY);
+    expect(overflowY).toBe('auto');
+  });
+
   test('single header: at 375x812 /app/editor exactly one visible header (mobile-topbar only)', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await loginAndGo(page, '/app/editor');

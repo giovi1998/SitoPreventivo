@@ -94,17 +94,15 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* Come gli altri editor: scrolla l'intero panel, non solo il log.
+   * Prima overflow:hidden + children flex-shrink:0 → contenuto clippato,
+   * irraggiungibile (report utente 2026-08-18). */
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .website-rail .ai-console__children {
   flex-shrink: 0;
-}
-
-.website-rail .ai-console__log {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 100px;
 }
 
 /* ─── BRIEF PANEL ─── */
