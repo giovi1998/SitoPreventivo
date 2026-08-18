@@ -478,7 +478,9 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     let lastVerifyResponse: AIResponse | null = null;
 
     const runCheck = () => {
-      const htmlRes = analyzeSiteCode(allPagesHtml, 'html');
+      // allPagesHtml ricostruito da `html` CORRENTE: il repair deterministico
+      // e il fix agent aggiornano `html`, mai la snapshot presa prima del verify.
+      const htmlRes = analyzeSiteCode([html, ...Object.values(pagesHtml)].join('\n\n'), 'html');
       const cssRes = analyzeSiteCode(currentCss, 'css');
       const jsRes = analyzeSiteCode(currentJs, 'js');
       const reg = analyzeSiteRegression(html, brief.contacts);

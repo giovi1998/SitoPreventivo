@@ -2246,6 +2246,19 @@ flyer ≥10pt, headline ≥24pt, tagline ≥40% wordmark). Baseline screenshot:
 
 **Test**: siteAnalyser 24 (10 regressione), orchestrator 40 (zero-AI, repair, fix agent mirato, parti integre mai inviate, recheck), matrice 3 provider 6 (niente tools/tool_calls — garanzia anti-400, 3-4 chiamate). Gate: typecheck + 3300 test verdi.
 
+### 26.30 Repair HTML — tag aperti mai chiusi + runCheck su html corrente (2026-08-18)
+
+**Bug (report utente: "Tag non bilanciato: chiusura </header> senza apertura <header> — capita molto spesso per il sitoweb")**: il pannello "Controllo qualità" segnalava `</header>` orfano con alta frequenza. Due cause:
+
+1. **`repairHtmlStructure` rimuoveva SOLO i tag di chiusura orfani** (`</tag>` con stack vuoto). Il caso reale è l'opposto: l'AI dimentica `</div>` interno (es. `</ul></header>` senza `</div></div>`) → `</header>` chiude lo stack con tag intermedi aperti → il repair non faceva nulla → fix agent chiamato (e spesso falliva → issue residua nel pannello).
+2. **`runCheck()` nel verify analizzava la snapshot `allPagesHtml`** presa PRIMA del verify (riga 385), mentre repair deterministico e fix agent aggiornano `html` → il repair HTML non ha MAI funzionato nell'orchestrator: recheck su copia vecchia → issue fantasma + fix agent inutile.
+
+**Fix**:
+- `repairHtmlStructure` ora **chiude i tag intermedi aperti** quando una chiusura orfana li lascerebbe appesi: `</header>` con `<div class="nav-inner">` aperto → inserisce `</div></header>` (edits con insert, non solo removals).
+- `runCheck()` ricostruisce `allPagesHtml` da `html` CORRENTE (`[html, ...Object.values(pagesHtml)].join('\n\n')`) → repair e fix agent visti dal recheck.
+
+**Test**: `repairStructure.test.ts` +1 ("chiude i tag aperti prima di una chiusura orfana"), orchestrator +1 ("HTML con </header> orfano → repair deterministico → verify:ok senza fix agent", 3 stream). Gate: typecheck + suite verdi.
+
 ### 26.29 Element picker website — cross-realm `instanceof Document` (2026-08-18)
 
 **Bug (report utente: "Elementpicker in sitoweb non funziona non seleziona gli elementi")**: click su 🎯 "Seleziona elemento" nel Website Editor non faceva nulla in Chrome — niente crosshair, niente selezione. Root cause: `enablePicker(target: Document | HTMLElement)` in `src/utils/website/elementPicker.ts` usava `target instanceof Document` per distinguere iframe-doc (website) da container in-page (card/flyer/logo). In un browser reale il `iframe.contentDocument` è **cross-realm**: il suo prototipo è il `Document` del realm iframe, NON del realm principale → `instanceof Document` ritorna `false` → il picker trattava il Document come HTMLElement container → `container.classList.add(...)` su un Document → **TypeError**, picker morto. (jsdom condivide il realm → i test non lo riproducevano.)

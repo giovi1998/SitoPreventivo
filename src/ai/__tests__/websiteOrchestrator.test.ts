@@ -418,6 +418,23 @@ describe('WebsiteOrchestrator.generateSite', () => {
     expect(fakeProvider.stream).toHaveBeenCalledTimes(3);
   });
 
+  it('verify: HTML con </header> orfano (div interno mai chiuso) → repair deterministico → verify:ok senza fix agent', async () => {
+    const htmlBrokenHeader = htmlNoHead.replace('</ul></div></header>', '</ul></header>');
+    chatResponses.push(
+      { content: JSON.stringify({ html: htmlBrokenHeader, pages: ['index'] }), usage: usage() },
+      { content: JSON.stringify({ css: 'body{}' }), usage: usage() },
+      { content: JSON.stringify({ js: 'console.log(1);' }), usage: usage() },
+    );
+    const result = await orch.generateSite(baseBrief, { modelId: 'mock' });
+    // repairHtmlStructure chiude il <div class="nav-inner"> prima di </header>
+    expect(result.site.html).toContain('</ul></div></header>');
+    expect(result.changes).toContain('verify:repair:html');
+    expect(result.changes).toContain('verify:ok');
+    expect(result.verifyIssues).toBeUndefined();
+    // Solo 3 chiamate stream (html/css/js): repair deterministico, zero AI verify
+    expect(fakeProvider.stream).toHaveBeenCalledTimes(3);
+  });
+
   it('verify: fix agent chiamato solo per la parte rotta (CSS non bilanciato)', async () => {
     chatResponses.push(
       { content: JSON.stringify({ html: htmlNoHead, pages: ['index'] }), usage: usage() },

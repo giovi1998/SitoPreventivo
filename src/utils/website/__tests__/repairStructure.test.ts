@@ -44,6 +44,14 @@ describe('repairHtmlStructure', () => {
     expect(out).toContain('<section>X</section>');
   });
 
+  it('chiude i tag aperti prima di una chiusura orfana (</header> senza <header>)', () => {
+    const html = '<header class="nav"><div class="nav-inner"><div class="brand">Chiccheria</div></header><section>X</section>';
+    const out = repairHtmlStructure(html);
+    expect(analyzeSiteCode(out, 'html').ok).toBe(true);
+    expect(out).toContain('</div></header>');
+    expect(out).toContain('<section>X</section>');
+  });
+
   it('html sano invariato', () => {
     const html = '<header><div>X</div></header><section><p>Y</p></section>';
     expect(repairHtmlStructure(html)).toBe(html);

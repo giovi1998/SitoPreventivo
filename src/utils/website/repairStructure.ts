@@ -136,11 +136,13 @@ export function repairCssStructure(css: string): string {
   return out;
 }
 
-/** Rimuove i tag di chiusura orfani (</tag> senza apertura corrispondente). */
+/** Rimuove i tag di chiusura orfani (</tag> senza apertura corrispondente) e
+ *  chiude i tag aperti che una chiusura orfana lascerebbe appesi (es.
+ *  </header> che chiude anche il <div> interno mai chiuso). */
 export function repairHtmlStructure(html: string): string {
   if (!html) return html;
   const stack: string[] = [];
-  const removals: Array<{ start: number; end: number }> = [];
+  const edits: Array<{ start: number; end: number; text: string }> = [];
   const tagRe = /<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:\s[^>]*)?)>/g;
   let m: RegExpExecArray | null;
   while ((m = tagRe.exec(html)) !== null) {
@@ -149,19 +151,20 @@ export function repairHtmlStructure(html: string): string {
     if (full.startsWith('</')) {
       const idx = stack.lastIndexOf(tag);
       if (idx === -1) {
-        removals.push({ start: m.index, end: m.index + full.length });
+        edits.push({ start: m.index, end: m.index + full.length, text: '' });
       } else {
+        const closers = stack.slice(idx + 1).reverse().map((t) => `</${t}>`).join('');
+        if (closers) edits.push({ start: m.index, end: m.index, text: closers });
         stack.splice(idx);
       }
     } else if (!VOID_TAGS.has(tag) && !full.endsWith('/>')) {
       stack.push(tag);
     }
   }
-  if (removals.length === 0) return html;
+  if (edits.length === 0) return html;
   let out = html;
-  for (let k = removals.length - 1; k >= 0; k--) {
-    const r = removals[k];
-    out = out.slice(0, r.start) + out.slice(r.end);
+  for (const e of edits.sort((a, b) => b.start - a.start)) {
+    out = out.slice(0, e.start) + e.text + out.slice(e.end);
   }
   return out;
 }
