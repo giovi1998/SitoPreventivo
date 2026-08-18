@@ -26,23 +26,27 @@ belle a livello di layout?"
 
 ## Decisions so far
 
-<!-- una riga per ticket chiuso: titolo link + gist -->
+- [T1 - Audit card editor](tickets/c01-audit-card-editor.md) — verde: azioni+layout coerenti, rail destra, FAB sheet, nessun P0-P1.
+- [T2 - Audit flyer editor](tickets/c02-audit-flyer-editor.md) — verde: template/AI copy/hero/export, rail destra 420px coerente, save-guard.
+- [T3 - Audit logo editor](tickets/c03-audit-logo-editor.md) — verde: save-guard, export 9 formati, placeholder mai successo, chat TTL 24h.
+- [T4 - Audit website editor](tickets/c04-audit-website-editor.md) — verde: brief/genera/verify/fix/picker/refine/ZIP, rail 320px, picker mobile fix.
+- [T5 - Audit editor minori + azioni globali](tickets/c05-audit-minori-globali.md) — verde: preventivo/QR/social/Collection/ActionBar/Settings ok; empty states per-tab, toast ovunque.
+- [C6 - Design tokens editor (advisory detector)](tickets/c06-design-tokens-editor.md) — ticket derivato: ~100 advisory token hardcoded (pre-token legacy, non drift), azione quando esiste DESIGN.md tokens.
 
 ## Frontier (ticket aperti)
 
-- [T1 - Audit card editor](tickets/c01-audit-card-editor.md)
-- [T2 - Audit flyer editor](tickets/c02-audit-flyer-editor.md)
-- [T3 - Audit logo editor](tickets/c03-audit-logo-editor.md)
-- [T4 - Audit website editor](tickets/c04-audit-website-editor.md)
-- [T5 - Audit editor minori + azioni globali](tickets/c05-audit-minori-globali.md)
+- [C6 - Design tokens editor](tickets/c06-design-tokens-editor.md) — differito (attende DESIGN.md).
 
 ## Not yet specified
 
 - **Design tokens cross-editor**: spacing/radius/shadow variano tra editor
-  (es. SocialEditor usa var(--radius-lg), card usa px)? Mappatura completa
-  emerge dal primo ticket.
+  (es. SocialEditor usa var(--radius-lg), card usa px)? Mappatura emersa
+  dal ticket C6: hardcoded pre-token, attende DESIGN.md.
 - **Stati vuoti**: ogni editor ha empty state coerente (social ce l'ha,
-  altri?)?
+  altri?)? — Verificato in T5: save-guard con toast "Compila almeno…"
+  in QR/logo/flyer + EmptyState Collection per-tab. Rimane: card non ha
+  empty state dedicato oltre al template banner (non bloccante, mock-up
+  già presenti).
 
 ## Out of scope
 
