@@ -864,11 +864,21 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
   - **Bozza locale**: pulsante "Genera sito bozza" in `CustomerDetail`
     (`crm-landing-btn`, zero AI) → ZIP `sito-<nome>.zip` (riuso
     `exportWebsiteZip`, logo in `assets/`) + preview HTML in nuova tab.
-  - **Deploy Netlify 1 comando**: `npm run deploy:landing -- <cartella-estratta>
-    [--prod]` (`scripts/deploy-landing.mjs`) → copia in `dist/landing` →
-    `netlify deploy` (draft preview di default, `--prod` per produzione).
-    Link condivisibile col cliente senza toccare Vercel.
-  - Test: `landingDraft.test.ts` (15, coverage 98% lines / 100% branches).
+  - **Selectbox modalità** (`crm-landing-mode`): "Solo ZIP" (locale) o
+    "ZIP + Netlify" (pubblica subito, link condivisibile col cliente).
+  - **Deploy Netlify server-side**: endpoint admin `POST
+    /customers/:id/landing-deploy` (handler.ts, `node:https`, token
+    `NETLIFY_AUTH_TOKEN` MAI esposto al browser). Crea il site
+    `quickbrand-<slug>` alla prima esecuzione (nome stabile per cliente),
+    poi deploy con upload del file → ritorna `deployUrl` (preview draft) +
+    `siteUrl`. 403 admin, 400 body, 404 cliente, 503 senza token, 502
+    errore Netlify. Test: `landingDeploy.test.ts` (7).
+  - **Deploy CLI locale**: `npm run deploy:landing -- <cartella-estratta>
+    [--prod]` (`scripts/deploy-landing.mjs`) → `netlify deploy` (draft
+    preview di default, `--prod` per produzione).
+  - Test: `landingDraft.test.ts` (15, coverage 98% lines / 100% branches),
+    `landingDeploy.test.ts` (7). Env: `NETLIFY_AUTH_TOKEN` (Vercel,
+    server-side only — vedi AGENTS.md).
   - Fuori scope mantenuto: builder self-service, publish dominio cliente,
     multi-pagina (vedi to-be-done TB-012 step 3).
 

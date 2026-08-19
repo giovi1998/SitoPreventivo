@@ -73,8 +73,9 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
   - Nota: valutare se anticipare vs backlog (priorità utente 2026-07-30:
     sito clienti = obiettivo confermato).
   ✅ 2026-08-19 (commit dedicato): `landingDraft.ts` + pulsante
-  `crm-landing-btn` + `npm run deploy:landing` (draft preview Netlify).
-  Vedi done.md → 2026-08-19.
+  `crm-landing-btn` (modalità "Solo ZIP" / "ZIP + Netlify") + deploy
+  server-side `POST /customers/:id/landing-deploy` (site per cliente,
+  preview URL) + CLI `npm run deploy:landing`. Vedi done.md → 2026-08-19.
 
 ### Backlog tecnico corrente
 

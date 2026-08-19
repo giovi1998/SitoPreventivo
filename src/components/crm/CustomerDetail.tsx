@@ -17,6 +17,7 @@ import CustomerKnowledgePanel from './CustomerKnowledgePanel';
 import { prefetchRemotePrompts, REMOTE_PROMPT_PILOT } from '../../utils/ai/remotePrompt';
 import { getAiReasoningEffort, setAiReasoningEffort } from '../../utils/uiPrefs';
 import { buildLandingWebsite, exportLandingZip } from '../../utils/landingDraft';
+import { sanitizeZipName } from '../../utils/websiteExport';
 
 const AB_TEST_PROMPTS = [
   { id: 'card-system', label: 'Card' },
@@ -240,6 +241,8 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const [aiProvider, setAiProvider] = useState<string>(() => providerRegistry.getDefaultId());
   const [aiReasoning, setAiReasoning] = useState<'low' | 'high' | 'max'>(() => getAiReasoningEffort());
   const [aiFillCost, setAiFillCost] = useState<number | null>(null);
+  const [landingMode, setLandingMode] = useState<'zip' | 'netlify'>('zip');
+  const [deployInfo, setDeployInfo] = useState<{ deployUrl: string; siteUrl: string } | null>(null);
 
   const [imageGenModel, setImageGenModel] = useState<string>('gemini-3.1-flash-image');
   const palette = useAIPalette();
@@ -529,7 +532,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       content: (flyerData.content || {}) as { headline?: string; body?: string; cta?: { label?: string } },
       style: (flyerData.style || {}) as { accentColor?: string },
     };
-    logger.appendLog('info', 'Generazione sito bozza (zero AI)…', undefined, { action: 'landing-draft', customerId });
+    logger.appendLog('info', 'Generazione sito bozza (zero AI)…', undefined, { action: 'landing-draft', customerId, mode: landingMode });
     try {
       const site = buildLandingWebsite({
         businessName: customer.businessName,
@@ -541,10 +544,23 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         logoUrl: customer.logoUrl || customer.detectedLogoUrl || null,
         flyer,
       });
-      const { fileName, assetCount } = await exportLandingZip(site);
-      const previewUrl = URL.createObjectURL(new Blob([site.html], { type: 'text/html' }));
-      window.open(previewUrl, '_blank');
-      logger.appendLog('success', 'Sito bozza generato', undefined, { fileName, assetCount, preview: true });
+      if (landingMode === 'netlify') {
+        const res = await dataService.deployLanding(customer.id, site.html, `${sanitizeZipName(customer.businessName || 'sito')}.html`);
+        if (res.error) {
+          setError(String(res.error));
+          logger.appendLog('error', `Deploy Netlify fallito: ${res.error}`, undefined, { action: 'landing-draft', mode: 'netlify', error: String(res.error) });
+          setBusy(null);
+          return;
+        }
+        const d = res.data as { deployUrl: string; siteUrl: string };
+        setDeployInfo({ deployUrl: d.deployUrl, siteUrl: d.siteUrl });
+        logger.appendLog('success', 'Sito bozza deployato su Netlify', undefined, { mode: 'netlify', deployUrl: d.deployUrl, siteUrl: d.siteUrl });
+      } else {
+        const { fileName, assetCount } = await exportLandingZip(site);
+        const previewUrl = URL.createObjectURL(new Blob([site.html], { type: 'text/html' }));
+        window.open(previewUrl, '_blank');
+        logger.appendLog('success', 'Sito bozza generato', undefined, { fileName, assetCount, preview: true, mode: 'zip' });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
@@ -903,9 +919,27 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         <button onClick={handleGeneratePalettes} disabled={busy !== null} data-testid="crm-palette-btn" title="Suggerisce 3 palette colori coerenti col brief via AI (costo AI)">
           {busy === 'palette' || palette.isProcessing ? 'Generando…' : 'Genera 3 palette'}
         </button>
-        <button onClick={handleLandingDraft} disabled={busy !== null} data-testid="crm-landing-btn" title="Genera landing page statica dai dati cliente (webAnswers + flyer + contatti, zero AI) e scarica lo ZIP">
-          {busy === 'landing' ? 'Generazione…' : 'Genera sito bozza'}
-        </button>
+        <div className="crm-landing-row">
+          <select
+            value={landingMode}
+            onChange={(e) => setLandingMode(e.target.value as 'zip' | 'netlify')}
+            data-testid="crm-landing-mode"
+            className="crm-provider-select"
+            title="Solo ZIP: scarica la cartella (deploy manuale). ZIP + Netlify: scarica e pubblica subito con link condivisibile (richiede NETLIFY_AUTH_TOKEN su Vercel)."
+          >
+            <option value="zip">Solo ZIP</option>
+            <option value="netlify">ZIP + Netlify</option>
+          </select>
+          <button onClick={handleLandingDraft} disabled={busy !== null} data-testid="crm-landing-btn" title="Genera landing page statica dai dati cliente (webAnswers + flyer + contatti, zero AI)">
+            {busy === 'landing' ? 'Generazione…' : 'Genera sito bozza'}
+          </button>
+        </div>
+        {deployInfo && (
+          <p className="crm-note" data-testid="crm-deploy-link">
+            Preview Netlify: <a href={deployInfo.deployUrl} target="_blank" rel="noopener noreferrer">{deployInfo.deployUrl}</a>
+            {deployInfo.siteUrl && <> · sito: <a href={deployInfo.siteUrl} target="_blank" rel="noopener noreferrer">{deployInfo.siteUrl}</a></>}
+          </p>
+        )}
       </section>
 
       <section className="crm-section">

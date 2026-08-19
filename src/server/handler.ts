@@ -1,6 +1,7 @@
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
+import https from 'node:https';
 import { z } from 'zod';
 import {
   getDb, usersTable, documentsTable, customersTable, intakesTable,
@@ -1172,8 +1173,106 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
     return json(req, res, 201, { data: { customerId: id, createdDocuments: created } });
   }
 
+  // TB-012 step 2: deploy Netlify della landing bozza (server-side, token
+  // NETLIFY_AUTH_TOKEN mai esposto al browser). Crea il site alla prima
+  // esecuzione (nome stabile per cliente), poi crea un deploy con il file
+  // uploadato. Ritorna l'URL preview (draft) condivisibile col cliente.
+  if (path.startsWith('/customers/') && method === 'POST' && path.endsWith('/landing-deploy')) {
+    if (!requireAdmin(req, res, body)) return;
+    const token = process.env.NETLIFY_AUTH_TOKEN;
+    if (!token) return json(req, res, 503, { error: 'Netlify non configurato (NETLIFY_AUTH_TOKEN mancante)' });
+    const id = path.split('/')[2];
+    const html = typeof body.html === 'string' ? body.html : '';
+    const fileName = typeof body.fileName === 'string' ? body.fileName : '';
+    if (!html.trim() || !fileName.trim()) return json(req, res, 400, { error: 'html e fileName richiesti' });
+    const db = await getDb();
+    const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, id));
+    if (!cust) return json(req, res, 404, { error: 'Cliente non trovato' });
+    const safeName = sanitizeNetlifyName(cust.businessName || 'cliente');
+    const siteName = `quickbrand-${safeName}`;
+    let existing = null;
+    try {
+      const list = await netlifyRequest(token, `/api/v1/sites?filter=all`, 'GET');
+      existing = Array.isArray(list) ? list.find((s: any) => s.name === siteName) : null;
+    } catch (err) {
+      // 404 = site mai creato → procedi con la creazione.
+      console.warn('[landing-deploy] list sites fallita (creo il site)', String(err));
+    }
+    const site = existing
+      ? existing
+      : await netlifyRequest(token, `/api/v1/sites`, 'POST', { name: siteName, ssl_url: undefined });
+    let deploy: any;
+    try {
+      const formBody = Buffer.from(
+        `--qb\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: text/html\r\n\r\n${html}\r\n--qb--\r\n`,
+      );
+      deploy = await netlifyRequest(token, `/api/v1/sites/${site.id}/deploys`, 'POST', formBody, {
+        'Content-Type': 'multipart/form-data; boundary=qb',
+      });
+    } catch (err) {
+      console.error('[landing-deploy] deploy fallito', String(err));
+      return json(req, res, 502, { error: `Deploy Netlify fallito: ${String(err)}` });
+    }
+    const deployUrl = String(deploy.deploy_url || '');
+    console.info('[landing-deploy]', { customerId: id, siteId: site.id, deployUrl });
+    return json(req, res, 200, {
+      data: { deployUrl, siteUrl: String(deploy.url || ''), siteId: site.id, fileName },
+    });
+  }
+
   return json(req, res, 404, { error: 'Endpoint customers non trovato' });
 };
+
+/** Slug Netlify-safe per il nome site: minuscolo, a-z0-9-, max 39. */
+function sanitizeNetlifyName(raw: string): string {
+  const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return (slug || 'cliente').slice(0, 39);
+}
+
+// lean-code: helper unico per chiamate Netlify API (GET + JSON + upload).
+// Ceiling: retry/backoff se la rate-limit Netlify diventa un problema.
+function netlifyRequest(
+  token: string,
+  path: string,
+  method: 'GET' | 'POST',
+  body?: Record<string, unknown> | Buffer,
+  headers?: Record<string, string>,
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const isBuffer = Buffer.isBuffer(body);
+    const payload = isBuffer ? body : body ? Buffer.from(JSON.stringify(body)) : null;
+    const req = https.request({
+      hostname: 'api.netlify.com',
+      port: 443,
+      path,
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(payload ? { 'Content-Type': headers?.['Content-Type'] || 'application/json' } : {}),
+        ...(payload ? { 'Content-Length': payload.length } : {}),
+      },
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf-8');
+        let parsed: unknown = text;
+        try { parsed = text ? JSON.parse(text) : null; } catch { /* body non-JSON */ }
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(parsed);
+        } else {
+          const msg = typeof parsed === 'object' && parsed !== null && typeof (parsed as any).msg === 'string'
+            ? (parsed as any).msg
+            : text.slice(0, 200);
+          reject(new Error(`Netlify API ${res.statusCode}: ${msg}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
 
 // --- TB-019 intake: /api/intake (pubblico) + /api/intakes (admin) ---
 

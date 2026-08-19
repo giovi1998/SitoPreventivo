@@ -456,9 +456,11 @@ attivi in `docs/spec/`. Root solo: `AGENTS.md`, `README.md`, `DESIGN.md`,
 | `REGISTRATION_ENABLED` | Vercel | TB-027: flag signup. Default `false` (CRM admin-only). `true` riattiva whitelabel. In dev anche `VITE_REGISTRATION_ENABLED` |
 | `FIRECRAWL_API_KEY` | opzionale | TB-027: scraping sito cliente per research + RAG. Senza key, status `web: no_key`. Endpoint v2. Formati: markdown, screenshot, branding, images, json (oggetto con schema), links. Timeout 120s. `webData` persiste markdownFull/screenshot/links/json/branding/images |
 | `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL` | Vercel + .env | TB-029: tracing AI + costi per cliente (OTLP ingest manuale in `src/server/langfuse.ts`). Senza chiavi → no-op. Mai esporre secret al browser |
+| `NETLIFY_AUTH_TOKEN` | Vercel | TB-012: deploy landing bozza su Netlify (server-side, endpoint `POST /customers/:id/landing-deploy`). Senza → pulsante "Genera sito bozza" solo modalità ZIP |
 
 **Mai esporre `DEEPSEEK_API_KEY`/`GEMINI_API_KEY`/`OLLAMA_API_KEY`/
-`FIRECRAWL_API_KEY` al browser.** Il frontend chiama solo il proxy serverless.
+`FIRECRAWL_API_KEY`/`NETLIFY_AUTH_TOKEN` al browser.** Il frontend chiama
+solo il proxy serverless.
 
 ## PDF Generation, Client-Side Only
 

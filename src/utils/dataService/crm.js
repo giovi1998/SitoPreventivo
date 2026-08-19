@@ -310,8 +310,7 @@ export function createCrmMethods(svc) {
       return api('POST', `/customers/${id}/ai-fill`, { adminEmail: 'admin@gmail.com' }, { timeoutMs: 60000 });
     },
 
-    async autoBuildCustomer(id, autoGenerate = false) {
-      if (IS_LOCAL) {
+    async autoBuildCustomer(id, autoGenerate = false) {      if (IS_LOCAL) {
         const all = lsGet('pq_customers:v1') || [];
         const cust = all.find((c) => c.id === id);
         if (!cust) return { error: 'Cliente non trovato' };
@@ -523,6 +522,13 @@ export function createCrmMethods(svc) {
         return { data: all[idx] };
       }
       return api('PATCH', `/intakes/${id}`, { adminEmail: 'admin@gmail.com', ...patch });
+    },
+
+    // TB-012: deploy landing bozza su Netlify (server-side, token mai
+    // nel browser). Funziona solo in prod (API) — in locale il dev server
+    // non ha NETLIFY_AUTH_TOKEN.
+    async deployLanding(id, html, fileName) {
+      return api('POST', `/customers/${id}/landing-deploy`, { adminEmail: 'admin@gmail.com', html, fileName });
     },
 
     // ─── TB-027 config pubblica ──────────────────────────
