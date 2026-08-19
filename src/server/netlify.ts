@@ -1,10 +1,17 @@
 import https from 'node:https';
+import crypto from 'node:crypto';
 
 /**
  * TB-012: deploy landing statica su Netlify (server-side). Condiviso da
  * handler.ts (prod) e dal dev proxy Vite (locale). Token mai esposto al
  * browser. Site per cliente (nome stabile `quickbrand-<slug>`): crea alla
  * prima esecuzione, poi deploy con upload file → URL preview (draft).
+ *
+ * Metodo: file digest (docs.netlify.com "Deploy with the API"). Un POST
+ * con il digest JSON del file → Netlify risponde con la lista di file da
+ * uploadare (PUT body grezzo); il file in path `/index.html` viene servito
+ * come entry point con Content-Type corretto. (ZIP e multipart falliscono:
+ * zip = file orfani, multipart = non supportato.)
  */
 
 /** Slug Netlify-safe: minuscolo, a-z0-9-, max 39. */
@@ -18,13 +25,13 @@ export function sanitizeNetlifyName(raw: string): string {
 function netlifyRequest(
   token: string,
   path: string,
-  method: 'GET' | 'POST',
-  body?: Record<string, unknown> | Buffer,
+  method: 'GET' | 'POST' | 'PUT',
+  body?: Record<string, unknown> | Buffer | string,
   headers?: Record<string, string>,
 ): Promise<any> {
   return new Promise((resolve, reject) => {
     const isBuffer = Buffer.isBuffer(body);
-    const payload = isBuffer ? body : body ? Buffer.from(JSON.stringify(body)) : null;
+    const payload = body == null ? null : isBuffer ? body : typeof body === 'string' ? Buffer.from(body) : Buffer.from(JSON.stringify(body));
     const req = https.request({
       hostname: 'api.netlify.com',
       port: 443,
@@ -58,16 +65,25 @@ function netlifyRequest(
   });
 }
 
+function sha1(input: string): string {
+  return crypto.createHash('sha1').update(input).digest('hex');
+}
+
 /**
  * Deploy una landing HTML su Netlify. Ritorna { deployUrl (preview draft),
  * siteUrl, siteId }. Throws su errore Netlify.
+ *
+ * Il file è sempre `/index.html` (entry point del site). `fileName` resta
+ * nel payload di risposta solo per tracciabilità del chiamante.
  */
 export async function deployLandingHtml(
   token: string,
   siteName: string,
   html: string,
   fileName: string,
-): Promise<{ deployUrl: string; siteUrl: string; siteId: string }> {
+  pollMs = 2500,
+  maxPolls = 8,
+): Promise<{ deployUrl: string; siteUrl: string; siteId: string; fileName: string }> {
   let existing = null;
   try {
     const list = await netlifyRequest(token, `/api/v1/sites?filter=all`, 'GET');
@@ -79,15 +95,26 @@ export async function deployLandingHtml(
   const site = existing
     ? existing
     : await netlifyRequest(token, `/api/v1/sites`, 'POST', { name: siteName, ssl_url: undefined });
-  const formBody = Buffer.from(
-    `--qb\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: text/html\r\n\r\n${html}\r\n--qb--\r\n`,
-  );
-  const deploy = await netlifyRequest(token, `/api/v1/sites/${site.id}/deploys`, 'POST', formBody, {
-    'Content-Type': 'multipart/form-data; boundary=qb',
+  const digest = await netlifyRequest(token, `/api/v1/sites/${site.id}/deploys`, 'POST', {
+    files: { '/index.html': sha1(html) },
   });
+  const deployId = String(digest.id || '');
+  const required: string[] = Array.isArray(digest.required) ? digest.required : [];
+  for (const fileSha of required) {
+    await netlifyRequest(token, `/api/v1/deploys/${deployId}/files/index.html`, 'PUT', html, {
+      'Content-Type': 'application/octet-stream',
+    });
+  }
+  let state = String(digest.state || '');
+  for (let i = 0; i < maxPolls && state && state !== 'ready'; i++) {
+    await new Promise((r) => setTimeout(r, pollMs));
+    const polled = await netlifyRequest(token, `/api/v1/deploys/${deployId}`, 'GET');
+    state = String(polled.state || state);
+  }
   return {
-    deployUrl: String(deploy.deploy_url || ''),
-    siteUrl: String(deploy.url || ''),
+    deployUrl: String(digest.deploy_url || ''),
+    siteUrl: String(digest.url || ''),
     siteId: String(site.id || ''),
+    fileName,
   };
 }

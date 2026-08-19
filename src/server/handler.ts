@@ -1192,7 +1192,7 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
     try {
       const deployed = await deployLandingHtml(token, siteName, html, fileName);
       console.info('[landing-deploy]', { customerId: id, siteId: deployed.siteId, deployUrl: deployed.deployUrl });
-      return json(req, res, 200, { data: { ...deployed, fileName } });
+      return json(req, res, 200, { data: deployed });
     } catch (err) {
       console.error('[landing-deploy] deploy fallito', String(err));
       return json(req, res, 502, { error: `Deploy Netlify fallito: ${String(err)}` });

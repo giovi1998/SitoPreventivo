@@ -889,6 +889,17 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
     `dataService.deployLanding` timeout 55s (upload + processing).
   - Fuori scope mantenuto: builder self-service, publish dominio cliente,
     multi-pagina (vedi to-be-done TB-012 step 3).
+  - **Fix deploy reale (stesso giorno, commit ca410d8..HEAD)**: Netlify
+    NON accetta multipart (deploy senza file → error page/`text/plain` né
+    ZIP (file orfani `/` senza mime) → passato al metodo **file digest**
+    (`POST /deploys` con `files.{'/index.html': sha1}` + `PUT
+    /deploys/:id/files/index.html`, polling fino a `ready`). File sempre
+    `index.html` → servito `text/html`. `buildWebsiteFullDocument` ora
+    rileva l'html già full-page (AI genera documento completo) e inietta
+    css/font/js senza doppio wrap. Rimossi selectbox "Solo ZIP/ZIP+Netlify"
+    e link deploy da `CustomerDetail` (deploy solo da WebsiteEditor).
+    Verificato live: site `quickbrand-live-test-*` con
+    `Content-Type: text/html`.
 
 ## 2026-08-03
 

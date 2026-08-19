@@ -89,6 +89,21 @@ describe('buildWebsiteFullDocument', () => {
     expect(buildWebsiteFullDocument('<h1>X</h1>', '', '', 'Georgia')).not.toContain('fonts.googleapis.com');
     expect(buildWebsiteFullDocument('<h1>X</h1>', '', '', '')).not.toContain('fonts.googleapis.com');
   });
+
+  it('html già documento completo: nessun doppio wrap, css/js iniettati', () => {
+    const full = '<!DOCTYPE html>\n<html lang="it">\n<head>\n<meta charset="UTF-8">\n<title>X</title>\n</head>\n<body>\n<h1>Ciao</h1>\n</body>\n</html>';
+    const doc = buildWebsiteFullDocument(full, 'h1{color:red}', 'console.log(1)');
+    expect(doc.match(/<!DOCTYPE html>/g)).toHaveLength(1);
+    expect(doc.indexOf('<style>h1{color:red}</style>')).toBeLessThan(doc.indexOf('</head>'));
+    expect(doc.indexOf('<script>console.log(1)</script>')).toBeGreaterThan(doc.indexOf('<h1>Ciao</h1>'));
+  });
+
+  it('html completo senza css/js: solo font link aggiunto', () => {
+    const full = '<html><head><title>T</title></head><body>ok</body></html>';
+    const doc = buildWebsiteFullDocument(full, '', '', 'Poppins');
+    expect(doc.match(/<html>/g)).toHaveLength(1);
+    expect(doc).toContain('fonts.googleapis.com/css2?family=Poppins');
+  });
 });
 
 describe('sanitizeZipName', () => {

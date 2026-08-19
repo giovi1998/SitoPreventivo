@@ -84,7 +84,7 @@ describe('TB-027 CustomerDetail', () => {
     expect(screen.getByText('Mario')).toBeTruthy();
   });
 
-  it('mostra azioni research/ai-fill/auto-build/palette', async () => {
+  it('mostra azioni research/ai-fill/auto-build/palette/landing', async () => {
     (dataService.getCustomer as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ data: baseCustomer });
     renderDetail();
     await waitFor(() => {
@@ -92,7 +92,10 @@ describe('TB-027 CustomerDetail', () => {
       expect(screen.getByTestId('crm-ai-fill-btn')).toBeTruthy();
       expect(screen.getByTestId('crm-auto-build-btn')).toBeTruthy();
       expect(screen.getByTestId('crm-palette-btn')).toBeTruthy();
+      expect(screen.getByTestId('crm-landing-btn')).toBeTruthy();
     });
+    expect(screen.queryByTestId('crm-landing-mode')).toBeNull();
+    expect(screen.queryByTestId('crm-deploy-link')).toBeNull();
   });
 
   it('errore getCustomer mostra messaggio', async () => {

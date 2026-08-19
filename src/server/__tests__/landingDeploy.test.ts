@@ -25,7 +25,7 @@ vi.mock('node:https', () => ({
       return {
         on: vi.fn(),
         write: vi.fn((data: any) => {
-          deployState.calls.push({ path: options.path, options, body: String(data) });
+          deployState.calls.push({ path: options.path, options, body: data });
           return true;
         }),
         end: vi.fn(),
@@ -183,12 +183,15 @@ describe('POST /api/customers/:id/landing-deploy', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.data.deployUrl).toBe('https://preview.quickbrand-demo.netlify.app');
     expect(res.body.data.siteUrl).toBe('https://quickbrand-demo.netlify.app');
+    expect(res.body.data.fileName).toBe('sito-test.html');
     expect(deployState.calls.length).toBe(2);
     expect(deployState.calls[0].path).toBe('/api/v1/sites');
     expect(String(deployState.calls[0].body)).toContain('quickbrand-panetteria-rossi');
-    expect(deployState.calls[1].path).toBe('/api/v1/sites/site_abc/deploys');
-    expect(String(deployState.calls[1].body)).toContain('sito-test.html');
-    expect(String(deployState.calls[1].body)).toContain('<h1>Ciao</h1>');
+    const deployCall = deployState.calls[1];
+    expect(deployCall.path).toBe('/api/v1/sites/site_abc/deploys');
+    const body = JSON.parse(String(deployCall.body));
+    expect(body.files['/index.html']).toBeTruthy();
+    expect(typeof body.files['/index.html']).toBe('string');
   });
 
   it('site esistente → nessun create, deploy diretto', async () => {

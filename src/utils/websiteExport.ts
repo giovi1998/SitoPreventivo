@@ -17,12 +17,33 @@ function googleFontsLink(fontFamily: string): string {
 }
 
 export function buildWebsiteFullDocument(html: string, css: string, js: string, fontFamily?: string): string {
+  const fontLink = fontFamily ? googleFontsLink(fontFamily) : '';
+  if (/<!DOCTYPE html>/i.test(html)) {
+    // Il documento è già completo (AI genera html full-page): inietta
+    // css/font nel <head> esistente e js prima di </body>.
+    let out = html;
+    if (fontLink || css) {
+      const headEnd = out.indexOf('</head>');
+      const inject = `${fontLink}<style>${css}</style>`;
+      out = headEnd >= 0
+        ? out.slice(0, headEnd) + inject + out.slice(headEnd)
+        : inject + out;
+    }
+    if (js) {
+      const bodyEnd = out.lastIndexOf('</body>');
+      const script = `<script>${js}</script>`;
+      out = bodyEnd >= 0
+        ? out.slice(0, bodyEnd) + script + out.slice(bodyEnd)
+        : out + script;
+    }
+    return out;
+  }
   return `<!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-${fontFamily ? googleFontsLink(fontFamily) : ''}<style>${css}</style>
+${fontLink}<style>${css}</style>
 </head>
 <body>
 ${html}
