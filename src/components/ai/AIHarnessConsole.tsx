@@ -21,13 +21,15 @@ export interface AIHarnessConsoleProps {
   className?: string;
   /** TB-023: callback extra quando l'utente cambia provider dal badge. */
   onProviderChange?: (providerId: string) => void;
+  /** Cancella i log AI (bottone ✕ nel pannello log). */
+  onClearLogs?: () => void;
 }
 
 /**
  * AIConsole pre-wired con AIHarness.
  * Usa `useAIHarness` per provider selection, costi, e preferenze AI.
  */
-export default function AIHarnessConsole({ onProviderChange, ...props }: AIHarnessConsoleProps): React.ReactElement {
+export default function AIHarnessConsole({ onProviderChange, onClearLogs, ...props }: AIHarnessConsoleProps): React.ReactElement {
   const harness = useAIHarness();
   const handleProviderChange = useCallback(
     (providerId: string) => {
@@ -42,6 +44,7 @@ export default function AIHarnessConsole({ onProviderChange, ...props }: AIHarne
       lastCostUsd={harness.lastCostUsd}
       totalCostUsd={harness.totalCostUsd}
       onProviderChange={handleProviderChange}
+      onClearLogs={onClearLogs}
       visionEnabled={harness.visionEnabled}
       providerId={harness.providerId}
       onVisionToggle={() => harness.setVision(!harness.visionEnabled)}

@@ -695,6 +695,7 @@ export default function CardEditorShell({ userEmail, initialCard, tier, onReset,
               tier={tier}
               onSubmitPrompt={(text: string) => setAiText(text)}
               hidePrompt
+              onClearLogs={handleResetCardChat}
               onProviderChange={(id: string) => setAiModel(id)}
               suggestedPrompt={!cardHasContent(card) ? 'Descrivi la tua attività, creo il bigliettino.' : undefined}
             >

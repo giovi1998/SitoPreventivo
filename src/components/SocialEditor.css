@@ -310,11 +310,37 @@
 
 .social-post-caption {
   margin: 0;
+  padding: 8px 10px;
   font-size: 0.88rem;
   line-height: 1.6;
   color: var(--ink);
   white-space: pre-wrap;
   overflow-wrap: break-word;
+  background: var(--bg-soft, #f8fafc);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  resize: vertical;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.social-post-image-prompt {
+  padding: 7px 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.social-post-image-prompt:focus {
+  border-color: var(--accent);
+  color: var(--ink);
+  outline: none;
 }
 
 .social-post-hashtags {

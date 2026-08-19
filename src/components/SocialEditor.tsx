@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
-import type { BusinessCard, Flyer } from '../utils/documentSchemas';
+import type { BusinessCard, Flyer, Website } from '../utils/documentSchemas';
 import { useAISocial } from '../hooks/useAISocial';
-import type { SocialSource, SocialTone, SocialPlatform } from '../ai/prompts/socialSystem';
+import type { SocialSource, SocialSourceType, SocialTone, SocialPlatform } from '../ai/prompts/socialSystem';
+import type { SocialPost } from '../ai/socialOrchestrator';
 import { useToast } from '../hooks/useToast';
 import AIConsole from './ai/AIHarnessConsole';
 import { AiSelect, AiGenerateButton } from './ai-ui';
@@ -11,6 +12,7 @@ import dataService from '../utils/dataService';
 import CardAIFab from './CardAIFab';
 import CardAIBottomSheet from './CardAIBottomSheet';
 import { useIsMobileWorkspace } from '../hooks/useMediaQuery';
+import { AI_IMAGE_MODELS, getAiImageModelDefault, setAiImageModelDefault } from '../utils/uiPrefs';
 import './SocialEditor.css';
 import './aiFabSheet.css';
 
@@ -18,6 +20,7 @@ interface Props {
   userEmail: string;
   cardDocuments: BusinessCard[];
   flyerDocuments: Flyer[];
+  websiteDocuments?: Website[];
 }
 
 const TONES: { value: SocialTone; label: string }[] = [
@@ -33,7 +36,9 @@ export function buildFallbackImagePrompt(source: SocialSource | null, platform: 
   const subject = source
     ? source.type === 'card'
       ? [source.data.services?.[0], source.data.title, source.data.company].filter(Boolean).join(', ')
-      : [source.data.headline, source.data.subheadline].filter(Boolean).join(', ')
+      : source.type === 'flyer'
+        ? [source.data.headline, source.data.subheadline].filter(Boolean).join(', ')
+        : [source.data.businessName, source.data.sector, source.data.features].filter(Boolean).join(', ')
     : '';
   const base = subject
     ? `Professional social media photo for a business: ${subject}. Clean composition, natural light, high quality photography`
@@ -41,13 +46,14 @@ export function buildFallbackImagePrompt(source: SocialSource | null, platform: 
   return `${base}. No text, no logos, no watermarks. Platform: ${platform}.`;
 }
 
-export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments }: Props) {
-  const { generate, generatePostImage, posts, postImages, isProcessing, logs, reset, lastCostUsd } = useAISocial(userEmail);
+export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments, websiteDocuments = [] }: Props) {
+  const { generate, generatePostImage, posts, postImages, isProcessing, logs, reset, lastCostUsd, setPosts } = useAISocial(userEmail);
   const { addToast } = useToast();
   const { user } = useContext(AuthContext);
   const [tier, setTier] = useState<'free' | 'unlocked'>('free');
   const [imageLoading, setImageLoading] = useState<string | null>(null);
   const [aiSheetOpen, setAiSheetOpen] = useState(false);
+  const [imageModel, setImageModel] = useState<string>(() => getAiImageModelDefault());
   const isMobileWorkspace = useIsMobileWorkspace();
 
   useEffect(() => {
@@ -61,27 +67,35 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
       .catch(() => { if (active) setTier('free'); });
     return () => { active = false; };
   }, [userEmail, user?.role]);
-  const [sourceType, setSourceType] = useState<'card' | 'flyer'>('card');
+  const [sourceType, setSourceType] = useState<SocialSourceType>('card');
   const [sourceId, setSourceId] = useState<string>('');
   const [tone, setTone] = useState<SocialTone>('promotional');
   const [lastSource, setLastSource] = useState<SocialSource | null>(null);
 
-  const hasSources = cardDocuments.length > 0 || flyerDocuments.length > 0;
+  const hasSources = cardDocuments.length > 0 || flyerDocuments.length > 0 || websiteDocuments.length > 0;
 
   const availableSources = useMemo(() => {
-    return sourceType === 'card'
-      ? cardDocuments.filter(Boolean).map((c) => ({ id: c?.id, label: c?.title || c?.front?.company || c?.front?.name || c?.id }))
-      : flyerDocuments.filter(Boolean).map((f) => ({ id: f?.id, label: f?.title || f?.content?.headline || f?.id }));
-  }, [sourceType, cardDocuments, flyerDocuments]);
+    if (sourceType === 'card') {
+      return cardDocuments.filter(Boolean).map((c) => ({ id: c?.id, label: c?.title || c?.front?.company || c?.front?.name || c?.id }));
+    }
+    if (sourceType === 'flyer') {
+      return flyerDocuments.filter(Boolean).map((f) => ({ id: f?.id, label: f?.title || f?.content?.headline || f?.id }));
+    }
+    return websiteDocuments.filter(Boolean).map((w) => ({ id: w?.id, label: w?.title || w?.brief?.businessName || w?.id }));
+  }, [sourceType, cardDocuments, flyerDocuments, websiteDocuments]);
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (promptOverride?: string) => {
     if (!sourceId) {
       addToast('info', 'Seleziona un documento sorgente dalla collection.');
       return;
     }
-    const doc = sourceType === 'card'
-      ? cardDocuments.find((c) => c.id === sourceId)
-      : flyerDocuments.find((f) => f.id === sourceId);
+    const promptText = promptOverride?.trim() || '';
+    const doc =
+      sourceType === 'card'
+        ? cardDocuments.find((c) => c.id === sourceId)
+        : sourceType === 'flyer'
+          ? flyerDocuments.find((f) => f.id === sourceId)
+          : websiteDocuments.find((w) => w.id === sourceId);
     if (!doc) {
       addToast('error', 'Documento non trovato.');
       return;
@@ -98,18 +112,32 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
             services: (doc as BusinessCard).back?.services,
           },
         }
-      : {
-          type: 'flyer',
-          sourceId: doc.id,
-          data: {
-            headline: (doc as Flyer).content?.headline,
-            subheadline: (doc as Flyer).content?.subheadline,
-            body: (doc as Flyer).content?.body,
-            ctaLabel: (doc as Flyer).content?.cta?.label,
-          },
-        };
+      : sourceType === 'flyer'
+        ? {
+            type: 'flyer',
+            sourceId: doc.id,
+            data: {
+              headline: (doc as Flyer).content?.headline,
+              subheadline: (doc as Flyer).content?.subheadline,
+              body: (doc as Flyer).content?.body,
+              ctaLabel: (doc as Flyer).content?.cta?.label,
+            },
+          }
+        : {
+            type: 'website',
+            sourceId: doc.id,
+            data: {
+              businessName: (doc as Website).brief?.businessName,
+              sector: (doc as Website).brief?.sector,
+              description: (doc as Website).brief?.description,
+              target: (doc as Website).brief?.target,
+              cta: (doc as Website).brief?.cta,
+              features: (doc as Website).brief?.features,
+              contact: (doc as Website).brief?.contacts,
+            },
+          };
     try {
-      const result = await generate(source, tone);
+      const result = await generate(source, tone, { userPrompt: promptText });
       if (result.applied) {
         setLastSource(source);
         addToast('success', `3 post generati per ${result.posts.length} piattaforme.`);
@@ -125,11 +153,15 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
     navigator.clipboard.writeText(caption).then(() => addToast('success', 'Caption copiata.'));
   };
 
+  const updatePost = (platform: string, patch: Partial<SocialPost>) => {
+    setPosts((prev) => prev.map((p) => (p.platform === platform ? { ...p, ...patch } : p)));
+  };
+
   const handleGenerateImage = async (platform: SocialPlatform, imagePrompt?: string) => {
     const prompt = imagePrompt?.trim() || buildFallbackImagePrompt(lastSource, platform);
     setImageLoading(platform);
     try {
-      await generatePostImage(platform, prompt);
+      await generatePostImage(platform, prompt, imageModel);
       addToast('success', `Immagine ${platform} generata.`);
     } catch (err) {
       addToast('error', 'Errore immagine: ' + ((err as Error)?.message ?? 'unknown'));
@@ -151,8 +183,8 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
       isProcessing={isProcessing}
       logs={logs}
       tier={tier}
-      onSubmitPrompt={() => {}}
-      hidePrompt
+      onSubmitPrompt={(text) => { void handleGenerate(text); }}
+      onClearLogs={reset}
       forceExpanded={isMobileWorkspace}
     >
       <section className="social-editor-form" aria-label="Configurazione post">
@@ -161,10 +193,11 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
         <AiSelect
           label="Tipo sorgente"
           value={sourceType}
-          onChange={(e) => { setSourceType(e.target.value as 'card' | 'flyer'); setSourceId(''); }}
+          onChange={(e) => { setSourceType(e.target.value as SocialSourceType); setSourceId(''); }}
           options={[
             { value: 'card', label: 'Bigliettino' },
             { value: 'flyer', label: 'Volantino' },
+            { value: 'website', label: 'Sito web' },
           ]}
         />
         <AiSelect
@@ -182,11 +215,18 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
           onChange={(e) => setTone(e.target.value as SocialTone)}
           options={TONES.map((t) => ({ value: t.value, label: t.label }))}
         />
+        <AiSelect
+          label="Modello immagine"
+          value={imageModel}
+          onChange={(e) => { setImageModel(e.target.value); setAiImageModelDefault(e.target.value); }}
+          options={AI_IMAGE_MODELS.map((m) => ({ value: m.id, label: m.name }))}
+          hint={AI_IMAGE_MODELS.find((m) => m.id === imageModel)?.description}
+        />
         <div className="social-editor-actions">
           <AiGenerateButton
             isProcessing={isProcessing}
             loadingText="Generando…"
-            onClick={handleGenerate}
+            onClick={() => { void handleGenerate(); }}
             disabled={!sourceId}
           >
             Genera 3 post
@@ -203,7 +243,7 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
     <div className="social-editor">
       <header className="social-editor-header">
         <h1>Generatore post social</h1>
-        <p>Genera 3 post coordinati (Instagram, Facebook, LinkedIn) a partire da un bigliettino o un volantino della tua Collection.</p>
+        <p>Genera 3 post coordinati (Instagram, Facebook, LinkedIn) a partire da un bigliettino, un volantino o un sito web della tua Collection.</p>
       </header>
 
       {!hasSources && (
@@ -217,11 +257,12 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
           </svg>
           <p className="social-empty-title">Nessun documento sorgente</p>
           <p className="social-empty-text">
-            Non hai ancora bigliettini o volantini salvati nella Collection. Creane uno, poi torna qui per generare post social coordinati a partire dal suo contenuto.
+            Non hai ancora bigliettini, volantini o siti web salvati nella Collection. Creane uno, poi torna qui per generare post social coordinati a partire dal suo contenuto.
           </p>
           <div className="social-empty-ctas">
             <Link to="/app/card" className="social-empty-cta">Crea bigliettino</Link>
             <Link to="/app/flyer" className="social-empty-cta secondary">Crea volantino</Link>
+            <Link to="/app/website" className="social-empty-cta secondary">Crea sito web</Link>
           </div>
         </div>
       )}
@@ -260,10 +301,24 @@ export default function SocialEditor({ userEmail, cardDocuments, flyerDocuments 
                         {imageLoading === post.platform ? 'Generazione immagine…' : 'Genera immagine'}
                       </button>
                     )}
-                    <p className="social-post-caption">{post.caption}</p>
+                    <textarea
+                      className="social-post-caption"
+                      aria-label={`Modifica caption ${post.platform}`}
+                      value={post.caption}
+                      onChange={(e) => updatePost(post.platform, { caption: e.target.value })}
+                      rows={Math.max(2, Math.ceil(post.caption.length / 60))}
+                    />
                     {post.hashtags.length > 0 && (
                       <p className="social-post-hashtags">{post.hashtags.join(' ')}</p>
                     )}
+                    <input
+                      type="text"
+                      className="social-post-image-prompt"
+                      aria-label={`Prompt immagine ${post.platform}`}
+                      placeholder="Prompt immagine (modifica per un visual diverso)"
+                      value={post.imagePrompt ?? ''}
+                      onChange={(e) => updatePost(post.platform, { imagePrompt: e.target.value })}
+                    />
                     <footer className="social-post-foot">
                       <p className="social-post-tone">Tono: {post.tone}</p>
                       <button type="button" className="social-copy-btn" onClick={() => copyPost(post.caption)}>

@@ -28,7 +28,7 @@ Il vantaggio non è la grafica migliore del mondo — è la velocità e il fatto
 
 L'AI è attiva in **5 moduli su 6** (preventivo, bigliettino, volantino, logo, social) — solo il QR resta manuale per scelta tecnica. Il vantaggio non è "abbiamo l'AI" (ce l'hanno tutti), ma:
 
-1. **AI contestualizzata per modulo**: la card AI conosce il grid 9-pos, la flyer AI rispetta density target e char budget per layout, la quote AI conosce i tool, la logo AI genera 3 concept + background Gemini con prompt Nano-Banana, la social AI legge card/flyer e genera post coordinati. Niente AI generica come Canva/Looka.
+1. **AI contestualizzata per modulo**: la card AI conosce il grid 9-pos, la flyer AI rispetta density target e char budget per layout, la quote AI conosce i tool, la logo AI genera 3 concept + background Gemini con prompt Nano-Banana, la social AI legge card/flyer/sito web e genera post coordinati. Niente AI generica come Canva/Looka.
 2. **Costo marginale sostenibile**: il piano Pro €9/mese include 1.000 prompt AI. Costo DeepSeek per 1.000 prompt ≈ €0.50-1 (flash), margine ~85-90%.
 3. **Costo/prompt trascurabile sui pacchetti una tantum**: ~€0.01-0.03/prompt (flash) rende l'AI inclusa anche in Starter €49 sostenibile.
 
@@ -316,7 +316,7 @@ Dopo il periodo di validazione iniziale (60 giorni, 2 clienti paganti, vedi sopr
 
 ### Q2-Q3 post-validazione (6-12 mesi)
 
-- **Social AI module** (cross-module): generatore 3 social post coordinati col bigliettino/volantino. Nuovo `documentType: 'socialPack'`, route `/app/social`. Spec già scritta. Setup ~25 ore.
+- **Social AI module** (cross-module): generatore 3 social post coordinati col bigliettino/volantino/sito web. Nuovo `documentType: 'socialPack'`, route `/app/social`. Spec già scritta. Setup ~25 ore.
 - **Onboarding AI assist**: suggerimenti displayName/company/profession in `OnboardingModal` step 0. Spec già scritta. Setup ~8 ore.
 - **Manutenzione scale-up**: da €49/mese a €79/mese quando funzionalità AI più pesanti incluse (chatbot cliente, generazione automatica contenuti mensili, aggiornamenti grafici ricorrenti). Costo AI sale a €25-35/mese, retainer €79 mantiene margine.
 

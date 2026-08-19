@@ -19,10 +19,12 @@ export interface UseAISocialReturn {
   generate: (
     source: SocialSource,
     tone: SocialTone,
-    options?: { onProgress?: (msg: string) => void },
+    options?: { onProgress?: (msg: string) => void; userPrompt?: string },
   ) => Promise<SocialProcessResult>;
+  /** Modifica manuale di una caption generata (resa user-editable). */
+  setPosts: React.Dispatch<React.SetStateAction<SocialPost[]>>;
   /** Genera l'immagine AI di un post via /api/ai/image-flash (1:1, kind custom). */
-  generatePostImage: (platform: SocialPlatform, prompt: string) => Promise<string>;
+  generatePostImage: (platform: SocialPlatform, prompt: string, imageModel?: string) => Promise<string>;
   reset: () => void;
   logs: ReturnType<typeof useAILogs>['logs'];
   posts: SocialPost[];
@@ -46,12 +48,14 @@ export function useAISocial(userEmail?: string, sessionId?: string): UseAISocial
   };
 
   const generate = useCallback(
-    async (source: SocialSource, tone: SocialTone, options?: { onProgress?: (msg: string) => void }) => {
+    async (source: SocialSource, tone: SocialTone, options?: { onProgress?: (msg: string) => void; userPrompt?: string }) => {
       const requestId = newRequestId();
       const label = source.type === 'card'
         ? `card "${source.data.name}"`
-        : `flyer "${source.data.headline}"`;
-      info(`Invio richiesta: 3 post da ${label}, tone=${tone}`, undefined, { requestId });
+        : source.type === 'flyer'
+          ? `flyer "${source.data.headline}"`
+          : `website "${source.data.businessName}"`;
+      info(`Invio richiesta: 3 post da ${label}, tone=${tone}${options?.userPrompt?.trim() ? `, prompt="${options.userPrompt.trim().slice(0, 60)}"` : ''}`, undefined, { requestId });
       const streamId = startStream('Generazione in corso…', {
         requestId,
         sessionId: getOrchestrator().getCurrentSessionId() ?? undefined,
@@ -64,6 +68,7 @@ export function useAISocial(userEmail?: string, sessionId?: string): UseAISocial
         const result = await getOrchestrator().generatePosts(source, tone, {
           modelId: resolvedModelId,
           sessionId,
+          userPrompt: options?.userPrompt,
           onStream: (chunk) => {
             if (chunk.type === 'content' && chunk.content) {
               appendStream(streamId, chunk.content);
@@ -110,11 +115,11 @@ export function useAISocial(userEmail?: string, sessionId?: string): UseAISocial
   );
 
   const generatePostImage = useCallback(
-    async (platform: SocialPlatform, prompt: string): Promise<string> => {
+    async (platform: SocialPlatform, prompt: string, imageModel?: string): Promise<string> => {
       const requestId = newRequestId();
       info(`Immagine post ${platform}…`, prompt.slice(0, 300), { requestId });
       try {
-        const imageModel = getAiImageModelDefault();
+        const model = imageModel || getAiImageModelDefault();
         const res = await fetch(`${import.meta.env?.VITE_API_BASE || ''}/api/ai/image-flash`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
@@ -123,7 +128,7 @@ export function useAISocial(userEmail?: string, sessionId?: string): UseAISocial
             kind: 'custom',
             aspectRatio: '1:1',
             size: '1K',
-            imageModel,
+            imageModel: model,
             userEmail: userEmail || undefined,
             ...(sessionId ? { sessionId } : {}),
           }),
@@ -134,7 +139,7 @@ export function useAISocial(userEmail?: string, sessionId?: string): UseAISocial
         }
         const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
         const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
-        const costUsd = calculateCostUsd(geminiImagePricingId(imageModel), undefined, 1);
+        const costUsd = calculateCostUsd(geminiImagePricingId(model), undefined, 1);
         if (userEmail && userEmail !== 'admin@gmail.com') {
           dataService.trackTokens(userEmail, IMAGE_TOKEN_COST, costUsd).catch(() => {});
         }
@@ -160,11 +165,12 @@ export function useAISocial(userEmail?: string, sessionId?: string): UseAISocial
 
   const availableModels = getOrchestrator().getProviderList();
 
-  return { generate, generatePostImage, reset, logs, posts, postImages, isProcessing, availableModels, lastCostUsd };
+  return { generate, generatePostImage, reset, logs, posts, postImages, isProcessing, availableModels, lastCostUsd, setPosts };
 }
 
 async function captureSocialPreview(source: SocialSource): Promise<string | undefined> {
   try {
+    if (source.type === 'website') return undefined;
     const selector = source.type === 'card' ? '[data-card-preview]' : '[data-flyer-preview]';
     const previewEl = document.querySelector<HTMLElement>(selector);
     if (!previewEl) return undefined;

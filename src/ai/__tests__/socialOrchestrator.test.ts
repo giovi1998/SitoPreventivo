@@ -1,5 +1,22 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { socialPackOutputSchema, SocialAIOrchestrator } from '../socialOrchestrator';
+import { buildSocialGenerateAllPrompt } from '../prompts/socialSystem';
+
+let fakeProvider: any;
+vi.mock('../providers/registry', () => ({
+  providerRegistry: {
+    getProvider: () => fakeProvider,
+    listProviders: () => [{ id: 'fake', name: 'Fake', model: 'fake-model', supportsStreaming: false, supportsTools: false, supportsVision: false }],
+  },
+}));
+
+const VALID_PACK = JSON.stringify({
+  posts: [
+    { platform: 'instagram', caption: 'Ciao', hashtags: ['#food'], tone: 'casual' },
+    { platform: 'facebook', caption: 'Welcome', hashtags: [], tone: 'promotional' },
+    { platform: 'linkedin', caption: 'Pro', hashtags: [], tone: 'professional' },
+  ],
+});
 
 describe('socialPackOutputSchema (spec 12)', () => {
   it('accepts a valid 3-post pack', () => {
@@ -72,6 +89,33 @@ describe('SocialAIOrchestrator (spec 12)', () => {
   it('instantiable and provides provider list', () => {
     const o = new SocialAIOrchestrator();
     expect(o.getProviderList().length).toBeGreaterThan(0);
+  });
+
+  it('appends user prompt with priority when options.userPrompt is set', async () => {
+    fakeProvider = {
+      id: 'fake',
+      name: 'Fake',
+      model: 'fake-model',
+      supportsStreaming: false,
+      supportsTools: false,
+      supportsVision: false,
+      chat: vi.fn().mockResolvedValue({ content: VALID_PACK, usage: undefined }),
+    };
+    const o = new SocialAIOrchestrator();
+    const result = await o.generatePosts(
+      { type: 'card', sourceId: 'C1', data: { name: 'Mario', title: 'Chef', company: 'Trattoria', accentColor: '#fff' } },
+      'casual',
+      { userPrompt: 'Concentrati solo sulla cucina thai' },
+    );
+    expect(result.applied).toBe(true);
+    const messages = fakeProvider.chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
+    const userMsg = messages.find((m) => m.role === 'user')!.content as string;
+    expect(userMsg).toContain('Istruzioni aggiuntive dell\'utente');
+    expect(userMsg).toContain('Concentrati solo sulla cucina thai');
+    expect(userMsg).toContain(buildSocialGenerateAllPrompt(
+      { type: 'card', sourceId: 'C1', data: { name: 'Mario', title: 'Chef', company: 'Trattoria', accentColor: '#fff' } },
+      'casual',
+    ).slice(0, 20));
   });
 });
 

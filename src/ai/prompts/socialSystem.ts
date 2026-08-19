@@ -7,6 +7,7 @@
 
 export type SocialTone = 'professional' | 'casual' | 'promotional';
 export type SocialPlatform = 'instagram' | 'facebook' | 'linkedin';
+export type SocialSourceType = 'card' | 'flyer' | 'website';
 
 export type CardSnapshot = {
   name: string;
@@ -24,9 +25,20 @@ export type FlyerSnapshot = {
   sector?: string;
 };
 
+export type WebsiteSnapshot = {
+  businessName: string;
+  sector?: string;
+  description?: string;
+  target?: string;
+  cta?: string;
+  features?: string;
+  contact?: string;
+};
+
 export type SocialSource =
   | { type: 'card'; data: CardSnapshot; sourceId: string }
-  | { type: 'flyer'; data: FlyerSnapshot; sourceId: string };
+  | { type: 'flyer'; data: FlyerSnapshot; sourceId: string }
+  | { type: 'website'; data: WebsiteSnapshot; sourceId: string };
 
 const PLATFORM_CAPTION_MAX: Record<SocialPlatform, number> = {
   instagram: 500,
@@ -37,7 +49,7 @@ const PLATFORM_CAPTION_MAX: Record<SocialPlatform, number> = {
 export function buildSocialSystemPrompt(): string {
   return `Sei l'assistente AI per la generazione di social post Quickbrand.
 Generi 3 post (uno per piattaforma: Instagram, Facebook, LinkedIn) coordinati
-con un documento sorgente (bigliettino da visita o volantino).
+con un documento sorgente (bigliettino da visita, volantino o sito web).
 
 Output: SOLO JSON valido con questo contract:
 {
@@ -73,7 +85,9 @@ export function buildSocialGeneratePrompt(
 ): string {
   const sourceSummary = document.type === 'card'
     ? `Bigliettino di ${document.data.name} (${document.data.title}) @ ${document.data.company}. Servizi: ${document.data.services?.join(', ') || 'n/d'}.`
-    : `Volantino "${document.data.headline}". Sub: ${document.data.subheadline}. Body: ${document.data.body}. CTA: ${document.data.ctaLabel}.`;
+    : document.type === 'flyer'
+      ? `Volantino "${document.data.headline}". Sub: ${document.data.subheadline}. Body: ${document.data.body}. CTA: ${document.data.ctaLabel}.`
+      : `Sito web di ${document.data.businessName}. Settore: ${document.data.sector || 'n/d'}. Descrizione: ${document.data.description || 'n/d'}. Target: ${document.data.target || 'n/d'}. CTA: ${document.data.cta || 'n/d'}. Servizi: ${document.data.features || 'n/d'}. Contatti: ${document.data.contact || 'n/d'}.`;
 
   return `Genera un post per la piattaforma ${platform} (tone: ${tone}).
 
@@ -86,7 +100,9 @@ Rispondi con SOLO l'oggetto JSON: { platform, caption, hashtags, tone }.`;
 export function buildSocialGenerateAllPrompt(document: SocialSource, tone: SocialTone): string {
   const sourceSummary = document.type === 'card'
     ? `Bigliettino di ${document.data.name} (${document.data.title}) @ ${document.data.company}. Servizi: ${document.data.services?.join(', ') || 'n/d'}.`
-    : `Volantino "${document.data.headline}". Sub: ${document.data.subheadline}. Body: ${document.data.body}. CTA: ${document.data.ctaLabel}.`;
+    : document.type === 'flyer'
+      ? `Volantino "${document.data.headline}". Sub: ${document.data.subheadline}. Body: ${document.data.body}. CTA: ${document.data.ctaLabel}.`
+      : `Sito web di ${document.data.businessName}. Settore: ${document.data.sector || 'n/d'}. Descrizione: ${document.data.description || 'n/d'}. Target: ${document.data.target || 'n/d'}. CTA: ${document.data.cta || 'n/d'}. Servizi: ${document.data.features || 'n/d'}. Contatti: ${document.data.contact || 'n/d'}.`;
 
   return `Genera 3 social post (Instagram, Facebook, LinkedIn) per:
 

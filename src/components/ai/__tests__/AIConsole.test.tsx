@@ -89,6 +89,19 @@ describe('AIConsole (REQ-AI-001/003/006)', () => {
     expect(document.querySelectorAll('.ai-console__quick')).toHaveLength(1);
   });
 
+  it('bottone ✕ nel log chiama onClearLogs (regression: non collegato in social/flyer/card)', () => {
+    const onClearLogs = vi.fn();
+    render(<AIConsole {...baseProps} logs={[{ id: '1', type: 'info', msg: 'x', time: '00:00' } as never]} onClearLogs={onClearLogs} />);
+    // il pannello log si auto-apre al primo log (useEffect)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancella log' }));
+    expect(onClearLogs).toHaveBeenCalledTimes(1);
+  });
+
+  it('senza onClearLogs la ✕ non è renderizzata (logo usa AILogPanel diretto)', () => {
+    render(<AIConsole {...baseProps} logs={[{ id: '1', type: 'info', msg: 'x', time: '00:00' } as never]} />);
+    expect(screen.queryByRole('button', { name: 'Cancella log' })).not.toBeInTheDocument();
+  });
+
   it('forceExpanded ignora la preferenza persistita collapsed (regression 2026-08-18: bottom sheet website vuota)', () => {
     // Bug: sheet mobile website renderizzava il toggle nascosto via CSS e
     // basta, perché pq_ui:v1 aveva website=false → pannello bianco.

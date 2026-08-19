@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // ─── SOCIAL PACK (Phase 12) ──────────────────────────────────
-// Cross-module AI: 3 social post coordinati col documento sorgente (card o flyer).
+// Cross-module AI: 3 social post coordinati col documento sorgente (card, flyer o sito web).
 export const socialPlatformSchema = z.enum(['instagram', 'facebook', 'linkedin']);
 export const socialToneSchema = z.enum(['professional', 'casual', 'promotional']);
 export const socialPostSchema = z.object({
@@ -10,6 +10,9 @@ export const socialPostSchema = z.object({
   hashtags: z.array(z.string().max(40)).max(10).default([]),
   tone: socialToneSchema,
 });
+export const socialSourceTypeSchema = z.enum(['card', 'flyer', 'website']);
+export type SocialSourceType = z.infer<typeof socialSourceTypeSchema>;
+
 export const socialPackSchema = z.object({
   documentType: z.literal('socialPack'),
   id: z.string().min(1),
@@ -17,7 +20,7 @@ export const socialPackSchema = z.object({
   title: z.string().default(''),
   posts: z.array(socialPostSchema).length(3),
   sourceDocumentId: z.string().optional(),
-  sourceDocumentType: z.enum(['card', 'flyer']).optional(),
+  sourceDocumentType: socialSourceTypeSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -26,7 +29,7 @@ export type SocialTone = z.infer<typeof socialToneSchema>;
 export type SocialPost = z.infer<typeof socialPostSchema>;
 export type SocialPack = z.infer<typeof socialPackSchema>;
 
-export function createEmptySocialPack(sourceId?: string, sourceType?: 'card' | 'flyer'): SocialPack {
+export function createEmptySocialPack(sourceId?: string, sourceType?: SocialSourceType): SocialPack {
   const now = new Date().toISOString();
   return {
     documentType: 'socialPack',

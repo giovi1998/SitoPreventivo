@@ -681,7 +681,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ses
         </div>
       )}
 
-      <AILogPanel logs={logs} isProcessing={isProcessing || isGeneratingBg} />
+      <AILogPanel logs={logs} isProcessing={isProcessing || isGeneratingBg} onClearLogs={reset} />
     </section>
   );
 }

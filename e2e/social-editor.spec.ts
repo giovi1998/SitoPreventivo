@@ -46,7 +46,7 @@ test.describe('Social editor — functional', () => {
     await seedAuth(page);
     await page.goto('/app/social');
     await page.waitForTimeout(1500);
-    const genBtn = page.getByRole('button', { name: /genera/i }).first();
+    const genBtn = page.getByRole('button', { name: /genera 3 post/i }).first();
     if (!(await genBtn.isVisible({ timeout: 3000 }).catch(() => false))) {
       test.skip(true, 'Generate button not visible');
       return;

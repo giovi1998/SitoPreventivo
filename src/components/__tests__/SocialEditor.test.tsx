@@ -2,21 +2,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import SocialEditor from '../SocialEditor';
+import { AuthContext, AUTH_DEFAULT } from '../../contexts';
 
 const mockGeneratePostImage = vi.fn().mockResolvedValue('data:image/jpeg;base64,QUJD');
+const mockSetPosts = vi.fn();
+const mockGenerate = vi.fn().mockResolvedValue({ applied: false, posts: [] });
 let mockPosts: { platform: string; caption: string; hashtags: string[]; tone: string; imagePrompt?: string }[] = [];
 let mockPostImages: Record<string, string> = {};
 
 // Mock useAISocial to avoid provider/network calls
 vi.mock('../../hooks/useAISocial', () => ({
   useAISocial: () => ({
-    generate: vi.fn(),
+    generate: mockGenerate,
     generatePostImage: mockGeneratePostImage,
     posts: mockPosts,
     postImages: mockPostImages,
     isProcessing: false,
     logs: [],
     reset: vi.fn(),
+    setPosts: mockSetPosts,
   }),
 }));
 
@@ -25,7 +29,13 @@ vi.mock('../../hooks/useToast', () => ({
 }));
 
 function renderWithRouter(ui: React.ReactElement) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+  return render(
+    <MemoryRouter>
+      <AuthContext.Provider value={{ ...AUTH_DEFAULT, user: { email: 't@e.com', role: 'admin' } }}>
+        {ui}
+      </AuthContext.Provider>
+    </MemoryRouter>
+  );
 }
 
 describe('SocialEditor (spec 12 UI integration)', () => {
@@ -34,6 +44,7 @@ describe('SocialEditor (spec 12 UI integration)', () => {
     mockPosts = [];
     mockPostImages = {};
     mockGeneratePostImage.mockClear();
+    mockSetPosts.mockClear();
   });
 
   it('mostra bottone "Genera immagine" per post con imagePrompt e chiama la generazione', async () => {
@@ -52,7 +63,7 @@ describe('SocialEditor (spec 12 UI integration)', () => {
     const buttons = screen.getAllByRole('button', { name: /Genera immagine/i });
     expect(buttons).toHaveLength(3);
     fireEvent.click(buttons[0]);
-    expect(mockGeneratePostImage).toHaveBeenCalledWith('instagram', 'flat lay pastries');
+    expect(mockGeneratePostImage).toHaveBeenCalledWith('instagram', 'flat lay pastries', expect.any(String));
   });
 
   it('mostra la preview immagine quando postImages contiene la piattaforma', () => {
@@ -132,6 +143,98 @@ describe('SocialEditor (spec 12 UI integration)', () => {
     const select = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'flyer' } });
     expect(screen.getByText('Sagra Flyer')).toBeDefined();
+  });
+
+  it('offers website as source type and lists website documents', () => {
+    renderWithRouter(
+      <SocialEditor
+        userEmail="t@e.com"
+        cardDocuments={[]}
+        flyerDocuments={[]}
+        websiteDocuments={[{ id: 'w1', brief: { businessName: 'Pizzeria Da Mario' } } as never]}
+      />
+    );
+    const select = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+    expect(screen.getByText('Sito web')).toBeDefined();
+    fireEvent.change(select, { target: { value: 'website' } });
+    expect(screen.getByText('Pizzeria Da Mario')).toBeDefined();
+  });
+
+  it('fallback image prompt for website source uses businessName/sector/features', async () => {
+    const { buildFallbackImagePrompt } = await import('../SocialEditor');
+    const websitePrompt = buildFallbackImagePrompt(
+      { type: 'website', sourceId: 'w1', data: { businessName: 'Thai Food', sector: 'Ristorazione', description: 'Cucina thai', features: 'Pad Thai, Asporto' } },
+      'instagram',
+    );
+    expect(websitePrompt).toContain('Thai Food');
+    expect(websitePrompt).toContain('Pad Thai');
+    expect(websitePrompt).toContain('No text');
+  });
+
+  it('passa il prompt libero alla generazione quando si scrive nella textarea', async () => {
+    mockGenerate.mockClear();
+    renderWithRouter(
+      <SocialEditor
+        userEmail="t@e.com"
+        cardDocuments={[{ id: 'c1', title: 'Mario Card' } as never]}
+        flyerDocuments={[]}
+      />
+    );
+    // seleziona il documento sorgente
+    const docSelect = screen.getAllByRole('combobox')[1] as HTMLSelectElement;
+    fireEvent.change(docSelect, { target: { value: 'c1' } });
+    // scrivi il prompt libero
+    const textarea = screen.getByPlaceholderText(/Descrivi cosa vuoi creare/i);
+    fireEvent.change(textarea, { target: { value: 'Concentrati sui servizi di ristorazione' } });
+    // submit della rail AI (pulsante "Genera")
+    fireEvent.click(screen.getByRole('button', { name: 'Genera' }));
+    expect(mockGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'card', sourceId: 'c1' }),
+      'promotional',
+      expect.objectContaining({ userPrompt: 'Concentrati sui servizi di ristorazione' }),
+    );
+  });
+
+  it('usa il modello immagine selezionato nel form quando genera', () => {
+    mockPosts = [
+      { platform: 'instagram', caption: 'Ciao', hashtags: [], tone: 'casual', imagePrompt: 'flat lay pastries' },
+      { platform: 'facebook', caption: 'FB', hashtags: [], tone: 'promotional' },
+      { platform: 'linkedin', caption: 'LI', hashtags: [], tone: 'professional' },
+    ];
+    renderWithRouter(
+      <SocialEditor
+        userEmail="t@e.com"
+        cardDocuments={[{ id: 'c1', title: 'Card' } as never]}
+        flyerDocuments={[]}
+      />
+    );
+    const modelSelect = screen.getByLabelText('Modello immagine') as HTMLSelectElement;
+    fireEvent.change(modelSelect, { target: { value: 'gemini-3.1-flash-lite-image' } });
+    const buttons = screen.getAllByRole('button', { name: /Genera immagine/i });
+    fireEvent.click(buttons[0]);
+    expect(mockGeneratePostImage).toHaveBeenCalledWith('instagram', 'flat lay pastries', 'gemini-3.1-flash-lite-image');
+  });
+
+  it('rende la caption modificabile e aggiorna il post', () => {
+    mockPosts = [
+      { platform: 'instagram', caption: 'Ciao', hashtags: ['#food'], tone: 'casual', imagePrompt: 'flat lay pastries' },
+      { platform: 'facebook', caption: 'FB', hashtags: [], tone: 'promotional' },
+      { platform: 'linkedin', caption: 'LI', hashtags: [], tone: 'professional' },
+    ];
+    renderWithRouter(
+      <SocialEditor
+        userEmail="t@e.com"
+        cardDocuments={[{ id: 'c1', title: 'Card' } as never]}
+        flyerDocuments={[]}
+      />
+    );
+    const caption = screen.getByLabelText('Modifica caption instagram') as HTMLTextAreaElement;
+    fireEvent.change(caption, { target: { value: 'Ciao aggiornato' } });
+    expect(mockSetPosts).toHaveBeenCalledWith(expect.any(Function));
+    // verifica che l'updater produca la patch giusta
+    const updater = mockSetPosts.mock.calls[0][0] as (prev: typeof mockPosts) => typeof mockPosts;
+    const next = updater(mockPosts);
+    expect(next[0].caption).toBe('Ciao aggiornato');
   });
 
   it('does not crash when card documents are missing front/style/content (prod data shape)', () => {

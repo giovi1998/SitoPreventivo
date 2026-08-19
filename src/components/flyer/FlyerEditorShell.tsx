@@ -530,6 +530,7 @@ export function FlyerEditorShell({ userEmail, initialFlyer, tier = 'unlocked', o
       tier={tier}
       onSubmitPrompt={(text: string) => { setAiPrompt(text); }}
       hidePrompt
+      onClearLogs={handleAiReset}
       // REQ-AI-003: su volantino vuoto la rail propone un prompt contestuale
       // con focus; l'expanded resta default true (o pq_ui:v1 se persistito).
       suggestedPrompt={!flyerHasContent(flyer) ? "Descrivi l'evento o la promo: scrivo il copy del volantino." : undefined}

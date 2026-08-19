@@ -50,4 +50,25 @@ describe('socialSystem (cross-module)', () => {
     expect(p).toContain('Facebook');
     expect(p).toContain('LinkedIn');
   });
+
+  it('generate prompt for website embeds businessName+description+cta', () => {
+    const p = buildSocialGeneratePrompt(
+      { type: 'website', sourceId: 'WEB-1', data: { businessName: 'Pizzeria Da Mario', sector: 'Ristorazione', description: 'Pizza napoletana a domicilio', cta: 'Ordina ora', features: 'Ristorazione, Asporto', contact: 'pizzeria@example.com' } },
+      'professional',
+      'linkedin',
+    );
+    expect(p).toContain('Pizzeria Da Mario');
+    expect(p).toContain('Pizza napoletana a domicilio');
+    expect(p).toContain('Ordina ora');
+    expect(p).toContain('linkedin');
+  });
+
+  it('all-platform prompt for website embeds businessName', () => {
+    const p = buildSocialGenerateAllPrompt(
+      { type: 'website', sourceId: 'WEB-1', data: { businessName: 'Studio Fiore', sector: 'Fiorista', description: 'Composizioni floreali' } },
+      'promotional',
+    );
+    expect(p).toContain('Studio Fiore');
+    expect(p).toContain('Fiorista');
+  });
 });

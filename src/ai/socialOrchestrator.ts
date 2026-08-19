@@ -52,12 +52,17 @@ export class SocialAIOrchestrator extends BaseOrchestrator {
       imagePreviewBase64?: string;
       /** TB-029: sessione Langfuse (docId: raggruppa chat+immagini del documento). */
       sessionId?: string;
+      /** Prompt/istruzioni libere dell'utente (direzione, focus, tono extra). */
+      userPrompt?: string;
     } = {},
   ): Promise<SocialProcessResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
     const systemPrompt = promptRegistry.getPrompt('social-system');
-    const userPrompt = buildSocialGenerateAllPrompt(source, tone);
+    let userPromptText = buildSocialGenerateAllPrompt(source, tone);
+    if (options.userPrompt?.trim()) {
+      userPromptText += `\n\nIstruzioni aggiuntive dell'utente (rispettale, hanno priorità su default e sorgente):\n${options.userPrompt.trim()}`;
+    }
 
     const provider = providerRegistry.getProvider(options.modelId);
     const hasImagePreview = !!options.imagePreviewBase64;
@@ -66,7 +71,7 @@ export class SocialAIOrchestrator extends BaseOrchestrator {
     if (useVision && options.imagePreviewBase64) {
       userContentParts.push(`Anteprima documento allegata (base64 JPEG): ${options.imagePreviewBase64}`);
     }
-    userContentParts.push(userPrompt);
+    userContentParts.push(userPromptText);
     const messages = this.buildMessages(systemPrompt, userContentParts.join('\n\n'));
 
     const response = await this.handleStream(
@@ -94,11 +99,12 @@ export class SocialAIOrchestrator extends BaseOrchestrator {
         applied: false,
       };
     }
+    const posts = parsed.data.posts;
     return {
-      posts: parsed.data.posts,
+      posts,
       response,
       sessionId,
-      changes: [`social:generated:${parsed.data.posts.length}`],
+      changes: [`social:generated:${posts.length}`],
       rawResponse: response.content ?? '',
       applied: true,
     };
