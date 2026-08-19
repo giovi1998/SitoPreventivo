@@ -29,9 +29,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   overflow: hidden;
 }
 
@@ -62,7 +62,7 @@
 .logo-ai-chat input,
 .logo-ai-chat select {
   padding: 0.5rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--line);
   border-radius: 6px;
   font: inherit;
 }
@@ -76,7 +76,7 @@
 
 .logo-ai-mood-options button {
   padding: 0.35rem 0.75rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: transparent;
   font: inherit;
@@ -98,8 +98,8 @@
 .logo-ai-actions button {
   padding: 0.6rem 1.2rem;
   border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #f5f5f5;
+  border: 1px solid var(--line);
+  background: var(--surface-sun);
   font: inherit;
   cursor: pointer;
 }
@@ -127,7 +127,7 @@
 }
 
 .logo-ai-preview-bg img {
-  border: 1px solid #ddd;
+  border: 1px solid var(--line);
 }
 
 .logo-ai-preview-params ul {
@@ -165,7 +165,7 @@
 
 .logo-ai-log-wrapper {
   margin-top: 1.5rem;
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--line);
   padding-top: 1rem;
 }
 
@@ -212,9 +212,9 @@
   opacity: 0.7;
 }
 
-.logo-ai-log-list .log-error .log-icon { color: #c00; }
-.logo-ai-log-list .log-success .log-icon { color: #080; }
-.logo-ai-log-list .log-info .log-icon { color: #06c; }
+.logo-ai-log-list .log-error .log-icon { color: var(--red); }
+.logo-ai-log-list .log-success .log-icon { color: var(--green); }
+.logo-ai-log-list .log-info .log-icon { color: var(--info-link); }
 
 /* Concept cards (3-concept selection, spec v2.2) */
 .logo-ai-concepts {
@@ -228,9 +228,9 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  border: 2px solid #ddd;
+  border: 2px solid var(--line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--surface);
   overflow: hidden;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -258,15 +258,15 @@
 }
 
 .logo-ai-concept.is-applied {
-  border-color: #080;
-  box-shadow: 0 0 0 2px rgba(0, 136, 0, 0.2);
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 20%, transparent);
 }
 
 .logo-ai-concept-preview {
   position: relative;
   width: 100%;
   aspect-ratio: 5 / 2;
-  background: #f5f5f5;
+  background: var(--surface-sun);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -298,8 +298,8 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: rgba(245, 245, 245, 0.85);
-  color: #1a1a2e;
+  background: color-mix(in srgb, var(--surface-sun) 85%, transparent);
+  color: var(--ink);
   font-size: 0.8rem;
   font-weight: 500;
   pointer-events: none;
@@ -308,7 +308,7 @@
 .logo-ai-concept-spinner {
   width: 28px;
   height: 28px;
-  border: 3px solid #d0d0d0;
+  border: 3px solid var(--line);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: logo-ai-spin 0.9s linear infinite;
@@ -342,12 +342,12 @@
 }
 
 .logo-ai-concept-ai-badge {
-  color: #080;
+  color: var(--green);
   font-weight: 600;
 }
 
 .logo-ai-concept-ai-err {
-  color: #c00;
+  color: var(--red);
 }
 
 .logo-ai-concept-badge,
@@ -361,7 +361,7 @@
 }
 
 .logo-ai-concept-badge {
-  background: #080;
+  background: var(--green);
   color: #fff;
 }
 
@@ -372,7 +372,7 @@
 
 /* Prompt avanzato per concept (Piano B) */
 .logo-ai-concept-advanced {
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--line-lt);
   padding: 0.5rem 0.75rem 0.75rem;
 }
 
@@ -389,7 +389,7 @@
   box-sizing: border-box;
   margin: 0.4rem 0;
   padding: 0.5rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--line);
   border-radius: 6px;
   font: inherit;
   font-size: 0.8rem;
@@ -399,8 +399,8 @@
 .logo-ai-concept-advanced button {
   padding: 0.4rem 0.9rem;
   border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #f5f5f5;
+  border: 1px solid var(--line);
+  background: var(--surface-sun);
   font: inherit;
   font-size: 0.8rem;
   cursor: pointer;
@@ -438,17 +438,17 @@
 .logo-ai-variants-btn {
   padding: 0.35rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid var(--line, #ccc);
+  border: 1px solid var(--line);
   background: transparent;
   font: inherit;
   font-size: 0.78rem;
   cursor: pointer;
-  color: var(--ink-sec, inherit);
+  color: var(--ink-sec);
 }
 
 .logo-ai-variants-btn:hover {
-  border-color: var(--accent, #E62020);
-  color: var(--accent, #E62020);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .logo-ai-variants-menu {
@@ -459,8 +459,8 @@
   min-width: 18rem;
   max-height: 18rem;
   overflow-y: auto;
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #ccc);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 20;
@@ -482,7 +482,7 @@
 }
 
 .logo-ai-variants-item:hover {
-  background: var(--surface-hov, #f1f5f9);
+  background: var(--surface-hov);
 }
 
 .logo-ai-variants-label {
@@ -492,7 +492,7 @@
 
 .logo-ai-variants-mood {
   font-size: 0.72rem;
-  color: var(--ink-sec, #666);
+  color: var(--ink-sec);
   opacity: 0.85;
 }
 
@@ -500,7 +500,7 @@
 .logo-ai-library {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--line-lt);
 }
 
 .logo-ai-library-header {
@@ -515,8 +515,8 @@
 .logo-ai-library-header button {
   padding: 0.4rem 0.8rem;
   border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #f5f5f5;
+  border: 1px solid var(--line);
+  background: var(--surface-sun);
   font: inherit;
   font-size: 0.8rem;
   cursor: pointer;
@@ -548,7 +548,7 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.4rem 0.6rem;
-  border: 1px solid #eee;
+  border: 1px solid var(--line-lt);
   border-radius: 6px;
 }
 
@@ -566,8 +566,8 @@
 .logo-ai-library-actions button {
   padding: 0.3rem 0.6rem;
   border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #fff;
+  border: 1px solid var(--line);
+  background: var(--surface);
   font: inherit;
   font-size: 0.75rem;
   cursor: pointer;

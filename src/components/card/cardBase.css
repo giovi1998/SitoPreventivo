@@ -57,7 +57,7 @@
   gap: 12px;
   padding: 12px 16px;
   background: var(--blue-bg, #e8f0fe);
-  border: 1px solid var(--blue-border, #b8d6ff);
+  border: 1px solid var(--blue-border);
   border-radius: var(--radius-md);
   color: var(--info-text, #1e4a7a);
   flex-wrap: wrap;

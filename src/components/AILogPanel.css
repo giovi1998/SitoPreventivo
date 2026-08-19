@@ -62,7 +62,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #22D3EE;
+  background: var(--ai-log-cyan, #22D3EE);
   animation: ai-log-pulse 1.5s ease-in-out infinite;
 }
 
@@ -130,15 +130,15 @@
 
 .ai-log-entry.pending {
   animation: ai-log-slide 0.2s ease-out, ai-log-pulse 1.5s ease-in-out 0.2s infinite;
-  background: rgba(34, 211, 238, 0.05);
+  background: color-mix(in srgb, var(--ai-log-cyan) 5%, transparent);
 }
 
-.ai-log-info { border-left-color: #22D3EE; }
-.ai-log-success { border-left-color: #34D399; }
-.ai-log-error { border-left-color: #FB7185; background: rgba(251, 113, 133, 0.05); }
-.ai-log-tool { border-left-color: #A78BFA; }
-.ai-log-stream { border-left-color: #22D3EE; }
-.ai-log-result { border-left-color: #34D399; }
+.ai-log-info { border-left-color: var(--ai-log-cyan); }
+.ai-log-success { border-left-color: var(--ai-log-green); }
+.ai-log-error { border-left-color: var(--ai-log-rose); background: color-mix(in srgb, var(--ai-log-rose) 5%, transparent); }
+.ai-log-tool { border-left-color: var(--ai-log-violet); }
+.ai-log-stream { border-left-color: var(--ai-log-cyan); }
+.ai-log-result { border-left-color: var(--ai-log-green); }
 
 .ai-log-row {
   display: flex;
@@ -193,7 +193,7 @@
 }
 
 .ai-log-cost-inline {
-  color: #10B981;
+  color: var(--success);
 }
 
 .ai-log-image {
@@ -254,7 +254,7 @@
 .ai-log-fullscreen-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: color-mix(in srgb, var(--overlay) 100%, transparent);
   z-index: 9999;
   display: flex;
   justify-content: flex-end;

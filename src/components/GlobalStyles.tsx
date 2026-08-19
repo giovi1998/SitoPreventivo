@@ -32,6 +32,8 @@ export default function GlobalStyles() {
       --success:#10B981;
       /* Ghost tokens, ora definiti (REQ-DS-003) */
       --primary:var(--accent);
+      --text:var(--ink-sec);
+      --text-muted:var(--muted);
       --ink-soft:var(--muted);
       --ink-muted:var(--muted);
       --bg:var(--surface);
@@ -39,6 +41,10 @@ export default function GlobalStyles() {
       --danger-bg:var(--red-bg);
       --accent-bg:var(--accent-soft);
       --radius-pill:var(--radius-full);
+      --ai-log-cyan:#22D3EE;
+      --ai-log-green:#34D399;
+      --ai-log-rose:#FB7185;
+      --ai-log-violet:#A78BFA;
       /* Tipografia (REQ-DS-004) */
       --font-display:'Outfit','Inter',ui-sans-serif,system-ui,sans-serif;
       --font-body:'Inter',ui-sans-serif,system-ui,sans-serif;
@@ -103,6 +109,8 @@ export default function GlobalStyles() {
       --success:#22c55e;
       /* Ghost tokens, ora definiti (REQ-DS-003) */
       --primary:var(--accent);
+      --text:var(--ink-sec);
+      --text-muted:var(--muted);
       --ink-soft:var(--muted);
       --ink-muted:var(--muted);
       --bg:var(--surface);
@@ -110,6 +118,10 @@ export default function GlobalStyles() {
       --danger-bg:var(--red-bg);
       --accent-bg:var(--accent-soft);
       --radius-pill:var(--radius-full);
+      --ai-log-cyan:#22D3EE;
+      --ai-log-green:#34D399;
+      --ai-log-rose:#FB7185;
+      --ai-log-violet:#A78BFA;
       --font-display:'Outfit','Inter',ui-sans-serif,system-ui,sans-serif;
       --font-body:'Inter',ui-sans-serif,system-ui,sans-serif;
       --font-mono:'JetBrains Mono',ui-monospace,'Roboto Mono',monospace;

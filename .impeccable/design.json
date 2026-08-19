@@ -99,6 +99,90 @@
         "displayName": "Pericolo",
         "canonical": "#dc2626",
         "tonalRamp": ["#290404", "#570808", "#8b0d0d", "#dc2626", "#f03e3e", "#f76b6b", "#fb9b9b", "#fecaca"]
+      },
+      "social-facebook": {
+        "role": "brand",
+        "displayName": "Facebook brand",
+        "canonical": "#1877f2",
+        "tonalRamp": ["#1877f2", "#1877f2", "#1877f2", "#1877f2", "#1877f2", "#1877f2", "#1877f2", "#1877f2"]
+      },
+      "social-linkedin": {
+        "role": "brand",
+        "displayName": "LinkedIn brand",
+        "canonical": "#0a66c2",
+        "tonalRamp": ["#0a66c2", "#0a66c2", "#0a66c2", "#0a66c2", "#0a66c2", "#0a66c2", "#0a66c2", "#0a66c2"]
+      },
+      "social-instagram-yellow": {
+        "role": "brand",
+        "displayName": "Instagram gradient yellow",
+        "canonical": "#f9ce34",
+        "tonalRamp": ["#f9ce34", "#f9ce34", "#f9ce34", "#f9ce34", "#f9ce34", "#f9ce34", "#f9ce34", "#f9ce34"]
+      },
+      "social-instagram-pink": {
+        "role": "brand",
+        "displayName": "Instagram gradient pink",
+        "canonical": "#ee2a7b",
+        "tonalRamp": ["#ee2a7b", "#ee2a7b", "#ee2a7b", "#ee2a7b", "#ee2a7b", "#ee2a7b", "#ee2a7b", "#ee2a7b"]
+      },
+      "social-instagram-violet": {
+        "role": "brand",
+        "displayName": "Instagram gradient violet",
+        "canonical": "#6228d7",
+        "tonalRamp": ["#6228d7", "#6228d7", "#6228d7", "#6228d7", "#6228d7", "#6228d7", "#6228d7", "#6228d7"]
+      },
+      "ai-log-bg": {
+        "role": "custom",
+        "displayName": "AI log dark background",
+        "canonical": "#020617",
+        "tonalRamp": ["#020617", "#020617", "#020617", "#020617", "#020617", "#020617", "#020617", "#020617"]
+      },
+      "ai-log-cyan": {
+        "role": "custom",
+        "displayName": "AI log info/stream accent",
+        "canonical": "#22D3EE",
+        "tonalRamp": ["#22D3EE", "#22D3EE", "#22D3EE", "#22D3EE", "#22D3EE", "#22D3EE", "#22D3EE", "#22D3EE"]
+      },
+      "ai-log-green": {
+        "role": "custom",
+        "displayName": "AI log success accent",
+        "canonical": "#34D399",
+        "tonalRamp": ["#34D399", "#34D399", "#34D399", "#34D399", "#34D399", "#34D399", "#34D399", "#34D399"]
+      },
+      "ai-log-rose": {
+        "role": "custom",
+        "displayName": "AI log error accent",
+        "canonical": "#FB7185",
+        "tonalRamp": ["#FB7185", "#FB7185", "#FB7185", "#FB7185", "#FB7185", "#FB7185", "#FB7185", "#FB7185"]
+      },
+      "ai-log-violet": {
+        "role": "custom",
+        "displayName": "AI log tool accent",
+        "canonical": "#A78BFA",
+        "tonalRamp": ["#A78BFA", "#A78BFA", "#A78BFA", "#A78BFA", "#A78BFA", "#A78BFA", "#A78BFA", "#A78BFA"]
+      },
+      "crm-blue": {
+        "role": "custom",
+        "displayName": "CRM link/info blue",
+        "canonical": "#2563eb",
+        "tonalRamp": ["#2563eb", "#2563eb", "#2563eb", "#2563eb", "#2563eb", "#2563eb", "#2563eb", "#2563eb"]
+      },
+      "crm-blue-light": {
+        "role": "custom",
+        "displayName": "CRM info icon blue",
+        "canonical": "#3b82f6",
+        "tonalRamp": ["#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6"]
+      },
+      "crm-violet": {
+        "role": "custom",
+        "displayName": "CRM AI badge violet",
+        "canonical": "#8b5cf6",
+        "tonalRamp": ["#8b5cf6", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#8b5cf6"]
+      },
+      "crm-green-soft": {
+        "role": "custom",
+        "displayName": "CRM soft green background",
+        "canonical": "#ecfdf5",
+        "tonalRamp": ["#ecfdf5", "#ecfdf5", "#ecfdf5", "#ecfdf5", "#ecfdf5", "#ecfdf5", "#ecfdf5", "#ecfdf5"]
       }
     },
     "typographyMeta": {
@@ -147,6 +231,76 @@
         "name": "document-shadow",
         "value": "0 24px 80px rgba(35,44,62,.12)",
         "purpose": "Profondità più marcata riservata alla pagina stampabile."
+      },
+      {
+        "name": "shadow-black-6",
+        "value": "rgba(0,0,0,.06)",
+        "purpose": "Sfumatura nera leggerissima per bordi/divider."
+      },
+      {
+        "name": "shadow-black-8",
+        "value": "rgba(0,0,0,.08)",
+        "purpose": "Sfumatura nera leggera per ombre di stato."
+      },
+      {
+        "name": "shadow-black-10",
+        "value": "rgba(0,0,0,.10)",
+        "purpose": "Bordi sottili e separatori."
+      },
+      {
+        "name": "shadow-black-12",
+        "value": "rgba(0,0,0,.12)",
+        "purpose": "Menu dropdown e pannelli leggeri."
+      },
+      {
+        "name": "shadow-black-18",
+        "value": "rgba(0,0,0,.18)",
+        "purpose": "Overlay leggero e stati focused."
+      },
+      {
+        "name": "shadow-black-20",
+        "value": "rgba(0,0,0,.20)",
+        "purpose": "Ombre medie su card e bottoni."
+      },
+      {
+        "name": "shadow-black-22",
+        "value": "rgba(0,0,0,.22)",
+        "purpose": "Badge e stati in rilievo."
+      },
+      {
+        "name": "shadow-black-25",
+        "value": "rgba(0,0,0,.25)",
+        "purpose": "Ombre medie su FAB e bottom sheet."
+      },
+      {
+        "name": "shadow-black-50",
+        "value": "rgba(0,0,0,.5)",
+        "purpose": "Backdrop scuro per modali e sheet."
+      },
+      {
+        "name": "shadow-black-55",
+        "value": "rgba(0,0,0,.55)",
+        "purpose": "Overlay scuro per stati speciali."
+      },
+      {
+        "name": "shadow-black-65",
+        "value": "rgba(0,0,0,.65)",
+        "purpose": "Overlay per preview documento."
+      },
+      {
+        "name": "shadow-black-70",
+        "value": "rgba(0,0,0,.7)",
+        "purpose": "Backdrop fullscreen log AI."
+      },
+      {
+        "name": "shadow-black-80",
+        "value": "rgba(0,0,0,.8)",
+        "purpose": "Overlay massimo per stati critici."
+      },
+      {
+        "name": "shadow-green-20",
+        "value": "rgba(0,136,0,.20)",
+        "purpose": "Glow verde per stato applicato."
       }
     ],
     "motion": [

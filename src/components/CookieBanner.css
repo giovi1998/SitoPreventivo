@@ -14,7 +14,7 @@
   border-top: 1px solid var(--border, #e5e7eb);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
   font-size: 0.85rem;
-  color: var(--text, #333);
+  color: var(--ink-sec);
 }
 
 .cookie-banner__text {
@@ -51,8 +51,8 @@
 
 .cookie-banner__btn--ghost {
   background: none;
-  color: var(--text, #333);
-  border-color: var(--border, #e5e7eb);
+  color: var(--ink-sec);
+  border-color: var(--line);
 }
 
 @media (max-width: 767px) {

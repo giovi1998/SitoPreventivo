@@ -31,17 +31,18 @@ belle a livello di layout?"
 - [T3 - Audit logo editor](tickets/c03-audit-logo-editor.md) — verde: save-guard, export 9 formati, placeholder mai successo, chat TTL 24h.
 - [T4 - Audit website editor](tickets/c04-audit-website-editor.md) — verde: brief/genera/verify/fix/picker/refine/ZIP, rail 320px, picker mobile fix.
 - [T5 - Audit editor minori + azioni globali](tickets/c05-audit-minori-globali.md) — verde: preventivo/QR/social/Collection/ActionBar/Settings ok; empty states per-tab, toast ovunque.
-- [C6 - Design tokens editor (advisory detector)](tickets/c06-design-tokens-editor.md) — ticket derivato: ~100 advisory token hardcoded (pre-token legacy, non drift), azione quando esiste DESIGN.md tokens.
+- [C6 - Design tokens editor (advisory detector)](tickets/c06-design-tokens-editor.md) — CHIUSO 2026-08-19: root cause DESIGN.md sizeScale lista→mappa (386→147), colori legacy→token (147→0 fuori GlobalStyles), colori intenzionali (social brand/AI log/CRM/shadows) documentati in DESIGN.md+sidecar. Restano advisory: font-size document-render intenzionali, 12 in GlobalStyles = definizioni token (falsi positivi).
 
 ## Frontier (ticket aperti)
 
-- [C6 - Design tokens editor](tickets/c06-design-tokens-editor.md) — differito (attende DESIGN.md).
+- (nessuno — tutti i ticket c01-c06 chiusi)
 
 ## Not yet specified
 
 - **Design tokens cross-editor**: spacing/radius/shadow variano tra editor
-  (es. SocialEditor usa var(--radius-lg), card usa px)? Mappatura emersa
-  dal ticket C6: hardcoded pre-token, attende DESIGN.md.
+  (es. SocialEditor usa var(--radius-lg), card usa px)? Ticket C6 chiuso:
+  colori/font mappati; radius residui sono fallback `var(--radius-sm, 6px)`
+  e micro-radii documentali — non bloccante.
 - **Stati vuoti**: ogni editor ha empty state coerente (social ce l'ha,
   altri?)? — Verificato in T5: save-guard con toast "Compila almeno…"
   in QR/logo/flyer + EmptyState Collection per-tab. Rimane: card non ha

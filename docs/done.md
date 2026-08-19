@@ -4,6 +4,39 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 (sezioni indicate per voce). Storico completo: git history.
 
 
+## 2026-08-19
+
+- **C6 Design tokens editor chiuso** (ticket wayfinder c06; detector
+  impeccable): root cause → DESIGN.md `typography.sizeScale` (lista YAML)
+  non parsabile dal detector (`parseYamlSubset` no liste) → type ramp
+  invisibile → ~240 falsi positivi font-size. Convertita in
+  `typography.scale` (mappa): **386 → 147 finding**.
+  - Colori legacy → token: LogoAiPanel (#ccc/#ddd/#eee/#d0d0d0 →
+    var(--line)/var(--line-lt), #080→var(--green), #c00→var(--red),
+    #06c→var(--info-link), #f5f5f5→var(--surface-sun), #fff→var(--surface),
+    rgba neri → color-mix su token), CookieBanner/ElementPickerPanel/
+    OnboardingModal (`var(--text, #333)`/`var(--text-muted, #666)`/
+    `var(--muted, #5c5c5c)` → var(--ink-sec)/var(--muted); aggiunti
+    `--text`/`--text-muted` in GlobalStyles), cardGridForm #b00020→
+    var(--red), WebsiteEditor #e11d48→var(--red) e #333→var(--line),
+    AILogPanel #10B981→var(--success) + neon log → token
+    `--ai-log-cyan/green/rose/violet` (GlobalStyles + DESIGN.md),
+    ErrorBoundary inline styles → `ErrorBoundary.css` con token,
+    document-render (cardPreviewSide/cardBase/flyer) → color-mix su
+    var(--ink).
+  - Colori intenzionali documentati in DESIGN.md frontmatter + sidecar
+    `.impeccable/design.json` (colorMeta con tonal ramp e shadows):
+    social brand (facebook/linkedin/instagram), AI log dark palette,
+    CRM blues/violet.
+  - Risultato: `design-system-color` fuori GlobalStyles **0** (i 12
+    restanti sono definizioni token in GlobalStyles, falsi positivi).
+    Restano advisory: font-size document-render (card 9px/1.6-4rem,
+    flyer) intenzionali per design; radius = fallback `var(--radius-sm,
+    6px)` e micro-radii.
+  - Gate: typecheck + 64 test mirati verdi (LogoAiPanel 32, ErrorBoundary,
+    OnboardingModal, QREditor, SocialEditor+responsive, WebsiteEditor,
+    CookieBanner).
+
 ## 2026-08-18
 
 - **Audit coerenza tutti gli editor (mappa wayfinder c01-c05 chiusa)** (richiesta utente "seguili tutti gli audit"): 5 ticket audit completati con detector impeccable (zero warning reali su logo/website/social/editor; card/flyer solo advisory token pre-token) + verifica funzionale codice (toast su ogni azione, save-guard, empty states, responsive, a11y). Esito: **verde, nessun issue P0-P1**. Correzione nota errata: rail flyer è a destra (shell.css `1fr 420px auto`), non a sinistra. Ticket derivato `c06-design-tokens-editor` (advisory ~100 hardcoded pre-token, attende DESIGN.md). Not yet specified aggiornato (card: empty state solo template banner, non bloccante).

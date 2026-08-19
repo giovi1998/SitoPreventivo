@@ -38,8 +38,8 @@
 .crm-webdata-colors { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .crm-color-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border: 1px solid #e5e7eb; border-radius: 999px; background: #fff; cursor: pointer; font-size: 12px; transition: box-shadow .15s, border-color .15s; }
 .crm-color-chip:hover { border-color: #d1d5db; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.crm-color-swatch { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(0,0,0,.12); }
-.crm-color-hex { font-family: 'JetBrains Mono', ui-monospace, monospace; color: #374151; }
+.crm-color-swatch { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); }
+.crm-color-hex { font-family: 'JetBrains Mono', ui-monospace, monospace; color: var(--ink-sec); }
 .crm-webdata-grid { display: grid; grid-template-columns: 1fr 380px; gap: 18px; align-items: start; }
 .crm-webdata-main { min-width: 0; }
 .crm-webdata-side { display: flex; flex-direction: column; gap: 14px; }
