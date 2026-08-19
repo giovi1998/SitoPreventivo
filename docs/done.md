@@ -849,6 +849,29 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
   - Test: `imageInjection.test.ts` (7), `sanitizeGenerated.test.ts` (7),
     `websiteExport.test.ts` (5).
 
+## 2026-08-19
+
+- **TB-012 step 2 pilota — Generazione SITO bozza + deploy Netlify** (commit
+  dedicato, branch `feat/tb-012-landing-draft`):
+  - **Mapper brief → landing statica** (`src/utils/landingDraft.ts`,
+    `buildLandingWebsite`): `webAnswers` (headline/offer/cta/tone) dal form
+    intake + flyer (headline/body/cta/accentColor) + contatti/social + logo
+    → landing single-file (hero + CTA, sezione contatti, footer). Zero AI,
+    zero dipendenze runtime. Fallback a catena: webAnswers → flyer →
+    activity → businessName. Palette deterministica da `preferredColors`
+    (nomi o hex, `colorFromName`), accent del flyer se presente. Escape HTML
+    su tutti i testi utente. Shape `Website` conforme a `websiteExport.ts`.
+  - **Bozza locale**: pulsante "Genera sito bozza" in `CustomerDetail`
+    (`crm-landing-btn`, zero AI) → ZIP `sito-<nome>.zip` (riuso
+    `exportWebsiteZip`, logo in `assets/`) + preview HTML in nuova tab.
+  - **Deploy Netlify 1 comando**: `npm run deploy:landing -- <cartella-estratta>
+    [--prod]` (`scripts/deploy-landing.mjs`) → copia in `dist/landing` →
+    `netlify deploy` (draft preview di default, `--prod` per produzione).
+    Link condivisibile col cliente senza toccare Vercel.
+  - Test: `landingDraft.test.ts` (15, coverage 98% lines / 100% branches).
+  - Fuori scope mantenuto: builder self-service, publish dominio cliente,
+    multi-pagina (vedi to-be-done TB-012 step 3).
+
 ## 2026-08-03
 
 - **Selettore UI reasoningEffort (Veloce/Profondo/Massimo)**: aggiunto nel

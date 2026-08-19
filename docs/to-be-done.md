@@ -52,7 +52,7 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
      correggere, aggiungere regression test dove possibile.
   Output atteso: E2E PROD funzionante + nota in `docs/done.md`.
 
-- [ ] **4. Generazione SITO bozza + build Netlify (TB-012 step 2 pilota)**:
+- [x] **4. Generazione SITO bozza + build Netlify (TB-012 step 2 pilota)**:
   prima landing page reale per un cliente, generata dagli asset esistenti
   invece che da zero. Porta d'ingresso dati già pronta: **`webAnswers`**
   (headline/offer/cta/tone/wantsPage) dal form intake, + asset del draft
@@ -72,6 +72,9 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
     multi-pagina — solo bozza + preview Netlify.
   - Nota: valutare se anticipare vs backlog (priorità utente 2026-07-30:
     sito clienti = obiettivo confermato).
+  ✅ 2026-08-19 (commit dedicato): `landingDraft.ts` + pulsante
+  `crm-landing-btn` + `npm run deploy:landing` (draft preview Netlify).
+  Vedi done.md → 2026-08-19.
 
 ### Backlog tecnico corrente
 

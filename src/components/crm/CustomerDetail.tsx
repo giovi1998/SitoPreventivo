@@ -16,6 +16,7 @@ import CustomerWebDataPanel from './CustomerWebDataPanel';
 import CustomerKnowledgePanel from './CustomerKnowledgePanel';
 import { prefetchRemotePrompts, REMOTE_PROMPT_PILOT } from '../../utils/ai/remotePrompt';
 import { getAiReasoningEffort, setAiReasoningEffort } from '../../utils/uiPrefs';
+import { buildLandingWebsite, exportLandingZip } from '../../utils/landingDraft';
 
 const AB_TEST_PROMPTS = [
   { id: 'card-system', label: 'Card' },
@@ -518,6 +519,40 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     setBusy(null);
   };
 
+  const handleLandingDraft = async () => {
+    if (!customer) return;
+    setBusy('landing');
+    setError(null);
+    const flyerDoc = docs.find((d) => d.documentType === 'flyer');
+    const flyerData = (flyerDoc?.data || {}) as Record<string, unknown>;
+    const flyer = {
+      content: (flyerData.content || {}) as { headline?: string; body?: string; cta?: { label?: string } },
+      style: (flyerData.style || {}) as { accentColor?: string },
+    };
+    logger.appendLog('info', 'Generazione sito bozza (zero AI)…', undefined, { action: 'landing-draft', customerId });
+    try {
+      const site = buildLandingWebsite({
+        businessName: customer.businessName,
+        webAnswers: customer.webAnswers as Record<string, string | undefined> | null | undefined,
+        preferredColors: customer.preferredColors,
+        activity: customer.activity,
+        contacts: customer.contacts,
+        socials: customer.socials,
+        logoUrl: customer.logoUrl || customer.detectedLogoUrl || null,
+        flyer,
+      });
+      const { fileName, assetCount } = await exportLandingZip(site);
+      const previewUrl = URL.createObjectURL(new Blob([site.html], { type: 'text/html' }));
+      window.open(previewUrl, '_blank');
+      logger.appendLog('success', 'Sito bozza generato', undefined, { fileName, assetCount, preview: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      logger.appendLog('error', `Sito bozza fallito: ${msg}`, undefined, { action: 'landing-draft', error: msg });
+    }
+    setBusy(null);
+  };
+
   const handleApplyPalette = async (concept: PaletteConcept) => {
     if (!customer) return;
     setBusy('apply-palette');
@@ -835,7 +870,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
       {hasWebAnswers && (
         <section className="crm-section" data-testid="crm-web-answers-section">
           <h3>Risposte form pagina web</h3>
-          <p className="crm-note">Brief landing page dal form intake (generazione non ancora attiva).</p>
+          <p className="crm-note">Brief landing page dal form intake. Usa “Genera sito bozza” per creare la landing statica (ZIP + preview).</p>
           {webAnswerEntries.map(([k, v]) => (
             <Field key={k} label={webAnswerLabels[k] || k} value={v} />
           ))}
@@ -867,6 +902,9 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         </button>
         <button onClick={handleGeneratePalettes} disabled={busy !== null} data-testid="crm-palette-btn" title="Suggerisce 3 palette colori coerenti col brief via AI (costo AI)">
           {busy === 'palette' || palette.isProcessing ? 'Generando…' : 'Genera 3 palette'}
+        </button>
+        <button onClick={handleLandingDraft} disabled={busy !== null} data-testid="crm-landing-btn" title="Genera landing page statica dai dati cliente (webAnswers + flyer + contatti, zero AI) e scarica lo ZIP">
+          {busy === 'landing' ? 'Generazione…' : 'Genera sito bozza'}
         </button>
       </section>
 

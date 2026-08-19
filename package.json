@@ -22,7 +22,8 @@
     "docs:sync-check": "node scripts/docs-sync-check.mjs",
     "prompts:sync": "tsx scripts/sync-prompts.ts",
     "prompts:sync:staging": "tsx scripts/sync-prompts.ts --label staging",
-    "prompts:sync:prod": "tsx scripts/sync-prompts.ts --label production"
+    "prompts:sync:prod": "tsx scripts/sync-prompts.ts --label production",
+    "deploy:landing": "node scripts/deploy-landing.mjs"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
