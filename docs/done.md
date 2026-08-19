@@ -120,6 +120,11 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
 
 ## 2026-08-16
 
+- **Decisione costi DeepSeek via Ollama** (da `to-be-done.md` Langfuse
+  follow-up): `deepseek-v4-flash:cloud` servito da Ollama Pro flat $20/mo →
+  costo per-token incluso nell'abbonamento, `costDetails: {}` e costo 0 =
+  corretto. Nessun costo per-token per modelli serviti da Ollama.
+
 - **TB-017 Landing vendita Apertura €349** (da `to-be-done.md`):
   - `src/pages/AperturaPage.tsx` + route `/apertura`: hero offerta €349,
     6 item inclusi (logo, biglietti, 250 volantini, sito 1 pagina, post
@@ -322,6 +327,22 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
     typecheck pulito. Commit `—` (da fare).
 
 ## 2026-08-11
+
+- **Langfuse follow-up CSV — verifiche e decisioni (2026-08-11/16)**
+  (da `to-be-done.md` Langfuse follow-up):
+  - **Costi Gemini = 0**: `computeCostUsd` server-side corretto già
+    presente; il dev proxy ora calcola il costo per immagine inline
+    (vedi 2026-08-12 "costi Gemini dev proxy").
+  - **Nomi trace server allineati**: `image-flash` + subfeature corretta
+    in `src/server/ai.ts` (vedi 2026-08-12 "nomi trace server allineati").
+  - **Media upload funzionante**: payload `POST /api/public/media`
+    verificato end-to-end (sha256 base64, checksum PUT, PATCH, 32-hex
+    traceId) — vedi 2026-08-12 "media upload FIX".
+  - **Sessioni vuote**: root cause doppio (zod strippava `sessionId` +
+    closure stale `useCallback`) fixato — vedi 2026-08-12 "sessioni vuote
+    FIX".
+  - **`costDetails` DeepSeek/Ollama = 0 corretto** (decisione 2026-08-16,
+    Ollama Pro flat $20/mo).
 
 - **Langfuse — nomi trace specifici + tags strutturati + costi + sessioni + fix error:empty (2026-08-11)**
   (spec §3-4-9-11):

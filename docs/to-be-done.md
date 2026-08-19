@@ -4,38 +4,6 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ## 🔴 Da fare (prodotto)
 
-### 🎯 Langfuse follow-up (2026-08-11, da CSV export)
-
-- [x] **Costi Gemini = 0 in Langfuse**: le trace `card-cover`/`image-flash`
-  hanno `costDetails: {}` e `totalCost: 0` — Gemini sembra gratis. Il
-  `computeCostUsd` server-side calcola il costo ma il dev proxy Gemini
-  (vite.config.js) non lo passa: `traceDev` per i 5 endpoint Gemini non
-  include `costUsd` calcolato (solo `body.costUsd` override, mai inviato
-  dal client). Fix: calcolare `computeCostUsd('gemini', model, undefined, 1)`
-  nel dev proxy (come fa il server handler) e passarlo a `traceDev`.
-  Verificare anche che il server handler prod lo faccia (sì, ma testare).
-- [x] **`generate-image-flash` nome vecchio + `subfeature:chat` errato**:
-  la trace `generate-image-flash` (21:09) ha ancora il nome vecchio e
-  `subfeature:chat` invece di `subfeature:icon|hero|flash`. Il server
-  handler `src/server/ai.ts` non è stato aggiornato (solo il dev proxy
-  vite.config.js lo era). Fix: rinominare in `image-flash` + subfeature
-  corretta in `ai.ts` (stesso mapping del dev proxy).
-- [x] **Media ancora placeholder**: `image: "[immagine allegata]"` nelle
-  trace Gemini — l'upload media fallisce ancora (400?). Verificare il
-  payload `POST /api/public/media` (sha256Hash+field+traceId) con
-  credenziali reali e il formato `traceId` (base64 OTLP vs hex atteso).
-- [x] **Sessioni vuote**: le trace chat/cover non hanno `sessionId` — il
-  wiring `sessionId=docId` è stato aggiunto ma il CSV mostra sessioni
-  vuote (trace del 21:19, dopo il fix?). Verificare che `loadedIdRef.current`
-  sia valorizzato al momento della chiamata e che il body arrivi al server.
-- [x] **`costDetails` per DeepSeek/Ollama**: chat `card-ai-chat` ha
-  `costDetails: {}` — `computeCostUsd` per Ollama flat → 0 (corretto), ma
-  per DeepSeek via Ollama (`deepseek-v4-flash:cloud`) il costo è 0 perché
-  il provider è `ollama` (flat). **Decisione (2026-08-16)**: con Ollama
-  Pro il costo è flat $20/mo — il costo per-token di `deepseek-v4-flash:cloud`
-  via Ollama è già incluso nell'abbonamento. Resta 0, corretto. Nessun
-  costo per-token per modelli serviti da Ollama.
-
 ### 🎯 Sprint prossima settimana (priorità utente 2026-08-01)
 
 - [ ] **3. "Genera bozze AI" in PROD non funziona (debug)**: la sequenza
@@ -148,16 +116,6 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 Ordine: validazione → portfolio → monetizzazione.
 
-- [x] **TB-022** Privacy policy + cookie banner (~3h). Serve prima
-  dell'outreach (form intake raccoglie PII). ✅ 2026-08-16: `PrivacyPage`
-  (route `/privacy`, sezioni GDPR, contatto), `CookieBanner` (consenso in
-  `pq_cookie_consent:v1`, solo cookie tecnici/localStorage, link privacy),
-  banner su HomePage + AppShell, link nel footer. Test: CookieBanner +
-  PrivacyPage.
-- [x] **TB-017** Landing vendita Apertura €349 (~4h, solo copy/struttura).
-  ✅ 2026-08-16: `AperturaPage` (route `/apertura`) — hero offerta, 6
-  item inclusi, 4 step, FAQ, CTA mailto; link dalla card Apertura in
-  HomePage. Test: AperturaPage (4).
 - [ ] **TB-018** Portfolio 5 esempi settore (8-10h) — DEFERRED, trigger:
   1 cliente reale in outreach.
 - [ ] **TB-011** Stripe Checkout + subscription Pro (spec parziale in
