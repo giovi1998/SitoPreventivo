@@ -628,6 +628,36 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     window.open(url, '_blank');
   }, [website, previewPage]);
 
+  // TB-012: pubblica il sito corrente su Netlify (link preview draft).
+  // Usa il customerId per il site name stabile; index.html single-file
+  // (lean-code: multi-pagina richiederebbe build completa — vedi to-be-done).
+  const [deploying, setDeploying] = useState(false);
+  const [deployUrl, setDeployUrl] = useState<string | null>(null);
+  const handleDeployNetlify = useCallback(async () => {
+    if (!website.customerId) {
+      addToast('info', 'Salva il sito collegandolo a un cliente (CRM) prima di pubblicare.');
+      return;
+    }
+    setDeploying(true);
+    try {
+      const pageHtml = previewPage === 'index' ? website.html : (website.pagesHtml || {})[previewPage] || website.html;
+      const doc = normalizeInlineImages(buildWebsiteFullDocument(pageHtml, website.css, website.js), 200_000);
+      const businessName = website.brief.businessName || 'sito';
+      const res = await dataService.deployLanding(website.customerId, doc, 'index.html', businessName);
+      if (res.error) {
+        addToast('error', `Deploy Netlify fallito: ${res.error}`);
+        return;
+      }
+      const d = res.data as { deployUrl: string; siteUrl: string };
+      setDeployUrl(d.deployUrl);
+      addToast('success', `Pubblicato! Preview: ${d.deployUrl}`);
+    } catch (err) {
+      addToast('error', `Deploy Netlify fallito: ${(err as Error)?.message || 'errore sconosciuto'}`);
+    } finally {
+      setDeploying(false);
+    }
+  }, [website, previewPage, addToast]);
+
   const handleProviderChange = useCallback((providerId: string) => {
     setAiProviderDefault(providerId);
     setAiModel(providerId);
@@ -824,10 +854,16 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
           onSave={openSaveDialog}
           exportItems={[
             { id: 'zip', label: exporting ? 'Esportando…' : 'ZIP (HTML+CSS+JS)' },
+            { id: 'netlify', label: deploying ? 'Pubblicando…' : 'Pubblica su Netlify' },
           ]}
-          onExport={(id) => { if (id === 'zip') handleExportZip(); }}
-          exportDisabled={exporting || !websiteHasContent(website)}
+          onExport={(id) => { if (id === 'zip') handleExportZip(); else if (id === 'netlify') void handleDeployNetlify(); }}
+          exportDisabled={exporting || deploying || !websiteHasContent(website)}
         />
+        {deployUrl && (
+          <p className="crm-note" data-testid="website-deploy-link" style={{ marginLeft: 12, fontSize: 12 }}>
+            Preview: <a href={deployUrl} target="_blank" rel="noopener noreferrer">{deployUrl}</a>
+          </p>
+        )}
       </header>
 
       <div className="website-tabs" role="tablist">

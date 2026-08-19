@@ -351,11 +351,14 @@ calibrate in `geometry.ts`; `GLYPH_HEIGHT_FACTOR=1.15`;
 **Dev proxy (§12)**: riavviare `npm run dev` dopo modifiche a
 `vite.config.js`; cover "entrambi i lati" serializzata (mai parallela,
 502); limiti `context` proxy = server (2000). Il proxy gestisce anche
-`/api/logs` (mirror dev) e il fallback Ollama chat diretto (timeout 600s,
+`/api/logs` (mirror dev), il fallback Ollama chat diretto (timeout 600s,
 tools propagati in richiesta E in risposta — `tool_calls` NDJSON inoltrati
 al client stream e non-stream, history normalizzata camelCase→snake_case
 con arguments oggetto — senza → agent loop morto o 400 "Value looks like
-object", gotcha §26.18).
+object", gotcha §26.18) e il mirror locale di `POST
+/api/customers/:id/landing-deploy` (TB-012, token
+`NETLIFY_AUTH_TOKEN`/`VITE_NETLIFY_AUTH_TOKEN`, modulo condiviso
+`src/server/netlify.ts`).
 
 **Build zero-warning + npm 12 (§25)**: `npm run build` deve restare
 pulito. Regole: moduli già statico-importati nel main → import statico,

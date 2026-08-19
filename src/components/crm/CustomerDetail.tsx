@@ -545,7 +545,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         flyer,
       });
       if (landingMode === 'netlify') {
-        const res = await dataService.deployLanding(customer.id, site.html, `${sanitizeZipName(customer.businessName || 'sito')}.html`);
+        const res = await dataService.deployLanding(customer.id, site.html, `${sanitizeZipName(customer.businessName || 'sito')}.html`, customer.businessName);
         if (res.error) {
           setError(String(res.error));
           logger.appendLog('error', `Deploy Netlify fallito: ${res.error}`, undefined, { action: 'landing-draft', mode: 'netlify', error: String(res.error) });

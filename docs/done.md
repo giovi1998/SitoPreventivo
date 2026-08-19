@@ -879,6 +879,14 @@ Colonna "Done" della kanban. Dettaglio tecnico: `agent-gotchas.md`
   - Test: `landingDraft.test.ts` (15, coverage 98% lines / 100% branches),
     `landingDeploy.test.ts` (7). Env: `NETLIFY_AUTH_TOKEN` (Vercel,
     server-side only — vedi AGENTS.md).
+  - **Follow-up (stesso giorno, commit 9f65d1c + fix dev)**: logica Netlify
+    estratta in `src/server/netlify.ts` (condivisa handler prod + dev proxy
+    Vite, `netlify.test.ts` 8 test). Fix 404 locale: mirror di
+    `POST /api/customers/:id/landing-deploy` nel dev proxy
+    (vite.config.js) con `NETLIFY_AUTH_TOKEN`/`VITE_NETLIFY_AUTH_TOKEN`.
+    WebsiteEditor: voce "Pubblica su Netlify" nel menu Esporta
+    (index.html single-file, richiede `customerId` — salvataggio in CRM).
+    `dataService.deployLanding` timeout 55s (upload + processing).
   - Fuori scope mantenuto: builder self-service, publish dominio cliente,
     multi-pagina (vedi to-be-done TB-012 step 3).
 

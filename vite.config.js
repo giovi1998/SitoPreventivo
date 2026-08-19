@@ -323,6 +323,32 @@ export default defineConfig(({ mode }) => {
           };
           server.middlewares.use(async (req, res, next) => {
             const url = (req.url || '').split('?')[0];
+            // TB-012: mirror locale di POST /api/customers/:id/landing-deploy
+            // (prod = server.ts → handler.ts). Usa lo stesso modulo
+            // src/server/netlify.ts via ssrLoadModule; token da
+            // VITE_NETLIFY_AUTH_TOKEN (o NETLIFY_AUTH_TOKEN) per dev.
+            const landingMatch = url.match(/^\/api\/customers\/([^/]+)\/landing-deploy$/);
+            if (landingMatch && req.method === 'POST') {
+              const chunks = [];
+              for await (const chunk of req) chunks.push(chunk);
+              let body = {};
+              try { body = JSON.parse(Buffer.concat(chunks).toString('utf-8')); } catch { body = {}; }
+              const token = process.env.NETLIFY_AUTH_TOKEN || process.env.VITE_NETLIFY_AUTH_TOKEN;
+              if (!token) return json(res, 503, { error: 'Netlify non configurato (NETLIFY_AUTH_TOKEN mancante)' });
+              const html = typeof body.html === 'string' ? body.html : '';
+              const fileName = typeof body.fileName === 'string' ? body.fileName : '';
+              if (!html.trim() || !fileName.trim()) return json(res, 400, { error: 'html e fileName richiesti' });
+              try {
+                const mod = await server.ssrLoadModule('/src/server/netlify.ts');
+                const siteName = `quickbrand-${mod.sanitizeNetlifyName(String(body.businessName || 'cliente'))}`;
+                const deployed = await mod.deployLandingHtml(token, siteName, html, fileName);
+                console.info('[landing-deploy] dev', { customerId: landingMatch[1], siteId: deployed.siteId, deployUrl: deployed.deployUrl });
+                return json(res, 200, { data: { ...deployed, fileName } });
+              } catch (err) {
+                console.error('[landing-deploy] dev fallito', String(err));
+                return json(res, 502, { error: `Deploy Netlify fallito: ${String(err)}` });
+              }
+            }
             const handledPaths = [
               '/api/ai/logo-config',
               '/api/ai/logo-background',

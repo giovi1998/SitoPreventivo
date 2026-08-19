@@ -525,10 +525,10 @@ export function createCrmMethods(svc) {
     },
 
     // TB-012: deploy landing bozza su Netlify (server-side, token mai
-    // nel browser). Funziona solo in prod (API) — in locale il dev server
-    // non ha NETLIFY_AUTH_TOKEN.
-    async deployLanding(id, html, fileName) {
-      return api('POST', `/customers/${id}/landing-deploy`, { adminEmail: 'admin@gmail.com', html, fileName });
+    // nel browser). Prod: API. Locale: dev proxy Vite (VITE_NETLIFY_AUTH_TOKEN).
+    // Timeout alto: Netlify upload + processing può richiedere 10-30s.
+    async deployLanding(id, html, fileName, businessName) {
+      return api('POST', `/customers/${id}/landing-deploy`, { adminEmail: 'admin@gmail.com', html, fileName, businessName }, { timeoutMs: 55000 });
     },
 
     // ─── TB-027 config pubblica ──────────────────────────
