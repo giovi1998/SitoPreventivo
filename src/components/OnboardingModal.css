@@ -73,7 +73,7 @@
 .onb-progress-count {
   font-size: 0.75rem;
   font-weight: 700;
-  color: var(--muted, #5c5c5c);
+  color: var(--muted);
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -93,7 +93,7 @@
 .onb-subtitle {
   margin: 0 0 22px;
   font-size: 0.92rem;
-  color: var(--muted, #5c5c5c);
+  color: var(--muted);
   line-height: 1.45;
 }
 
@@ -248,8 +248,8 @@
   text-transform: uppercase;
   padding: 3px 7px;
   border-radius: 6px;
-  background: var(--line, #d8dde6);
-  color: var(--muted, #5c5c5c);
+  background: var(--line);
+  color: var(--muted);
 }
 
 .onb-doc-icon {
@@ -311,8 +311,8 @@
   flex: 0 0 auto;
   padding: 14px 18px;
   background: transparent;
-  color: var(--muted, #5c5c5c);
-  border: 1px solid var(--line, #d8dde6);
+  color: var(--muted);
+  border: 1px solid var(--line);
   font-weight: 700;
   font-size: 0.9rem;
 }

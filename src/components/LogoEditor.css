@@ -396,7 +396,7 @@
 }
 
 .builder-color-swatch.transparent {
-  background: repeating-conic-gradient(#ccc 0% 25%, transparent 0% 50%) 50% / 8px 8px;
+  background: repeating-conic-gradient(var(--line) 0% 25%, transparent 0% 50%) 50% / 8px 8px;
 }
 
 .builder-color-label {

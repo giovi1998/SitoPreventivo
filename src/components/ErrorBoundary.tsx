@@ -1,4 +1,5 @@
 import React from 'react';
+import './ErrorBoundary.css';
 
 interface Props {
   children: React.ReactNode;
@@ -26,12 +27,12 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'system-ui, sans-serif' }}>
+        <div className="error-boundary">
           <h2>Qualcosa è andato storto</h2>
-          <p style={{ color: '#666', margin: '12px 0' }}>{this.state.error?.message}</p>
+          <p className="error-boundary__message">{this.state.error?.message}</p>
           <button
+            className="error-boundary__reload"
             onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
-            style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: '#E62020', color: '#fff', cursor: 'pointer' }}
           >
             Ricarica
           </button>

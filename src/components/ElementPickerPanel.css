@@ -45,7 +45,7 @@
   margin: 0;
   padding-left: 18px;
   font-size: 0.8rem;
-  color: var(--text, #333);
+  color: var(--ink-sec);
   max-height: 200px;
   overflow-y: auto;
 }
@@ -118,12 +118,12 @@
   align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--accent, #4f46e5);
+  border: 1px solid var(--accent);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--accent, #4f46e5) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   font-size: 0.78rem;
   line-height: 1.4;
-  color: var(--text, #333);
+  color: var(--ink-sec);
 }
 
 .picker-hint__icon {
@@ -170,7 +170,7 @@
   padding: 2px 8px;
   border-radius: 10px;
   background: var(--border, #e5e7eb);
-  color: var(--text, #333);
+  color: var(--ink-sec);
   font-family: monospace;
 }
 
@@ -222,7 +222,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-muted, #666);
+  color: var(--muted);
 }
 
 .element-inspector__code {
@@ -252,7 +252,7 @@
 
 .element-inspector__computed-prop {
   min-width: 130px;
-  color: var(--text-muted, #666);
+  color: var(--muted);
 }
 
 .element-inspector__computed-value {

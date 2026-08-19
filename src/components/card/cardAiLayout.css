@@ -197,7 +197,7 @@
   height: 22px;
   border-radius: 50%;
   border: none;
-  background: rgba(0, 0, 0, 0.55);
+  background: color-mix(in srgb, var(--overlay) 100%, transparent);
   color: #fff;
   cursor: pointer;
   font-size: 0.95rem;
@@ -209,7 +209,7 @@
   transition: background 0.15s;
 }
 .card-ai-cover-thumb__remove:hover {
-  background: rgba(0, 0, 0, 0.8);
+  background: color-mix(in srgb, var(--ink) 80%, transparent);
 }
 
 /* Quick action groups: chips con label gruppo */

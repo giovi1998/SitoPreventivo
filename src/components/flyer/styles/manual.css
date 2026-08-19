@@ -18,7 +18,7 @@
 }
 
 .flyer-warning-info {
-  color: #0ea5e9;
+  color: var(--info-link);
 }
 
 .flyer-warning-warning {

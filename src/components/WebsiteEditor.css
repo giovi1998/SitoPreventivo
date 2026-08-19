@@ -190,8 +190,8 @@
 }
 
 .social-remove:hover {
-  border-color: #e11d48;
-  color: #e11d48;
+  border-color: var(--red);
+  color: var(--red);
 }
 
 .social-add {
@@ -260,7 +260,7 @@
   height: 22px;
   border-radius: 50%;
   border: none;
-  background: rgba(0,0,0,0.5);
+  background: var(--overlay);
   color: #fff;
   font-size: 12px;
   cursor: pointer;
@@ -587,7 +587,7 @@
   flex: 1;
   min-height: 400px;
   overflow: hidden;
-  border: 1px solid #333;
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: #1e1e1e;
 }
@@ -609,7 +609,7 @@
   padding: 12px;
   border: none;
   background: #1e1e1e;
-  color: #d4d4d4;
+  color: var(--muted-lt);
   font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
   font-size: 13px;
   line-height: 1.5;

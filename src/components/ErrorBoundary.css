@@ -1,0 +1,19 @@
+.error-boundary {
+  padding: 40px;
+  text-align: center;
+  font-family: system-ui, sans-serif;
+}
+
+.error-boundary__message {
+  color: var(--muted);
+  margin: 12px 0;
+}
+
+.error-boundary__reload {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
