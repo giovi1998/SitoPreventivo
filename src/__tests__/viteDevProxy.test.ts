@@ -232,8 +232,7 @@ describe('vite dev API proxy (vite.config.js)', () => {
     expect(JSON.parse(toolCalls[0].function.arguments)).toEqual({ focus: 'elegante' });
   });
 
-  it('fallback Ollama stream FORWARD tool_calls come delta SSE — regressione 2026-08-13', async () => {
-    process.env.OLLAMA_API_KEY = 'test-key';
+  it('fallback Ollama stream FORWARD tool_calls come delta SSE — regressione 2026-08-13', async () => {    process.env.OLLAMA_API_KEY = 'test-key';
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -297,8 +296,7 @@ describe('vite dev API proxy (vite.config.js)', () => {
     expect(toolMsg.tool_call_id).toBe('call_1');
   });
 
-  it('TB-029 fix: /api/ai/card-cover passa costUsd Gemini (0.04) a ingestLangfuse', async () => {
-    process.env.GEMINI_API_KEY = 'test-gemini';
+  it('TB-029 fix: /api/ai/card-cover passa costUsd Gemini (0.04) a ingestLangfuse', async () => {    process.env.GEMINI_API_KEY = 'test-gemini';
     const traceCalls: any[] = [];
     const api = await loadApiMiddleware(async (id: string) => {
       if (id === '/src/server/langfuse.ts') {
@@ -326,6 +324,66 @@ describe('vite dev API proxy (vite.config.js)', () => {
     expect(traceCalls[0].name).toBe('card-cover');
     expect(traceCalls[0].costUsd).toBe(0.04);
     expect(traceCalls[0].subfeature).toBe('cover');
+  });
+
+  it('TB-029: dev proxy kimi-k3:cloud calcola costUsd pay-per-token (18.00) sulla trace stream', async () => {
+    process.env.OLLAMA_API_KEY = 'test-key';
+    const traceCalls: any[] = [];
+    const api = await loadApiMiddleware(async (id: string) => {
+      if (id === '/src/server/langfuse.ts') {
+        return { ingestLangfuse: async (input: any) => { traceCalls.push(input); } };
+      }
+      return null;
+    });
+    const ndjson = [
+      JSON.stringify({ message: { content: 'ok' }, done: true, prompt_eval_count: 1_000_000, eval_count: 1_000_000 }),
+    ].join('\n') + '\n';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(ndjson, { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } }),
+      ),
+    );
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/ai/chat/stream', { provider: 'ollama', model: 'kimi-k3:cloud', messages: [{ role: 'user', content: 'ciao' }], kind: 'card' }),
+      res,
+      () => {},
+    );
+    expect(res.statusCode).toBe(200);
+    await vi.waitFor(() => expect(traceCalls.length).toBe(1));
+    expect(traceCalls[0].model).toBe('kimi-k3:cloud');
+    expect(traceCalls[0].costUsd).toBe(18);
+    expect(traceCalls[0].usage).toEqual({ promptTokens: 1_000_000, completionTokens: 1_000_000 });
+  });
+
+  it('TB-029: dev proxy minimax-m3 flat → costUsd assente sulla trace', async () => {
+    process.env.OLLAMA_API_KEY = 'test-key';
+    const traceCalls: any[] = [];
+    const api = await loadApiMiddleware(async (id: string) => {
+      if (id === '/src/server/langfuse.ts') {
+        return { ingestLangfuse: async (input: any) => { traceCalls.push(input); } };
+      }
+      return null;
+    });
+    const ndjson = [
+      JSON.stringify({ message: { content: 'ok' }, done: true, prompt_eval_count: 5000, eval_count: 200 }),
+    ].join('\n') + '\n';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(ndjson, { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } }),
+      ),
+    );
+    const res = mockRes();
+    await api(
+      mockReq('POST', '/api/ai/chat/stream', { provider: 'ollama', model: 'minimax-m3:cloud', messages: [{ role: 'user', content: 'ciao' }] }),
+      res,
+      () => {},
+    );
+    expect(res.statusCode).toBe(200);
+    await vi.waitFor(() => expect(traceCalls.length).toBe(1));
+    expect(traceCalls[0].costUsd).toBeUndefined();
   });
 
   it('RAG: POST /api/ai/embeddings risponde embedding + trace observationType embedding', async () => {

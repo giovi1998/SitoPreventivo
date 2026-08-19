@@ -1319,17 +1319,42 @@ non serve). Dettaglio per provider:
 - Dev proxy (`vite.config.js`): propaga `think`/`format`/`num_predict` e
   `reasoningEffort` nelle options verso il provider Ollama
 
-### Provider registrati (7 totali)
+### Provider registrati (19 totali)
 
 | ID | Provider class | Model | Vision | Pricing |
 |---|---|---|---|---|
 | `deepseek-v4-flash` | DeepSeekProvider | deepseek-v4-flash | no | $0.14/$0.28 per 1M tok |
 | `deepseek-v4-pro` | DeepSeekProvider | deepseek-v4-pro | no | $0.55/$2.19 per 1M tok |
 | `ollama-minimax-m3` | OllamaProProvider | minimax-m3:cloud | sì | $20/mo flat |
+| `ollama-minimax-m2.7` | OllamaProProvider | minimax-m2.7:cloud | no | $20/mo flat |
 | `ollama-deepseek-v4-flash` | OllamaProProvider | deepseek-v4-flash:cloud | no | $20/mo flat |
 | `ollama-deepseek-v4-flash-0731` | OllamaProProvider | deepseek-v4-flash:0731-cloud | no | $20/mo flat |
 | `ollama-deepseek-v4-pro` | OllamaProProvider | deepseek-v4-pro:cloud | no | $20/mo flat |
 | `ollama-qwen-3.5` | OllamaProProvider | qwen-3.5 | sì | $20/mo flat |
+| `ollama-qwen3.5-397b` | OllamaProProvider | qwen3.5:397b:cloud | sì | $20/mo flat |
+| `ollama-glm-5.2` | OllamaProProvider | glm-5.2:cloud | no | $20/mo flat |
+| `ollama-glm-5.1` | OllamaProProvider | glm-5.1:cloud | no | $20/mo flat |
+| `ollama-kimi-k3` | OllamaProProvider | kimi-k3:cloud | sì | **$3.0/$15.0 per 1M tok (extra usage)** |
+| `ollama-kimi-k2.7-code` | OllamaProProvider | kimi-k2.7-code:cloud | sì | $20/mo flat |
+| `ollama-mistral-large-3` | OllamaProProvider | mistral-large-3:675b:cloud | sì | $20/mo flat |
+| `ollama-gemma4-31b` | OllamaProProvider | gemma4:31b:cloud | sì | $20/mo flat |
+| `ollama-gpt-oss-120b` | OllamaProProvider | gpt-oss:120b:cloud | no | $20/mo flat |
+| `ollama-nemotron-3-ultra` | OllamaProProvider | nemotron-3-ultra:cloud | no | $20/mo flat |
+
+**kimi-k3:cloud NON è flat** (2026-08): richiede piano Pro/Max ma consuma
+extra usage credits pay-per-token ($3.0/$15.0 per 1M) oltre il flat. Prezzi
+in **3 punti** (mai solo 1, regressione 2026-08-19 quando mancava su server
+e dev proxy → cost_details Langfuse assente in prod e locale):
+1. `src/ai/providerPricing.ts` — `PRICING['ollama-kimi-k3']` (client: badge,
+   aiStats, UI) + test `providerPricing.test.ts`
+2. `src/server/ai.ts` — `OLLAMA_PER_TOKEN_PRICE` + `computeCostUsd` (trace
+   Langfuse prod); la chiave è il **model** (`kimi-k3:cloud`), non il
+   provider ID
+3. `vite.config.js` — `OLLAMA_PER_TOKEN_PRICE` + `ollamaCostUsd` nel dev
+   proxy (trace Langfuse locale, stream e non-stream)
+
+Un nuovo model Ollama pay-per-token va registrato in TUTTI e 3 i punti,
+altrimenti su Langfuse risulta gratis (flat 0).
 
 ### Regole per modifiche future
 
@@ -1358,6 +1383,11 @@ non serve). Dettaglio per provider:
 7. **KV cache**: `usage.cachedTokens` = `prompt_cache_hit_tokens` (DeepSeek).
    Se un giorno si tracciano costi reali, i token cache-hit vanno fatturati
    a tariffa cache (più bassa), non a quella full.
+8. **kimi-k3:cloud pay-per-token su 3 livelli**: pricing in
+   `providerPricing.ts` (client), `OLLAMA_PER_TOKEN_PRICE` in `ai.ts`
+   (server prod) e `vite.config.js` (dev proxy). Un model Ollama registrato
+   solo in uno dei 3 punti → cost_details Langfuse mancante o errato
+   (regressione 2026-08-19).
 
 ---
 

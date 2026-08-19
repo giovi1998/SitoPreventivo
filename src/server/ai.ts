@@ -42,6 +42,12 @@ const GEMINI_PER_IMAGE: Record<string, number> = {
   'gemini-3.1-flash-image': 0.04,
   'gemini-2.0-flash-preview-image-generation': 0.02,
 };
+// Ollama Pro: quasi tutti i modelli sono flat $20/mo; kimi-k3:cloud è
+// l'eccezione pay-per-token (extra usage oltre il flat, prezzi ollama.com
+// 2026-08). Mirror di src/ai/providerPricing.ts (provider ID→model).
+const OLLAMA_PER_TOKEN_PRICE: Record<string, { input: number; output: number }> = {
+  'kimi-k3:cloud': { input: 3.0, output: 15.0 },
+};
 
 function computeCostUsd(
   provider: string,
@@ -57,6 +63,13 @@ function computeCostUsd(
     const p = DEEPSEEK_PRICES[model] ?? DEEPSEEK_PRICES['deepseek-v4-flash'];
     const cost = (usage.promptTokens / 1_000_000) * p.input + (usage.completionTokens / 1_000_000) * p.output;
     return Math.round(cost * 1_000_000) / 1_000_000;
+  }
+  if (provider === 'ollama' && usage) {
+    const p = OLLAMA_PER_TOKEN_PRICE[model];
+    if (p) {
+      const cost = (usage.promptTokens / 1_000_000) * p.input + (usage.completionTokens / 1_000_000) * p.output;
+      return Math.round(cost * 1_000_000) / 1_000_000;
+    }
   }
   // Ollama Pro flat $20/mo → 0 per chiamata
   return 0;
@@ -294,7 +307,10 @@ export const handleAI: RouteHandler = async (path, method, req, res, body) => {
         input: messages,
         output: normalized,
         usage: { promptTokens: normalized.usage.prompt_tokens, completionTokens: normalized.usage.completion_tokens },
-        costUsd: costUsd ?? computeCostUsd('ollama', ollamaModel),
+        costUsd: costUsd ?? computeCostUsd('ollama', ollamaModel, {
+          promptTokens: normalized.usage.prompt_tokens,
+          completionTokens: normalized.usage.completion_tokens,
+        }),
         startTime: startedAt,
         sessionId,
         runId,
@@ -834,7 +850,10 @@ Restituisci SOLO un oggetto JSON valido con questa struttura:
             ...(streamToolCalls.length > 0 ? { toolCalls: streamToolCalls } : {}),
           },
           usage: finalUsage ? { promptTokens: finalUsage.prompt_tokens, completionTokens: finalUsage.completion_tokens } : undefined,
-          costUsd: costUsd ?? computeCostUsd('ollama', ollamaModel),
+          costUsd: costUsd ?? computeCostUsd('ollama', ollamaModel, finalUsage ? {
+            promptTokens: finalUsage.prompt_tokens,
+            completionTokens: finalUsage.completion_tokens,
+          } : undefined),
           startTime: startedAt,
           sessionId,
           runId,
