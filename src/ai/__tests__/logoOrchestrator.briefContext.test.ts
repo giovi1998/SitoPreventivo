@@ -25,6 +25,7 @@ class MockProvider implements AIProvider {
   readonly model = 'mock-logo';
   readonly supportsStreaming = true;
   readonly supportsTools = false;
+  supportsVision = false;
   public chatMock = vi.fn();
 
   async chat(messages: ChatMessage[], _options?: ChatOptions): Promise<AIResponse> {
@@ -79,6 +80,28 @@ describe('LogoAIOrchestrator.generateLogo briefContext (TB-027)', () => {
     expect(prompt).toContain('Logo minimal e moderno');
     expect(prompt).toContain('Contesto cliente:');
     expect(prompt).toContain('Bar Da Mario');
+  });
+
+  it('TB-033: referenceImageBase64 aggiunge il blocco riferimento con testo NUOVO', async () => {
+    fakeProvider.supportsVision = true;
+    const orch = new LogoAIOrchestrator();
+    const result = await orch.generateLogo(createEmptyLogo(), 'Nuovo nome: Bar Roma', {
+      referenceImageBase64: 'data:image/jpeg;base64,AAAA',
+    });
+    expect(result.applied).toBe(true);
+    const prompt = lastUserMessage(fakeProvider);
+    expect(prompt).toContain('Logo di riferimento del cliente');
+    expect(prompt).toContain('AAAA');
+    expect(prompt).toContain('mai riprodurre il wordmark/tagline esistenti');
+    expect(prompt).toContain('Nuovo nome: Bar Roma');
+  });
+
+  it('TB-033: senza referenceImageBase64 il prompt non contiene il blocco', async () => {
+    fakeProvider.supportsVision = true;
+    const orch = new LogoAIOrchestrator();
+    await orch.generateLogo(createEmptyLogo(), 'Logo minimal');
+    const prompt = lastUserMessage(fakeProvider);
+    expect(prompt).not.toContain('Logo di riferimento del cliente');
   });
 
   it('prompt is unchanged when the logo has no briefContext', async () => {

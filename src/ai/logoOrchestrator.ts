@@ -72,6 +72,9 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       /** TB-029: sessione Langfuse (docId). */
       sessionId?: string;
       imagePreviewBase64?: string;
+      /** TB-033: logo del cliente (data URL compresso) come riferimento
+       *  visivo — i concept imitano stile/colori/icona cambiando il testo. */
+      referenceImageBase64?: string;
       /** TB-032: override reasoning (badge AI/Clienti); assente = preferenza utente. */
       reasoningEffort?: 'low' | 'high' | 'max';
     } & RunTraceOptions = {},
@@ -98,6 +101,16 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
     const userContentParts: string[] = [];
     if (useVision && options.imagePreviewBase64) {
       userContentParts.push(`Anteprima logo allegata (base64 JPEG): ${options.imagePreviewBase64}`);
+    }
+    // TB-033: reference logo del cliente (vision). Il testo va comunque
+    // cambiato secondo il brief: lo stile (colori/icona/layout) si imita,
+    // il wordmark/tagline sono nuovi.
+    if (options.referenceImageBase64 && (provider as { supportsVision?: boolean }).supportsVision) {
+      userContentParts.push(
+        `Logo di riferimento del cliente (base64 JPEG): ${options.referenceImageBase64}\n` +
+        'Imita STILE, COLORI e ICONA del logo di riferimento (resta riconoscibile), ma usa testo NUOVO dal brief: ' +
+        'mai riprodurre il wordmark/tagline esistenti, nemmeno parzialmente. Se il brief contiene un nome, usalo come primaryText.',
+      );
     }
     userContentParts.push(userPrompt);
     // TB-027 auto-build: il brief deve guidare struttura, testo e stile dei

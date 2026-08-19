@@ -128,7 +128,14 @@ export function createCrmMethods(svc) {
         const all = lsGet('pq_customers:v1') || [];
         const idx = all.findIndex((c) => c.id === id);
         if (idx < 0) return { error: 'Cliente non trovato' };
-        const updated = { ...all[idx], ...patch, updatedAt: new Date().toISOString() };
+        // strip undefined/'' dai patch opzionali: lo spread locale li
+        // scriverebbe sul record clobberando i valori esistenti (es.
+        // font/colori già salvati) — i client PROD li saltano, qui no.
+        const clean = {};
+        for (const [k, v] of Object.entries(patch)) {
+          if (v !== undefined && v !== '') clean[k] = v;
+        }
+        const updated = { ...all[idx], ...clean, updatedAt: new Date().toISOString() };
         all[idx] = updated;
         lsSet('pq_customers:v1', all);
         // TB-030 sync customer→website (locale): aggiorna i doc website del

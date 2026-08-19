@@ -94,8 +94,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   const initialHasContent = websiteHasContent(initialWebsite);
   const [tab, setTab] = useState<'brief' | 'code' | 'preview'>(() => (initialHasContent ? 'preview' : 'brief'));
   const [codeTab, setCodeTab] = useState<CodeTab>('html');
-  const [previewPage, setPreviewPage] = useState('index');
-  const [codePage, setCodePage] = useState('index');
+  const [page, setPage] = useState('index');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [exporting, setExporting] = useState(false);
   // Default mobile viewport su workspace mobile: l'iframe mostra subito il
@@ -190,6 +189,26 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     return () => { cancelled = true; };
   }, [website.customerId]);
 
+  // TB-030 sync website→customer: font/colori/contatti/social del brief
+  // aggiornano il customer. skipSync=true: il PATCH non ri-triggera il sync
+  // customer→website. Chiamato su autosave e save esplicito (last-write-wins:
+  // solo campi non vuoti, così un brief parziale non svuota il customer).
+  const syncWebsiteToCustomer = useCallback((doc: Website) => {
+    if (!doc.customerId) return;
+    const b = doc.brief;
+    const custContacts = (customerRef.current?.contacts || {}) as Record<string, unknown>;
+    const patch: Record<string, unknown> = { skipSync: true };
+    if (b.font) patch.font = b.font;
+    if (b.preferredColors) patch.preferredColors = b.preferredColors;
+    const contacts: Record<string, unknown> = { ...custContacts };
+    if (b.address) contacts.address = b.address;
+    if (b.phone) contacts.phone = b.phone;
+    if (b.email) contacts.email = b.email;
+    if (Object.keys(contacts).length > 0) patch.contacts = contacts;
+    if (b.socials?.length) patch.socials = b.socials;
+    dataService.updateCustomer(doc.customerId, patch).catch((err) => logger.warn('Sync website→customer fallito', { err: String(err) }));
+  }, []);
+
   useEffect(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
@@ -202,9 +221,10 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       }).catch((err) => {
         logger.error('Website auto-save failed', { err: (err as Error).message });
       });
+      syncWebsiteToCustomer(toSave);
     }, 30000);
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
-  }, [website, userEmail, onSaved]);
+  }, [website, userEmail, onSaved, syncWebsiteToCustomer]);
 
   const updateBrief = useCallback((field: keyof WebsiteBrief, value: string) => {
     setWebsite((prev) => {
@@ -471,7 +491,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     const iframe = previewIframeRef.current;
     const doc = iframe?.contentDocument;
     if (!doc) return;
-    const context = extractElementContext(el, website.css, previewPage, viewport);
+    const context = extractElementContext(el, website.css, page, viewport);
     setSelectedElements((prev) => {
       if (prev.length >= 5) {
         addToast('info', 'Max 5 elementi selezionati. Deseleziona per aggiungerne altri.');
@@ -480,7 +500,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       return [...prev, context];
     });
     // Picker resta attivo: multi-selezione. Esc o toggle per uscire.
-  }, [website.css, previewPage, addToast]);
+  }, [website.css, page, addToast]);
 
   const handleDeselect = useCallback((index?: number) => {
     setSelectedElements((prev) => (index === undefined ? [] : prev.filter((_, i) => i !== index)));
@@ -562,31 +582,13 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
         addToast('success', `«${title}» salvato (${toSave.images.length} immagini)`);
         setShowSaveDialog(false);
         if (onSaved) onSaved(toSave);
-        // TB-030 sync website→customer (on save esplicito, last-write-wins):
-        // font/colori/contatti/social del brief aggiornano il customer.
-        // skipSync=true: il PATCH non ri-triggera il sync customer→website.
-        if (website.customerId) {
-          const b = website.brief;
-          const custContacts = (customerRef.current?.contacts || {}) as Record<string, unknown>;
-          dataService.updateCustomer(website.customerId, {
-            font: b.font || undefined,
-            preferredColors: b.preferredColors || undefined,
-            contacts: {
-              ...custContacts,
-              address: b.address || undefined,
-              phone: b.phone || undefined,
-              email: b.email || undefined,
-            },
-            socials: b.socials?.length ? b.socials : undefined,
-            skipSync: true,
-          }).catch((err) => logger.warn('Sync website→customer fallito', { err: String(err) }));
-        }
+        syncWebsiteToCustomer(toSave);
       })
       .catch((err) => {
         logger.error('Website save failed', { err: (err as Error)?.message });
         addToast('error', (err as Error)?.message || 'Errore salvataggio');
       });
-  }, [website, userEmail, addToast, saveDocumentGuarded, onSaved]);
+  }, [website, userEmail, addToast, saveDocumentGuarded, onSaved, syncWebsiteToCustomer]);
 
   const openSaveDialog = useCallback(() => {
     if (!websiteHasContent(website)) {
@@ -621,12 +623,19 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   }, [website, addToast]);
 
   const handleOpenInNewTab = useCallback(() => {
-    const pageHtml = previewPage === 'index' ? website.html : (website.pagesHtml || {})[previewPage] || website.html;
+    const pageHtml = page === 'index' ? website.html : (website.pagesHtml || {})[page] || website.html;
     const doc = normalizeInlineImages(buildWebsiteFullDocument(pageHtml, website.css, website.js), 200_000);
     const blob = new Blob([doc], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
-  }, [website, previewPage]);
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }, [website, page]);
 
   // TB-012: pubblica il sito corrente su Netlify (link preview draft).
   // Usa il customerId per il site name stabile; index.html single-file
@@ -640,7 +649,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     }
     setDeploying(true);
     try {
-      const pageHtml = previewPage === 'index' ? website.html : (website.pagesHtml || {})[previewPage] || website.html;
+      const pageHtml = page === 'index' ? website.html : (website.pagesHtml || {})[page] || website.html;
       const doc = normalizeInlineImages(buildWebsiteFullDocument(pageHtml, website.css, website.js), 200_000);
       const businessName = website.brief.businessName || 'sito';
       const res = await dataService.deployLanding(website.customerId, doc, 'index.html', businessName);
@@ -656,7 +665,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     } finally {
       setDeploying(false);
     }
-  }, [website, previewPage, addToast]);
+  }, [website, page, addToast]);
 
   const handleProviderChange = useCallback((providerId: string) => {
     setAiProviderDefault(providerId);
@@ -785,12 +794,12 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   }, []);
 
   const fullDocument = useMemo(() => {
-    const pageHtml = previewPage === 'index' ? website.html : (website.pagesHtml || {})[previewPage] || website.html;
+    const pageHtml = page === 'index' ? website.html : (website.pagesHtml || {})[page] || website.html;
     // Normalizza i data URL (base64 wrapped → strip whitespace): Chrome
     // rifiuta i payload con whitespace in about:srcdoc → ERR_INVALID_URL.
     // Soglia alta (200KB): le foto gallery (~60KB) restano visibili.
     return normalizeInlineImages(buildWebsiteFullDocument(pageHtml, website.css, website.js, website.brief.font), 200_000);
-  }, [website, previewPage]);
+  }, [website, page]);
 
   // Pannello AI condiviso: rail desktop + bottom sheet mobile (pattern card).
   const aiConsolePanel = (
@@ -1019,8 +1028,8 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                     {website.pages.map((p) => (
                       <button
                         key={p}
-                        className={`page-switch-btn${previewPage === p ? ' active' : ''}`}
-                        onClick={() => setPreviewPage(p)}
+                        className={`page-switch-btn${page === p ? ' active' : ''}`}
+                        onClick={() => setPage(p)}
                       >
                         {p}
                       </button>
@@ -1063,8 +1072,8 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
                   {website.pages.map((p) => (
                     <button
                       key={p}
-                      className={`page-switch-btn${codePage === p ? ' active' : ''}`}
-                      onClick={() => setCodePage(p)}
+                      className={`page-switch-btn${page === p ? ' active' : ''}`}
+                      onClick={() => setPage(p)}
                     >
                       {p}
                     </button>
@@ -1074,14 +1083,15 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
               <div className="code-editor-container">
                 {codeTab === 'html' && (
                   <CodeEditor
-                    value={codePage === 'index' ? website.html : (website.pagesHtml || {})[codePage] || ''}
+                    key={page}
+                    value={page === 'index' ? website.html : (website.pagesHtml || {})[page] || ''}
                     onChange={(v) => {
-                      if (codePage === 'index') {
+                      if (page === 'index') {
                         updateCode('html', v);
                       } else {
                         setWebsite((prev) => ({
                           ...prev,
-                          pagesHtml: { ...(prev.pagesHtml || {}), [codePage]: v },
+                          pagesHtml: { ...(prev.pagesHtml || {}), [page]: v },
                           updatedAt: new Date().toISOString(),
                         }));
                       }

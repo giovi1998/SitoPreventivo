@@ -36,6 +36,7 @@ import {
   storageKeyFor,
   persistState,
 } from '../utils/logo/logoAiPersistence';
+import { compressForAI } from '../utils/ai/compressForAI';
 import ConceptCard from './logo/ConceptCard';
 import './LogoAiPanel.css';
 
@@ -233,6 +234,10 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ses
   const [library, setLibrary] = useState<PromptLibraryEntry[]>(() => loadSharedPromptLibrary(PROMPT_LIBRARY_KEYS.logo));
   const [regeneratingIdx, setRegeneratingIdx] = useState<number | null>(null);
   const [imageModel, setImageModel] = useState<string>(() => getAiImageModelDefault());
+  // TB-033: logo del cliente caricato come riferimento visivo (stile simile,
+  // testo nuovo). Compresso per vision, mai salvato.
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const referenceInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentPreviewSvg = React.useMemo(() => {
     try {
@@ -312,6 +317,30 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ses
 
   const canGenerate = answers.activity.trim().length > 2 && answers.target.trim().length > 2;
 
+  const handleReferenceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      addToast('error', 'Il riferimento deve essere un\'immagine.');
+      return;
+    }
+    try {
+      const raw = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error ?? new Error('Lettura file fallita'));
+        reader.readAsDataURL(file);
+      });
+      // Reference piccolo e lossy: è input per vision, non deliverable.
+      const compressed = await compressForAI(raw, 400_000, 1024);
+      setReferenceImage(compressed.dataUrl);
+      addToast('success', 'Logo di riferimento caricato. I concept imiteranno stile e colori con testo nuovo.');
+    } catch (err) {
+      addToast('error', `Immagine non valida: ${(err as Error)?.message ?? 'errore sconosciuto'}`);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!canGenerate) {
       addToast('info', 'Compila almeno attività e target (3+ caratteri).');
@@ -325,7 +354,10 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ses
         `Settore: ${answers.sector}`,
       ].join('. ');
       addToast('info', 'Generazione 3 concept logo...');
-      const result = await generate(logo, brief, { sector: answers.sector });
+      const result = await generate(logo, brief, {
+        sector: answers.sector,
+        referenceImageBase64: referenceImage || undefined,
+      });
       if (result.aiCall) onAiCall?.(result.aiCall.kind, result.aiCall.costUsd);
       if (!result.applied || !result.concepts.length) {
         addToast('error', 'AI non ha restituito concept validi. Riprova con una descrizione più dettagliata.');
@@ -411,6 +443,7 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ses
     setSelected(-1);
     setBgImages([null, null, null]);
     setBgErrors([null, null, null]);
+    setReferenceImage(null);
     reset();
     localStorage.removeItem(lsKey);
   };
@@ -551,6 +584,30 @@ export default function LogoAiPanel({ logo, onPatch, tier, userEmail, docId, ses
 
       {step === 'chat' && (
         <div className="logo-ai-chat">
+          <div className="logo-ai-reference">
+            <label>Logo di riferimento (opzionale)</label>
+            <p className="logo-ai-hint">Carica il logo attuale del cliente: l'AI imita stile e colori ma scrive il nome nuovo del brief.</p>
+            {referenceImage ? (
+              <div className="logo-ai-reference-preview">
+                <img src={referenceImage} alt="Logo di riferimento" />
+                <button type="button" onClick={() => setReferenceImage(null)} title="Rimuovi riferimento">✕</button>
+              </div>
+            ) : (
+              <>
+                <input
+                  ref={referenceInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleReferenceUpload}
+                  hidden
+                  data-testid="logo-reference-upload"
+                />
+                <button type="button" className="logo-ai-reference-btn" onClick={() => referenceInputRef.current?.click()}>
+                  Carica logo esistente
+                </button>
+              </>
+            )}
+          </div>
           <AiPromptTextarea
             label="Cosa fa la tua attività?"
             value={answers.activity}

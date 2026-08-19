@@ -15,6 +15,11 @@ interface CodeEditorProps {
 export default function CodeEditor({ value, onChange, language }: CodeEditorProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<{ destroy: () => void } | null>(null);
+  // Il listener CodeMirror cattura la prima `onChange` al mount; un ref
+  // sempre fresco evita la stale closure quando il prop cambia (es. pagina
+  // diversa) senza dover forzare il remount dell'editor.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +41,7 @@ export default function CodeEditor({ value, onChange, language }: CodeEditorProp
           oneDark,
           lang,
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) onChange(update.state.doc.toString());
+            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
           }),
         ],
       });

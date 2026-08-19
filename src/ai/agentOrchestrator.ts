@@ -30,6 +30,8 @@ export interface AgentContext {
   userEmail?: string;
   /** T7: trace gerarchica — l'agente è il root, ogni tool uno step span. */
   runTrace?: RunTraceOptions;
+  /** TB-033: logo cliente compresso come riferimento vision per generate_logo. */
+  logoReference?: string;
 }
 
 export interface AgentDoc {
@@ -178,6 +180,7 @@ export class AgentOrchestrator extends BaseOrchestrator {
             modelId: ctx.modelId,
             customerId: ctx.customerId,
             sessionId: ctx.sessionId,
+            referenceImageBase64: ctx.logoReference,
             ...runTrace,
           });
           const selected = result.concepts[result.selected];

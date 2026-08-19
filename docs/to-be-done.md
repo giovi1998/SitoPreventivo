@@ -79,10 +79,6 @@ Colonna "To do" della kanban. Completati → **[done.md](done.md)**.
 
 ### Backlog tecnico corrente
 
-- [ ] **Website Builder — follow-up multi-pagina (2026-08-05)**: possibile
-  raffinamento quando si vede il risultato reale: qualità delle pagine
-  secondarie (contenuti), nav identica, asset condivisi. Base fatta
-  (→ done.md).
 - [ ] **Card flusso completo in clienti**: auto-build → Genera bozze AI →
   preview/editor senza errori quota/JSON/vision. Verificare E2E con
   Playwright su cliente reale.

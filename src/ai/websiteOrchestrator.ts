@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { promptRegistry } from './prompts/registry';
-import { buildWebsiteGeneratePrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteJsPrompt, buildWebsiteFixPrompt, buildWebsitePagePrompt } from './prompts/websiteSystem';
+import { buildWebsiteGeneratePrompt, buildWebsiteHtmlPrompt, buildWebsiteCssPrompt, buildWebsiteJsPrompt, buildWebsiteFixPrompt, buildWebsitePagePrompt, summarizeIndexHtml } from './prompts/websiteSystem';
 import { ensureSeoMeta, stripSocialCanonical } from '../utils/website/seoMeta';
 import { stripLogoFromHtml } from '../utils/website/logoInjection';
 import { enforceMapIframe } from '../utils/website/sanitizeGenerated';
@@ -331,6 +331,10 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const secondaryPages = pages.filter((p) => p !== 'index');
     if (secondaryPages.length > 0) {
       const navHtml = extractNavFromHtml(html);
+      // TB-034: la pagina vede il riassunto deterministico dell'index (hero,
+      // CTA, sezioni) per NON ripetere contenuto e restare coerente
+      // (stesso CSS condiviso, stesse classi semantiche).
+      const indexSummary = summarizeIndexHtml(html);
       for (const page of secondaryPages) {
         const pagePrompt = buildWebsitePagePrompt(page, {
           businessName: brief.businessName,
@@ -340,7 +344,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
           cta: brief.cta,
           contacts: brief.contacts,
           socials: brief.socials,
-        }, navHtml);
+        }, navHtml, indexSummary);
         options.onStep?.(`page:${page}`, pagePrompt);
         const pageMessages: ChatMessage[] = [
           { role: 'system', content: promptRegistry.getPrompt('website-system') },

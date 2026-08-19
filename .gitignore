@@ -119,3 +119,6 @@ __pycache__/
 
 # Playwright persistent profile degli script design-review/verify (browser data, mai committare)
 e2e/__screenshots__/.pw-profile/
+
+# Screenshot generati dagli E2E (website-coherence-audit, ecc.) — rigenerabili, mai committare
+artifacts/

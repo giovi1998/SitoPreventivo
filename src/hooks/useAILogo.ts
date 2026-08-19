@@ -16,7 +16,7 @@ export interface UseAILogoReturn {
   generate: (
     logo: Logo,
     brief: string,
-    options?: { sector?: string; modelId?: string; onProgress?: (msg: string) => void },
+    options?: { sector?: string; modelId?: string; onProgress?: (msg: string) => void; referenceImageBase64?: string },
   ) => Promise<LogoProcessResult>;
   generateBackground: (
     logo: Logo,
@@ -65,7 +65,7 @@ export function useAILogo(userEmail?: string, sessionId?: string): UseAILogoRetu
   );
 
   const generate = useCallback(
-    async (logo: Logo, brief: string, options?: { sector?: string; modelId?: string; onProgress?: (msg: string) => void }) => {
+    async (logo: Logo, brief: string, options?: { sector?: string; modelId?: string; onProgress?: (msg: string) => void; referenceImageBase64?: string }) => {
       const requestId = newRequestId();
       const promptPreview = brief.length > 60 ? brief.slice(0, 57) + '...' : brief;
 
@@ -104,6 +104,7 @@ export function useAILogo(userEmail?: string, sessionId?: string): UseAILogoRetu
           },
           userEmail,
           imagePreviewBase64,
+          referenceImageBase64: options?.referenceImageBase64,
         });
 
         const tokens = result.response?.usage

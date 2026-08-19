@@ -7,6 +7,7 @@ REGOLE FONDAMENTALI:
 - css: CSS con variabili custom :root { --primary, --secondary, --accent, --bg, --text, --font }, CSS Grid/Flexbox, media query a 768px.
 - js: Vanilla ES6+ per interazioni base (menu hamburger mobile, smooth scroll, form validation). Progressive enhancement: il sito funziona anche senza JS.
 - pages: array di nomi pagina (es. ["index", "about", "contact"]). Se il brief richiede >1 pagina, genera link relativi tra pagine. Ogni pagina è autonoma (ha il suo CSS/JS completo). Se il brief è semplice, single-page con sezioni anchor.
+- Coerenza M-PAGE: con >1 pagina, nav/footer/logo IDENTICI su tutte (stesso markup, stessi link); contenuto senza ripetizioni (mai hero/CTA identici in 2 pagine); stesse classi condivise (.btn, .section-inner, .nav, .footer) — pagina interna usa .page-hero (più piccolo dell'hero home) con .eyebrow; il CSS è UNO SOLO e include tutte le pagine.
 - heroPrompts: array di prompt per generazione immagini hero via AI (opzionale, max 5). Usa solo se il brief richiede immagini fotografiche.
 
 CRAFT FLOOR (qualità non negoziabile — impeccable):
@@ -214,6 +215,31 @@ export function buildWebsiteHtmlPrompt(
   return parts.join('\n');
 }
 
+/** Riassunto deterministico dell'index per coerenza multipagina:
+ *  hero, CTA e sezioni già usate in home — da NON ripetere nelle pagine
+ *  secondarie. La classe CSS è condivisa: stesso --primary/--font/--radius. */
+export interface IndexPageSummary {
+  heroTitle: string | null;
+  heroLeadLine: string | null;
+  cta: string | null;
+  sections: string[];
+}
+
+export function summarizeIndexHtml(html: string): IndexPageSummary {
+  const stripTags = (s: string) => s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const heroMatch = html.match(/<section[^>]*class="[^"]*\bhero\b[^"]*"[^>]*>[\s\S]*?<\/section>/i);
+  const heroBlock = heroMatch?.[0] ?? '';
+  const heroTitle = stripTags(heroBlock.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? '') || null;
+  const heroLeadLine = stripTags(heroBlock.match(/<p[^>]*>([\s\S]*?)<\/p>/i)?.[1] ?? '') || null;
+  const ctaRaw = heroBlock.match(/<a[^>]*class="[^"]*\bbtn\b[^"]*"[^>]*>([\s\S]*?)<\/a>/i)?.[1]
+    ?? html.match(/<a[^>]*class="[^"]*\bbtn\b[^"]*"[^>]*>([\s\S]*?)<\/a>/i)?.[1]
+    ?? html.match(/<button[^>]*class="[^"]*\bbtn\b[^"]*"[^>]*>([\s\S]*?)<\/button>/i)?.[1]
+    ?? null;
+  const cta = ctaRaw ? stripTags(ctaRaw) : null;
+  const sections = [...html.matchAll(/<section[^>]*\sid="([^"]+)"/gi)].map((m) => m[1]);
+  return { heroTitle, heroLeadLine, cta, sections };
+}
+
 export function buildWebsitePagePrompt(
   page: string,
   brief: {
@@ -226,7 +252,23 @@ export function buildWebsitePagePrompt(
     socials: { platform: string; url: string }[];
   },
   navHtml: string,
+  indexSummary?: IndexPageSummary | null,
 ): string {
+  const summary = indexSummary ?? summarizeIndexHtml('');
+  const alreadyInIndex: string[] = [];
+  if (summary.heroTitle) alreadyInIndex.push(`Slogan hero: "${summary.heroTitle}"`);
+  if (summary.heroLeadLine) alreadyInIndex.push(`Sottotitolo hero: "${summary.heroLeadLine}"`);
+  if (summary.cta) alreadyInIndex.push(`CTA principale: "${summary.cta}"`);
+  if (summary.sections.length > 0) alreadyInIndex.push(`Sezioni già usate in home (id): ${summary.sections.join(', ')}`);
+
+  const dedupeRules = alreadyInIndex.length > 0
+    ? [
+        '',
+        '⚠️ CONTENUTO GIÀ PRESENTE IN INDEX — NON ripetere (niente slogan hero, niente CTA identica, niente stesse sezioni o elenco servizi):',
+        ...alreadyInIndex.map((s) => `- ${s}`),
+      ].join('\n')
+    : '';
+
   return `# Generazione pagina "${page}" del sito web
 
 Nome attività: ${brief.businessName}
@@ -238,12 +280,20 @@ ${brief.contacts ? `Contatti: ${brief.contacts}` : ''}
 
 NAV DA USARE IDENTICA ALLE ALTRE PAGINE (stessi link, stessa struttura):
 ${navHtml.slice(0, 1500)}
+${dedupeRules}
+
+COERENZA VISIVA OBBLIGATORIA:
+- Le pagine condividono LO STESSO CSS (generato dopo): MAI usare classi inline style, MAI inventare classi come .button/.cta-primary/.header se quelle condivise esistono.
+- Riusa ESATTAMENTE le classi dell'index per elementi comuni: header nav brand nav-inner nav-links menu-toggle | main section-inner | btn | footer current-year. Quando descrivi sezioni, usa le stesse classi dell'index (section-inner, btn, hero solo se identica al tema).
+- Per contenuti nuovi (valori, team, storia, form) usa classi semantiche semplici: .value, .team, .team-member, .form-group, .form-field. Non reintrodurre style o span con inline style.
+- Stessa griglia tipografica dell'index: h1 per il titolo pagina, h2 per le sottosezioni, p per il corpo. MAI h1 più piccolo di h2, MAI testi "tutto uguale".
 
 Regole:
 - Genera SOLO la struttura HTML della pagina "${page}". Nessun CSS, nessun JavaScript.
 - La pagina DEVE avere: <head> con <meta name="viewport"> e <meta name="description">, la nav IDENTICA a quella sopra (stesso brand, stessi link, stesso menu-toggle), <main> con contenuti reali per "${page}", footer con classe .current-year.
 - Contenuti placeholder realistici in italiano coerenti col settore, MAI "Lorem ipsum".
 - Se "${page}" è "about" o simile: chi siamo, missione, valori, team, storia. Se è "contact" o "contatti": sezione contatti con indirizzo/telefono/email del brief e form semplice (senza server). Se è "services"/"servizi": elenco servizi/offerte. Adatta i contenuti al nome della pagina.
+- AGGIUNGI un breadcrumb (o titolo di pagina) coerente col nome: <section class="page-hero"><div class="section-inner"><p class="eyebrow">${brief.businessName}</p><h1>${page.charAt(0).toUpperCase() + page.slice(1)}</h1><p>Sottotitolo contestuale alla pagina</p></div></section> in alto nel main (dopo la nav), non un hero identico alla home.
 - 🚫 LOGO: NON generare MAI tag <img> logo, <svg> logo, brand-mark né placeholder. La <div class="brand"> contiene SOLO il testo del nome attività.
 - 🚫 SVG: NON creare MAI tag <svg> né elementi SVG da nessuna parte, a meno che il brief non lo richieda esplicitamente.
 - 🚫 EMOJI: NON usare emoji nel testo visibile.
@@ -300,6 +350,8 @@ OBBLIGATORIO:
 - Transizioni fluide (transition: 0.3s ease)
 - Focus states per accessibilità (:focus-visible con outline)
 - Stili per .hero, .hero h1, .hero p, .btn, .section-inner, .footer, .nav, .nav-links, .menu-toggle
+- Stili per .page-hero (testata pagine interne: più bassa dell'hero home, stesso accent, padding ridotto), .eyebrow (small caps, letter-spacing var(--tracking))
+- Stili per .value, .team, .team-member, .form-group, .form-field (sezioni pagine interne)
 - Brand wrapper (logo + nome): display:flex, align-items:center, gap:12px. MAI column.
 - Padding/margin coerenti (usa variabili --space-*)
 - Font-size fluidi con clamp() dove appropriato
@@ -412,6 +464,10 @@ ${html.slice(0, 5000)}
 
 Il JS deve funzionare con QUALSIASI struttura HTML. Usa querySelector generici con fallback.
 
+Coerenza multipagina:
+- La stessa base JS serve sia alla index sia alle pagine secondarie (page-hero con .eyebrow, .team, .value, .form-group). Non scrivere logica valida solo per una pagina.
+- Ogni selettore DEVE avere guard: se l'elemento manca (es. nessun form sulla pagina di about) il codice non deve fallire.
+
 Funzioni da includere OBBLIGATORIAMENTE (tutte):
 1. **Smooth scroll** per link anchor: document.querySelectorAll('a[href^="#"]').forEach...
 2. **Hamburger menu**: cerca .menu-toggle o <button> dentro <header>/<nav>. Se non c'è bottone, creane uno con JS e appendilo al nav. Toggle classe .nav-open sul nav.
@@ -468,6 +524,7 @@ QUALITÀ JS:
 - Performance: evita querySelectorAll ripetuti, cache i selettori
 - Accessibility: aria-expanded sul toggle menu, role="navigation" sul nav
 - Fallback: se un elemento non esiste, non crashare (optional chaining o if guard)
+- Coerenza: se ci sono .form-group/.form-field in una pagina di contatto, il submit va gestito UNA VOLTA con guard sul form esistente (non creare un secondo form handler per quella pagina).
 
 Rispondi SOLO con JSON: { "js": "..." }
 IL CAMPO "js" DEVE CONTENERE ALMENO 30 RIGHE DI JAVASCRIPT. NON PUÒ ESSERE VUOTO.`;

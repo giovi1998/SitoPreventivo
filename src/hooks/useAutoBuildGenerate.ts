@@ -272,13 +272,14 @@ async function generateFlashImage(
   return null;
 }
 
-async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: AutoBuildGenerateOptions): Promise<LogoBuilder> {
+async function generateLogoDraft(doc: AutoBuildDoc, brief: string, options?: AutoBuildGenerateOptions, referenceImage?: string | null): Promise<LogoBuilder> {
   const orchestrator = new LogoAIOrchestrator();
   const result = await orchestrator.generateLogo(doc.data as unknown as Logo, brief, {
     modelId: options?.providerId,
     customerId: options?.customerId,
     sessionId: doc.id,
     reasoningEffort: options?.reasoningEffort,
+    referenceImageBase64: referenceImage || undefined,
     ...options?.runTrace,
   });
   const selected = result.selected >= 0 ? result.concepts[result.selected] : result.concepts[0];
@@ -615,7 +616,18 @@ export function useAutoBuildGenerate() {
     async (doc: AutoBuildDoc, customer: AutoBuildCustomer, allDocs?: AutoBuildDoc[], options?: AutoBuildGenerateOptions): Promise<void> => {
       const brief = briefOf(doc);
       if (doc.documentType === 'logo') {
-        logoBuilderRef.current = await generateLogoDraft(doc, brief, options);
+        // TB-033: logo del cliente come riferimento visivo (stile simile,
+        // testo nuovo). Comprimiamo per vision quando c'è.
+        let reference: string | null = null;
+        const rawLogo = customer.logoUrl || customer.detectedLogoUrl || null;
+        if (rawLogo) {
+          try {
+            reference = (await compressDataUrl(rawLogo, 1024, 400_000)) || rawLogo;
+          } catch {
+            reference = rawLogo;
+          }
+        }
+        logoBuilderRef.current = await generateLogoDraft(doc, brief, options, reference);
       } else if (doc.documentType === 'businessCard') {
         // Vision: logo generato in questo run, altrimenti builder del draft logo esistente.
         const existingBuilder = allDocs?.find((d) => d.documentType === 'logo')?.data?.builder as LogoBuilder | undefined;
@@ -653,6 +665,16 @@ export function useAutoBuildGenerate() {
         try {
           const agent = new AgentOrchestrator();
           const runTrace: RunTraceOptions = { runId, runName: 'auto-build', startRun: true, rootSpanId };
+          // TB-033: reference logo del cliente compresso per vision.
+          let logoReference: string | undefined;
+          const rawLogo = customer.logoUrl || customer.detectedLogoUrl || null;
+          if (rawLogo) {
+            try {
+              logoReference = (await compressDataUrl(rawLogo, 1024, 400_000)) || rawLogo;
+            } catch {
+              logoReference = rawLogo;
+            }
+          }
           // I tool ricevono i draft REALI (con default per i parziali):
           // `{}` rompeva generateCopy (size/style mancanti → TypeError
           // "reading 'undefined'" in scaledFontBounds, bug live 2026-08-13).
@@ -670,6 +692,7 @@ export function useAutoBuildGenerate() {
               modelId: options.providerId,
               customerId: options.customerId,
               runTrace,
+              logoReference,
             },
             {
               include: targets.map((t) => agentTypeOfDoc(t.documentType)).filter((t): t is NonNullable<typeof t> => t != null),
