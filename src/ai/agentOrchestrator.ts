@@ -161,10 +161,17 @@ export class AgentOrchestrator extends BaseOrchestrator {
     const messages = this.buildMessages(AGENT_SYSTEM_PROMPT, buildAgentUserPrompt(brief, include));
     const results: AgentToolResult[] = [];
     let response: AIResponse = { content: null, toolCalls: undefined, usage: undefined };
+    // t12: guardia anti-fix-loop — 2 fallimenti consecutivi di generate_*
+    // (misurato su Langfuse 17-19/08: 9/30 run bloccati su verify:fix
+    // senza mai convergere) → stop e riepilogo parziale.
+    let consecutiveFailures = 0;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      // t12: dopo 2 fallimenti consecutivi il fix non converge → round di
+      // sintesi senza tools (il modello riassume in testo), poi stop.
+      const roundTools = consecutiveFailures >= 2 ? [] : tools;
       response = await this.handleStream(provider, messages, {
-        tools,
+        tools: roundTools,
         reasoningEffort: 'max',
         sessionId: ctx.sessionId,
         customerId: ctx.customerId,
@@ -179,6 +186,8 @@ export class AgentOrchestrator extends BaseOrchestrator {
 
       const toolCalls = response.toolCalls ?? [];
       if (toolCalls.length === 0) break;
+      // t12: round di sintesi (senza tools) → il modello riassume e termina.
+      if (roundTools.length === 0) break;
 
       for (const tc of toolCalls) {
         const toolDoc = tc.function.name.replace('generate_', '') as (typeof include)[number];
@@ -189,6 +198,7 @@ export class AgentOrchestrator extends BaseOrchestrator {
         messages.push({ role: 'assistant', content: response.content ?? '', toolCalls: [tc] });
         messages.push({ role: 'tool', content: result.content ?? JSON.stringify(result.summary), toolCallId: tc.id, name: tc.function.name });
         await options.onToolResult?.(result);
+        consecutiveFailures = result.ok ? 0 : consecutiveFailures + 1;
       }
     }
 

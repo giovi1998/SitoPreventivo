@@ -2,7 +2,36 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:research`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, resolution below)
+
+## Risoluzione
+
+Misura effettuata su Langfuse (v2/observations, 17-19/08, ~30 run
+`agent:auto-build`):
+
+**Osservazioni reali:**
+1. **verify:fix non converge**: 9/30 run terminano con step
+   `agent:auto-build:verify:fix` come ultimo step — il modello insiste
+   a fixare ma la verify non passa mai (nessun `verify:pass` dopo).
+   Questo è lo spreco principale: round bruciati su fix che non chiudono.
+2. **Doppio verify:pass**: 1 run con `pass1` DEFAULT + `pass2` DEFAULT +
+   `pass2` ERROR (17/08 09:43-09:46) — "riprova una volta" già eseguito,
+   poi fallisce.
+3. **Nessun dedup args**: nessuna coppia di tool call identica ravvicinata
+   osservata. Il dedup per args **non è giustificato** dai dati.
+
+**Decisione (guardia minima):**
+- **Early-stop su 2 fix consecutivi senza pass**: in `AgentOrchestrator.run`,
+  contare i fallimenti consecutivi; a 2 → stop del loop con sintesi finale
+  ("riassumi cosa è stato generato finora"), non nuovo tool call.
+- **Niente dedup args** (non osservato; aggiungere solo se le trace future
+  mostrano duplicati).
+- La sintesi forzata è già il comportamento del round finale: va solo
+  assicurata anche sul path early-stop.
+
+**Follow-up registrato in mappa**: bug trace (root duplicate + generation
+orfana nella stessa trace — g0qieJCR e A3EJgT+r) da verificare in t07
+(threading runid), non è loop hardening.
 
 ## Question
 
