@@ -326,7 +326,7 @@ describe('vite dev API proxy (vite.config.js)', () => {
     expect(traceCalls[0].subfeature).toBe('cover');
   });
 
-  it('TB-029: dev proxy kimi-k3:cloud calcola costUsd pay-per-token (18.00) sulla trace stream', async () => {
+  it('2026-08-20: dev proxy kimi-k3:cloud flat → costUsd assente sulla trace', async () => {
     process.env.OLLAMA_API_KEY = 'test-key';
     const traceCalls: any[] = [];
     const api = await loadApiMiddleware(async (id: string) => {
@@ -353,7 +353,7 @@ describe('vite dev API proxy (vite.config.js)', () => {
     expect(res.statusCode).toBe(200);
     await vi.waitFor(() => expect(traceCalls.length).toBe(1));
     expect(traceCalls[0].model).toBe('kimi-k3:cloud');
-    expect(traceCalls[0].costUsd).toBe(18);
+    expect(traceCalls[0].costUsd).toBeUndefined();
     expect(traceCalls[0].usage).toEqual({ promptTokens: 1_000_000, completionTokens: 1_000_000 });
   });
 

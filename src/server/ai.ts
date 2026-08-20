@@ -42,12 +42,11 @@ const GEMINI_PER_IMAGE: Record<string, number> = {
   'gemini-3.1-flash-image': 0.04,
   'gemini-2.0-flash-preview-image-generation': 0.02,
 };
-// Ollama Pro: quasi tutti i modelli sono flat $20/mo; kimi-k3:cloud è
-// l'eccezione pay-per-token (extra usage oltre il flat, prezzi ollama.com
-// 2026-08). Mirror di src/ai/providerPricing.ts (provider ID→model).
-const OLLAMA_PER_TOKEN_PRICE: Record<string, { input: number; output: number }> = {
-  'kimi-k3:cloud': { input: 3.0, output: 15.0 },
-};
+// Ollama Pro: tutti i modelli flat $20/mo dal 2026-08-20 (kimi-k3:cloud
+// incluso nella subscription, nessun extra usage). Tabella lasciata vuota
+// per backward compat: un futuro model pay-per-token va aggiunto qui e in
+// src/ai/providerPricing.ts (provider ID→model).
+const OLLAMA_PER_TOKEN_PRICE: Record<string, { input: number; output: number }> = {};
 
 function computeCostUsd(
   provider: string,
