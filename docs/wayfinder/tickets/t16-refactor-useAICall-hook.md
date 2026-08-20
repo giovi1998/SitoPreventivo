@@ -2,7 +2,23 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:task`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, resolution below)
+
+## Risoluzione
+
+Creati due moduli utility **puri** (no React state → non servono hook):
+
+- `src/utils/ai/tokenBudget.ts` — `ensureTokenBudget(userEmail)` (pure async).
+- `src/utils/ai/imageCall.ts` — `postAiImage(endpoint, payload, opts)`:
+  fetch unico + error map + costUsd + aiCall shape; ritorna
+  `{ dataUrl, aiCall }`.
+
+Migrati: useAICard (generateCover/generatePhoto), useAILogo (background),
+useAIFlyer (hero), useAIIconHero. `setLastCostUsd` no-op rimosso (era
+dead code: gestito da useAILogs). `ensureTokenBudget` duplicato in 3
+hook → unico modulo. `trackImageTokens` → `postAiImage` fa il track
+internamente. Test: `tokenBudget.test.ts` + `imageCall.test.ts`
+(happy path + error fetch). Nessuna feature nuova — solo DRY.
 
 ## Question
 

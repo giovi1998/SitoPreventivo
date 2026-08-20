@@ -11,7 +11,6 @@ import {
   resolveCardCoverLogo,
 } from '../utils/card/coverImage';
 import { logger } from '../utils/logger';
-import { isLocalhost } from '../utils/env';
 import { mapAiError } from '../utils/ai/mapAiError';
 import { saveGeneratedImage } from '../utils/saveGeneratedImage';
 import { buildCardPhotoBrief } from '../utils/card/photoBrief';
@@ -22,6 +21,8 @@ import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiVisionEnabled } from '../utils/uiPrefs';
 import { getAiImageModelDefault } from '../utils/uiPrefs';
 import type { AiCallKind } from '../utils/aiStats';
+import { ensureTokenBudget } from '../utils/ai/tokenBudget';
+import { postAiImage } from '../utils/ai/imageCall';
 
 interface UseAICardReturn {
   processCardPrompt: (
@@ -72,16 +73,6 @@ export function useAICard(userEmail?: string, sessionId?: string): UseAICardRetu
     return orchestratorRef.current;
   }, []);
 
-  const ensureTokenBudget = useCallback(async () => {
-    if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
-      const profile = await dataService.getUserProfile(userEmail);
-      if (profile.error) throw new Error(profile.error);
-      if (profile.tokensUsed >= profile.tokenLimit) {
-        throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
-      }
-    }
-  }, [userEmail]);
-
   const trackImageTokens = useCallback(
     (costUsd?: number) => {
       if (userEmail && userEmail !== 'admin@gmail.com') {
@@ -103,7 +94,7 @@ export function useAICard(userEmail?: string, sessionId?: string): UseAICardRetu
     ) => {
       if (!prompt.trim()) throw new Error("Inserisci un prompt per l'AI.");
       const requestId = newRequestId();
-      await ensureTokenBudget();
+      await ensureTokenBudget(userEmail);
 
         const promptPreview = prompt.length > 60 ? prompt.slice(0, 57) + '...' : prompt;
 
@@ -239,7 +230,7 @@ export function useAICard(userEmail?: string, sessionId?: string): UseAICardRetu
   const generateCover = useCallback(
     async (card: BusinessCard, side: 'front' | 'back' = 'front', promptOverride?: string, options?: { onProgress?: (msg: string) => void; imageModel?: string }) => {
       const requestId = newRequestId();
-      await ensureTokenBudget();
+      await ensureTokenBudget(userEmail);
 
       const { prompt: coverPrompt, context: coverContext } =
         promptOverride ? { prompt: promptOverride, context: '' } : buildCardCoverBrief(card, side);
@@ -257,26 +248,19 @@ export function useAICard(userEmail?: string, sessionId?: string): UseAICardRetu
         const payload = buildCardCoverPayload(coverPrompt, coverContext, { cardImage, logoImage }, side, userEmail, imageModel);
         if (sessionId) payload.sessionId = sessionId;
 
-        const apiBase = import.meta.env?.VITE_API_BASE || '';
-        const res = await fetch(`${apiBase}/api/ai/card-cover`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
-          body: JSON.stringify(payload),
+        const { dataUrl, costUsd, mimeType, sizeKB } = await postAiImage({
+          endpoint: '/api/ai/card-cover',
+          payload,
+          requestId,
+          imageModel,
+          userEmail,
+          fallbackError: 'Errore generazione cover',
         });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: 'Errore generazione cover' }));
-          throw new Error(err.error || `Cover AI ${res.status}`);
-        }
-
-        const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
-        const imageCost = calculateCostUsd('gemini-nano-banana', undefined, 1);
-        setLastCostUsd(imageCost);
-        trackImageTokens(imageCost);
-        success(`Cover AI (${side}) generata`, `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd: imageCost, hasImage: true, modelId: imageModel });
-        const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
+        setLastCostUsd(costUsd);
+        trackImageTokens(costUsd);
+        success(`Cover AI (${side}) generata`, `${mimeType}, ${sizeKB}KB`, { requestId, costUsd, hasImage: true, modelId: imageModel });
         saveGeneratedImage(userEmail, dataUrl, 'cards', 'cover', coverPrompt).catch(() => {});
-        return { dataUrl, aiCall: { kind: 'cover' as const, costUsd: imageCost } };
+        return { dataUrl, aiCall: { kind: 'cover' as const, costUsd } };
       } catch (err: any) {
         const hint = mapAiError(err);
         logger.error('Card AI generateCover failed', { route: 'useAICard.generateCover', err: err?.message });
@@ -290,7 +274,7 @@ export function useAICard(userEmail?: string, sessionId?: string): UseAICardRetu
   const generatePhoto = useCallback(
     async (card: BusinessCard, options?: { promptOverride?: string; onProgress?: (msg: string) => void; imageModel?: string }) => {
       const requestId = newRequestId();
-      await ensureTokenBudget();
+      await ensureTokenBudget(userEmail);
 
       const brief = buildCardPhotoBrief(card);
       const override = options?.promptOverride?.trim();
@@ -300,33 +284,26 @@ export function useAICard(userEmail?: string, sessionId?: string): UseAICardRetu
       options?.onProgress?.('🖼️ Generazione foto AI in corso...');
 
       try {
-        const apiBase = import.meta.env?.VITE_API_BASE || '';
         const imageModel = options?.imageModel || getAiImageModelDefault();
-        const res = await fetch(`${apiBase}/api/ai/card-photo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
-          body: JSON.stringify({
+        const { dataUrl, costUsd, mimeType, sizeKB } = await postAiImage({
+          endpoint: '/api/ai/card-photo',
+          payload: {
             prompt,
             context: context || undefined,
             userEmail: userEmail || undefined,
             imageModel,
             ...(sessionId ? { sessionId } : {}),
-          }),
+          },
+          requestId,
+          imageModel,
+          userEmail,
+          fallbackError: 'Errore generazione foto',
         });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: `Errore generazione foto (${res.status})` }));
-          throw new Error(err.error || `Photo AI ${res.status}`);
-        }
-
-        const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
-        const imageCost = calculateCostUsd('gemini-nano-banana', undefined, 1);
-        setLastCostUsd(imageCost);
-        trackImageTokens(imageCost);
-        success('Foto AI generata', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd: imageCost, hasImage: true, modelId: imageModel });
-        const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
+        setLastCostUsd(costUsd);
+        trackImageTokens(costUsd);
+        success('Foto AI generata', `${mimeType}, ${sizeKB}KB`, { requestId, costUsd, hasImage: true, modelId: imageModel });
         saveGeneratedImage(userEmail, dataUrl, 'cards', 'photo', prompt).catch(() => {});
-        return { dataUrl, aiCall: { kind: 'photo' as const, costUsd: imageCost } };
+        return { dataUrl, aiCall: { kind: 'photo' as const, costUsd } };
       } catch (err: any) {
         const hint = mapAiError(err);
         logger.error('Card AI generatePhoto failed', { route: 'useAICard.generatePhoto', err: err?.message });
