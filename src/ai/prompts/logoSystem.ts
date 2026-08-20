@@ -134,6 +134,7 @@ ${safeSector ? `Settore: ${safeSector}` : ''}${contextSection}
 Ogni concept DEVE differire per almeno 2 campi tra nome, icona, layout, colori o decorazioni.
 Rispetta l'allowlist lucide se usi iconType=lucide.
 L'imagePrompt DEVE preservare una text legibility zone: la zona centrale dell'immagine resta più scura e priva di dettagli, perché sopra viene sovrapposto il wordmark bianco.
+Per ogni concept aggiungi qualityScore (0-1, quanto questo concept è impattante, coerente col brand e credibile per il settore) e scoreReason (motivazione in max 10 parole). Il punteggio più alto indica il concept migliore.
 Rispondi con SOLO il JSON array (nessun testo extra).`;
 }
 

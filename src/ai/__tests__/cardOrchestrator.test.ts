@@ -199,6 +199,47 @@ describe('CardAIOrchestrator', () => {
     expect(orch.getCurrentSessionId()).toBeNull();
   });
 
+  it('t19: best-of-N envelope {variants, selected} → usa la variante selezionata', async () => {
+    chatResponses.push({
+      content: JSON.stringify({
+        variants: [
+          { front: { name: 'VAR 0' }, style: { accentColor: '#000000' } },
+          { front: { name: 'VAR 1' }, style: { accentColor: '#111111' } },
+          { front: { name: 'VAR 2' }, style: { accentColor: '#222222' } },
+        ],
+        selected: 2,
+      }),
+      usage: { promptTokens: 20, completionTokens: 10, totalTokens: 30 },
+    });
+    const card = createEmptyCard();
+    const result = await orch.processPrompt(card, 'crea card', { modelId: 'mock' });
+    expect(result.card.front.name).toBe('VAR 2');
+    expect(result.card.style.accentColor).toBe('#222222');
+  });
+
+  it('t19: selected invalido → fallback prima variante', async () => {
+    chatResponses.push({
+      content: JSON.stringify({
+        variants: [{ front: { name: 'OK' } }, { front: { name: 'NO' } }],
+        selected: 99,
+      }),
+      usage: { promptTokens: 20, completionTokens: 10, totalTokens: 30 },
+    });
+    const card = createEmptyCard();
+    const result = await orch.processPrompt(card, 'crea card', { modelId: 'mock' });
+    expect(result.card.front.name).toBe('OK');
+  });
+
+  it('t19: schema legacy (card diretta) resta invariato', async () => {
+    chatResponses.push({
+      content: JSON.stringify({ front: { name: 'LEGACY' } }),
+      usage: { promptTokens: 20, completionTokens: 10, totalTokens: 30 },
+    });
+    const card = createEmptyCard();
+    const result = await orch.processPrompt(card, 'cambia nome', { modelId: 'mock' });
+    expect(result.card.front.name).toBe('LEGACY');
+  });
+
   it('getProviderList returns available providers', () => {
     const list = orch.getProviderList();
     expect(list.length).toBeGreaterThan(0);

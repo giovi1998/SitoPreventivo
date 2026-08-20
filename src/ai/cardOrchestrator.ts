@@ -26,17 +26,39 @@ export interface CardProcessResult {
   costUsd?: number;
 }
 
+/**
+ * t19: best-of-N envelope `{ variants: [...], selected: N }` → card scelta.
+ * Schema legacy (card diretta) e varianti vuote tornano invariate.
+ */
+function pickBestCardVariant(parsed: unknown): unknown {
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const maybe = parsed as { variants?: unknown; selected?: unknown };
+    if (Array.isArray(maybe.variants) && maybe.variants.length > 0) {
+      const idx = Number(maybe.selected);
+      const safe = Number.isInteger(idx) && idx >= 0 && idx < maybe.variants.length ? idx : 0;
+      return maybe.variants[safe];
+    }
+  }
+  return parsed;
+}
+
 /** Prompt completo per generare una card da zero (struttura grid + testi +
  * stile). Unica sorgente condivisa: auto-build non-agente e tool
  * `generate_card` dell'agente (senza struttura l'AI ometteva layout/grid →
- * rendering fallback legacy non centrato, bug visivo 2026-08-13). */
+ * rendering fallback legacy non centrato, bug visivo 2026-08-13).
+ *
+ * t19: best-of-N interno — il modello propone 3 varianti complete e
+ * seleziona la migliore in `selected`. Se risponde senza `variants`
+ * (schema legacy) il parse usa il fallback a card singola. */
 export function buildCardDraftPrompt(brief: string): string {
   return [
     'Crea il biglietto da visita completo per questa attività partendo dal brief.',
-    'Definisci TUTTI e tre gli aspetti:',
+    'Genera 3 VARIANTI complete e distinte (STRUTTURA + TESTI + STILE), poi indica in `selected` l\'indice (0-2) della migliore per impatto e coerenza col brand.',
+    'Per ogni variante definisci:',
     '- STRUTTURA: layout fronte più adatto e disposizione elementi (grid) senza sovrapposizioni;',
     '- TESTI: nome, titolo/ruolo, servizi (back.services) plausibili per il settore;',
     '- STILE: palette coerente (bgColor, textColor, accentColor in #RRGGBB), fontFamily, eventuale decorazione.',
+    'Rispondi con: { "variants": [card, card, card], "selected": N }.',
     `Brief: ${brief}`,
   ].join('\n');
 }
@@ -231,12 +253,13 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
           });
           const cleanJson = this.sanitizeAIResponse(followUp.content);
           try {
-            const modified = JSON.parse(cleanJson);
+            // t19: envelope best-of-N {variants, selected} → card scelta.
+            const modified = pickBestCardVariant(JSON.parse(cleanJson));
             const validation = aiCardInputSchema.safeParse(modified);
             if (!validation.success) {
               changes.push(`error:invalid_card_followup:${validation.error.issues.length}`);
             } else {
-              const { card: merged, changes: mergeChanges } = mergeCardAIResponse(currentCard, modified);
+              const { card: merged, changes: mergeChanges } = mergeCardAIResponse(currentCard, validation.data);
               currentCard = merged;
               changes.push(...mergeChanges);
             }
@@ -268,12 +291,13 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
     if (aiResponse.content) {
       const cleanJson = this.sanitizeAIResponse(aiResponse.content);
       try {
-        const modified = JSON.parse(cleanJson);
+        // t19: envelope best-of-N {variants, selected} → card scelta.
+        const modified = pickBestCardVariant(JSON.parse(cleanJson));
         const validation = aiCardInputSchema.safeParse(modified);
         if (!validation.success) {
           changes.push(`error:invalid_card:${validation.error.issues.length}`);
         } else {
-          const { card: merged, changes: mergeChanges } = mergeCardAIResponse(currentCard, modified);
+          const { card: merged, changes: mergeChanges } = mergeCardAIResponse(currentCard, validation.data);
           currentCard = merged;
           changes.push(...mergeChanges);
         }

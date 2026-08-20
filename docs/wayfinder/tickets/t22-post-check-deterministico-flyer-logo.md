@@ -2,7 +2,30 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:task`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, resolution below)
+
+## Risoluzione
+
+Implementato (2026-08-20). Nota lean-code: i floors esistevano già
+(`scaledFontBounds` flyer, hex `hexColorSchema`, grid clamp card). Il gap
+vero era che Zod **rigettava** gli output oltre limite → `applied=false`
+o placeholder "Brand" senza motivo. Fix = **pre-clamp prima dello schema**
+(non più validazione):
+
+- **Logo** (`logoOrchestrator.ts`): `clampLogoAIOutput` tronca
+  primaryText/tagline/monogram/iconName/imagePrompt/qualityScore/
+  scoreReason ai limiti `logoAIOutputSchema` → un tagline da 70 char non
+  fa più fallire l'intero parse (bug storico placeholder "Brand").
+- **Flyer** (`flyerOrchestrator.ts`): `clampFlyerCopy` tronca
+  headline/subheadline/body/cta.label ai limiti `flyerAIOutputSchema`
+  (headline 200, subheadline 300, body 2000, cta 50) → `applied=true`
+  con copy troncata invece di `error:invalid_flyer`. Applicato nei 2
+  path (direct + follow-up tools).
+- Non toccati: `scaledFontBounds` (già clampato a print floors),
+  `textScale` schema (già 0.7-1.5), grid card (già clampata).
+- Test: logo (truncate+parse ok, qualityScore clamp) + flyer (truncate,
+  valido invariato) + aggiornato il vecchio test che si aspettava il
+  rigetto. 53 verdi, typecheck 0.
 
 ## Question
 

@@ -2,7 +2,30 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:task`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, resolution below)
+
+## Risoluzione
+
+Implementato (2026-08-20):
+
+- **Card** (`cardOrchestrator.ts`): `buildCardDraftPrompt` ora chiede
+  `{ "variants": [3 card complete], "selected": N }`; `pickBestCardVariant`
+  estrae la variante selezionata con fallback a index 0 se `selected`
+  invalido; schema legacy (card diretta) resta supportato. Applicato nei
+  2 path (direct + follow-up tools).
+- **Logo** (`logoOrchestrator.ts` + `logoSystem.ts`): campi
+  `qualityScore` (0-1) + `scoreReason` nel `logoAIOutputSchema`, prompt
+  aggiornato; `pickBestScoredConcept` seleziona il concept con punteggio
+  più alto; senza qualityScore (tutti) selected resta -1 (compat).
+- **Flyer: NON implementato** — `generateCopy` torna un solo copy:
+  3 varianti richiederebbe cambio schema di ritorno (array + selected)
+  che rompe `useAIFlyer → FlyerEditorShell`. Rimandato: ridondante con
+  t18 (verify testuale giudica già la singola variante).
+- **T22 collegato**: `clampLogoAIOutput` (pre-clamp prima dello schema)
+  garantisce che i campi oltre limite non facciano fallire il parse
+  (tagline 70 char → placeholder "Brand" bug storico).
+- Test: card (envelope valido/invalido/legacy) + logo (clamp, best-score,
+  parziale) + flyer (clampFlyerCopy). 53 verdi, typecheck 0.
 
 ## Question
 

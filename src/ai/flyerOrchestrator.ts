@@ -35,6 +35,23 @@ export const flyerAIOutputSchema = z.object({
 });
 export type FlyerAIOutput = z.infer<typeof flyerAIOutputSchema>;
 
+/** t22: copy oltre il limite schema → troncato, non rigettato
+ *  (headline da 250 char faceva `applied=false` senza spiegazione). */
+export function clampFlyerCopy(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const o = raw as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...o };
+  if (typeof out.headline === 'string') out.headline = (out.headline as string).slice(0, FLYER_HEADLINE_MAX);
+  if (typeof out.subheadline === 'string') out.subheadline = (out.subheadline as string).slice(0, FLYER_SUBHEADLINE_MAX);
+  if (typeof out.body === 'string') out.body = (out.body as string).slice(0, FLYER_BODY_MAX);
+  if (out.cta && typeof out.cta === 'object') {
+    const cta = out.cta as Record<string, unknown>;
+    if (typeof cta.label === 'string') cta.label = (cta.label as string).slice(0, FLYER_CTA_LABEL_MAX);
+    out.cta = cta;
+  }
+  return out;
+}
+
 export interface FlyerProcessResult {
   flyer: Flyer;
   response: AIResponse;
@@ -273,7 +290,9 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
           });
           const clean = this.sanitizeAIResponse(followUp.content);
           try {
-            const parsed = JSON.parse(clean);
+            // t22: pre-clamp (tronca oltre limite schema, font safe) prima
+            // della validazione → copy lungo non rigettato.
+            const parsed = clampFlyerCopy(JSON.parse(clean));
             const validation = flyerAIOutputSchema.safeParse(parsed);
             if (!validation.success) {
               changes.push(`error:invalid_flyer_followup:${validation.error.issues.length}`);
@@ -322,7 +341,9 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
     if (aiResponse.content) {
       const clean = this.sanitizeAIResponse(aiResponse.content);
       try {
-        const parsed = JSON.parse(clean);
+        // t22: pre-clamp (tronca oltre limite schema, font safe) prima
+        // della validazione → copy lungo non rigettato.
+        const parsed = clampFlyerCopy(JSON.parse(clean));
         const validation = flyerAIOutputSchema.safeParse(parsed);
         if (!validation.success) {
           changes.push(`error:invalid_flyer:${validation.error.issues.length}`);

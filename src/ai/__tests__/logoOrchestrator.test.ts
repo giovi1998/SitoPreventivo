@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { logoAIOutputSchema, mergeLogoAIResponse } from '../logoOrchestrator';
+import { logoAIOutputSchema, mergeLogoAIResponse, clampLogoAIOutput, pickBestScoredConcept } from '../logoOrchestrator';
 import type { Logo } from '../../utils/documentSchemas';
 import { createEmptyLogo } from '../../utils/documentSchemas';
 
@@ -102,6 +102,41 @@ describe('mergeLogoAIResponse (spec 11)', () => {
       layout: 'horizontal',
     });
     expect(merged.builder.iconGlyph).toBe('AB');
+  });
+});
+
+describe('clampLogoAIOutput + pickBestScoredConcept (t19/t22)', () => {
+  it('t22: tronca i campi oltre il limite schema (tagline 70 char)', () => {
+    const raw = [{ primaryText: 'A'.repeat(40), tagline: 'T'.repeat(70), iconType: 'shape', monogram: 'ABC', primaryColor: '#01696F', secondaryColor: '#1a1a2e', layout: 'horizontal' }];
+    const out = clampLogoAIOutput(raw) as Array<Record<string, unknown>>;
+    expect(out[0].primaryText).toHaveLength(30);
+    expect(out[0].tagline).toHaveLength(60);
+    expect(out[0].monogram).toHaveLength(2);
+    // dopo il clamp il parse Zod passa (senza clamp fallirebbe)
+    const parsed = logoAIOutputSchema.safeParse(out[0]);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('t22: clamp qualità fuori range', () => {
+    const out = clampLogoAIOutput([{ primaryText: 'X', tagline: '', iconType: 'none', qualityScore: 2.5, primaryColor: '#01696F', secondaryColor: '#1a1a2e', layout: 'horizontal' }]) as Array<Record<string, unknown>>;
+    expect(out[0].qualityScore).toBe(1);
+  });
+
+  it('t19: vince il concept con qualityScore più alto', () => {
+    const idx = pickBestScoredConcept([
+      { primaryText: 'A', tagline: '', iconType: 'none', qualityScore: 0.4, primaryColor: '#01696F', secondaryColor: '#1a1a2e', layout: 'horizontal' },
+      { primaryText: 'B', tagline: '', iconType: 'none', qualityScore: 0.9, primaryColor: '#01696F', secondaryColor: '#1a1a2e', layout: 'horizontal' },
+      { primaryText: 'C', tagline: '', iconType: 'none', qualityScore: 0.7, primaryColor: '#01696F', secondaryColor: '#1a1a2e', layout: 'horizontal' },
+    ]);
+    expect(idx).toBe(1);
+  });
+
+  it('t19: qualityScore parziale → -1 (nessun auto-giudizio)', () => {
+    const idx = pickBestScoredConcept([
+      { primaryText: 'A', tagline: '', iconType: 'none', qualityScore: 0.9, primaryColor: '#01696F', secondaryColor: '#1a1a2e', layout: 'horizontal' },
+      { primaryText: 'B', tagline: '', iconType: 'none', primaryColor: '#01696F', secondaryColor: '#1a1a2e', layout: 'horizontal' },
+    ]);
+    expect(idx).toBe(-1);
   });
 });
 
