@@ -251,6 +251,9 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       firstCall = false;
       return trace;
     };
+    // t14: la skill di design segue lo stile del brief (brutalist →
+    // industrial-brutalist-ui, minimal → minimalist-ui, editorial → gpt-taste).
+    const websiteSystemPrompt = () => resolveSystemPrompt('website-system', { style });
 
     // ─── Step 1: HTML ───────────────────────────────────────────
     const htmlPrompt = buildWebsiteHtmlPrompt(brief, style, options.briefContext);
@@ -259,7 +262,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       changes.push(`scraped:${options.scrapedReference.length}chars`);
     }
     const htmlMessages = this.buildMessages(
-      await resolveSystemPrompt('website-system'),
+      await websiteSystemPrompt(),
       htmlPrompt,
     );
     if (hasVision && options.logoBase64) {
@@ -347,7 +350,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
         }, navHtml, indexSummary);
         options.onStep?.(`page:${page}`, pagePrompt);
         const pageMessages: ChatMessage[] = [
-          { role: 'system', content: await resolveSystemPrompt('website-system') },
+          { role: 'system', content: await websiteSystemPrompt() },
           { role: 'user', content: pagePrompt },
         ];
         const pageStart = Date.now();
@@ -392,7 +395,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const cssPrompt = buildWebsiteCssPrompt(allPagesHtml, style, brief);
     options.onStep?.('css', cssPrompt);
     const cssMessages: ChatMessage[] = [
-      { role: 'system', content: await resolveSystemPrompt('website-system') },
+      { role: 'system', content: await websiteSystemPrompt() },
       { role: 'user', content: cssPrompt },
     ];
     const cssStart = Date.now();
@@ -431,7 +434,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
     const jsPrompt = buildWebsiteJsPrompt(allPagesHtml);
     options.onStep?.('js', jsPrompt);
     const jsMessages: ChatMessage[] = [
-      { role: 'system', content: await resolveSystemPrompt('website-system') },
+      { role: 'system', content: await websiteSystemPrompt() },
       { role: 'user', content: jsPrompt },
     ];
     const jsStart = Date.now();
@@ -537,7 +540,7 @@ export class WebsiteOrchestrator extends BaseOrchestrator {
       changes.push(`verify:${allIssues.length}issues:${allIssues.slice(0, 3).join(' | ')}`);
       if (parts.length > 0) {
         const fixMessages: ChatMessage[] = [
-          { role: 'system', content: await resolveSystemPrompt('website-system') },
+          { role: 'system', content: await websiteSystemPrompt() },
           { role: 'user', content: buildWebsiteFixPrompt(parts) },
         ];
         options.onStep?.('verify', 'fix agent (solo parti rotte)');

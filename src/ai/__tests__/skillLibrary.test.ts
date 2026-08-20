@@ -62,6 +62,25 @@ describe('resolveSystemPrompt', () => {
     expect(out).toBe('BASE:card-system');
     setAiSkillDisabled('card', false);
   });
+
+  it('t14: website style=brutalist → skill industrial-brutalist-ui (sostituzione)', async () => {
+    const out = await resolveSystemPrompt('website-system', { style: 'brutalist' });
+    expect(out).toContain('BASE:website-system');
+    expect(out).toContain('industrial-brutalist-ui');
+    expect(out).not.toContain('high-end-visual-design');
+  });
+
+  it('t14: website style=minimal → skill minimalist-ui', async () => {
+    const out = await resolveSystemPrompt('website-system', { style: 'minimal' });
+    expect(out).toContain('minimalist-ui');
+    expect(out).not.toContain('high-end-visual-design');
+  });
+
+  it('t14: website style non mappato → skill default high-end-visual-design', async () => {
+    const out = await resolveSystemPrompt('website-system', { style: 'luxury' });
+    expect(out).toContain('high-end-visual-design');
+    expect(out).not.toContain('industrial-brutalist-ui');
+  });
 });
 
 describe('loadSkillContent', () => {

@@ -2,7 +2,24 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:research`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, resolution below)
+
+## Risoluzione
+
+Misura + implementazione (2026-08-20):
+
+- **Misura** (Langfuse, 17-19/08): delta qualità per stile non misurabile
+  su trace storiche (nessun run con stile diverso da default/modern
+  sufficiente); il costo token della skill è lineare (≈350-4K input/call,
+  già documentato t15) → mappa style→skill a **costo zero** (sostituzione,
+  non somma: stessa 1 skill per call, cambia solo quale).
+- **Implementata**: `STYLE_SKILL_MAP` in `skillLibrary.ts` (minimal/
+  minimalist→minimalist-ui, brutalist→industrial-brutalist-ui,
+  editorial→gpt-taste); loader `?raw` aggiunto; `websiteOrchestrator`
+  passa `{ style }` a `resolveSystemPrompt` (tutte le 6 call interne:
+  html/pagine/css/js/fix/refine-default). Stili non mappati → default
+  high-end-visual-design. Test: 3 nuovi in skillLibrary (mappa,
+  sostituzione, default). 58 test website + 14 skill verdi, typecheck 0.
 
 ## Question
 

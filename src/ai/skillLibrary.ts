@@ -38,6 +38,7 @@ const RAW_LOADERS: Record<string, () => Promise<string>> = {
   'muapi-nano-banana': async () => (await import('../../.agents/skills/muapi-nano-banana/SKILL.md?raw')).default,
   'high-end-visual-design': async () => (await import('../../.agents/skills/high-end-visual-design/SKILL.md?raw')).default,
   'minimalist-ui': async () => (await import('../../.agents/skills/minimalist-ui/SKILL.md?raw')).default,
+  'industrial-brutalist-ui': async () => (await import('../../.agents/skills/industrial-brutalist-ui/SKILL.md?raw')).default,
 };
 
 const defineSkill = (name: string, summary: string): ProjectSkill => {
@@ -59,11 +60,26 @@ const EDITOR_SKILLS: Record<string, ProjectSkill[]> = {
   flyer: [defineSkill('gpt-taste', 'Tipografia editoriale larga, struttura AIDA, spaziatura generosa, anti-template')],
   logo: [defineSkill('brandkit', 'Sistemi brand identity premium: concept logo, gerarchia, palette, art direction')],
   social: [defineSkill('muapi-nano-banana', 'Prompt logica-driven per generazione immagini con brief creativi strutturati')],
+  // t14: il default website usa high-end-visual-design; gli stili
+  // specifici (minimal/brutalist/editorial...) usano la skill dedicata
+  // via STYLE_SKILL_MAP (sostituzione, non somma → token invariati).
   website: [defineSkill('high-end-visual-design', 'Design agency-level: font, spacing, ombre, card, animazioni; blocca i default cheap')],
   palette: [defineSkill('minimalist-ui', 'Interfacce editoriali pulite: palette monocrome calde, contrasto tipografico, zero gradienti')],
 };
 
-export const SKILL_CATALOG: ProjectSkill[] = Object.values(EDITOR_SKILLS).flat();
+/** t14: website style → skill dedicata. Sostituisce la skill fissa del kind. */
+const STYLE_SKILL_MAP: Record<string, string> = {
+  minimal: 'minimalist-ui',
+  minimalist: 'minimalist-ui',
+  brutalist: 'industrial-brutalist-ui',
+  editorial: 'gpt-taste',
+};
+
+// t14: skill extra per la mappa style→skill (non iniettate di default).
+const STYLE_SKILLS: ProjectSkill[] = [
+  defineSkill('industrial-brutalist-ui', 'Interfacce meccaniche raw: griglie rigide, scala tipografica estrema, utilitarismo')];
+
+export const SKILL_CATALOG: ProjectSkill[] = [...Object.values(EDITOR_SKILLS).flat(), ...STYLE_SKILLS];
 
 /** Kind editor che hanno una skill di progetto (per il toggle t13). */
 export const EDITOR_SKILL_KINDS: string[] = Object.keys(EDITOR_SKILLS);
@@ -82,7 +98,15 @@ export async function resolveSystemPrompt(promptId: string, ctx?: PromptContext)
   const kind = kindFromPromptId(promptId);
   // t13: toggle utente — la skill del kind può essere esclusa dalla prossima call.
   if (!kind || !editorSkillsEnabled(kind)) return base;
-  const skills = EDITOR_SKILLS[kind];
+  let skills = EDITOR_SKILLS[kind];
+  // t14: website style → skill dedicata (es. brutalist → industrial-brutalist-ui).
+  if (kind === 'website' && ctx?.style) {
+    const styleSkill = STYLE_SKILL_MAP[String(ctx.style).toLowerCase()];
+    if (styleSkill) {
+      const entry = SKILL_CATALOG.find((s) => s.name === styleSkill);
+      if (entry) skills = [entry];
+    }
+  }
   if (!skills?.length) return base;
   const blocks = await Promise.all(
     skills.map((s) =>
