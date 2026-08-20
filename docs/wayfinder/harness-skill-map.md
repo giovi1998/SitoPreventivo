@@ -34,12 +34,17 @@ decisioni residue per completare il percorso.
 - [Few-shot golden per editor](../wayfinder/tickets/t20-few-shot-golden-per-editor.md, 2026-08-20) — task HITL: inserimento inline esempi buoni nei system prompt.
 - [Coherence pass post-run](../wayfinder/tickets/t21-coherence-pass-post-run.md, 2026-08-20) — task: palette/font unificati cross-object CRM, JSON patch merge.
 - [Post-check deterministico flyer+logo](../wayfinder/tickets/t22-post-check-deterministico-flyer-logo.md, 2026-08-20) — task: clamp font/color/collisioni, zero costo AI.
+- [Loop hardening — early-stop](../wayfinder/tickets/t12-loop-hardening.md, 2026-08-20) — chiuso: misura Langfuse (9/30 run bloccati su verify:fix) → 2 fallimenti consecutivi = round di sintesi + stop. Dedup args non giustificato dai dati. Commit 45502e3.
+- [Toggle skill per-documento](../wayfinder/tickets/t13-controllo-utente-skill.md, 2026-08-20) — chiuso: toggle "Skill design" in AIConsole (auto-wired per kind con skill), pref `aiSkillDisabledByKind` in pq_ui:v1, skip injection. Commit 304dca8.
+- [Skill condizionali per stile website](../wayfinder/tickets/t14-skill-condizionali-stile-website.md, 2026-08-20) — chiuso: STYLE_SKILL_MAP (brutalist→industrial-brutalist-ui, minimal→minimalist-ui, editorial→gpt-taste), sostituzione costo zero, ctx style in tutte le call website. Commit 1e14fc0.
+- [Budget costi per documento — warning visibile](../wayfinder/tickets/t15-budget-costi-skill.md, 2026-08-20) — chiuso: badge arancione oltre soglia $X in DocumentAiStats, nessun blocco. Soglia da definire al widget.
 
 ## Not yet specified
 
-- Skill condizionali per stile del sito web (t14) — attesa misura qualità
-  per stile vs skill fissa, ticket di implementazione da creare quando
-  misurato.
+- Widget soglia t15: implementare il badge in DocumentAiStats (soglia
+  candidati $0.50/$1) — ticket di implementazione da creare.
+- kimi-k3:cloud flat dal 2026-08-20 (fix 7a8db6a): tutto Ollama è
+  flat $20/mo; tabella pay-per-token vuota nei 3 livelli.
 
 ## Out of scope
 
