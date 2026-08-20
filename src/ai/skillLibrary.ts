@@ -12,6 +12,7 @@
 // rompere il flusso AI per una skill mancante.
 import { promptRegistry } from './prompts/registry';
 import type { PromptContext } from './prompts/registry';
+import { isAiSkillDisabled } from '../utils/uiPrefs';
 
 const MAX_SKILL_CHARS = 20000;
 
@@ -64,13 +65,24 @@ const EDITOR_SKILLS: Record<string, ProjectSkill[]> = {
 
 export const SKILL_CATALOG: ProjectSkill[] = Object.values(EDITOR_SKILLS).flat();
 
+/** Kind editor che hanno una skill di progetto (per il toggle t13). */
+export const EDITOR_SKILL_KINDS: string[] = Object.keys(EDITOR_SKILLS);
+
+/** t13: la skill curata per il kind editor è attiva? (toggle utente in pq_ui:v1). */
+export function editorSkillsEnabled(kind: string): boolean {
+  return !isAiSkillDisabled(kind as never);
+}
+
 function kindFromPromptId(promptId: string): string {
   return promptId.endsWith('-system') ? promptId.slice(0, -'-system'.length) : '';
 }
 
 export async function resolveSystemPrompt(promptId: string, ctx?: PromptContext): Promise<string> {
   const base = promptRegistry.getPrompt(promptId, ctx);
-  const skills = EDITOR_SKILLS[kindFromPromptId(promptId)];
+  const kind = kindFromPromptId(promptId);
+  // t13: toggle utente — la skill del kind può essere esclusa dalla prossima call.
+  if (!kind || !editorSkillsEnabled(kind)) return base;
+  const skills = EDITOR_SKILLS[kind];
   if (!skills?.length) return base;
   const blocks = await Promise.all(
     skills.map((s) =>

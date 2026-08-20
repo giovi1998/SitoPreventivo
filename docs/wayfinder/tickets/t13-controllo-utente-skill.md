@@ -2,7 +2,24 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:prototype`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, resolution below)
+
+## Risoluzione
+
+Toggle implementato (prototipo minimo, 2026-08-20):
+
+- `pq_ui:v1` nuova pref `aiSkillDisabledByKind` + `isAiSkillDisabled`/
+  `setAiSkillDisabled` in `src/utils/uiPrefs.ts`.
+- `AIConsole` auto-wired: per kind con skill curata (card/flyer/logo/
+  social/website/palette, via `EDITOR_SKILL_KINDS`) mostra il toggle
+  "Skill design" nella riga toggles, persistito, default on. Prop
+  esterna `skillDisabled`/`onSkillToggle` per controllo da chiamante.
+- `resolveSystemPrompt` (skillLibrary) salta l'injection se il kind è
+  disattivato → prompt torna al base del registry (componibile con
+  override Langfuse).
+- Test: AIConsole (toggle visibile/persiste/nascosto su editor senza
+  skill/controllo esterno) + skillLibrary (skill disattivata → prompt
+  base). 26 verdi, typecheck pulito.
 
 ## Question
 

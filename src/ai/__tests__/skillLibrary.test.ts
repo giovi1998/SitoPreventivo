@@ -54,6 +54,14 @@ describe('resolveSystemPrompt', () => {
     // orchestratore con registry reale. Qui basta che non lanci.
     expect(true).toBe(true);
   });
+
+  it('t13: skill disattivata dall\u2019utente → prompt senza skill', async () => {
+    const { setAiSkillDisabled } = await import('../../utils/uiPrefs');
+    setAiSkillDisabled('card', true);
+    const out = await resolveSystemPrompt('card-system');
+    expect(out).toBe('BASE:card-system');
+    setAiSkillDisabled('card', false);
+  });
 });
 
 describe('loadSkillContent', () => {
