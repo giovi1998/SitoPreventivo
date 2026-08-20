@@ -39,10 +39,13 @@ decisioni residue per completare il percorso.
 
 ## Not yet specified
 
-- Widget soglia t15: implementare il badge in DocumentAiStats (soglia
-  candidati $0.50/$1) — ticket di implementazione da creare.
 - kimi-k3:cloud flat dal 2026-08-20 (fix 7a8db6a): tutto Ollama è
   flat $20/mo; tabella pay-per-token vuota nei 3 livelli.
+
+## Ticket aperti (harness)
+
+- [Widget soglia budget in DocumentAiStats](../wayfinder/tickets/t23-widget-soglia-budget.md) — task: badge arancione oltre soglia $X, no blocco.
+- [Bug trace Langfuse — root duplicata + generazione orfana](../wayfinder/tickets/t24-trace-root-duplicata-generazione-orfana.md) — research: gerarchia trace agent rotta (collegato t07).
 
 ## Out of scope
 
