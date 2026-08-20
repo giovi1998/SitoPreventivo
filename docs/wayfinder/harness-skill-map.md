@@ -25,8 +25,6 @@ decisioni residue per completare il percorso.
   curato kind→skill, contenuto `?raw` lazy, injection DOPO
   `promptRegistry.getPrompt` (componibile con override Langfuse), tool
   `load_skill` nell'agente non filtrato da `include`.
-- [Budget costi per documento — warning visibile](../wayfinder/tickets/t15-budget-costi-skill.md, 2026-08-20) — oltre soglia $X badge arancione in DocumentAiStats, nessun blocco hard. Soglia da definire al widget.
-- [Toggle skill per-documento — utente vuole il controllo](../wayfinder/tickets/t13-controllo-utente-skill.md, 2026-08-20) — verdetto sull'UI da valutare col prototipo; ticket ancora open per la demo.
 - [Resume run agente — stato minimo](../wayfinder/tickets/t17-resume-run-minimo.md, 2026-08-20) — runId + steps + resumeKey, niente resume cross-session.
 - [Auto-revisione verify estesa a card/flyer/logo](../wayfinder/tickets/t18-verify-esteso-card-flyer-logo.md, 2026-08-20) — sì, tutti e 3: verdetto pass/regenera.
 - [Refactor useAICall shared hook](../wayfinder/tickets/t16-refactor-useAICall-hook.md, 2026-08-20) — task AFK: elimina duplicazioni useAI*.ts, zero feature nuove.
