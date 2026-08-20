@@ -2,7 +2,20 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:grilling`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, resolution below)
+
+## Risoluzione
+
+Deciso in sessione 2026-08-20 (grilling con utente):
+
+- **Warning visibile**, non blocco: oltre soglia $X per documento,
+  DocumentAiStats mostra un badge di avviso (arancione) con la spesa
+  corrente, senza bloccare la generazione.
+- Soglia di default da decidere nel ticket di implementazione del widget
+  (candidati: $0.50 / $1). Non serve blocco hard finché il volume
+  pay-per-token resta basso — il monitoring è già garantito da aiStats.
+- Collegamenti: t16 (refactor hook, elimina duplicazioni costo),
+  Report run CRM (decisione in fog harness).
 
 ## Question
 
