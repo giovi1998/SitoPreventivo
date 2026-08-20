@@ -93,7 +93,10 @@ describe('CardAIOrchestrator', () => {
     await orch.processPrompt(card, 'cambia nome', { modelId: 'mock' });
     const msgs = fakeProvider.chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
     expect(msgs[0].role).toBe('system');
-    expect(msgs[0].content).toBe('PROMPT REMOTO LANGfUSE');
+    // L'override remoto resta la base; la skill del kind viene appesa DOPO
+    // (skillLibrary compone con Langfuse, non lo rimpiazza).
+    expect(msgs[0].content.startsWith('PROMPT REMOTO LANGfUSE')).toBe(true);
+    expect(msgs[0].content).toContain('Skill di progetto: web-design-guidelines');
   });
 
   it('processPrompt preserves id and documentType', async () => {

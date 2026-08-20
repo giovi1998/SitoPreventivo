@@ -2,7 +2,7 @@ import type { BusinessCard } from '../utils/documentSchemas';
 import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall, RunTraceOptions } from './types';
 import { providerRegistry } from './providers/registry';
 import { chatStore } from './chat/store';
-import { promptRegistry } from './prompts/registry';
+import { resolveSystemPrompt } from './skillLibrary';
 import { buildCardAIContext } from './prompts/cardContext';
 import { aiCardInputSchema } from './aiCardInputSchema';
 import { mergeCardAIResponse } from './cardMerge';
@@ -101,7 +101,8 @@ export class CardAIOrchestrator extends ToolAwareOrchestrator<BusinessCard> {
         role: 'system',
         // TB-029 fase 2: passa dal promptRegistry → override remoto Langfuse
         // (prefetchRemotePrompts) possibile; builder locale = fallback.
-        content: promptRegistry.getPrompt('card-system'),
+        // Skill library: + skill di design curate per il kind.
+        content: await resolveSystemPrompt('card-system'),
       });
     }
 

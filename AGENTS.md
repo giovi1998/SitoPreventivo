@@ -166,7 +166,8 @@ Se uno dei due fallisce, **non** proporre il push. Risolvi prima.
 | `src/ai/BaseOrchestrator.ts` | Abstract condivisa (sanitize, parseJson, handleStream, trackUsage) |
 | `src/ai/quoteOrchestrator.ts` | Orchestratore quote (ex `ai/index.ts`): `AIOrchestrator`, `needsTools`, tool registry quote |
 | `src/ai/*Orchestrator.ts` | card / flyer / logo / social / onboarding / website |
-| `src/ai/agentOrchestrator.ts` | T9: agente orchestratore con harness — 4 tools `generate_logo/card/flyer/website`, loop plan→act max 6 round su `BaseOrchestrator`, `onToolResult` per save client. **Non ancora collegato alla UI** (wiring CRM = prossimo step) |
+| `src/ai/agentOrchestrator.ts` | T9: agente orchestratore con harness — 4 tools `generate_logo/card/flyer/website` + `load_skill` (skill di progetto on-demand), loop plan→act max 8 round su `BaseOrchestrator`, `onToolResult` per save client. Wirato al CRM "Genera bozze AI" via `agentMode` (t11, 2026-08-12) |
+| `src/ai/skillLibrary.ts` | Skill di progetto (`.agents/skills`) per l'AI: catalogo curato kind→skill, `resolveSystemPrompt` (injection DOPO `promptRegistry.getPrompt`, componibile con override Langfuse), `loadSkillContent` per il tool `load_skill`. `?raw` lazy, cap 20K/skill, fallback silenzioso |
 | `src/ai/runTrace.ts` | T7: helper trace gerarchica — `newRunId()` (32-hex) / `newSpanId()` (16-hex); campi run propagati via `RunTraceOptions` → `ChatOptions` → body `/api/ai/chat` |
 | `src/ai/prompts/registry.ts` | promptRegistry: lookup centralizzato prompt di sistema (incl. website-system, palette). I 4 prompt principali (card/flyer/logo/website) includono il "CRAFT FLOOR" impeccable + Named Rules (gerarchia tipografica netta, WCAG 4.5:1, spacing rhythm, anti AI-slop) |
 | `src/ai/providers/registry.ts` | Registry provider AI (default `ollama-minimax-m3`, fallback automatico) |

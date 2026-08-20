@@ -5,7 +5,7 @@ import { getFlyerCopyBudget } from '../utils/flyer';
 import type { AIProvider, ChatMessage, AIResponse, AIStreamChunk, AIToolCall, RunTraceOptions } from './types';
 import { providerRegistry } from './providers/registry';
 import { chatStore } from './chat/store';
-import { promptRegistry } from './prompts/registry';
+import { resolveSystemPrompt } from './skillLibrary';
 import { buildFlyerCopyPrompt, type FlyerCopyContext } from './prompts/flyerSystem';
 import { ToolAwareOrchestrator } from './BaseOrchestrator';
 import {
@@ -177,7 +177,8 @@ Restituisci SOLO il JSON aggiornato con la stessa struttura.`;
       session.messages.push({
         role: 'system',
         // TB-029 fase 2: registry → override remoto Langfuse possibile.
-        content: promptRegistry.getPrompt('flyer-system'),
+        // Skill library: + skill di design curate per il kind.
+        content: await resolveSystemPrompt('flyer-system'),
       });
     }
     const userContentParts: string[] = [];

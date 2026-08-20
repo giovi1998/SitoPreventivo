@@ -202,4 +202,40 @@ describe('AgentOrchestrator (T9)', () => {
     // esegue perché il tool non esiste (fallback "Tool sconosciuto").
     expect(mockProcessPrompt).not.toHaveBeenCalled();
   });
+
+  it('load_skill: carica una skill del catalogo e ne passa il contenuto al modello', async () => {
+    chatResponses.push(
+      {
+        toolCalls: [{ id: 'c2', type: 'function', function: { name: 'load_skill', arguments: '{"name":"web-design-guidelines"}' } }],
+        content: '',
+        usage: usage(),
+      },
+      { content: 'fatto', usage: usage() },
+    );
+
+    const agent = new AgentOrchestrator();
+    // load_skill deve restare disponibile anche con include ristretto.
+    const { results } = await agent.run(brief, docs, {}, { include: ['logo'] });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe('load_skill');
+    expect(results[0].ok).toBe(true);
+    expect((results[0].content ?? '').length).toBeGreaterThan(200);
+  });
+
+  it('load_skill: skill fuori catalogo → ok=false senza crash', async () => {
+    chatResponses.push(
+      {
+        toolCalls: [{ id: 'c3', type: 'function', function: { name: 'load_skill', arguments: '{"name":"lean-code"}' } }],
+        content: '',
+        usage: usage(),
+      },
+      { content: 'fatto', usage: usage() },
+    );
+
+    const agent = new AgentOrchestrator();
+    const { results } = await agent.run(brief, docs, {});
+    expect(results[0].ok).toBe(false);
+    expect(results[0].summary).toContain('lean-code');
+  });
 });

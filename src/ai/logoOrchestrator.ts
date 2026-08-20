@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Logo, LogoBuilder } from '../utils/documentSchemas';
-import { promptRegistry } from './prompts/registry';
+import { resolveSystemPrompt } from './skillLibrary';
 import { buildLogoGeneratePrompt, sanitizeLogoBrief } from './prompts/logoSystem';
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { isValidLucideIcon } from '../utils/logoGenerator';
@@ -81,7 +81,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
   ): Promise<LogoProcessResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
-    const systemPrompt = promptRegistry.getPrompt('logo-system');
+    const systemPrompt = await resolveSystemPrompt('logo-system');
     // TB-027 auto-build: brief vuoto → fallback al briefContext del draft.
     // Se l'utente ha scritto un brief, il briefContext passa come sezione
     // "Contesto cliente" separata nel prompt.
