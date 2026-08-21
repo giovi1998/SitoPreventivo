@@ -8,8 +8,8 @@ describe('cohereDrafts t21', () => {
     const flyer = { style: { accentColor: '#111111' } } as never;
     const website = { brief: { preferredColors: '#000000' } } as never;
     const patch = cohereDrafts({ logo, card, flyer, website });
-    expect((patch.card?.style as never)?.accentColor).toBe('#FF0000');
-    expect((patch.flyer?.style as never)?.accentColor).toBe('#FF0000');
+    expect((patch.card as unknown as { style?: { accentColor?: string } })?.style?.accentColor).toBe('#FF0000');
+    expect((patch.flyer as unknown as { style?: { accentColor?: string } })?.style?.accentColor).toBe('#FF0000');
     expect(patch.website?.preferredColors).toBe('#FF0000,#00FF00');
   });
 

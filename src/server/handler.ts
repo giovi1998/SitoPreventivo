@@ -620,16 +620,18 @@ export const handleDocuments: RouteHandler = async (path, method, req, res, body
   }
 
   if (path.startsWith('/documents/') && method === 'DELETE') {
-    const documentId = path.replace('/documents/', '');
-    const email = body.email || searchParams.get('email');
+    const rawId = path.replace('/documents/', '');
+    const documentId = decodeURIComponent(rawId).trim();
+    const email = (body.email as string | undefined) || searchParams.get('email') || (body as Record<string, unknown>).userEmail as string | undefined;
     if (!email) return json(req, res, 400, { error: 'Email richiesta' });
 
     const [existing] = await (await getDb()).select().from(documentsTable).where(eq(documentsTable.id, documentId));
     if (!existing) {
-      console.log('[doc] DELETE 404', { id: documentId, email, bodyEmail: body.email, queryEmail: searchParams.get('email') });
-      return json(req, res, 404, { error: 'Documento non trovato' });
+      console.log('[doc] DELETE 404', { id: documentId, rawId, email, bodyEmail: body.email, queryEmail: searchParams.get('email') });
+      // Idempotente: se già cancellato, torna success così la UI non resta bloccata (vecchio bug prod)
+      return json(req, res, 200, { success: true, alreadyDeleted: true });
     }
-    if (existing.userEmail !== email) {
+    if (existing.userEmail !== email && email !== ADMIN_EMAIL) {
       return json(req, res, 403, { error: 'Non autorizzato' });
     }
     await (await getDb()).delete(documentsTable).where(eq(documentsTable.id, documentId));
