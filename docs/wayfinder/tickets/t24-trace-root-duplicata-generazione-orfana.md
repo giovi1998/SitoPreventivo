@@ -2,7 +2,7 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:research`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, fix in feat/ai-skill-harness)
 
 ## Question
 
@@ -31,3 +31,7 @@ Da verificare (collegato a t07 threading runid):
 
 Deliverable: fix threading (un solo root per runId, generation figlie con
 parentObservationId corretto) + regression test payload OTLP.
+
+## Fix (2026-08-20)
+- `src/ai/agentOrchestrator.ts:210` — `executeTool` forza `startRun: false` (i tool sono figli del root agent, mai nuovo root). Prima `...ctx.runTrace` propagava `startRun:true` → 2 root con stesso runId (trace `g0qieJCR`).
+- Verificato che `logo-ai-chat` ora ha `parentObservationId = stepSpanId` del tool, non `null`.

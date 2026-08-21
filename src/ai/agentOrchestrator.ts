@@ -207,7 +207,8 @@ export class AgentOrchestrator extends BaseOrchestrator {
 
   private async executeTool(tc: AIToolCall, brief: AgentBrief, docs: AgentDoc, ctx: AgentContext): Promise<AgentToolResult> {
     const name = tc.function.name;
-    const runTrace = { ...ctx.runTrace, stepName: name.replace('generate_', ''), stepSpanId: newSpanId() };
+    // t24: i tool sono figli del root agent — mai startRun true (evita root duplicata)
+    const runTrace = { ...ctx.runTrace, stepName: name.replace('generate_', ''), stepSpanId: newSpanId(), startRun: false };
     try {
       switch (name) {
         case 'load_skill': {
