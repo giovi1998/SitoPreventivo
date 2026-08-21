@@ -20,6 +20,7 @@ import { loadRunState, saveRunState, clearRunState } from '../utils/runState';
 import { AgentOrchestrator } from '../ai/agentOrchestrator';
 import { VerifyOrchestrator } from '../ai/verifyOrchestrator';
 import { renderDraftPreviews } from '../utils/verifyRender';
+import { cohereDrafts } from '../ai/coherenceOrchestrator';
 import { buildAgentBrief, agentResultData, agentTypeOfDoc, docTypeOfTool } from '../ai/agentSave';
 import type { BusinessCard, Flyer, FlyerTone, Logo, LogoBuilder } from '../utils/documentSchemas';
 import { createEmptyCard, createEmptyFlyer, createEmptyLogo, ensureCardGrid } from '../utils/documentSchemas';
@@ -754,6 +755,42 @@ export function useAutoBuildGenerate() {
           }
         }
       };
+      // t21: coherence pass — palette/font unificati (solo agentMode, 1 patch deterministico).
+      const runCoherenceAfterAgent = async () => {
+        const lastData = lastDataByTypeRef.current;
+        const patch = cohereDrafts({
+          logo: lastData.logo as unknown as Logo | undefined,
+          card: lastData.businessCard as unknown as BusinessCard | undefined,
+          flyer: lastData.flyer as unknown as Flyer | undefined,
+          website: lastData.website as unknown as { brief?: { preferredColors?: string }; style?: string } | undefined,
+        });
+        if (!patch.card && !patch.flyer && !patch.website) return;
+        setState((prev) => ({ ...prev, currentStep: 'Coerenza palette…' }));
+        for (const [docType, patchData] of Object.entries(patch) as Array<[string, Record<string, unknown>]>) {
+          const targetType = docType === 'card' ? 'businessCard' : docType;
+          const doc = targets.find((d) => d.documentType === targetType);
+          if (!doc || !patchData) continue;
+          try {
+            const current = (lastData[targetType] ?? doc.data ?? {}) as Record<string, unknown>;
+            // Website: patch preferredColors va in data.brief.preferredColors
+            let merged: Record<string, unknown>;
+            if (targetType === 'website' && patchData.preferredColors) {
+              const brief = (current.brief ?? {}) as Record<string, unknown>;
+              merged = { ...current, brief: { ...brief, preferredColors: patchData.preferredColors } };
+            } else {
+              merged = { ...current, ...patchData };
+              // Card/flyer: merge style/decorations shallow
+              if (patchData.style) merged.style = { ...(current.style as Record<string, unknown>), ...(patchData.style as Record<string, unknown>) };
+              if (patchData.decorations) merged.decorations = { ...(current.decorations as Record<string, unknown>), ...(patchData.decorations as Record<string, unknown>) };
+            }
+            lastData[targetType] = merged;
+            await saveDraft(doc, merged);
+            logger.info('t21: coherence patch applicata', { route: 'useAutoBuildGenerate', docType: targetType });
+          } catch (err) {
+            logger.warn('t21: coherence patch fallita', { route: 'useAutoBuildGenerate', docType: targetType, err: String(err) });
+          }
+        }
+      };
       if (options?.agentMode && workList.length > 0) {
         let toolCount = 0;
         setState((prev) => ({ ...prev, currentStep: 'Agente: pianifico la generazione…' }));
@@ -824,6 +861,8 @@ export function useAutoBuildGenerate() {
           );
           // t18: verifica visione post-loop (1 call con preview dei 3 draft).
           await runVerifyAfterAgent();
+          // t21: coherence palette/fonte unificata
+          await runCoherenceAfterAgent();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           logger.error('Auto-build agente fallito', { route: 'useAutoBuildGenerate', err: msg });

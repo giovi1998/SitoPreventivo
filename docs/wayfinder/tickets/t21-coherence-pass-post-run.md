@@ -2,7 +2,7 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:grilling`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, implementation in feat/ai-skill-harness)
 
 ## Question
 
@@ -24,3 +24,7 @@ concrete, restituisce patch JSON `{flyer: {...}, website: {...}}` che
 applichiamo con un merge locale (no regenerate completo).
 
 Costo: ~1 call post-run (~2K token). Soglia budget (t15) include questa.
+
+## Implementation (2026-08-20)
+- `src/ai/coherenceOrchestrator.ts` — `cohereDrafts()` deterministico: copia palette logo su card/flyer/website (lean-code, upgrade ad AI quando divergenza misurata).
+- `src/hooks/useAutoBuildGenerate.ts` — `runCoherenceAfterAgent()` post-verify, patch via `saveDraft`.
