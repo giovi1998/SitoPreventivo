@@ -1,4 +1,5 @@
 import type { FlyerTone, FlyerLayout, FlyerSize } from '../../utils/documentSchemas';
+import { GOLDEN_FLYER_EXAMPLE } from './goldenExamples';
 
 const TONE_DESCRIPTIONS: Record<FlyerTone, string> = {
   formale: 'tono formale e professionale, rivolto a un pubblico adulto, lessico curato',
@@ -149,5 +150,7 @@ NAMED RULES:
 - The Concrete CTA Rule: la CTA è un'azione verificabile (chiama, scrivi, prenota) — mai "Scopri di più" generica.
 
 OUTPUT:
-- Rispondi con il JSON completo del volantino aggiornato.`;
+- Rispondi con il JSON completo del volantino aggiornato.
+
+${GOLDEN_FLYER_EXAMPLE}`;
 }

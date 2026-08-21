@@ -1,3 +1,5 @@
+import { GOLDEN_CARD_EXAMPLE } from './goldenExamples';
+
 export function buildCardSystemPrompt(): string {
   return `Sei un assistente AI per la creazione di bigliettini da visita professionali.
 Il tuo compito è modificare il JSON del bigliettino in base alla richiesta dell'utente.
@@ -197,5 +199,7 @@ ESEMPI COMUNI MODIFICA (rispondi SEMPRE con JSON completo):
 
 ESEMPI ANALISI (rispondi con TESTO, niente JSON):
 - "ottimizza per stampa": verifica contrasto, suggerisci font leggibili, evita colori troppo chiari
-- "verifica contrasto": analizza e suggerisci`;
+- "verifica contrasto": analizza e suggerisci
+
+${GOLDEN_CARD_EXAMPLE}`;
 }

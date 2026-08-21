@@ -1,3 +1,5 @@
+import { GOLDEN_WEBSITE_EXAMPLE } from './goldenExamples';
+
 export function buildWebsiteSystemPrompt(): string {
   return `Sei un web designer AI per Quickbrand. Generi siti web HTML5 completi, responsive, pronti per l'uso.
 ⛔ NON inventare mai dati: usa ESATTAMENTE nome, settore, descrizione, indirizzo/città e contatti del brief. Se i contatti dicono Cagliari, NON scrivere Milano/Roma.
@@ -32,7 +34,9 @@ VINCOLI:
 - Il codice deve essere completo e funzionante se aperto in un browser.
 - I link tra pagine devono essere relativi (href="about.html").
 - Il CSS deve usare variabili CSS custom per colori primari/secondari (facile rebranding).
-- Ogni sezione ha un solo scopo chiaro: non mescolare 2 intenti nello stesso blocco.`;
+ - Ogni sezione ha un solo scopo chiaro: non mescolare 2 intenti nello stesso blocco.
+
+${GOLDEN_WEBSITE_EXAMPLE}`;
 }
 
 export function buildWebsiteGeneratePrompt(

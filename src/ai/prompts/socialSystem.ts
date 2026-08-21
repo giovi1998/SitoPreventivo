@@ -1,3 +1,5 @@
+import { GOLDEN_SOCIAL_EXAMPLE } from './goldenExamples';
+
 /**
  * Social AI system + generate prompt (cross-module). Generates 3
  * coordinated social posts (Instagram, Facebook, LinkedIn) starting
@@ -72,10 +74,12 @@ REGOLE:
   - LinkedIn: caption professionale, valore e insight business, 2-3 hashtag, tono formale e autorevole.
 - Caption coerente col documento sorgente (nome brand, servizi/headline).
 - Hashtag: max 10 per post, formato #word (no spazi, no punteggiatura interna).
-- NON INVENTARE prezzi, date, luoghi non presenti nel documento sorgente.
-- imagePrompt: visuale coerente col brand/servizi della sorgente, in inglese,
-  fotografico o illustrato, SENZA testo scritto né loghi nell'immagine.
-- Lingua caption: italiano.`;
+ - NON INVENTARE prezzi, date, luoghi non presenti nel documento sorgente.
+ - imagePrompt: visuale coerente col brand/servizi della sorgente, in inglese,
+   fotografico o illustrato, SENZA testo scritto né loghi nell'immagine.
+ - Lingua caption: italiano.
+
+${GOLDEN_SOCIAL_EXAMPLE}`;
 }
 
 export function buildSocialGeneratePrompt(

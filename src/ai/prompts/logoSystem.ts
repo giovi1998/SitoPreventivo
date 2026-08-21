@@ -6,6 +6,8 @@
  * pick it up when wired in.
  */
 
+import { GOLDEN_LOGO_EXAMPLE } from './goldenExamples';
+
 const LUCIDE_ALLOWLIST = [
   'Coffee', 'Pizza', 'Utensils', 'ChefHat', 'Wheat', 'Cookie',
   'Cloud', 'Code', 'Cpu', 'Database', 'Server', 'Terminal',
@@ -118,7 +120,9 @@ VINCOLI:
 - NON inventare campi fuori contract.
 - Lingua: italiano per primaryText/tagline.
 - Se il brief è davvero vuoto/insensato: genera 3 loghi neutri (iconType="shape" o "lucide", colori grigio/blu).
-- I 3 concept DEVONO essere distinti: nessuno deve essere identico a un altro.`;
+ - I 3 concept DEVONO essere distinti: nessuno deve essere identico a un altro.
+
+${GOLDEN_LOGO_EXAMPLE}`;
 }
 
 export function buildLogoGeneratePrompt(brief: string, sector?: string, briefContext?: string): string {
