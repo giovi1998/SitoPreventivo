@@ -13,7 +13,7 @@
 export function injectLogoIntoHtml(html: string, logoUrl: string | null): string {
   if (!logoUrl) return html;
   const logoHtml = `<div class="qb-site-logo" style="display:flex!important;align-items:center!important;gap:12px!important;flex-shrink:0!important;background:transparent!important;border:none!important;box-shadow:none!important;padding:0!important;">
-  <img src="${logoUrl}" alt="Logo" style="height:40px!important;width:auto!important;max-width:180px!important;object-fit:contain!important;display:block!important;background:transparent!important;border:none!important;box-shadow:none!important;padding:0!important;border-radius:0!important;margin:0!important;" />
+  <img src="${logoUrl}" alt="Logo" referrerpolicy="no-referrer" onerror="this.style.display='none'" style="height:40px!important;width:auto!important;max-width:180px!important;object-fit:contain!important;display:block!important;background:transparent!important;border:none!important;box-shadow:none!important;padding:0!important;border-radius:0!important;margin:0!important;" />
 </div>`;
   let cleaned = html.replace(/<img[^>]*src\s*=\s*"data:image[^"]*"[^>]*\/?>/gi, '');
   cleaned = cleaned.replace(/<span[^>]*class\s*=\s*"[^"]*brand-mark[^"]*"[^>]*>.*?<\/span>/gi, '');

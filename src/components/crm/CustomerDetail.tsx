@@ -861,7 +861,7 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
             <label htmlFor="crm-logo-upload" className="crm-btn-secondary">Carica logo</label>
             {logoPreview && (
               <div className="crm-logo-preview-wrap" data-testid="crm-logo-preview">
-                <img src={logoPreview} alt="Logo caricato" className="crm-logo-preview" />
+                <img src={logoPreview} alt="Logo caricato" className="crm-logo-preview" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                 <button
                   type="button"
                   className="crm-logo-remove"
