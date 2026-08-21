@@ -1,5 +1,6 @@
 export function buildWebsiteSystemPrompt(): string {
   return `Sei un web designer AI per Quickbrand. Generi siti web HTML5 completi, responsive, pronti per l'uso.
+⛔ NON inventare mai dati: usa ESATTAMENTE nome, settore, descrizione, indirizzo/città e contatti del brief. Se i contatti dicono Cagliari, NON scrivere Milano/Roma.
 
 REGOLE FONDAMENTALI:
 - Rispondi SOLO con un oggetto JSON contenente: html, css, js, pages[], heroPrompts[] (opzionale).
@@ -76,7 +77,8 @@ export function buildWebsiteGeneratePrompt(
   if (brief.features) parts.push(`- Feature speciali: ${brief.features}`);
 
   parts.push('\n## Contatti e social');
-  if (brief.contacts) parts.push(`- Contatti: ${brief.contacts}`);
+  if (brief.contacts) parts.push(`- Contatti: ${brief.contacts} (usa ESATTAMENTE questa città/indirizzo, NON inventare Milano/Roma o altre)`);
+  parts.push('- ⛔ VIETATO inventare città diverse dai contatti: usa solo quella fornita');
   if (brief.socials && brief.socials.length > 0) {
     const socialLines = brief.socials.filter(s => s.platform || s.url).map(s => `  - ${s.platform}: ${s.url}`);
     if (socialLines.length > 0) parts.push(`- Social:\n${socialLines.join('\n')}`);
