@@ -2,7 +2,7 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:task`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, implementation in feat/ai-skill-harness)
 
 ## Question
 
@@ -27,3 +27,8 @@ Da NON fare (candidates rimossi): pool di esempi (token explosion),
 esempi dinamici da customer (overkill, rischio cross-contenuto).
 
 **HITL**: l'utente deve fornire gli esempi (output recenti buoni).
+
+## Implementation (2026-08-20)
+- `src/ai/prompts/goldenExamples.ts` — 5 esempi ideali (card Giovanni, flyer Sagra, logo pasticceria, social 3 post, website Osteria Thai).
+- Injection dopo CRAFT FLOOR in `cardSystem.ts`, `flyerSystem.ts`, `logoSystem.ts`, `socialSystem.ts`, `websiteSystem.ts` via `GOLDEN_*_EXAMPLE`.
+- L'utente valida/migliora gli esempi in follow-up (commit dedicato).
