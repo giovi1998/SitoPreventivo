@@ -55,7 +55,7 @@ const defineSkill = (name: string, summary: string): ProjectSkill => {
 
 // Kind editor → skill curate. Quote/onboarding: nessuna skill pertinente
 // nel progetto (i prompt sono già mirati); l'agente usa load_skill.
-const EDITOR_SKILLS: Record<string, ProjectSkill[]> = {
+export const EDITOR_SKILLS: Record<string, ProjectSkill[]> = {
   card: [defineSkill('web-design-guidelines', 'Regole UI e accessibilità web (Web Interface Guidelines)')],
   flyer: [defineSkill('gpt-taste', 'Tipografia editoriale larga, struttura AIDA, spaziatura generosa, anti-template')],
   logo: [defineSkill('brandkit', 'Sistemi brand identity premium: concept logo, gerarchia, palette, art direction')],

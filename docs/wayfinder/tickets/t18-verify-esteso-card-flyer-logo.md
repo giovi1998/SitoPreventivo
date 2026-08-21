@@ -2,42 +2,36 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:grilling`
 Blocked by: —
-Status: open, unassigned
+Status: closed, assigned to opencode
 
 ## Question
 
-Il verify AI (genera → verifica → rigenera) oggi è solo per website
-(`website-system` user-prompt). La stessa funzione di controllo qualità
-dovrebbe estendersi a card/flyer/logo.
+Il verify AI (genera → verifica → rigenera) oggi è solo per website.
+La stessa funzione di controllo qualità dovrebbe estendersi a card/flyer/logo.
 
-Deciso in sessione 2026-08-20: **sì, tutti e 3.**
+## Decisions
 
-Scope (da definire nel ticket di implementazione):
-- Card: layout, contrasto, no overlap, font-size, wrap → verdetto
-  pass/regenera
-- Flyer: floor stampa minimo, headline, budget copy → pass/regenera
-- Logo: concetti validi (no fallback "Brand"), background AI
-  applicato, tagline leggibile → pass/regenera
+Deciso in sessione 2026-08-20:
+- **Sì, tutti e 3** (card / flyer / logo).
+- Solo `agentMode` CRM (costo contenuto, gating vision).
+- Post-loop, **singola call** `verify` con i 3 preview insieme.
+- Max 1 regeneration per oggetto.
+- Vision self-review: screenshot preview → modello vision → verdetto pass/retry.
 
-Soglia: verdetto `pass`/`retry` con motivazione dal modello (non solo
-applicato/ok: il concept "Brand" fallback è un esempio di falso
-positivo).
-Costo: ~1 call AI aggiuntiva per oggetto — valutare se solo in
-`agentMode` (CRM) o sempre.
+## Implementation
 
-Domande aperte:
-1. Dove chiama verify: solo `agentMode` CRM o anche editor singoli? —
-   consiglio: solo CRM (costo) + editor con toggle.
-2. Come integrare: loop verify→regenerate nel `executeTool` agente o
-   nuovo step post-generazione? — consiglio: post-loop, singola call
-   `verify_docs` con tutti i 3 oggetti insieme (1 call vs 3).
-3. Fallback: max 1 regeneration per oggetto (bounded), poi warning.
-4. Budget: aggiungere soglia verify a t15 (warning visibile).
+- `src/ai/verifyOrchestrator.ts` — nuovo orchestratore, 1 call AI con
+  immagini dei draft. Output JSON `{logo,card,flyer}.verdict` e `reason`.
+- `src/utils/verifyRender.ts` — rasterizza logo/card/flyer in PNG data URL
+  via `builderToSvg`, `buildCardSvg`, `buildFlyerSvg`, `svgToPng`.
+- `src/hooks/useAutoBuildGenerate.ts`:
+  - `runVerifyAfterAgent()` chiamato post-loop in `agentMode` solo se
+    vision enabled.
+  - Per ogni `retry`, rigenera il singolo oggetto con `runDoc` e la
+    motivazione come `userPrompt` focus.
+  - `lastDataByTypeRef` tiene traccia dei draft finali per il render.
+- `src/ai/__tests__/verifyOrchestrator.test.ts` — 5 tests.
+- `src/utils/__tests__/runState.test.ts` condivide lo stesso pattern di
+  persistenza per t17.
 
-## Aggiornamento 2026-08-20 (seconda grilling)
-
-Aggiunto **vision self-review**: dopo la generazione, si renderizza la
-preview (canvas/SVG) → screenshot → modello vision giudica layout/contrasto
-→ fix/rigenera. Integrato nel verify esteso (t18), non ticket separato.
-Costo: +1 call vision per oggetto — già gating visionEnabled (CON-MM-002).
-Anche qui: solo CRM + toggle editor, bounded 1 retry, soglia budget t15.
+Closed 2026-08-20.

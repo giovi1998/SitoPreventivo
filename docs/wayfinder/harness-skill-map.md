@@ -25,8 +25,8 @@ decisioni residue per completare il percorso.
   curato kind→skill, contenuto `?raw` lazy, injection DOPO
   `promptRegistry.getPrompt` (componibile con override Langfuse), tool
   `load_skill` nell'agente non filtrato da `include`.
-- [Resume run agente — stato minimo](../wayfinder/tickets/t17-resume-run-minimo.md, 2026-08-20) — runId + steps + resumeKey, niente resume cross-session.
-- [Auto-revisione verify estesa a card/flyer/logo](../wayfinder/tickets/t18-verify-esteso-card-flyer-logo.md, 2026-08-20) — sì, tutti e 3: verdetto pass/regenera.
+- [Resume run agente — stato minimo](../wayfinder/tickets/t17-resume-run-minimo.md, 2026-08-20) — closed: sessionStorage `pq_autobuild_run:v1`, resume filtra done, clear a fine.
+- [Auto-revisione verify estesa a card/flyer/logo](../wayfinder/tickets/t18-verify-esteso-card-flyer-logo.md, 2026-08-20) — closed: verifyOrchestrator con 1 call vision sui 3 preview, max 1 retry in agentMode.
 - [Refactor useAICall shared hook](../wayfinder/tickets/t16-refactor-useAICall-hook.md, 2026-08-20) — task AFK: elimina duplicazioni useAI*.ts, zero feature nuove.
 - [Best-of-N interno per copy](../wayfinder/tickets/t19-best-of-n-interno.md, 2026-08-20) — task: 3 varianti in 1 call flyer+card+logo, fallback first variant.
 - [Few-shot golden per editor](../wayfinder/tickets/t20-few-shot-golden-per-editor.md, 2026-08-20) — task HITL: inserimento inline esempi buoni nei system prompt.

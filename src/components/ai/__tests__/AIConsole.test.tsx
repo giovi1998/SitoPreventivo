@@ -134,4 +134,10 @@ describe('AIConsole (REQ-AI-001/003/006)', () => {
     // non persistito automaticamente (controllo esterno)
     expect(isAiSkillDisabled('logo')).toBe(false);
   });
+
+  it('t13: label toggle mostra il nome della skill per l\u2019editor', () => {
+    render(<AIConsole {...baseProps} editorKind="card" />);
+    expect(screen.getByLabelText('Skill di progetto')).toBeInTheDocument();
+    expect(screen.getByText('Skill design: web-design-guidelines')).toBeInTheDocument();
+  });
 });

@@ -3,7 +3,7 @@ import AILogPanel from '../AILogPanel';
 import AIProviderBadge from './AIProviderBadge';
 import type { AILogEntry } from '../../ai/types';
 import { getAiConsoleExpanded, setAiConsoleExpanded, isAiSkillDisabled, setAiSkillDisabled, type EditorKind } from '../../utils/uiPrefs';
-import { EDITOR_SKILL_KINDS } from '../../ai/skillLibrary';
+import { EDITOR_SKILL_KINDS, EDITOR_SKILLS } from '../../ai/skillLibrary';
 import './AIConsole.css';
 
 export type { AILogEntry };
@@ -119,6 +119,8 @@ export default function AIConsole({
   const prevLogsLength = useRef(0);
   // t13: toggle skill di progetto auto-wired per kind con skill curata.
   const hasEditorSkill = editorKind != null && EDITOR_SKILL_KINDS.includes(editorKind);
+  const skillName = hasEditorSkill ? EDITOR_SKILLS[editorKind]?.[0]?.name : undefined;
+  const skillLabel = `Skill design${skillName ? `: ${skillName}` : ''}`;
   const [skillDisabled, setSkillDisabledState] = useState<boolean>(() => (hasEditorSkill ? isAiSkillDisabled(editorKind) : false));
 
   const toggleSkill = useCallback(() => {
@@ -230,7 +232,7 @@ export default function AIConsole({
                     onChange={onSkillToggle}
                     aria-label="Skill di progetto"
                   />
-                  <span>Skill design</span>
+                  <span>{skillLabel}</span>
                 </label>
               )}
               {hasEditorSkill && onSkillToggle == null && (
@@ -241,7 +243,7 @@ export default function AIConsole({
                     onChange={toggleSkill}
                     aria-label="Skill di progetto"
                   />
-                  <span>Skill design</span>
+                  <span>{skillLabel}</span>
                 </label>
               )}
             </div>
