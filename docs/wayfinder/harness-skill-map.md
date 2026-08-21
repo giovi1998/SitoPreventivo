@@ -29,9 +29,11 @@ decisioni residue per completare il percorso.
 - [Auto-revisione verify estesa a card/flyer/logo](../wayfinder/tickets/t18-verify-esteso-card-flyer-logo.md, 2026-08-20) — closed: verifyOrchestrator con 1 call vision sui 3 preview, max 1 retry in agentMode.
 - [Refactor useAICall shared hook](../wayfinder/tickets/t16-refactor-useAICall-hook.md, 2026-08-20) — task AFK: elimina duplicazioni useAI*.ts, zero feature nuove.
 - [Best-of-N interno per copy](../wayfinder/tickets/t19-best-of-n-interno.md, 2026-08-20) — task: 3 varianti in 1 call flyer+card+logo, fallback first variant.
-- [Few-shot golden per editor](../wayfinder/tickets/t20-few-shot-golden-per-editor.md, 2026-08-20) — task HITL: inserimento inline esempi buoni nei system prompt.
-- [Coherence pass post-run](../wayfinder/tickets/t21-coherence-pass-post-run.md, 2026-08-20) — task: palette/font unificati cross-object CRM, JSON patch merge.
+- [Few-shot golden per editor](../wayfinder/tickets/t20-few-shot-golden-per-editor.md, 2026-08-20) — closed: `goldenExamples.ts` + injection dopo CRAFT FLOOR in 5 system prompt (HITL, utente valida esempi).
+- [Coherence pass post-run](../wayfinder/tickets/t21-coherence-pass-post-run.md, 2026-08-20) — closed: `coherenceOrchestrator.ts` deterministico copia palette logo su card/flyer/website, `runCoherenceAfterAgent` post-verify.
 - [Post-check deterministico flyer+logo](../wayfinder/tickets/t22-post-check-deterministico-flyer-logo.md, 2026-08-20) — task: clamp font/color/collisioni, zero costo AI.
+- [Widget soglia budget](../wayfinder/tickets/t23-widget-soglia-budget.md, 2026-08-20) — closed: `DocumentAiStats.tsx` badge `⚠ spesa $X` oltre $0.50, 5 test.
+- [Bug trace Langfuse](../wayfinder/tickets/t24-trace-root-duplicata-generazione-orfana.md, 2026-08-20) — closed: `agentOrchestrator.ts:210` forza `startRun:false` sui tool.
 - [Loop hardening — early-stop](../wayfinder/tickets/t12-loop-hardening.md, 2026-08-20) — chiuso: misura Langfuse (9/30 run bloccati su verify:fix) → 2 fallimenti consecutivi = round di sintesi + stop. Dedup args non giustificato dai dati. Commit 45502e3.
 - [Toggle skill per-documento](../wayfinder/tickets/t13-controllo-utente-skill.md, 2026-08-20) — chiuso: toggle "Skill design" in AIConsole (auto-wired per kind con skill), pref `aiSkillDisabledByKind` in pq_ui:v1, skip injection. Commit 304dca8.
 - [Skill condizionali per stile website](../wayfinder/tickets/t14-skill-condizionali-stile-website.md, 2026-08-20) — chiuso: STYLE_SKILL_MAP (brutalist→industrial-brutalist-ui, minimal→minimalist-ui, editorial→gpt-taste), sostituzione costo zero, ctx style in tutte le call website. Commit 1e14fc0.
@@ -44,8 +46,7 @@ decisioni residue per completare il percorso.
 
 ## Ticket aperti (harness)
 
-- [Widget soglia budget in DocumentAiStats](../wayfinder/tickets/t23-widget-soglia-budget.md) — task: badge arancione oltre soglia $X, no blocco.
-- [Bug trace Langfuse — root duplicata + generazione orfana](../wayfinder/tickets/t24-trace-root-duplicata-generazione-orfana.md) — research: gerarchia trace agent rotta (collegato t07).
+- Nessuno — t23/t24 chiusi in questa sessione. Restano solo follow-up t06/t10 fuori harness.
 
 ## Out of scope
 
