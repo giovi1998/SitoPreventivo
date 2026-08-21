@@ -2,7 +2,7 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:task`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, implementation in feat/ai-skill-harness)
 
 ## Question
 
@@ -20,3 +20,7 @@ widget:
 
 Deliverable: badge + test (sotto soglia → nessun badge, sopra → badge con
 costo formattato da formatCostUsd).
+
+## Implementation (2026-08-20)
+- `src/components/DocumentAiStats.tsx` — `BUDGET_THRESHOLD_USD = 0.5`, badge arancione `⚠ spesa $X` se `totalCostUsd > 0.5`.
+- `src/components/__tests__/DocumentAiStats.test.tsx` — 5 test (sotto/sopra/esattamente/stringa/empty).
