@@ -36,7 +36,7 @@ export function injectImagesIntoHtml(html: string, images: string[]): string {
       if (imgIndex >= images.length) return match;
       const img = images[imgIndex];
       imgIndex++;
-      const imgHtml = `<img src="${img}" alt="Foto ${imgIndex}" loading="lazy" />`;
+      const imgHtml = `<img src="${img}" alt="Foto ${imgIndex}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" />`;
       const openTag = `<${tag}${match.slice(tag.length + 1, match.indexOf('>'))}>`;
       return `${openTag}${imgHtml}${inner}</${tag}>`;
     });
@@ -48,7 +48,7 @@ export function injectImagesIntoHtml(html: string, images: string[]): string {
     // Se restano immagini non usate → aggiungi altri item
     if (imgIndex < images.length) {
       const extra = images.slice(imgIndex).map((img) =>
-        `<div class="gallery-item"><img src="${img}" alt="Foto" loading="lazy" /></div>`
+        `<div class="gallery-item"><img src="${img}" alt="Foto" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" /></div>`
       ).join('\n');
       const galleryWrap = out.match(/(<div[^>]*class\s*=\s*"[^"]*\bgallery\b[^"]*"[^>]*>)([\s\S]*?)(<\/div>)/i);
       if (galleryWrap) {
@@ -73,7 +73,7 @@ export function injectImagesIntoHtml(html: string, images: string[]): string {
 
 function buildGallerySection(images: string[]): string {
   const items = images
-    .map((img, i) => `<div class="gallery-item"><img src="${img}" alt="Foto ${i + 1}" loading="lazy" /></div>`)
+    .map((img, i) => `<div class="gallery-item"><img src="${img}" alt="Foto ${i + 1}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" /></div>`)
     .join('\n');
   return `\n<section id="gallery" class="gallery-section">\n  <div class="section-inner">\n    <h2>Gallery</h2>\n    <div class="gallery" aria-label="Galleria foto">\n${items}\n    </div>\n  </div>\n</section>`;
 }
