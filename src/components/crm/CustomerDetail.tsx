@@ -17,6 +17,18 @@ import CustomerKnowledgePanel from './CustomerKnowledgePanel';
 import { prefetchRemotePrompts, REMOTE_PROMPT_PILOT } from '../../utils/ai/remotePrompt';
 import { getAiReasoningEffort, setAiReasoningEffort } from '../../utils/uiPrefs';
 import { buildLandingWebsite } from '../../utils/landingDraft';
+import { compressImage } from '../../utils/card/imageCompress';
+
+const isLocalhost = () => typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Lettura file fallita'));
+    reader.readAsDataURL(file);
+  });
+}
 
 const AB_TEST_PROMPTS = [
   { id: 'card-system', label: 'Card' },
@@ -350,23 +362,44 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     if (!customer) return;
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      logger.appendLog('info', 'Caricamento logo manuale…', undefined, { fileName: file.name, sizeBytes: file.size, mime: file.type });
-      try {
-        await dataService.updateCustomer(customer.id, { logoUrl: dataUrl });
-        logger.appendLog('success', 'Logo caricato', undefined, { logoUrl: truncateDataUrl(dataUrl) });
-        flashSaved('logoUrl');
-        await load();
-        onRefresh();
-        await propagateLogoToDrafts(customer.id, dataUrl);
-      } catch (err) {
-        logger.appendLog('error', 'Caricamento logo fallito', undefined, { error: String(err) });
+    logger.appendLog('info', 'Caricamento logo manuale…', undefined, { fileName: file.name, sizeBytes: file.size, mime: file.type });
+    try {
+      // In locale comprimiamo solo file di una certa dimensione per evitare
+      // QuotaExceededError sui draft (4x base64 in localStorage), ma evitiamo
+      // di comprimere iconcine gia piccole (e file fittizi in test jsdom).
+      let logoUrl: string;
+      if (isLocalhost() && file.size > 50_000) {
+        try {
+          logoUrl = await compressImage(file, 1024, 400_000, { format: file.type === 'image/png' ? 'png' : 'jpeg' });
+        } catch {
+          logoUrl = await fileToDataUrl(file);
+        }
+      } else {
+        logoUrl = await fileToDataUrl(file);
       }
-    };
-    reader.readAsDataURL(file);
+      await dataService.updateCustomer(customer.id, { logoUrl });
+      logger.appendLog('success', 'Logo caricato', undefined, { logoUrl: truncateDataUrl(logoUrl) });
+      flashSaved('logoUrl');
+      await load();
+      onRefresh();
+      await propagateLogoToDrafts(customer.id, logoUrl);
+    } catch (err) {
+      logger.appendLog('error', 'Caricamento logo fallito', undefined, { error: String(err) });
+    }
     if (logoInputRef.current) logoInputRef.current.value = '';
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!customer) return;
+    try {
+      await dataService.updateCustomer(customer.id, { logoUrl: null });
+      await load();
+      onRefresh();
+      flashSaved('logoUrl');
+      logger.appendLog('success', 'Logo rimosso');
+    } catch (err) {
+      logger.appendLog('error', 'Rimozione logo fallita', undefined, { error: String(err) });
+    }
   };
 
   const handlePhotosUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -829,6 +862,15 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
             {logoPreview && (
               <div className="crm-logo-preview-wrap" data-testid="crm-logo-preview">
                 <img src={logoPreview} alt="Logo caricato" className="crm-logo-preview" />
+                <button
+                  type="button"
+                  className="crm-logo-remove"
+                  onClick={handleRemoveLogo}
+                  title="Rimuovi logo"
+                  data-testid="crm-logo-remove"
+                >
+                  ×
+                </button>
                 <span className="crm-logo-check">✓</span>
               </div>
             )}
@@ -901,9 +943,6 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         </button>
         <button onClick={handleGeneratePalettes} disabled={busy !== null} data-testid="crm-palette-btn" title="Suggerisce 3 palette colori coerenti col brief via AI (costo AI)">
           {busy === 'palette' || palette.isProcessing ? 'Generando…' : 'Genera 3 palette'}
-        </button>
-        <button onClick={handleLandingDraft} disabled={busy !== null} data-testid="crm-landing-btn" title="Genera landing page statica dai dati cliente (webAnswers + flyer + contatti, zero AI)">
-          {busy === 'landing' ? 'Generazione…' : 'Genera sito bozza'}
         </button>
       </section>
 
