@@ -22,7 +22,7 @@ import {
   CreateCustomerSchema, UpdateCustomerSchema, AutoBuildSchema, IntakeSchema,
   VALID_CUSTOMER_STATUS, VALID_CUSTOMER_SOURCES, VALID_INTAKE_STATUS,
 } from './schemas.ts';
-import { buildBriefContextApi, callDeepSeekAiFill, getBestKnowledgeChunks, runCustomerResearch, syncCustomerToWebsiteDocs } from './crm.ts';
+import { buildBriefContextApi, callDeepSeekAiFill, getBestKnowledgeChunks, runCustomerResearch, syncCustomerToWebsiteDocs, syncCustomerToCardDocs } from './crm.ts';
 import { handleAI } from './ai.ts';
 import { ingestLangfuse } from './langfuse.ts';
 import { deployLandingHtml, sanitizeNetlifyName } from './netlify.ts';
@@ -820,8 +820,9 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
     if (!d.skipSync) {
       try {
         await syncCustomerToWebsiteDocs(id, updated);
+        await syncCustomerToCardDocs(id, updated);
       } catch (err) {
-        console.warn('[sync] customer→website fallito', { customerId: id, err: String(err), stack: (err as Error)?.stack });
+        console.warn('[sync] customer→website/card fallito', { customerId: id, err: String(err), stack: (err as Error)?.stack });
       }
     }
     return json(req, res, 200, { data: updated });

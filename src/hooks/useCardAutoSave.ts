@@ -3,6 +3,7 @@ import type { BusinessCard } from '../utils/documentSchemas';
 import { pruneCardGrids } from '../utils/card/gridElements';
 import { compressCardImages } from '../utils/card/saveCompression';
 import { logger } from '../utils/logger';
+import dataService from '../utils/dataService';
 
 const AUTO_SAVE_DELAY_MS = 30_000;
 
@@ -31,6 +32,36 @@ export function defaultCardTitle(c: BusinessCard): string {
   if (c.title?.trim()) return c.title.trim();
   if (c.front.name?.trim()) return `Bigliettino ${c.front.name.trim()}`;
   return 'Bigliettino';
+}
+
+function customerPatchFromCard(card: BusinessCard): Record<string, unknown> | null {
+  const customerId = (card as unknown as { customerId?: string }).customerId;
+  if (!customerId) return null;
+  const patch: Record<string, unknown> = {};
+  const contacts: Record<string, string> = {};
+  if (card.back.phone?.trim()) contacts.phone = card.back.phone.trim();
+  if (card.back.email?.trim()) contacts.email = card.back.email.trim();
+  if (card.back.website?.trim()) contacts.website = card.back.website.trim();
+  if (card.back.address?.trim()) contacts.address = card.back.address.trim();
+  if (Object.keys(contacts).length) patch.contacts = contacts;
+  if (card.back.socials?.length) patch.socials = card.back.socials;
+  if (card.front.company?.trim()) patch.businessName = card.front.company.trim();
+  if (card.front.name?.trim()) patch.ownerName = card.front.name.trim();
+  if (card.front.title?.trim()) patch.sector = card.front.title.trim();
+  const style = (card as unknown as { style?: { fontFamily?: string; accentColor?: string } }).style;
+  if (style?.fontFamily) patch.font = style.fontFamily;
+  if (style?.accentColor) patch.preferredColors = style.accentColor;
+  if (Object.keys(patch).length === 0) return null;
+  return patch;
+}
+
+function syncCardToCustomer(card: BusinessCard): void {
+  const patch = customerPatchFromCard(card);
+  if (!patch) return;
+  const customerId = (card as unknown as { customerId?: string }).customerId!;
+  dataService.updateCustomer(customerId, { ...patch, skipSync: true } as Record<string, unknown>).catch((err) => {
+    logger.warn('Sync card→customer fallito', { err: String(err) });
+  });
 }
 
 interface UseCardAutoSaveOptions {
@@ -106,6 +137,7 @@ export function useCardAutoSave({
       setShowSaveDialog(false);
       addToast('success', `«${title}» salvato. Visibile in Collection.`);
       if (onSaved) onSaved(sanitized);
+      syncCardToCustomer(sanitized);
     } catch (err: any) {
       logger.error('Card save failed', { err: err?.message || String(err) });
       addToast('error', `Errore durante il salvataggio: ${err?.message || 'sconosciuto'}`);
@@ -142,6 +174,7 @@ export function useCardAutoSave({
             }
             setIsSaved(true);
             if (onSaved && sanitized.id) onSaved(sanitized);
+            syncCardToCustomer(sanitized);
           }
         });
       });

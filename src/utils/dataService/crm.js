@@ -59,6 +59,50 @@ function syncCustomerToWebsiteLocal(cust) {
   if (changed) lsSet('precisionQuote_documents:v1', docs);
 }
 
+// TB-030b sync customer→card (locale): mirror server syncCustomerToCardDocs.
+function syncCustomerToCardLocal(cust) {
+  const docs = lsGet('precisionQuote_documents:v1') || [];
+  const contacts = cust.contacts || {};
+  const socials = Array.isArray(cust.socials) ? cust.socials : [];
+  const businessName = typeof cust.businessName === 'string' ? cust.businessName : '';
+  const ownerName = typeof cust.ownerName === 'string' ? cust.ownerName : '';
+  const sector = typeof cust.sector === 'string' ? cust.sector : '';
+  const font = typeof cust.font === 'string' ? cust.font : '';
+  const preferredColors = typeof cust.preferredColors === 'string' ? cust.preferredColors : '';
+  const custUpdated = new Date(cust.updatedAt || Date.now()).getTime();
+  let changed = false;
+  for (const d of docs) {
+    if (d.customerId !== cust.id || d.documentType !== 'businessCard') continue;
+    const docUpdated = new Date(d.updatedAt || 0).getTime();
+    if (docUpdated > custUpdated) continue;
+    // In locale i doc sono FLAT: front/back/style top-level, non in data.
+    const front = d.front || {};
+    const back = d.back || {};
+    const style = d.style || {};
+    let docChanged = false;
+    if (contacts.phone && contacts.phone !== back.phone) { back.phone = String(contacts.phone); docChanged = true; }
+    if (contacts.email && contacts.email !== back.email) { back.email = String(contacts.email); docChanged = true; }
+    if (contacts.website && contacts.website !== back.website) { back.website = String(contacts.website); docChanged = true; }
+    if (contacts.address && contacts.address !== back.address) { back.address = String(contacts.address); docChanged = true; }
+    if (socials.length > 0 && JSON.stringify(socials) !== JSON.stringify(back.socials)) { back.socials = socials; docChanged = true; }
+    if (businessName && businessName !== front.company) { front.company = businessName; docChanged = true; }
+    if (ownerName && ownerName !== front.name) { front.name = ownerName; docChanged = true; }
+    if (sector && sector !== front.title) { front.title = sector; docChanged = true; }
+    if (font && font !== style.fontFamily) { style.fontFamily = font; docChanged = true; }
+    if (preferredColors) {
+      const firstColor = preferredColors.split(/[,\s]+/).find((c) => c.startsWith('#'));
+      if (firstColor && firstColor !== style.accentColor) { style.accentColor = firstColor; docChanged = true; }
+    }
+    if (!docChanged) continue;
+    d.front = front;
+    d.back = back;
+    d.style = style;
+    d.updatedAt = new Date().toISOString();
+    changed = true;
+  }
+  if (changed) lsSet('precisionQuote_documents:v1', docs);
+}
+
 /** Piattaforma social dal dominio URL (instagram.com → Instagram). */
 function socialPlatformFromUrl(url) {
   const m = url.match(/https?:\/\/(?:www\.)?([^/]+)/i);
@@ -146,13 +190,13 @@ export function createCrmMethods(svc) {
         const updated = { ...all[idx], ...clean, updatedAt: new Date().toISOString() };
         all[idx] = updated;
         lsSet('pq_customers:v1', all);
-        // TB-030 sync customer→website (locale): aggiorna i doc website del
-        // cliente con i campi brand. Last-write-wins con confronto updatedAt.
+        // TB-030 sync customer→website/card (locale): aggiorna i doc del cliente.
         if (!patch.skipSync) {
           try {
             syncCustomerToWebsiteLocal(updated);
+            syncCustomerToCardLocal(updated);
           } catch (e) {
-            console.warn('[sync] customer→website fallito (locale)', e?.message || e);
+            console.warn('[sync] customer→website/card fallito (locale)', e?.message || e);
           }
         }
         return { data: updated };
