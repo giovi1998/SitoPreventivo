@@ -77,7 +77,8 @@ describe('buildWebsiteFullDocument', () => {
     expect(doc).toContain('<!DOCTYPE html>');
     expect(doc).toContain('<style>h1{color:red}</style>');
     expect(doc).toContain('<h1>Ciao</h1>');
-    expect(doc).toContain('<script>console.log(1)</script>');
+    expect(doc).toContain('console.log(1)');
+    expect(doc).toContain('try{');
   });
 
   it('inietta link Google Fonts se fontFamily è un font Google', () => {
@@ -95,7 +96,7 @@ describe('buildWebsiteFullDocument', () => {
     const doc = buildWebsiteFullDocument(full, 'h1{color:red}', 'console.log(1)');
     expect(doc.match(/<!DOCTYPE html>/g)).toHaveLength(1);
     expect(doc.indexOf('<style>h1{color:red}</style>')).toBeLessThan(doc.indexOf('</head>'));
-    expect(doc.indexOf('<script>console.log(1)</script>')).toBeGreaterThan(doc.indexOf('<h1>Ciao</h1>'));
+    expect(doc.indexOf('console.log(1)')).toBeGreaterThan(doc.indexOf('<h1>Ciao</h1>'));
   });
 
   it('html completo senza css/js: solo font link aggiunto', () => {
@@ -103,6 +104,38 @@ describe('buildWebsiteFullDocument', () => {
     const doc = buildWebsiteFullDocument(full, '', '', 'Poppins');
     expect(doc.match(/<html>/g)).toHaveLength(1);
     expect(doc).toContain('fonts.googleapis.com/css2?family=Poppins');
+  });
+
+  it('js con SyntaxError → sostituito da fallback menu (preview navigabile)', () => {
+    const broken = "if (nav.classList) { nav.classList.toggle('open'); }\nelse { console.log('x')";
+    const doc = buildWebsiteFullDocument('<nav><button class="menu-toggle"></button></nav>', 'h1{}', broken);
+    expect(doc).not.toContain("console.log('x')");
+    expect(doc).toContain('menu-toggle');
+    expect(doc).toContain('nav-open');
+  });
+
+  it('js con sintassi valida ma ReferenceError a runtime → fallback attivo via __qbSiteJsFailed', () => {
+    const runtimeBroken = `document.querySelector('.menu-toggle').addEventListener('click', function(){ initMenu(); });`;
+    const doc = buildWebsiteFullDocument('<h1>X</h1>', 'h1{}', runtimeBroken);
+    // Il js generato viaggia in try/catch + fallback condizionato.
+    expect(doc).toContain('__qbSiteJsFailed');
+    expect(doc).toContain('initMenu()');
+  });
+
+  it('js valido → wrapped in try/catch, nessun doppio binding di fallback', () => {
+    const ok = "document.querySelector('.menu-toggle').addEventListener('click',function(){document.querySelector('.nav').classList.toggle('nav-open')});";
+    const doc = buildWebsiteFullDocument('<h1>X</h1>', '', ok);
+    expect(doc).toContain(ok);
+    expect(doc).toContain('__qbSiteJsFailed');
+    // Il flag compare 2 volte: set nel try/catch + check del fallback condizionato.
+    expect(doc.match(/__qbSiteJsFailed/g)?.length).toBe(2);
+  });
+
+  it('js vuoto → fallback menu iniettato (idempotente)', () => {
+    const doc = buildWebsiteFullDocument('<h1>X</h1>', '', '');
+    expect(doc).toContain('menu-toggle');
+    expect(doc).toContain('nav-open');
+    expect(doc).not.toContain('__qbSiteJsFailed');
   });
 });
 

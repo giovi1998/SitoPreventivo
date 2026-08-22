@@ -16,6 +16,9 @@ function makeDb() {
     select: vi.fn(() => makeSelectChain()),
     insert: vi.fn(() => makeInsertChain()),
     update: vi.fn(() => makeUpdateChain()),
+    delete: vi.fn(() => ({
+      where: vi.fn(() => Promise.resolve()),
+    })),
   };
 }
 

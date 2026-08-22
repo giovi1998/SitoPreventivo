@@ -17,7 +17,21 @@ import {
   loadSkillContent,
   distillSkillMarkdown,
   SKILL_CATALOG,
+  activeSkillLabels,
 } from '../skillLibrary';
+
+describe('activeSkillLabels (tracciabilità)', () => {
+  it('ritorna kind→skill per i kind con skill attiva', () => {
+    const labels = activeSkillLabels(['card', 'flyer', 'logo']);
+    expect(labels).toContain('card→web-design-guidelines');
+    expect(labels).toContain('flyer→gpt-taste');
+    expect(labels).toContain('logo→brandkit');
+  });
+
+  it('kind senza skill o sconosciuti esclusi', () => {
+    expect(activeSkillLabels(['quote', 'onboarding', 'inesistente'])).toEqual([]);
+  });
+});
 
 describe('distillSkillMarkdown', () => {
   it('rimuove il frontmatter YAML', () => {

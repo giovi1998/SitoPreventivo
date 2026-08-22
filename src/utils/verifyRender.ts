@@ -1,14 +1,14 @@
 // t18: renderizza i draft logo/card/flyer in PNG data URL per la
 // chiamata di verifica visione post-loop (`verifyOrchestrator`).
-// Output piccolo (256-512px lato lungo) per stare sotto il budget
-// immagini del provider senza appesantire la precision.
+// 512px lato lungo: sotto i 400px il modello non legge le gerarchie
+// tipografiche (contatti retro card ~16px scalati) e giudica cieco.
 import type { BusinessCard, Flyer, Logo } from './documentSchemas';
 import { buildCardSvg } from './card/svgRenderer';
 import { builderToSvg } from './logo/svgBuilder';
 import { buildFlyerSvg } from './flyer/svgRenderer';
 import { svgToPng } from './logo/exporters';
 
-const PREVIEW_PX = 256;
+const PREVIEW_PX = 512;
 
 async function svgStringToPngDataUrl(svg: string): Promise<string> {
   const bytes = await svgToPng(svg, PREVIEW_PX, { tier: 'unlocked' });

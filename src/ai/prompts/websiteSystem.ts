@@ -187,6 +187,7 @@ export function buildWebsiteHtmlPrompt(
   parts.push('- Ogni sezione deve avere <div class="section-inner"> per contenuto centrato');
   parts.push('- Aggiungi classe .current-year nel footer per l\'anno automatico via JS');
   parts.push('- I link social devono avere target="_blank" rel="noopener"');
+  parts.push('- Il FORM contatti è OPZIONALE: includilo SOLO se il brief lo richiede (feature/CTA di contatto). Se lo includi senza backend, il submit deve mostrare un messaggio (mai action="#" finto che non fa nulla); in alternativa usa link mailto/tel o la CTA.');
   parts.push('🚫 FOOTER MINIMALE: il footer DEVE essere semplice — una riga con copyright (.current-year) e al massimo i contatti essenziali. VIETATO: footer-brand con logo/nome duplicato (il brand è già nella nav), colonne multiple, footer-bottom separato, crediti "Sito web:". Un solo <footer> con <div class="section-inner"> e testo inline.');
   parts.push('\n⚠️ MULTI-PAGINA (se il brief richiede più di una pagina):');
   parts.push('- Restituisci UN SOLO HTML, quello della pagina index. Le altre pagine (about, contact...) vengono generate in uno step successivo.');

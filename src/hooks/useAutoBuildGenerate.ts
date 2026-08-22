@@ -13,7 +13,7 @@ import { resolveProviderId, providerSupportsVision } from '../utils/resolveProvi
 import { incrementAiStats, type AiStats } from '../utils/aiStats';
 import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
-import { enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss } from '../utils/website/sanitizeGenerated';
+import { enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss, applyPaletteVars, ensureMenuToggleButton } from '../utils/website/sanitizeGenerated';
 import { newRunId, newSpanId } from '../ai/runTrace';
 import { type RunTraceOptions } from '../ai/types';
 import { loadRunState, saveRunState, clearRunState } from '../utils/runState';
@@ -22,6 +22,7 @@ import { VerifyOrchestrator } from '../ai/verifyOrchestrator';
 import { renderDraftPreviews } from '../utils/verifyRender';
 import { cohereDrafts } from '../ai/coherenceOrchestrator';
 import { buildAgentBrief, agentResultData, agentTypeOfDoc, docTypeOfTool } from '../ai/agentSave';
+import { activeSkillLabels } from '../ai/skillLibrary';
 import type { BusinessCard, Flyer, FlyerTone, Logo, LogoBuilder } from '../utils/documentSchemas';
 import { createEmptyCard, createEmptyFlyer, createEmptyLogo, ensureCardGrid } from '../utils/documentSchemas';
 
@@ -68,6 +69,9 @@ export interface AutoBuildGenerateOptions {
   agentMode?: boolean;
   /** t18: focus aggiuntivo per il retry post-verifica (verdetto motivazione). */
   userPrompt?: string;
+  /** Tracciabilità: eventi intermedi (skill attive, tool, verify, coherence)
+   *  nel registro operativo del cliente (useCustomerLogger). */
+  onLog?: (type: 'info' | 'success' | 'error', msg: string) => void;
 }
 
 const GENERATABLE_ORDER = ['logo', 'businessCard', 'flyer', 'website'] as const;
@@ -578,6 +582,10 @@ async function generateWebsiteDraft(
       logoBase64,
       customerId: options?.customerId,
       sessionId: doc.id,
+      // Tracciabilità: step intermedi nel registro cliente (html/css/js/verify/pagine).
+      onStep: (step: string) => {
+        options?.onLog?.('info', `Sito: ${step.replace('page:', 'pagina ')}…`);
+      },
       generateHeroImages: async (prompt) => {
         const hero = await generateFlashImage(prompt, 'hero', {});
         return hero?.dataUrl ?? null;
@@ -589,7 +597,7 @@ async function generateWebsiteDraft(
   const contacts = String(briefData.contacts || '');
   await saveDraft(doc, {
     ...(doc.data as Record<string, unknown>),
-    html: enforceMapIframe(injectLogoIntoHtml(result.site.html, logoBase64 || null), contacts),
+    html: enforceMapIframe(ensureMenuToggleButton(injectLogoIntoHtml(result.site.html, logoBase64 || null)), contacts),
     css: ensureHamburgerCss(result.site.css),
     js: sanitizeGeneratedJs(result.site.js),
     pages: result.site.pages,
@@ -655,6 +663,9 @@ export function useAutoBuildGenerate() {
       const targets = GENERATABLE_ORDER.flatMap((type) =>
         docs.filter((d) => d.documentType === type && d.data?.autoGeneratePending),
       );
+      // Tracciabilità CRM: eventi intermedi nel registro cliente (se il
+      // chiamante passa onLog). Mai fatali.
+      const emit = (type: 'info' | 'success' | 'error', msg: string) => options?.onLog?.(type, msg);
       logoBuilderRef.current = null;
       cardDataRef.current = null;
       // t17: resume del run precedente per questo cliente se lo stato
@@ -700,9 +711,13 @@ export function useAutoBuildGenerate() {
       // T11: modalità agente — l'AI pianifica e delega ai sub-orchestratori
       // via tool; ogni tool result viene salvato sul doc corrispondente.
       const workList = resumed;
+      // Tipi agent per i tool (logo/card/flyer/website) — anche per il log skill.
+      const includeTypes = resumed
+        .map((t) => agentTypeOfDoc(t.documentType))
+        .filter((t): t is NonNullable<typeof t> => t != null);
       // t18: verifica visione post-loop. 1 call AI con preview dei 3 draft;
       // per ogni "retry" rigenera quello solo (max 1 volta) con la motivazione come focus.
-      const runVerifyAfterAgent = async () => {
+      const runVerifyAfterAgent = async (briefText: string) => {
         if (!getAiVisionEnabled()) return;
         const modelId = resolveProviderId();
         if (!providerSupportsVision(modelId)) return;
@@ -726,7 +741,7 @@ export function useAutoBuildGenerate() {
         if (drafts.card) drafts.card.preview = previews.card ?? '';
         if (drafts.flyer) drafts.flyer.preview = previews.flyer ?? '';
         const verdict = await new VerifyOrchestrator().verifyDrafts({
-          brief: options?.customerId ? `Cliente ${options.customerId}` : '',
+          brief: briefText,
           drafts: {
             logo: drafts.logo,
             card: drafts.card,
@@ -737,6 +752,12 @@ export function useAutoBuildGenerate() {
         if (verdict.logo?.verdict === 'retry') retries.push('logo');
         if (verdict.card?.verdict === 'retry') retries.push('businessCard');
         if (verdict.flyer?.verdict === 'retry') retries.push('flyer');
+        // Tracciabilità: verdetto verify nel registro cliente.
+        const verdictMsg = (['logo', 'card', 'flyer'] as const)
+          .filter((k) => verdict[k])
+          .map((k) => `${k}:${verdict[k]!.verdict}`)
+          .join(', ');
+        emit(retries.length > 0 ? 'info' : 'success', `Verifica visione: ${verdictMsg || 'nessun draft'}`);
         if (retries.length === 0) return;
         for (const targetType of retries) {
           const doc = targets.find((d) => d.documentType === targetType);
@@ -752,6 +773,7 @@ export function useAutoBuildGenerate() {
             });
           } catch (err) {
             logger.warn('t18: retry fallito', { route: 'useAutoBuildGenerate', targetType, err: String(err) });
+            emit('error', `Reverifica ${STEP_LABEL[targetType] ?? targetType} fallita: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
       };
@@ -772,11 +794,17 @@ export function useAutoBuildGenerate() {
           if (!doc || !patchData) continue;
           try {
             const current = (lastData[targetType] ?? doc.data ?? {}) as Record<string, unknown>;
-            // Website: patch preferredColors va in data.brief.preferredColors
             let merged: Record<string, unknown>;
+            // Website: palette nel brief (future rigenerazioni) E nel CSS
+            // già generato (override :root in cascade, t21).
             if (targetType === 'website' && patchData.preferredColors) {
               const brief = (current.brief ?? {}) as Record<string, unknown>;
-              merged = { ...current, brief: { ...brief, preferredColors: patchData.preferredColors } };
+              const [primary, secondary] = String(patchData.preferredColors).split(',');
+              merged = {
+                ...current,
+                brief: { ...brief, preferredColors: patchData.preferredColors },
+                css: applyPaletteVars(String(current.css ?? ''), { primary, secondary }),
+              };
             } else {
               merged = { ...current, ...patchData };
               // Card/flyer: merge style/decorations shallow
@@ -786,6 +814,7 @@ export function useAutoBuildGenerate() {
             lastData[targetType] = merged;
             await saveDraft(doc, merged);
             logger.info('t21: coherence patch applicata', { route: 'useAutoBuildGenerate', docType: targetType });
+            emit('info', `Coerenza palette: ${STEP_LABEL[targetType] ?? targetType} allineato al logo`);
           } catch (err) {
             logger.warn('t21: coherence patch fallita', { route: 'useAutoBuildGenerate', docType: targetType, err: String(err) });
           }
@@ -794,6 +823,13 @@ export function useAutoBuildGenerate() {
       if (options?.agentMode && workList.length > 0) {
         let toolCount = 0;
         setState((prev) => ({ ...prev, currentStep: 'Agente: pianifico la generazione…' }));
+        emit(
+          'info',
+          `Agente: ${workList.length} oggetti, skill: ${activeSkillLabels(includeTypes).join(', ') || 'nessuna'}`,
+        );
+        if (resumedSkip > 0) {
+          emit('info', `Resume run ${runId.slice(0, 8)}: salto ${resumedSkip} step già completati`);
+        }
         try {
           const agent = new AgentOrchestrator();
           const runTrace: RunTraceOptions = { runId, runName: 'auto-build', startRun: true, rootSpanId };
@@ -827,7 +863,7 @@ export function useAutoBuildGenerate() {
               logoReference,
             },
             {
-              include: resumed.map((t) => agentTypeOfDoc(t.documentType)).filter((t): t is NonNullable<typeof t> => t != null),
+              include: includeTypes,
               onToolResult: async (result) => {
                 toolCount++;
                 const docType = docTypeOfTool(result.name);
@@ -837,6 +873,7 @@ export function useAutoBuildGenerate() {
                   ...prev,
                   currentStep: `Agente: ${result.ok ? '✓' : '✗'} ${result.name} (${toolCount} tools)`,
                 }));
+                emit(result.ok ? 'success' : 'error', `${result.name}: ${result.summary}`);
                 if (result.ok) {
                   const data = agentResultData(docType, result);
                   if (data) {
@@ -860,7 +897,10 @@ export function useAutoBuildGenerate() {
             },
           );
           // t18: verifica visione post-loop (1 call con preview dei 3 draft).
-          await runVerifyAfterAgent();
+          // Il revisore vede il brief reale, non solo l'id cliente.
+          await runVerifyAfterAgent(
+            [agentBrief.businessName, agentBrief.sector, agentBrief.description].filter(Boolean).join(' — '),
+          );
           // t21: coherence palette/fonte unificata
           await runCoherenceAfterAgent();
         } catch (err) {

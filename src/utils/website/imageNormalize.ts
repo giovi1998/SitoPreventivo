@@ -33,6 +33,18 @@ export function normalizeInlineImages(html: string, maxChars: number): string {
 
   let out = html;
 
+  // 0) Il logo iniettato dall'app (img con data-qb-logo) non si tocca MAI:
+  //    se superasse maxChars verrebbe sostituito dal placeholder GIF
+  //    (invisibile) → il sito appare "senza logo" e l'element picker
+  //    restituisce al modello un img placeholder (bug live 2026-08-21).
+  //    Estrazione → normalizzazione → ripristino.
+  const protectedLogos = new Map<string, string>();
+  out = out.replace(/<img\b[^>]*\bdata-qb-logo=["'][^>]*>/gi, (tag) => {
+    const token = `@@QB_LOGO_${protectedLogos.size}@@`;
+    protectedLogos.set(token, tag);
+    return token;
+  });
+
   // 1) <img src="data:..."> o src='data:...' — payload tra gli stessi apici.
   //    g1 = prefisso fino al quote, g2 = quote, g3 = data URL.
   out = out.replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])(data:[\s\S]*?)\2/gi, (m, pre: string, quote: string, url: string) => {
@@ -48,6 +60,11 @@ export function normalizeInlineImages(html: string, maxChars: number): string {
     if (clean.length > maxChars) return `${pre}${GIF_PLACEHOLDER}`;
     return `${pre}${clean}`;
   });
+
+  // Ripristino dei logo protetti.
+  for (const [token, tag] of protectedLogos) {
+    out = out.replace(token, () => tag);
+  }
 
   // 3) background-image inline con data: — stesso trattamento
   out = out.replace(/(background(?:-image)?\s*:\s*url\(\s*["']?)(data:[^"')]+)(["']?\s*\))/gi, (m, pre: string, url: string, post: string) => {

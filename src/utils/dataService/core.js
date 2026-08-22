@@ -245,6 +245,11 @@ export function buildBriefContext(cust) {
   if (c.mood) parts.push(`Mood: ${c.mood}`);
   if (c.target) parts.push(`Target: ${c.target}`);
   if (c.preferredColors) parts.push(`Palette: ${c.preferredColors}`);
+  if (c.font) parts.push(`Font: ${c.font}`);
+  if (c.pages) parts.push(`Pagine: ${c.pages}`);
+  if (c.sections) parts.push(`Sezioni: ${c.sections}`);
+  if (c.cta) parts.push(`CTA: ${c.cta}`);
+  if (c.features) parts.push(`Feature: ${c.features}`);
   if (contacts.address) parts.push(`Indirizzo: ${contacts.address}`);
   if (contacts.website) parts.push(`Sito: ${contacts.website}`);
   if (contacts.phone) parts.push(`Telefono: ${contacts.phone}`);

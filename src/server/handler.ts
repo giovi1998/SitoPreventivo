@@ -760,11 +760,18 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
       target: d.target || null,
       preferredColors: d.preferredColors || null,
       contacts: d.contacts || null,
+      socials: d.socials || null,
+      font: d.font || null,
+      pages: d.pages || null,
+      sections: d.sections || null,
+      cta: d.cta || null,
+      features: d.features || null,
       package: d.package || 'apertura',
       source: 'manual',
       status: 'new',
       notes: d.notes || null,
       assignedTo: d.assignedTo || null,
+      googleMapsUrl: d.googleMapsUrl || null,
     }).returning();
     return json(req, res, 201, { data: created });
   }
@@ -801,7 +808,7 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
       return json(req, res, 400, { error: 'Status non valido' });
     }
     const patch: Record<string, unknown> = { updatedAt: new Date() };
-    for (const k of ['businessName', 'ownerName', 'sector', 'activity', 'mood', 'target', 'preferredColors', 'contacts', 'socials', 'font', 'package', 'status', 'logoUrl', 'notes', 'assignedTo', 'googleMapsUrl', 'promptLabels', 'promptVersions'] as const) {
+    for (const k of ['businessName', 'ownerName', 'sector', 'activity', 'mood', 'target', 'preferredColors', 'contacts', 'socials', 'font', 'pages', 'sections', 'cta', 'features', 'package', 'status', 'logoUrl', 'detectedLogoUrl', 'notes', 'assignedTo', 'googleMapsUrl', 'promptLabels', 'promptVersions'] as const) {
       if (d[k] !== undefined) patch[k] = d[k];
     }
     const [updated] = await (await getDb()).update(customersTable).set(patch).where(eq(customersTable.id, id)).returning();
@@ -1142,12 +1149,12 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
           description: String(cust.activity || ''),
           tone: String(cust.mood || ''),
           target: String(cust.target || ''),
-          pages: 'index',
+          pages: String(cust.pages || 'index'),
           preferredColors: String(cust.preferredColors || ''),
           font: String(cust.font || ''),
-          cta: '',
-          sections: 'hero, chi_siamo, contatti',
-          features: '',
+          cta: String(cust.cta || ''),
+          sections: String(cust.sections || 'hero, chi_siamo, contatti'),
+          features: String(cust.features || ''),
           contacts: [mapAddress, contacts.phone, contacts.email].filter(Boolean).join(', '),
           address: mapAddress,
           phone: String(contacts.phone || ''),

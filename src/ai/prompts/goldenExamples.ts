@@ -1,13 +1,17 @@
-// t20: esempi ideali per few-shot per editor.
-// L'utente cura gli esempi dopo il commit iniziale — placeholder validi ma minimali.
-// Ogni esempio è un JSON completo come atteso in modalità MODIFICA.
+// t20: esempi few-shot per editor. Un esempio è "golden" SOLO dopo
+// validazione visiva (genera → renderizza → approvi contro
+// docs/design-criteria.md), poi si congela qui. I campi devono rispettare
+// ESATTAMENTE gli schema di output: un campo inventato (es. iconGlyph)
+// viene scartato da Zod in silenzio e insegna al modello la forma sbagliata.
+// Cura: sostituisci l'esempio quando una generazione reale passa verify +
+// review visiva; uno per editor, non di più (token).
 
 export const GOLDEN_CARD_EXAMPLE = `## Esempio ideale
 Input utente: "rendi premium la card di Giovanni"
 Output JSON atteso (estratto):
 {
   "front": { "name": "Giovanni Cidu", "title": "Full-Stack Developer", "company": "Quickbrand", "layout": "split", "useGrid": true },
-  "back": { "phone": "+39 012 345 6789", "email": "mario.rossi@example.com", "website": "https://giovannicidu.vercel.app", "address": "Cagliari, Italia", "services": ["Sviluppo Web", "UI Design", "AI Engineering"] },
+  "back": { "phone": "+39 012 345 6789", "email": "giovanni@quickbrand.app", "website": "https://giovannicidu.vercel.app", "address": "Cagliari, Italia", "services": ["Sviluppo Web", "UI Design", "AI Engineering"] },
   "style": { "bgColor": "#FFFFFF", "textColor": "#1A1A2A", "accentColor": "#1E3A5F", "fontFamily": "Inter", "borderStyle": "accent-strip-left" },
   "grid": { "cols": 4, "rows": 4, "elements": { "photo": { "x": 0, "y": 0, "w": 1, "h": 4 }, "name": { "x": 1, "y": 0, "w": 3, "h": 1, "placement": { "scale": 1.2 } }, "title": { "x": 1, "y": 1, "w": 3, "h": 1 }, "company": { "x": 1, "y": 2, "w": 3, "h": 1, "placement": { "scale": 0.85 } } } },
   "decorations": { "pattern": "blob-corner", "opacity": 0.2, "palette": { "primary": "#1E3A5F", "secondary": "#E11D48", "accent": null } }
@@ -28,9 +32,9 @@ Input: "pasticceria elegante"
 Output JSON:
 {
   "concepts": [
-    { "primaryText": "DolceVita", "tagline": "Pasticceria Artigianale", "iconType": "lucide", "iconGlyph": "cake", "primaryColor": "#8B0000", "secondaryColor": "#1A1A1A", "layout": "stacked", "imagePrompt": "elegant pastry logo, minimal, warm cream background, serif typography" },
-    { "primaryText": "DolceVita", "tagline": "Dal 1985", "iconType": "shape", "iconShape": "circle", "primaryColor": "#1E3A5F", "secondaryColor": "#C9A86A", "layout": "horizontal", "imagePrompt": "premium bakery emblem, circular badge, navy and gold" },
-    { "primaryText": "DolceVita", "tagline": "", "iconType": "monogram", "iconGlyph": "DV", "primaryColor": "#01696F", "secondaryColor": "#1A1A2E", "layout": "vertical", "imagePrompt": "monogram DV, teal and charcoal, modern minimal" }
+    { "primaryText": "DolceVita", "tagline": "Pasticceria Artigianale", "iconType": "lucide", "iconName": "Cookie", "primaryColor": "#8B0000", "secondaryColor": "#1A1A1A", "layout": "stacked", "qualityScore": 0.9, "scoreReason": "Icona settoriale chiara, palette calda coerente", "imagePrompt": "elegant pastry logo, minimal, warm cream background, serif typography" },
+    { "primaryText": "DolceVita", "tagline": "Dal 1985", "iconType": "shape", "iconShape": "circle", "primaryColor": "#1E3A5F", "secondaryColor": "#C9A86A", "layout": "horizontal", "qualityScore": 0.75, "scoreReason": "Badge classico, meno distintivo del primo", "imagePrompt": "premium bakery emblem, circular badge, navy and gold" },
+    { "primaryText": "DolceVita", "tagline": "", "iconType": "monogram", "monogram": "DV", "primaryColor": "#01696F", "secondaryColor": "#1A1A2E", "layout": "vertical", "qualityScore": 0.6, "scoreReason": "Monogram pulito ma freddo per un food brand", "imagePrompt": "monogram DV, teal and charcoal, modern minimal" }
   ],
   "selected": 0
 }`;

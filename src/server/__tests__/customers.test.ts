@@ -247,6 +247,36 @@ describe('TB-027 /api/customers', () => {
     expect(lastUpdate.webData.images).toHaveLength(1);
   });
 
+  it('POST /customers/:id/research: chunk spam (mojibake/link-farm) filtrati dal knowledge', async () => {
+    process.env.FIRECRAWL_API_KEY = 'fc_test';
+    const bad = String.fromCharCode(0xfffd);
+    const spamChunk = `Odkryj ekscytuj${bad}cy wiat${bad} gier online\n\n[vavada aplikacja](https://cor.com.pl/) [casino](https://spam.example/x) [slot](https://spam.example/y) testo cortissimo`;
+    const cleanChunk = 'Un angolo di Thailandia nel cuore della Sardegna. Pad Thai autentico, ingredienti freschi.';
+    mockDbState.selectResults.push([{ id: 'cust_1', businessName: 'PadThai', contacts: { website: 'https://padthai.example.com' } }]);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      if (String(url).includes('api.firecrawl.dev/v2/scrape')) {
+        return new Response(JSON.stringify({
+          data: {
+            markdown: `${cleanChunk}\n\n${spamChunk}`,
+            branding: {},
+            links: [],
+            json: {},
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const res = await callHandler({
+      method: 'POST', url: '/api/customers/cust_1/research', body: { adminEmail: 'admin@gmail.com' },
+    });
+    expect(res.statusCode).toBe(200);
+    // Solo il chunk pulito entra nel knowledge; lo spam (Vavada) no.
+    expect(res.body.data.knowledgeCount).toBe(1);
+    const insertedChunks = mockDbState.inserted.filter((r: any) => r.chunk);
+    expect(insertedChunks).toHaveLength(1);
+    expect(String(insertedChunks[0].chunk)).toContain('Thailandia');
+  });
+
   it('POST /customers/:id/ai-fill senza DeepSeek key → fallback lookup, costUsd 0', async () => {
     mockDbState.selectResults.push(
       [{ id: 'cust_1', businessName: 'Bar', sector: 'bar', mood: null, target: null, preferredColors: null, activity: null }],
@@ -574,6 +604,24 @@ describe('TB-027 /api/customers', () => {
     expect(res.statusCode).toBe(200);
     // nessuna select per il sync (selectResults vuoto → sync non partito)
     expect(mockDbState.updated.filter((u: any) => u.data)).toHaveLength(0);
+  });
+
+  it('PATCH customer con logoUrl:null + detectedLogoUrl:null → 200, entrambi azzerati (bug "Logo rimosso" che non rimuoveva)', async () => {
+    const cust = {
+      id: 'cust_1', businessName: 'Bar', contacts: {},
+      logoUrl: 'data:image/png;base64,manual', detectedLogoUrl: 'https://old.example/logo.png',
+      updatedAt: new Date().toISOString(),
+    };
+    mockDbState.selectResults.push([cust]);
+    mockDbState.nextReturning = [{ ...cust, logoUrl: null, detectedLogoUrl: null }];
+    const res = await callHandler({
+      method: 'PATCH', url: '/api/customers/cust_1',
+      body: { adminEmail: 'admin@gmail.com', logoUrl: null, detectedLogoUrl: null, skipSync: true },
+    });
+    expect(res.statusCode).toBe(200);
+    const lastUpdate = mockDbState.updated[mockDbState.updated.length - 1] as Record<string, unknown>;
+    expect(lastUpdate.logoUrl).toBeNull();
+    expect(lastUpdate.detectedLogoUrl).toBeNull();
   });
 });
 

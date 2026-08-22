@@ -4,6 +4,7 @@
 // NOTA: chunkMarkdown è DUPLICATO da api/index.ts — il codice in api/ non è
 // importabile lato client (boundary Vercel: api/ non è bundled per il browser).
 // Tenere allineato a mano se cambia la logica di chunking.
+import { filterJunkChunks } from './knowledgeTopK.js';
 
 const KNOWLEDGE_KEY = 'pq_customer_knowledge:v1';
 const FIRECRAWL_SCRAPE_URL = 'https://api.firecrawl.dev/v2/scrape';
@@ -170,17 +171,18 @@ export function extractWebImages(scraped, max = 6) {
 // Knowledge chunks in localStorage: { [customerId]: [{ chunk, source, createdAt }] }.
 // Replace per customer (una research sovrascrive la precedente). Try/catch quota.
 export function saveKnowledgeChunks(customerId, chunks, source = 'firecrawl:homepage') {
-  if (!chunks.length) return 0;
+  const clean = filterJunkChunks(chunks);
+  if (!clean.length) return 0;
   try {
     const raw = localStorage.getItem(KNOWLEDGE_KEY);
     const store = raw ? JSON.parse(raw) : {};
     const createdAt = new Date().toISOString();
-    store[customerId] = chunks.map((chunk) => ({ chunk, source, createdAt }));
+    store[customerId] = clean.map((chunk) => ({ chunk, source, createdAt }));
     localStorage.setItem(KNOWLEDGE_KEY, JSON.stringify(store));
-    return chunks.length;
+    return clean.length;
   } catch (err) {
     const reason = err?.name === 'QuotaExceededError' ? 'quota localStorage esaurita' : (err?.message || String(err));
-    console.warn(`[knowledge] salvataggio chunk fallito per ${customerId} (${chunks.length} chunk persi): ${reason}`);
+    console.warn(`[knowledge] salvataggio chunk fallito per ${customerId} (${clean.length} chunk persi): ${reason}`);
     return 0;
   }
 }

@@ -24,6 +24,7 @@ vi.mock('../../utils/resolveProviderId', () => ({
 vi.mock('../../utils/uiPrefs', () => ({
   getAiImageModelDefault: vi.fn(() => 'gemini-3.1-flash-image'),
   getAiVisionEnabled: mocks.getAiVisionEnabled,
+  isAiSkillDisabled: vi.fn(() => false),
 }));
 
 vi.mock('../../utils/logoGenerator', () => ({
@@ -436,6 +437,32 @@ describe('useAutoBuildGenerate', () => {
     for (const call of mockSave.mock.calls) {
       expect(call[1].customerId).toBe('cust_123');
     }
+  });
+
+  it('onLog riceve eventi intermedi: skill attive, tool ok/fail', async () => {
+    mocks.agentRun.mockImplementation(async (_brief: any, _docs: any, _ctx: any, opts: any) => {
+      await opts.onToolResult({ name: 'generate_logo', ok: true, summary: 'Logo generato: "Bar"', data: {} });
+      await opts.onToolResult({ name: 'generate_card', ok: false, summary: 'schema fail', data: {} });
+    });
+    const onLog = vi.fn();
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    await act(async () => {
+      await result.current.generateAll(makeDocs(), customer, { agentMode: true, onLog });
+    });
+    const msgs = onLog.mock.calls.map((c) => `${c[0]}:${c[1]}`);
+    // Skill attive per i kind inclusi (logo, card, flyer).
+    expect(msgs.some((m) => m.startsWith('info:Agente:') && m.includes('skill:') && m.includes('logo→brandkit'))).toBe(true);
+    expect(msgs.some((m) => m === 'success:generate_logo: Logo generato: "Bar"')).toBe(true);
+    expect(msgs.some((m) => m === 'error:generate_card: schema fail')).toBe(true);
+  });
+
+  it('senza onLog la generazione agentMode non crasha (callback opzionale)', async () => {
+    mocks.agentRun.mockImplementation(async () => {});
+    const { result } = renderHook(() => useAutoBuildGenerate());
+    await act(async () => {
+      const summary = await result.current.generateAll(makeDocs(), customer, { agentMode: true });
+      expect(summary.statuses).toBeDefined();
+    });
   });
 
   it('flyer senza size/style/content non va in errore', async () => {

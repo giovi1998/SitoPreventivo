@@ -84,6 +84,16 @@ export const SKILL_CATALOG: ProjectSkill[] = [...Object.values(EDITOR_SKILLS).fl
 /** Kind editor che hanno una skill di progetto (per il toggle t13). */
 export const EDITOR_SKILL_KINDS: string[] = Object.keys(EDITOR_SKILLS);
 
+/** Etichette "kind→skill" attive per i kind dati (toggle rispettato).
+ *  Per il log/tracciabilità: mostra all'utente cosa verrà iniettato. */
+export function activeSkillLabels(kinds: string[]): string[] {
+  return kinds
+    .filter((kind) => editorSkillsEnabled(kind))
+    .map((kind) => ({ kind, skill: EDITOR_SKILLS[kind]?.[0]?.name }))
+    .filter((e): e is { kind: string; skill: string } => !!e.skill)
+    .map((e) => `${e.kind}→${e.skill}`);
+}
+
 /** t13: la skill curata per il kind editor è attiva? (toggle utente in pq_ui:v1). */
 export function editorSkillsEnabled(kind: string): boolean {
   return !isAiSkillDisabled(kind as never);

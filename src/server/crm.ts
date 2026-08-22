@@ -4,7 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { getDb, customersTable, customerKnowledgeTable, documentsTable } from './db.ts';
 import { clampDataUrl } from './core.ts';
 import { ingestLangfuse } from './langfuse.ts';
-import { topKChunks } from '../utils/knowledgeTopK.js';
+import { topKChunks, filterJunkChunks, cleanMarkdownForKnowledge } from '../utils/knowledgeTopK.js';
 import type { FirecrawlResult } from './types.ts';
 // TB-030 sync customer→website: aggiorna i doc website del cliente con i
 // campi brand (font/colori/contatti/social). Last-write-wins con confronto
@@ -21,6 +21,10 @@ export async function syncCustomerToWebsiteDocs(customerId: string, cust: Record
   const socials = Array.isArray(cust.socials) ? cust.socials as Array<{ platform?: string; url?: string }> : [];
   const font = typeof cust.font === 'string' ? cust.font : '';
   const preferredColors = typeof cust.preferredColors === 'string' ? cust.preferredColors : '';
+  const pages = typeof cust.pages === 'string' ? cust.pages : '';
+  const sections = typeof cust.sections === 'string' ? cust.sections : '';
+  const cta = typeof cust.cta === 'string' ? cust.cta : '';
+  const features = typeof cust.features === 'string' ? cust.features : '';
   // Indirizzo per la mappa: preferisce l'indirizzo COMPLETO dal research
   // Firecrawl (webData.json.addresses, es. "Via Dante 5/A, Cagliari") —
   // contacts.address è spesso solo via senza città → Google risolve male.
@@ -43,6 +47,10 @@ export async function syncCustomerToWebsiteDocs(customerId: string, cust: Record
       ...brief,
       font: font || brief.font,
       preferredColors: preferredColors || brief.preferredColors,
+      pages: pages || brief.pages,
+      sections: sections || brief.sections,
+      cta: cta || brief.cta,
+      features: features || brief.features,
       address,
       phone,
       email,
@@ -72,6 +80,11 @@ export function buildBriefContextApi(cust: Record<string, unknown>): string {  c
   if (c.target) parts.push(`Target: ${c.target}`);
   if (brandingColors) parts.push(`Colori sito (USA QUESTI per logo/card/flyer): ${JSON.stringify(brandingColors)}`);
   if (c.preferredColors) parts.push(`Palette preferita cliente (secondaria): ${c.preferredColors}`);
+  if (c.font) parts.push(`Font: ${c.font}`);
+  if (c.pages) parts.push(`Pagine: ${c.pages}`);
+  if (c.sections) parts.push(`Sezioni: ${c.sections}`);
+  if (c.cta) parts.push(`CTA: ${c.cta}`);
+  if (c.features) parts.push(`Feature: ${c.features}`);
   if (contacts.address) parts.push(`Indirizzo: ${contacts.address}`);
   if (contacts.website) parts.push(`Sito: ${contacts.website}`);
   if (contacts.phone) parts.push(`Telefono: ${contacts.phone}`);
@@ -160,10 +173,18 @@ export function chunkMarkdown(markdown: string, maxLen = 1000): string[] {
 }
 
 export async function saveCustomerKnowledge(customerId: string, chunks: string[], source: string, metadata?: Record<string, unknown>): Promise<number> {
-  if (!chunks.length) return 0;
+  // Filtro spam/mojibake PRIMA del salvataggio: i chunk junk finirebbero
+  // nel briefContext AI (auto-build/ai-fill) inquinando la generazione.
+  const clean = filterJunkChunks(chunks);
+  if (!clean.length) return 0;
   const db = await getDb();
+  // Research idempotente: una nuova scrape della stessa source sostituisce
+  // i chunk vecchi (prima si accumulavano run dopo run, spam incluso).
+  await db.delete(customerKnowledgeTable).where(
+    and(eq(customerKnowledgeTable.customerId, customerId), eq(customerKnowledgeTable.source, source)),
+  );
   let inserted = 0;
-  for (const chunk of chunks) {
+  for (const chunk of clean) {
     await db.insert(customerKnowledgeTable).values({
       customerId,
       chunk,
@@ -363,7 +384,10 @@ export async function runCustomerResearch(cust: any): Promise<{
     const firecrawl = await fetchFirecrawlPage(website);
     researchStatus.web = firecrawl.status;
     if (firecrawl.status === 'ok') {
-      const chunks = chunkMarkdown(firecrawl.markdown || '');
+      // Pre-filter paragrafi junk (spam/mojibake) PRIMA del chunking:
+      // chunkMarkdown taglia a 1000 char e un filtro post mischierebbe
+      // spam e contenuto pulito nello stesso chunk su markdown corti.
+      const chunks = chunkMarkdown(cleanMarkdownForKnowledge(firecrawl.markdown || ''));
       knowledgeCount = await saveCustomerKnowledge(cust.id, chunks, 'firecrawl:homepage', {
         title: firecrawl.title,
         description: firecrawl.description,

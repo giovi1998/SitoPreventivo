@@ -5,7 +5,7 @@
 // `svc` è la facade dataService (riferimenti cross-modulo a call time).
 import { IS_LOCAL, lsGet, lsSet, api, cryptoRandomId, buildBriefContext, buildAiFillPrompt, extractJsonObject } from './core.js';
 import { chunkMarkdown, scrapeFirecrawlLocal, extractLogoFromFirecrawl, extractWebImages, saveKnowledgeChunks, getKnowledgeChunks } from '../firecrawlLocal.js';
-import { topKChunks } from '../knowledgeTopK.js';
+import { topKChunks, cleanMarkdownForKnowledge } from '../knowledgeTopK.js';
 
 // TB-030 sync customer→website (locale): aggiorna i doc website del cliente
 // con i campi brand. Last-write-wins con confronto updatedAt: il doc vince
@@ -16,6 +16,10 @@ function syncCustomerToWebsiteLocal(cust) {
   const socials = Array.isArray(cust.socials) ? cust.socials : [];
   const font = typeof cust.font === 'string' ? cust.font : '';
   const preferredColors = typeof cust.preferredColors === 'string' ? cust.preferredColors : '';
+  const pages = typeof cust.pages === 'string' ? cust.pages : '';
+  const sections = typeof cust.sections === 'string' ? cust.sections : '';
+  const cta = typeof cust.cta === 'string' ? cust.cta : '';
+  const features = typeof cust.features === 'string' ? cust.features : '';
   // Indirizzo per la mappa: preferisce l'indirizzo COMPLETO dal research
   // Firecrawl (webData.json.addresses) — contacts.address è spesso solo via
   // senza città → Google risolve male (Monza/Rozzano).
@@ -38,6 +42,10 @@ function syncCustomerToWebsiteLocal(cust) {
         ...brief,
         font: font || brief.font,
         preferredColors: preferredColors || brief.preferredColors,
+        pages: pages || brief.pages,
+        sections: sections || brief.sections,
+        cta: cta || brief.cta,
+        features: features || brief.features,
         address,
         phone,
         email,
@@ -212,7 +220,8 @@ export function createCrmMethods(svc) {
         const page = scraped.scraped || {};
         const metadata = page.metadata || {};
         const markdown = typeof page.markdown === 'string' ? page.markdown : '';
-        const chunks = chunkMarkdown(markdown);
+        // Pre-filter paragrafi junk (spam/mojibake) prima del chunking.
+        const chunks = chunkMarkdown(cleanMarkdownForKnowledge(markdown));
         const knowledgeCount = saveKnowledgeChunks(id, chunks);
         // Logo manuale (upload admin) ha priorità: status 'manual', mai sovrascritto.
         const detectedLogoUrl = extractLogoFromFirecrawl(page);
@@ -441,12 +450,12 @@ export function createCrmMethods(svc) {
                 description: String(cust.activity || ''),
                 tone: String(cust.mood || ''),
                 target: String(cust.target || ''),
-                pages: 'index',
+                pages: String(cust.pages || 'index'),
                 preferredColors: String(cust.preferredColors || ''),
                 font: String(cust.font || ''),
-                cta: '',
-                sections: 'hero, chi_siamo, contatti',
-                features: '',
+                cta: String(cust.cta || ''),
+                sections: String(cust.sections || 'hero, chi_siamo, contatti'),
+                features: String(cust.features || ''),
                 contacts: [mapAddress, contacts.phone, contacts.email].filter(Boolean).join(', '),
                 address: mapAddress,
                 phone: String(contacts.phone || ''),

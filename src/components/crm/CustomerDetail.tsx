@@ -51,6 +51,10 @@ type Customer = Record<string, unknown> & {
   target?: string | null;
   preferredColors?: string | null;
   font?: string | null;
+  pages?: string | null;
+  sections?: string | null;
+  cta?: string | null;
+  features?: string | null;
   socials?: Array<{ platform?: string; url?: string }> | null;
   contacts?: Record<string, unknown> | null;
   package?: string | null;
@@ -391,12 +395,22 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
 
   const handleRemoveLogo = async () => {
     if (!customer) return;
+    // Rimuove SIA il logo manuale SIA quello rilevato dalla research:
+    // la preview è logoUrl || detectedLogoUrl → azzerare solo il primo
+    // lasciava visibile il secondo (log "Logo rimosso" menzognero).
+    const removedManual = !!customer.logoUrl;
+    const removedDetected = !!customer.detectedLogoUrl;
     try {
-      await dataService.updateCustomer(customer.id, { logoUrl: null });
+      await dataService.updateCustomer(customer.id, { logoUrl: null, detectedLogoUrl: null });
       await load();
       onRefresh();
       flashSaved('logoUrl');
-      logger.appendLog('success', 'Logo rimosso');
+      logger.appendLog(
+        'success',
+        removedDetected && !removedManual ? 'Logo rilevato rimosso' : 'Logo rimosso',
+        undefined,
+        { manual: removedManual, rilevato: removedDetected },
+      );
     } catch (err) {
       logger.appendLog('error', 'Rimozione logo fallita', undefined, { error: String(err) });
     }
@@ -652,7 +666,14 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const handleGenerateAll = async () => {
     if (!customer) return;
     logger.appendLog('info', `Generazione bozze AI in corso (provider: ${aiProvider}, reasoning: ${aiReasoning})…`, undefined, { docs: docs.length, provider: aiProvider });
-    const summary = await autoGen.generateAll(docs, customer, { providerId: aiProvider, customerId: customerId, reasoningEffort: aiReasoning, agentMode: true });
+    const summary = await autoGen.generateAll(docs, customer, {
+      providerId: aiProvider,
+      customerId: customerId,
+      reasoningEffort: aiReasoning,
+      agentMode: true,
+      // Tracciabilità: skill attive, tool, verify e coherence nel registro.
+      onLog: (type, msg) => logger.appendLog(type, msg),
+    });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const perDoc = docs
@@ -685,7 +706,13 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const handleGenerateOne = async (doc: Doc) => {
     if (!customer) return;
     logger.appendLog('info', `Rigenero bozza ${doc.documentType} (provider: ${aiProvider}, reasoning: ${aiReasoning})…`, undefined, { docId: doc.id, provider: aiProvider });
-    const genError = await autoGen.generateOne(doc, customer, { providerId: aiProvider, customerId: customerId, reasoningEffort: aiReasoning });
+    const genError = await autoGen.generateOne(doc, customer, {
+      providerId: aiProvider,
+      customerId: customerId,
+      reasoningEffort: aiReasoning,
+      // Tracciabilità: step intermedi nel registro (website html/css/js/verify…).
+      onLog: (type, msg) => logger.appendLog(type, msg),
+    });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const freshDoc = freshDocs.find((x) => x.id === doc.id);
@@ -830,6 +857,10 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         {renderField('target', 'Target', customer.target, true)}
         {renderField('preferredColors', 'Colori preferiti', customer.preferredColors)}
         {renderField('font', 'Font preferito', customer.font)}
+        {renderField('pages', 'Pagine richieste', (customer as any).pages)}
+        {renderField('sections', 'Sezioni desiderate', (customer as any).sections, true)}
+        {renderField('cta', 'Call-to-action', (customer as any).cta)}
+        {renderField('features', 'Feature speciali', (customer as any).features, true)}
       </section>
 
       <section className="crm-section">
