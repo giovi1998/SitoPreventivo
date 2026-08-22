@@ -17,6 +17,18 @@ import CustomerKnowledgePanel from './CustomerKnowledgePanel';
 import { prefetchRemotePrompts, REMOTE_PROMPT_PILOT } from '../../utils/ai/remotePrompt';
 import { getAiReasoningEffort, setAiReasoningEffort } from '../../utils/uiPrefs';
 import { buildLandingWebsite } from '../../utils/landingDraft';
+import { compressImage } from '../../utils/card/imageCompress';
+
+const isLocalhost = () => typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Lettura file fallita'));
+    reader.readAsDataURL(file);
+  });
+}
 
 const AB_TEST_PROMPTS = [
   { id: 'card-system', label: 'Card' },
@@ -39,6 +51,10 @@ type Customer = Record<string, unknown> & {
   target?: string | null;
   preferredColors?: string | null;
   font?: string | null;
+  pages?: string | null;
+  sections?: string | null;
+  cta?: string | null;
+  features?: string | null;
   socials?: Array<{ platform?: string; url?: string }> | null;
   contacts?: Record<string, unknown> | null;
   package?: string | null;
@@ -350,23 +366,54 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
     if (!customer) return;
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      logger.appendLog('info', 'Caricamento logo manuale…', undefined, { fileName: file.name, sizeBytes: file.size, mime: file.type });
-      try {
-        await dataService.updateCustomer(customer.id, { logoUrl: dataUrl });
-        logger.appendLog('success', 'Logo caricato', undefined, { logoUrl: truncateDataUrl(dataUrl) });
-        flashSaved('logoUrl');
-        await load();
-        onRefresh();
-        await propagateLogoToDrafts(customer.id, dataUrl);
-      } catch (err) {
-        logger.appendLog('error', 'Caricamento logo fallito', undefined, { error: String(err) });
+    logger.appendLog('info', 'Caricamento logo manuale…', undefined, { fileName: file.name, sizeBytes: file.size, mime: file.type });
+    try {
+      // In locale comprimiamo solo file di una certa dimensione per evitare
+      // QuotaExceededError sui draft (4x base64 in localStorage), ma evitiamo
+      // di comprimere iconcine gia piccole (e file fittizi in test jsdom).
+      let logoUrl: string;
+      if (isLocalhost() && file.size > 50_000) {
+        try {
+          logoUrl = await compressImage(file, 1024, 400_000, { format: file.type === 'image/png' ? 'png' : 'jpeg' });
+        } catch {
+          logoUrl = await fileToDataUrl(file);
+        }
+      } else {
+        logoUrl = await fileToDataUrl(file);
       }
-    };
-    reader.readAsDataURL(file);
+      await dataService.updateCustomer(customer.id, { logoUrl });
+      logger.appendLog('success', 'Logo caricato', undefined, { logoUrl: truncateDataUrl(logoUrl) });
+      flashSaved('logoUrl');
+      await load();
+      onRefresh();
+      await propagateLogoToDrafts(customer.id, logoUrl);
+    } catch (err) {
+      logger.appendLog('error', 'Caricamento logo fallito', undefined, { error: String(err) });
+    }
     if (logoInputRef.current) logoInputRef.current.value = '';
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!customer) return;
+    // Rimuove SIA il logo manuale SIA quello rilevato dalla research:
+    // la preview è logoUrl || detectedLogoUrl → azzerare solo il primo
+    // lasciava visibile il secondo (log "Logo rimosso" menzognero).
+    const removedManual = !!customer.logoUrl;
+    const removedDetected = !!customer.detectedLogoUrl;
+    try {
+      await dataService.updateCustomer(customer.id, { logoUrl: null, detectedLogoUrl: null });
+      await load();
+      onRefresh();
+      flashSaved('logoUrl');
+      logger.appendLog(
+        'success',
+        removedDetected && !removedManual ? 'Logo rilevato rimosso' : 'Logo rimosso',
+        undefined,
+        { manual: removedManual, rilevato: removedDetected },
+      );
+    } catch (err) {
+      logger.appendLog('error', 'Rimozione logo fallita', undefined, { error: String(err) });
+    }
   };
 
   const handlePhotosUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -619,7 +666,14 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const handleGenerateAll = async () => {
     if (!customer) return;
     logger.appendLog('info', `Generazione bozze AI in corso (provider: ${aiProvider}, reasoning: ${aiReasoning})…`, undefined, { docs: docs.length, provider: aiProvider });
-    const summary = await autoGen.generateAll(docs, customer, { providerId: aiProvider, customerId: customerId, reasoningEffort: aiReasoning, agentMode: true });
+    const summary = await autoGen.generateAll(docs, customer, {
+      providerId: aiProvider,
+      customerId: customerId,
+      reasoningEffort: aiReasoning,
+      agentMode: true,
+      // Tracciabilità: skill attive, tool, verify e coherence nel registro.
+      onLog: (type, msg) => logger.appendLog(type, msg),
+    });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const perDoc = docs
@@ -652,7 +706,13 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
   const handleGenerateOne = async (doc: Doc) => {
     if (!customer) return;
     logger.appendLog('info', `Rigenero bozza ${doc.documentType} (provider: ${aiProvider}, reasoning: ${aiReasoning})…`, undefined, { docId: doc.id, provider: aiProvider });
-    const genError = await autoGen.generateOne(doc, customer, { providerId: aiProvider, customerId: customerId, reasoningEffort: aiReasoning });
+    const genError = await autoGen.generateOne(doc, customer, {
+      providerId: aiProvider,
+      customerId: customerId,
+      reasoningEffort: aiReasoning,
+      // Tracciabilità: step intermedi nel registro (website html/css/js/verify…).
+      onLog: (type, msg) => logger.appendLog(type, msg),
+    });
     const fresh = await dataService.getCustomer(customerId);
     const freshDocs = (((fresh.data as (Customer & { documents?: Doc[] }) | undefined)?.documents) ?? []) as Doc[];
     const freshDoc = freshDocs.find((x) => x.id === doc.id);
@@ -797,6 +857,10 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         {renderField('target', 'Target', customer.target, true)}
         {renderField('preferredColors', 'Colori preferiti', customer.preferredColors)}
         {renderField('font', 'Font preferito', customer.font)}
+        {renderField('pages', 'Pagine richieste', (customer as any).pages)}
+        {renderField('sections', 'Sezioni desiderate', (customer as any).sections, true)}
+        {renderField('cta', 'Call-to-action', (customer as any).cta)}
+        {renderField('features', 'Feature speciali', (customer as any).features, true)}
       </section>
 
       <section className="crm-section">
@@ -828,7 +892,16 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
             <label htmlFor="crm-logo-upload" className="crm-btn-secondary">Carica logo</label>
             {logoPreview && (
               <div className="crm-logo-preview-wrap" data-testid="crm-logo-preview">
-                <img src={logoPreview} alt="Logo caricato" className="crm-logo-preview" />
+                <img src={logoPreview} alt="Logo caricato" className="crm-logo-preview" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                <button
+                  type="button"
+                  className="crm-logo-remove"
+                  onClick={handleRemoveLogo}
+                  title="Rimuovi logo"
+                  data-testid="crm-logo-remove"
+                >
+                  ×
+                </button>
                 <span className="crm-logo-check">✓</span>
               </div>
             )}
@@ -901,9 +974,6 @@ export default function CustomerDetail({ customerId, onBack, onRefresh }: Props)
         </button>
         <button onClick={handleGeneratePalettes} disabled={busy !== null} data-testid="crm-palette-btn" title="Suggerisce 3 palette colori coerenti col brief via AI (costo AI)">
           {busy === 'palette' || palette.isProcessing ? 'Generando…' : 'Genera 3 palette'}
-        </button>
-        <button onClick={handleLandingDraft} disabled={busy !== null} data-testid="crm-landing-btn" title="Genera landing page statica dai dati cliente (webAnswers + flyer + contatti, zero AI)">
-          {busy === 'landing' ? 'Generazione…' : 'Genera sito bozza'}
         </button>
       </section>
 

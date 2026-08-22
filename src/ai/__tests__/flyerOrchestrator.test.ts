@@ -17,7 +17,7 @@ vi.mock('../providers/registry', () => ({
   },
 }));
 
-import { FlyerAIOrchestrator, flyerAIOutputSchema } from '../flyerOrchestrator';
+import { FlyerAIOrchestrator, flyerAIOutputSchema, clampFlyerCopy } from '../flyerOrchestrator';
 import { createEmptyFlyer } from '../../utils/documentSchemas';
 import { getFlyerCopyBudget } from '../../utils/flyer';
 
@@ -81,6 +81,27 @@ describe('FlyerAIOrchestrator (phase 3)', () => {
     });
   });
 
+  describe('clampFlyerCopy (t22)', () => {
+    it('tronca headline/subheadline/cta oltre il limite', () => {
+      const out = clampFlyerCopy({
+        headline: 'H'.repeat(250),
+        subheadline: 'S'.repeat(350),
+        body: 'B'.repeat(50),
+        cta: { label: 'C'.repeat(60) },
+      }) as { headline: string; subheadline: string; body: string; cta: { label: string } };
+      expect(out.headline).toHaveLength(200);
+      expect(out.subheadline).toHaveLength(300);
+      expect(out.body).toHaveLength(50);
+      expect(out.cta.label).toHaveLength(50);
+      expect(flyerAIOutputSchema.safeParse(out).success).toBe(true);
+    });
+
+    it('lascia invariato un output valido', () => {
+      const input = { headline: 'H', subheadline: '', body: '', cta: { label: 'C' } };
+      expect(clampFlyerCopy(input)).toEqual(input);
+    });
+  });
+
   describe('generateCopy', () => {
     it('parses the JSON response and merges it into the flyer (keeps cta.url)', async () => {
       const mock = setupMock();
@@ -128,7 +149,7 @@ describe('FlyerAIOrchestrator (phase 3)', () => {
       expect(result.changes).toContain('error:empty');
     });
 
-    it('clamps oversize body via Zod', async () => {
+    it('t22: tronca il body oltre il limite schema invece di rigettare', async () => {
       const mock = setupMock();
       mock.chatMock.mockResolvedValue({
         content: JSON.stringify({
@@ -140,8 +161,8 @@ describe('FlyerAIOrchestrator (phase 3)', () => {
       const orch = new FlyerAIOrchestrator();
       const flyer = createEmptyFlyer();
       const result = await orch.generateCopy(flyer, 'brief', 'formale');
-      expect(result.applied).toBe(false);
-      expect(result.changes.join(' ')).toMatch(/error:invalid_flyer/);
+      expect(result.applied).toBe(true);
+      expect(result.flyer.content.body).toHaveLength(2000);
     });
 
     it('falls back to flyer.briefContext when brief is empty (TB-027)', async () => {

@@ -22,7 +22,7 @@ import {
   CreateCustomerSchema, UpdateCustomerSchema, AutoBuildSchema, IntakeSchema,
   VALID_CUSTOMER_STATUS, VALID_CUSTOMER_SOURCES, VALID_INTAKE_STATUS,
 } from './schemas.ts';
-import { buildBriefContextApi, callDeepSeekAiFill, getBestKnowledgeChunks, runCustomerResearch, syncCustomerToWebsiteDocs } from './crm.ts';
+import { buildBriefContextApi, callDeepSeekAiFill, getBestKnowledgeChunks, runCustomerResearch, syncCustomerToWebsiteDocs, syncCustomerToCardDocs } from './crm.ts';
 import { handleAI } from './ai.ts';
 import { ingestLangfuse } from './langfuse.ts';
 import { deployLandingHtml, sanitizeNetlifyName } from './netlify.ts';
@@ -620,16 +620,18 @@ export const handleDocuments: RouteHandler = async (path, method, req, res, body
   }
 
   if (path.startsWith('/documents/') && method === 'DELETE') {
-    const documentId = path.replace('/documents/', '');
-    const email = body.email || searchParams.get('email');
+    const rawId = path.replace('/documents/', '');
+    const documentId = decodeURIComponent(rawId).trim();
+    const email = (body.email as string | undefined) || searchParams.get('email') || (body as Record<string, unknown>).userEmail as string | undefined;
     if (!email) return json(req, res, 400, { error: 'Email richiesta' });
 
     const [existing] = await (await getDb()).select().from(documentsTable).where(eq(documentsTable.id, documentId));
     if (!existing) {
-      console.log('[doc] DELETE 404', { id: documentId, email, bodyEmail: body.email, queryEmail: searchParams.get('email') });
-      return json(req, res, 404, { error: 'Documento non trovato' });
+      console.log('[doc] DELETE 404', { id: documentId, rawId, email, bodyEmail: body.email, queryEmail: searchParams.get('email') });
+      // Idempotente: se già cancellato, torna success così la UI non resta bloccata (vecchio bug prod)
+      return json(req, res, 200, { success: true, alreadyDeleted: true });
     }
-    if (existing.userEmail !== email) {
+    if (existing.userEmail !== email && email !== ADMIN_EMAIL) {
       return json(req, res, 403, { error: 'Non autorizzato' });
     }
     await (await getDb()).delete(documentsTable).where(eq(documentsTable.id, documentId));
@@ -758,11 +760,18 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
       target: d.target || null,
       preferredColors: d.preferredColors || null,
       contacts: d.contacts || null,
+      socials: d.socials || null,
+      font: d.font || null,
+      pages: d.pages || null,
+      sections: d.sections || null,
+      cta: d.cta || null,
+      features: d.features || null,
       package: d.package || 'apertura',
       source: 'manual',
       status: 'new',
       notes: d.notes || null,
       assignedTo: d.assignedTo || null,
+      googleMapsUrl: d.googleMapsUrl || null,
     }).returning();
     return json(req, res, 201, { data: created });
   }
@@ -799,7 +808,7 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
       return json(req, res, 400, { error: 'Status non valido' });
     }
     const patch: Record<string, unknown> = { updatedAt: new Date() };
-    for (const k of ['businessName', 'ownerName', 'sector', 'activity', 'mood', 'target', 'preferredColors', 'contacts', 'socials', 'font', 'package', 'status', 'logoUrl', 'notes', 'assignedTo', 'googleMapsUrl', 'promptLabels', 'promptVersions'] as const) {
+    for (const k of ['businessName', 'ownerName', 'sector', 'activity', 'mood', 'target', 'preferredColors', 'contacts', 'socials', 'font', 'pages', 'sections', 'cta', 'features', 'package', 'status', 'logoUrl', 'detectedLogoUrl', 'notes', 'assignedTo', 'googleMapsUrl', 'promptLabels', 'promptVersions'] as const) {
       if (d[k] !== undefined) patch[k] = d[k];
     }
     const [updated] = await (await getDb()).update(customersTable).set(patch).where(eq(customersTable.id, id)).returning();
@@ -811,8 +820,9 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
     if (!d.skipSync) {
       try {
         await syncCustomerToWebsiteDocs(id, updated);
+        await syncCustomerToCardDocs(id, updated);
       } catch (err) {
-        console.warn('[sync] customer→website fallito', { customerId: id, err: String(err), stack: (err as Error)?.stack });
+        console.warn('[sync] customer→website/card fallito', { customerId: id, err: String(err), stack: (err as Error)?.stack });
       }
     }
     return json(req, res, 200, { data: updated });
@@ -1140,12 +1150,12 @@ export const handleCustomers: RouteHandler = async (path, method, req, res, body
           description: String(cust.activity || ''),
           tone: String(cust.mood || ''),
           target: String(cust.target || ''),
-          pages: 'index',
+          pages: String(cust.pages || 'index'),
           preferredColors: String(cust.preferredColors || ''),
           font: String(cust.font || ''),
-          cta: '',
-          sections: 'hero, chi_siamo, contatti',
-          features: '',
+          cta: String(cust.cta || ''),
+          sections: String(cust.sections || 'hero, chi_siamo, contatti'),
+          features: String(cust.features || ''),
           contacts: [mapAddress, contacts.phone, contacts.email].filter(Boolean).join(', '),
           address: mapAddress,
           phone: String(contacts.phone || ''),

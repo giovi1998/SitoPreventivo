@@ -8,7 +8,7 @@ import { ensureCardGrid } from '../utils/documentSchemas';
 import type { BusinessCard } from '../utils/documentSchemas';
 
 type BriefDoc = { data?: Record<string, unknown> | null };
-type BriefCustomer = { businessName?: string; aiSuggestedFields?: Record<string, unknown> | null };
+type BriefCustomer = { businessName?: string; aiSuggestedFields?: Record<string, unknown> | null; logoUrl?: string | null; detectedLogoUrl?: string | null };
 
 const DOC_TYPE_OF_TOOL: Record<string, string> = {
   generate_logo: 'logo',
@@ -53,6 +53,8 @@ export function buildAgentBrief(docs: BriefDoc[], customer: BriefCustomer): Agen
   const main = docs.find((d) => typeof d.data?.briefContext === 'string' && String(d.data?.briefContext).trim())?.data ?? {};
   const suggested = customer.aiSuggestedFields ?? {};
   const websiteDoc = docs.find((d) => d.data?.source === 'ai' || d.data?.html);
+  // Logo priority: website draft logoUrl > any draft logoUrl > detected > null.
+  const logoUrl = strField(websiteDoc?.data, 'logoUrl') || strField(docs.find((d) => d.data?.logoUrl)?.data, 'logoUrl') || (customer.logoUrl as string | undefined) || (customer.detectedLogoUrl as string | undefined) || '';
   return {
     businessName: customer.businessName || strField(main, 'businessName') || 'Attività',
     sector: strField(main, 'sector'),
@@ -69,6 +71,7 @@ export function buildAgentBrief(docs: BriefDoc[], customer: BriefCustomer): Agen
     website: {
       style: strField(main, 'style') || 'modern',
       briefContext: firstBrief(docs),
+      logoBase64: logoUrl || undefined,
     },
   };
 }

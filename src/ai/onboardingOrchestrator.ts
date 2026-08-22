@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { AIStreamChunk, AIResponse } from './types';
-import { promptRegistry } from './prompts/registry';
+import { resolveSystemPrompt } from './skillLibrary';
 import { buildOnboardingSuggestPrompt } from './prompts/onboardingSystem';
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { providerRegistry } from './providers/registry';
@@ -40,7 +40,7 @@ export class OnboardingAIOrchestrator extends BaseOrchestrator {
     } = {},
   ): Promise<OnboardingSuggestResult> {
     const sessionId = this.ensureSession();
-    const systemPrompt = promptRegistry.getPrompt('onboarding-system');
+    const systemPrompt = await resolveSystemPrompt('onboarding-system');
     const userPrompt = buildOnboardingSuggestPrompt(name, sector);
     const messages = this.buildMessages(systemPrompt, userPrompt);
 

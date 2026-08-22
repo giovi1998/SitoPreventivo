@@ -24,6 +24,8 @@ export interface UiPrefs {
   aiAutoFallback?: boolean;
   /** Livello di ragionamento AI (low/high/max). Default 'max'. */
   aiReasoningEffort?: 'low' | 'high' | 'max';
+  /** t13: skill di progetto disattivate per kind editor (default: tutte attive). */
+  aiSkillDisabledByKind?: Partial<Record<EditorKind, boolean>>;
 }
 
 const KEY = 'pq_ui:v1';
@@ -49,6 +51,7 @@ export function getUiPrefs(): UiPrefs {
 
     aiAutoFallback: parsed.aiAutoFallback,
     aiReasoningEffort: parsed.aiReasoningEffort,
+    aiSkillDisabledByKind: parsed.aiSkillDisabledByKind ?? {},
   };
   } catch {
     return { ...DEFAULTS, aiConsoleExpanded: {} };
@@ -160,5 +163,18 @@ export function getAiReasoningEffort(): 'low' | 'high' | 'max' {
 export function setAiReasoningEffort(effort: 'low' | 'high' | 'max'): void {
   const prefs = getUiPrefs();
   prefs.aiReasoningEffort = effort;
+  save(prefs);
+}
+
+// ─── t13: controllo utente sulle skill di progetto ─────────────
+
+/** t13: la skill del kind è disattivata? Default: attiva. */
+export function isAiSkillDisabled(kind: EditorKind): boolean {
+  return getUiPrefs().aiSkillDisabledByKind?.[kind] ?? false;
+}
+
+export function setAiSkillDisabled(kind: EditorKind, disabled: boolean): void {
+  const prefs = getUiPrefs();
+  prefs.aiSkillDisabledByKind = { ...(prefs.aiSkillDisabledByKind ?? {}), [kind]: disabled };
   save(prefs);
 }

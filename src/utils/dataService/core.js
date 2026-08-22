@@ -16,8 +16,33 @@ export function lsGet(key) {
 
 export function lsSet(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) {
-    return { error: e?.name === 'QuotaExceededError' ? 'Spazio locale esaurito (immagine troppo grande)' : 'Errore scrittura locale' };
+    // Guard solo localhost: in prod i documenti sono su Postgres, nessun limite localStorage.
+    if (e?.name === 'QuotaExceededError' && IS_LOCAL && key === 'precisionQuote_documents:v1' && Array.isArray(val)) {
+      try {
+        const pruned = pruneOrphanedBozza(val);
+        if (pruned.length < val.length) {
+          localStorage.setItem(key, JSON.stringify(pruned));
+          console.warn(`[guard] localhost quota: rimossi ${val.length - pruned.length} doc orfani BOZZA (solo localhost, in prod Postgres`);
+          return true;
+        }
+      } catch {}
+    }
+    return { error: e?.name === 'QuotaExceededError' ? 'Spazio locale esaurito (solo localhost — in produzione Postgres, nessun limite. Pulisci i documenti orfani)' : 'Errore scrittura locale' };
   }
+}
+
+// lean-code: solo localhost — in prod i documenti sono su Postgres, mai su localStorage.
+function pruneOrphanedBozza(docs) {
+  const keep = [];
+  const orphaned = [];
+  for (const d of docs) {
+    if (d.customerId == null && d.status === 'BOZZA' && ['logo','businessCard','flyer','website'].includes(d.documentType)) orphaned.push(d);
+    else keep.push(d);
+  }
+  orphaned.sort((a,b) => new Date(a.updatedAt||0) - new Date(b.updatedAt||0));
+  // tieni i 10 orfani più recenti, scarta i più vecchi
+  const keepOrphaned = orphaned.slice(-10);
+  return [...keep, ...keepOrphaned];
 }
 
 // TB-029: email utente loggato per attribuzione Langfuse (user.id).
@@ -220,6 +245,11 @@ export function buildBriefContext(cust) {
   if (c.mood) parts.push(`Mood: ${c.mood}`);
   if (c.target) parts.push(`Target: ${c.target}`);
   if (c.preferredColors) parts.push(`Palette: ${c.preferredColors}`);
+  if (c.font) parts.push(`Font: ${c.font}`);
+  if (c.pages) parts.push(`Pagine: ${c.pages}`);
+  if (c.sections) parts.push(`Sezioni: ${c.sections}`);
+  if (c.cta) parts.push(`CTA: ${c.cta}`);
+  if (c.features) parts.push(`Feature: ${c.features}`);
   if (contacts.address) parts.push(`Indirizzo: ${contacts.address}`);
   if (contacts.website) parts.push(`Sito: ${contacts.website}`);
   if (contacts.phone) parts.push(`Telefono: ${contacts.phone}`);

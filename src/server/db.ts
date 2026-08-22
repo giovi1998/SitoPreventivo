@@ -71,6 +71,11 @@ export const customersTable = pgTable('customers', {
   socials: jsonb(),
   // TB-030 sync CRM↔website: font preferito del cliente (auto-build prefill).
   font: varchar({ length: 50 }),
+  // Brief website → CRM parity (pagine/sezioni/CTA/feature per confronto onesto)
+  pages: text(),
+  sections: text(),
+  cta: text(),
+  features: text(),
   package: varchar({ length: 50 }).default('apertura'),
   source: varchar({ length: 20 }).default('manual'),
   intakeId: varchar('intake_id', { length: 50 }),

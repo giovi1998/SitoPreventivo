@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import AILogPanel from '../AILogPanel';
 import AIProviderBadge from './AIProviderBadge';
 import type { AILogEntry } from '../../ai/types';
-import { getAiConsoleExpanded, setAiConsoleExpanded, type EditorKind } from '../../utils/uiPrefs';
+import { getAiConsoleExpanded, setAiConsoleExpanded, isAiSkillDisabled, setAiSkillDisabled, type EditorKind } from '../../utils/uiPrefs';
+import { EDITOR_SKILL_KINDS, EDITOR_SKILLS } from '../../ai/skillLibrary';
 import './AIConsole.css';
 
 export type { AILogEntry };
@@ -68,6 +69,10 @@ export interface AIConsoleProps {
   autoFallbackEnabled?: boolean;
   /** TB-023: toggle auto-fallback callback */
   onAutoFallbackToggle?: () => void;
+  /** t13: la skill di progetto del kind è disattivata dall'utente */
+  skillDisabled?: boolean;
+  /** t13: toggle skill di progetto */
+  onSkillToggle?: () => void;
   /** Clear AI logs callback */
   onClearLogs?: () => void;
 }
@@ -94,6 +99,8 @@ export default function AIConsole({
   onVisionToggle,
   onAutoFallbackToggle,
   autoFallbackEnabled,
+  skillDisabled: skillDisabledExternal,
+  onSkillToggle,
   onClearLogs,
 }: AIConsoleProps): React.ReactElement {
   const [expanded, setExpanded] = useState<boolean>(() => {
@@ -110,6 +117,20 @@ export default function AIConsole({
   const [logOpen, setLogOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevLogsLength = useRef(0);
+  // t13: toggle skill di progetto auto-wired per kind con skill curata.
+  const hasEditorSkill = editorKind != null && EDITOR_SKILL_KINDS.includes(editorKind);
+  const skillName = hasEditorSkill ? EDITOR_SKILLS[editorKind]?.[0]?.name : undefined;
+  const skillLabel = `Skill design${skillName ? `: ${skillName}` : ''}`;
+  const [skillDisabled, setSkillDisabledState] = useState<boolean>(() => (hasEditorSkill ? isAiSkillDisabled(editorKind) : false));
+
+  const toggleSkill = useCallback(() => {
+    if (!hasEditorSkill || !editorKind) return;
+    setSkillDisabledState((prev) => {
+      const next = !prev;
+      setAiSkillDisabled(editorKind, next);
+      return next;
+    });
+  }, [hasEditorSkill, editorKind]);
 
   // Auto-apri log panel quando arrivano nuovi log
   useEffect(() => {
@@ -190,17 +211,41 @@ export default function AIConsole({
 
           {quickActions && <div className="ai-console__quick">{quickActions}</div>}
 
-          {onAutoFallbackToggle != null && (
+          {(onAutoFallbackToggle != null || onSkillToggle != null || hasEditorSkill) && (
             <div className="ai-console__toggles">
-              <label className="ai-console__toggle-row" title="Se Ollama fallisce, riprova automaticamente con DeepSeek">
-                <input
-                  type="checkbox"
-                  checked={autoFallbackEnabled}
-                  onChange={onAutoFallbackToggle}
-                  aria-label="Fallback automatico"
-                />
-                <span>Auto-fallback</span>
-              </label>
+              {onAutoFallbackToggle != null && (
+                <label className="ai-console__toggle-row" title="Se Ollama fallisce, riprova automaticamente con DeepSeek">
+                  <input
+                    type="checkbox"
+                    checked={autoFallbackEnabled}
+                    onChange={onAutoFallbackToggle}
+                    aria-label="Fallback automatico"
+                  />
+                  <span>Auto-fallback</span>
+                </label>
+              )}
+              {onSkillToggle != null && (
+                <label className="ai-console__toggle-row" title="Esclude la skill di progetto dal system prompt di questo editor">
+                  <input
+                    type="checkbox"
+                    checked={!skillDisabledExternal}
+                    onChange={onSkillToggle}
+                    aria-label="Skill di progetto"
+                  />
+                  <span>{skillLabel}</span>
+                </label>
+              )}
+              {hasEditorSkill && onSkillToggle == null && (
+                <label className="ai-console__toggle-row" title="Esclude la skill di progetto dal system prompt di questo editor">
+                  <input
+                    type="checkbox"
+                    checked={!skillDisabled}
+                    onChange={toggleSkill}
+                    aria-label="Skill di progetto"
+                  />
+                  <span>{skillLabel}</span>
+                </label>
+              )}
             </div>
           )}
 

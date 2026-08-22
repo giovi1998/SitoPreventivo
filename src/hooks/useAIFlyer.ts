@@ -9,12 +9,13 @@ import { logger } from '../utils/logger';
 import { mapAiError } from '../utils/ai/mapAiError';
 import { saveGeneratedImage } from '../utils/saveGeneratedImage';
 import { newRequestId } from '../utils/ai/requestId';
-import { IMAGE_TOKEN_COST } from '../ai/costs';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
-import { calculateCostUsd, geminiImagePricingId } from '../ai/providerPricing';
+import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiImageModelDefault, getAiVisionEnabled } from '../utils/uiPrefs';
 import { renderFlyerPreviewImage } from '../utils/flyer/flyerPreviewImage';
 import type { AiCallKind } from '../utils/aiStats';
+import { ensureTokenBudget } from '../utils/ai/tokenBudget';
+import { postAiImage } from '../utils/ai/imageCall';
 
 export interface FlyerAiCall {
   kind: AiCallKind;
@@ -55,16 +56,6 @@ export function useAIFlyer(userEmail?: string, sessionId?: string): UseAIFlyerRe
     return orchestratorRef.current;
   }, []);
 
-  const ensureTokenBudget = async (requestId: string) => {
-    if (userEmail && userEmail !== 'admin@gmail.com' && !isLocalhost()) {
-      const profile = await dataService.getUserProfile(userEmail);
-      if (profile.error) throw new Error(profile.error);
-      if (profile.tokensUsed >= profile.tokenLimit) {
-        throw new Error("Limite token AI raggiunto. Contatta l'amministratore.");
-      }
-    }
-  };
-
   const runWith = useCallback(
     async (
       label: string,
@@ -75,7 +66,7 @@ export function useAIFlyer(userEmail?: string, sessionId?: string): UseAIFlyerRe
     ) => {
       const resolvedId = resolveProviderId(modelId);
       const requestId = newRequestId();
-      await ensureTokenBudget(requestId);
+      await ensureTokenBudget(userEmail);
       info(`📤 ${label}`, detail, { requestId, hasImage: !!imagePreviewBase64, imagePreviewBase64 });
       const streamId = startStream('Generazione in corso…', { requestId });
 
@@ -187,31 +178,22 @@ export function useAIFlyer(userEmail?: string, sessionId?: string): UseAIFlyerRe
         const imageModel = options?.imageModel || getAiImageModelDefault();
         const payload = buildFlyerHeroPayload(flyer, sector, tone, { flyerImage }, userEmail, options?.promptOverride, imageModel);
         if (sessionId) payload.sessionId = sessionId;
-        const apiBase = import.meta.env?.VITE_API_BASE || '';
-        const res = await fetch(`${apiBase}/api/ai/flyer-hero`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
-          body: JSON.stringify(payload),
+        const { dataUrl, costUsd, mimeType, sizeKB } = await postAiImage({
+          endpoint: '/api/ai/flyer-hero',
+          payload,
+          requestId,
+          imageModel,
+          userEmail,
+          fallbackError: 'Errore generazione hero',
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: 'Errore generazione hero' }));
-          throw new Error(mapAiError(err.error || `Hero AI ${res.status}`));
-        }
-        const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
-        const heroImage = `data:${data.mimeType};base64,${data.imageBase64}`;
+        const heroImage = dataUrl;
         const updated: Flyer = { ...flyer, content: { ...flyer.content, heroImage }, updatedAt: new Date().toISOString() };
 
-        // TB-023: costo reale dell'immagine usando providerPricing
-        const pricingId = geminiImagePricingId(imageModel);
-        const imageCost = calculateCostUsd(pricingId, undefined, 1);
-        if (userEmail && userEmail !== 'admin@gmail.com') {
-          dataService.trackTokens(userEmail, IMAGE_TOKEN_COST, imageCost).catch(() => {});
-        }
-        setLastCostUsd(imageCost);
+        setLastCostUsd(costUsd);
 
-        success('Hero AI generato', `${data.mimeType}, ${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, modelId: imageModel, costUsd: imageCost, hasImage: true });
+        success('Hero AI generato', `${mimeType}, ${sizeKB}KB`, { requestId, modelId: imageModel, costUsd, hasImage: true });
         saveGeneratedImage(userEmail, heroImage, 'flyers', 'hero').catch(() => {});
-        return { flyer: updated, applied: true, aiCall: { kind: 'hero' as const, costUsd: imageCost } };
+        return { flyer: updated, applied: true, aiCall: { kind: 'hero' as const, costUsd } };
       } catch (err) {
         const hint = mapAiError(err);
         logger.error('Flyer AI generateHero failed', { route: 'useAIFlyer.generateHero', err: hint });

@@ -36,3 +36,36 @@ export function mergeKnowledgeIntoBrief(brief, chunks) {
   if (!Array.isArray(chunks) || chunks.length === 0) return brief;
   return `${brief}\nContenuto sito web:\n${chunks.join('\n')}`;
 }
+
+// Filtro anti-spam per i chunk research: i siti clienti hanno spesso
+// comment-spam/link-farm nel markup (es. chunk in polacco con mojibake U+FFFD
+// e link casino trovati live 2026-08-21). I chunk junk finivano nel
+// briefContext AI → generazione inquinata. Euristiche deterministiche:
+// 1. ≥2 caratteri di replacement U+FFFD (mojibake/encoding rotto)
+// 2. la metà+ dei caratteri del chunk sta dentro URL di link markdown
+export function isJunkChunk(chunk) {
+  if (typeof chunk !== 'string' || !chunk.trim()) return true;
+  const replacementChar = String.fromCharCode(0xfffd);
+  const mojibake = chunk.split(replacementChar).length - 1;
+  if (mojibake >= 2) return true;
+  const urlChars = (chunk.match(/[(](https?:\/\/[^)\s]+)[)]/g) || [])
+    .reduce((acc, m) => acc + m.length, 0);
+  if (urlChars > chunk.length * 0.5) return true;
+  return false;
+}
+
+export function filterJunkChunks(chunks) {
+  if (!Array.isArray(chunks)) return [];
+  return chunks.filter((c) => !isJunkChunk(c));
+}
+
+// Filtra i paragrafi junk dal markdown scrape PRIMA del chunking: il
+// chunker taglia a 1000 char, quindi un filtro post-chunk su markdown
+// corti mischierebbe spam e contenuto pulito nello stesso chunk.
+export function cleanMarkdownForKnowledge(markdown) {
+  if (typeof markdown !== 'string' || !markdown.trim()) return '';
+  return markdown
+    .split(/\n{2,}/)
+    .filter((p) => !isJunkChunk(p))
+    .join('\n\n');
+}

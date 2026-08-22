@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { AIStreamChunk, AIResponse } from './types';
-import { promptRegistry } from './prompts/registry';
+import { resolveSystemPrompt } from './skillLibrary';
 import {
   buildSocialGenerateAllPrompt,
   type SocialSource,
@@ -58,7 +58,7 @@ export class SocialAIOrchestrator extends BaseOrchestrator {
   ): Promise<SocialProcessResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
-    const systemPrompt = promptRegistry.getPrompt('social-system');
+    const systemPrompt = await resolveSystemPrompt('social-system');
     let userPromptText = buildSocialGenerateAllPrompt(source, tone);
     if (options.userPrompt?.trim()) {
       userPromptText += `\n\nIstruzioni aggiuntive dell'utente (rispettale, hanno priorità su default e sorgente):\n${options.userPrompt.trim()}`;

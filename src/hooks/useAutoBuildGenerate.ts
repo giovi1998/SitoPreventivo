@@ -13,11 +13,16 @@ import { resolveProviderId, providerSupportsVision } from '../utils/resolveProvi
 import { incrementAiStats, type AiStats } from '../utils/aiStats';
 import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
-import { enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss } from '../utils/website/sanitizeGenerated';
+import { enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss, applyPaletteVars, ensureMenuToggleButton } from '../utils/website/sanitizeGenerated';
 import { newRunId, newSpanId } from '../ai/runTrace';
-import type { RunTraceOptions } from '../ai/types';
+import { type RunTraceOptions } from '../ai/types';
+import { loadRunState, saveRunState, clearRunState } from '../utils/runState';
 import { AgentOrchestrator } from '../ai/agentOrchestrator';
+import { VerifyOrchestrator } from '../ai/verifyOrchestrator';
+import { renderDraftPreviews } from '../utils/verifyRender';
+import { cohereDrafts } from '../ai/coherenceOrchestrator';
 import { buildAgentBrief, agentResultData, agentTypeOfDoc, docTypeOfTool } from '../ai/agentSave';
+import { activeSkillLabels } from '../ai/skillLibrary';
 import type { BusinessCard, Flyer, FlyerTone, Logo, LogoBuilder } from '../utils/documentSchemas';
 import { createEmptyCard, createEmptyFlyer, createEmptyLogo, ensureCardGrid } from '../utils/documentSchemas';
 
@@ -62,6 +67,11 @@ export interface AutoBuildGenerateOptions {
   runTrace?: RunTraceOptions;
   /** T11: usa l'agente orchestratore (harness tools) invece della sequenza fissa. */
   agentMode?: boolean;
+  /** t18: focus aggiuntivo per il retry post-verifica (verdetto motivazione). */
+  userPrompt?: string;
+  /** Tracciabilità: eventi intermedi (skill attive, tool, verify, coherence)
+   *  nel registro operativo del cliente (useCustomerLogger). */
+  onLog?: (type: 'info' | 'success' | 'error', msg: string) => void;
 }
 
 const GENERATABLE_ORDER = ['logo', 'businessCard', 'flyer', 'website'] as const;
@@ -572,6 +582,10 @@ async function generateWebsiteDraft(
       logoBase64,
       customerId: options?.customerId,
       sessionId: doc.id,
+      // Tracciabilità: step intermedi nel registro cliente (html/css/js/verify/pagine).
+      onStep: (step: string) => {
+        options?.onLog?.('info', `Sito: ${step.replace('page:', 'pagina ')}…`);
+      },
       generateHeroImages: async (prompt) => {
         const hero = await generateFlashImage(prompt, 'hero', {});
         return hero?.dataUrl ?? null;
@@ -583,7 +597,7 @@ async function generateWebsiteDraft(
   const contacts = String(briefData.contacts || '');
   await saveDraft(doc, {
     ...(doc.data as Record<string, unknown>),
-    html: enforceMapIframe(injectLogoIntoHtml(result.site.html, logoBase64 || null), contacts),
+    html: enforceMapIframe(ensureMenuToggleButton(injectLogoIntoHtml(result.site.html, logoBase64 || null)), contacts),
     css: ensureHamburgerCss(result.site.css),
     js: sanitizeGeneratedJs(result.site.js),
     pages: result.site.pages,
@@ -598,6 +612,7 @@ export function useAutoBuildGenerate() {
   const [state, setState] = useState<AutoBuildGenerateState>({ statuses: {}, errors: {}, currentStep: null, running: false });
   const logoBuilderRef = useRef<LogoBuilder | null>(null);
   const cardDataRef = useRef<Record<string, unknown> | null>(null);
+  const lastDataByTypeRef = useRef<Record<string, Record<string, unknown>>>({});
 
   const setStatus = useCallback((id: string, status: DraftGenStatus) => {
     setState((prev) => ({ ...prev, statuses: { ...prev.statuses, [id]: status } }));
@@ -614,7 +629,8 @@ export function useAutoBuildGenerate() {
 
   const runDoc = useCallback(
     async (doc: AutoBuildDoc, customer: AutoBuildCustomer, allDocs?: AutoBuildDoc[], options?: AutoBuildGenerateOptions): Promise<void> => {
-      const brief = briefOf(doc);
+      const baseBrief = briefOf(doc);
+      const brief = options?.userPrompt ? `${baseBrief}. ${options.userPrompt}` : baseBrief;
       if (doc.documentType === 'logo') {
         // TB-033: logo del cliente come riferimento visivo (stile simile,
         // testo nuovo). Comprimiamo per vision quando c'è.
@@ -647,21 +663,173 @@ export function useAutoBuildGenerate() {
       const targets = GENERATABLE_ORDER.flatMap((type) =>
         docs.filter((d) => d.documentType === type && d.data?.autoGeneratePending),
       );
+      // Tracciabilità CRM: eventi intermedi nel registro cliente (se il
+      // chiamante passa onLog). Mai fatali.
+      const emit = (type: 'info' | 'success' | 'error', msg: string) => options?.onLog?.(type, msg);
       logoBuilderRef.current = null;
       cardDataRef.current = null;
+      // t17: resume del run precedente per questo cliente se lo stato
+      // è ancora valido — i done si saltano, gli error riprovano.
+      const prevRun = options?.customerId ? loadRunState(options.customerId) : null;
+      let resumedSkip = 0;
+      const steps = prevRun?.steps ?? [];
+
+      targets.forEach((d) => {
+        const prev = steps.find((s) => s.step === d.documentType);
+        if (prev?.status === 'done') resumedSkip++;
+      });
+      // t17: il resume salta gli step già done nel run precedente;
+      // gli error/pending ripartono.
+      const resumed = targets.filter((d) => {
+        const prev = steps.find((s) => s.step === d.documentType);
+        return prev?.status !== 'done';
+      });
+
       // T7: un run agente = una trace Langfuse (runId condiviso). Il primo
       // step emette lo span root; ogni step ha stepSpanId nuovo.
-      const runId = options?.runTrace?.runId ?? newRunId();
+      const runId = options?.runTrace?.runId ?? prevRun?.runId ?? newRunId();
       const rootSpanId = options?.runTrace?.rootSpanId ?? newSpanId();
       const statuses: Record<string, DraftGenStatus> = {};
       const errors: Record<string, string> = {};
       setState((prev) => ({ ...prev, running: true }));
 
+      // t17: salva lo stato del run corrente per un eventuale resume.
+      const persistRunState = (extraStatuses: Record<string, DraftGenStatus>) => {
+        if (!options?.customerId) return;
+        const merged: Record<string, DraftGenStatus> = { ...extraStatuses };
+        saveRunState({
+          runId,
+          customerId: options.customerId,
+          startedAt: Date.now(),
+          steps: targets.map((d) => {
+            const prev = steps.find((s) => s.step === d.documentType);
+            return { step: d.documentType, status: merged[d.id] ?? prev?.status ?? 'pending' };
+          }),
+        });
+      };
+
       // T11: modalità agente — l'AI pianifica e delega ai sub-orchestratori
       // via tool; ogni tool result viene salvato sul doc corrispondente.
-      if (options?.agentMode && targets.length > 0) {
+      const workList = resumed;
+      // Tipi agent per i tool (logo/card/flyer/website) — anche per il log skill.
+      const includeTypes = resumed
+        .map((t) => agentTypeOfDoc(t.documentType))
+        .filter((t): t is NonNullable<typeof t> => t != null);
+      // t18: verifica visione post-loop. 1 call AI con preview dei 3 draft;
+      // per ogni "retry" rigenera quello solo (max 1 volta) con la motivazione come focus.
+      const runVerifyAfterAgent = async (briefText: string) => {
+        if (!getAiVisionEnabled()) return;
+        const modelId = resolveProviderId();
+        if (!providerSupportsVision(modelId)) return;
+        const lastData = lastDataByTypeRef.current;
+        const drafts: {
+          logo?: { draft: Logo; preview: string };
+          card?: { draft: BusinessCard; preview: string };
+          flyer?: { draft: Flyer; preview: string };
+        } = {};
+        if (lastData.logo) drafts.logo = { draft: lastData.logo as unknown as Logo, preview: '' };
+        if (lastData.businessCard) drafts.card = { draft: lastData.businessCard as unknown as BusinessCard, preview: '' };
+        if (lastData.flyer) drafts.flyer = { draft: lastData.flyer as unknown as Flyer, preview: '' };
+        if (!drafts.logo && !drafts.card && !drafts.flyer) return;
+        setState((prev) => ({ ...prev, currentStep: 'Verifica visione delle bozze…' }));
+        const previews = await renderDraftPreviews({
+          logo: drafts.logo?.draft,
+          card: drafts.card?.draft,
+          flyer: drafts.flyer?.draft,
+        });
+        if (drafts.logo) drafts.logo.preview = previews.logo ?? '';
+        if (drafts.card) drafts.card.preview = previews.card ?? '';
+        if (drafts.flyer) drafts.flyer.preview = previews.flyer ?? '';
+        const verdict = await new VerifyOrchestrator().verifyDrafts({
+          brief: briefText,
+          drafts: {
+            logo: drafts.logo,
+            card: drafts.card,
+            flyer: drafts.flyer,
+          },
+        });
+        const retries: Array<'logo' | 'businessCard' | 'flyer'> = [];
+        if (verdict.logo?.verdict === 'retry') retries.push('logo');
+        if (verdict.card?.verdict === 'retry') retries.push('businessCard');
+        if (verdict.flyer?.verdict === 'retry') retries.push('flyer');
+        // Tracciabilità: verdetto verify nel registro cliente.
+        const verdictMsg = (['logo', 'card', 'flyer'] as const)
+          .filter((k) => verdict[k])
+          .map((k) => `${k}:${verdict[k]!.verdict}`)
+          .join(', ');
+        emit(retries.length > 0 ? 'info' : 'success', `Verifica visione: ${verdictMsg || 'nessun draft'}`);
+        if (retries.length === 0) return;
+        for (const targetType of retries) {
+          const doc = targets.find((d) => d.documentType === targetType);
+          if (!doc) continue;
+          setState((prev) => ({ ...prev, currentStep: `Reverifica: ${STEP_LABEL[targetType] ?? targetType}` }));
+          try {
+            await runDoc(doc, customer, docs, {
+              ...options,
+              runTrace: { runId, runName: 'auto-build', stepName: `${targetType}-reverify` },
+              userPrompt: verdict[targetType === 'businessCard' ? 'card' : (targetType as 'logo' | 'flyer')]?.reason
+                ? `Focus post-verifica: ${verdict[targetType === 'businessCard' ? 'card' : (targetType as 'logo' | 'flyer')]?.reason}`
+                : undefined,
+            });
+          } catch (err) {
+            logger.warn('t18: retry fallito', { route: 'useAutoBuildGenerate', targetType, err: String(err) });
+            emit('error', `Reverifica ${STEP_LABEL[targetType] ?? targetType} fallita: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      };
+      // t21: coherence pass — palette/font unificati (solo agentMode, 1 patch deterministico).
+      const runCoherenceAfterAgent = async () => {
+        const lastData = lastDataByTypeRef.current;
+        const patch = cohereDrafts({
+          logo: lastData.logo as unknown as Logo | undefined,
+          card: lastData.businessCard as unknown as BusinessCard | undefined,
+          flyer: lastData.flyer as unknown as Flyer | undefined,
+          website: lastData.website as unknown as { brief?: { preferredColors?: string }; style?: string } | undefined,
+        });
+        if (!patch.card && !patch.flyer && !patch.website) return;
+        setState((prev) => ({ ...prev, currentStep: 'Coerenza palette…' }));
+        for (const [docType, patchData] of Object.entries(patch) as Array<[string, Record<string, unknown>]>) {
+          const targetType = docType === 'card' ? 'businessCard' : docType;
+          const doc = targets.find((d) => d.documentType === targetType);
+          if (!doc || !patchData) continue;
+          try {
+            const current = (lastData[targetType] ?? doc.data ?? {}) as Record<string, unknown>;
+            let merged: Record<string, unknown>;
+            // Website: palette nel brief (future rigenerazioni) E nel CSS
+            // già generato (override :root in cascade, t21).
+            if (targetType === 'website' && patchData.preferredColors) {
+              const brief = (current.brief ?? {}) as Record<string, unknown>;
+              const [primary, secondary] = String(patchData.preferredColors).split(',');
+              merged = {
+                ...current,
+                brief: { ...brief, preferredColors: patchData.preferredColors },
+                css: applyPaletteVars(String(current.css ?? ''), { primary, secondary }),
+              };
+            } else {
+              merged = { ...current, ...patchData };
+              // Card/flyer: merge style/decorations shallow
+              if (patchData.style) merged.style = { ...(current.style as Record<string, unknown>), ...(patchData.style as Record<string, unknown>) };
+              if (patchData.decorations) merged.decorations = { ...(current.decorations as Record<string, unknown>), ...(patchData.decorations as Record<string, unknown>) };
+            }
+            lastData[targetType] = merged;
+            await saveDraft(doc, merged);
+            logger.info('t21: coherence patch applicata', { route: 'useAutoBuildGenerate', docType: targetType });
+            emit('info', `Coerenza palette: ${STEP_LABEL[targetType] ?? targetType} allineato al logo`);
+          } catch (err) {
+            logger.warn('t21: coherence patch fallita', { route: 'useAutoBuildGenerate', docType: targetType, err: String(err) });
+          }
+        }
+      };
+      if (options?.agentMode && workList.length > 0) {
         let toolCount = 0;
         setState((prev) => ({ ...prev, currentStep: 'Agente: pianifico la generazione…' }));
+        emit(
+          'info',
+          `Agente: ${workList.length} oggetti, skill: ${activeSkillLabels(includeTypes).join(', ') || 'nessuna'}`,
+        );
+        if (resumedSkip > 0) {
+          emit('info', `Resume run ${runId.slice(0, 8)}: salto ${resumedSkip} step già completati`);
+        }
         try {
           const agent = new AgentOrchestrator();
           const runTrace: RunTraceOptions = { runId, runName: 'auto-build', startRun: true, rootSpanId };
@@ -679,7 +847,7 @@ export function useAutoBuildGenerate() {
           // `{}` rompeva generateCopy (size/style mancanti → TypeError
           // "reading 'undefined'" in scaledFontBounds, bug live 2026-08-13).
           const draftData = (type: string) =>
-            targets.find((d) => d.documentType === type)?.data as Record<string, unknown> | undefined;
+            resumed.find((d) => d.documentType === type)?.data as Record<string, unknown> | undefined;
           const agentBrief = buildAgentBrief(docs, customer);
           await agent.run(
             agentBrief,
@@ -695,7 +863,7 @@ export function useAutoBuildGenerate() {
               logoReference,
             },
             {
-              include: targets.map((t) => agentTypeOfDoc(t.documentType)).filter((t): t is NonNullable<typeof t> => t != null),
+              include: includeTypes,
               onToolResult: async (result) => {
                 toolCount++;
                 const docType = docTypeOfTool(result.name);
@@ -705,6 +873,7 @@ export function useAutoBuildGenerate() {
                   ...prev,
                   currentStep: `Agente: ${result.ok ? '✓' : '✗'} ${result.name} (${toolCount} tools)`,
                 }));
+                emit(result.ok ? 'success' : 'error', `${result.name}: ${result.summary}`);
                 if (result.ok) {
                   const data = agentResultData(docType, result);
                   if (data) {
@@ -712,7 +881,8 @@ export function useAutoBuildGenerate() {
                     try {
                       enriched = await enrichAgentDocWithImages(docType, data, agentBrief.description || agentBrief.businessName);
                     } catch { /* immagini best-effort: salva comunque il testo */ }
-                    await saveDraft(doc, { ...(doc.data as Record<string, unknown>), ...enriched });
+                    lastDataByTypeRef.current[docType] = { ...(doc.data as Record<string, unknown>), ...enriched };
+                    await saveDraft(doc, lastDataByTypeRef.current[docType]);
                     statuses[doc.id] = 'done';
                     setStatus(doc.id, 'done');
                   }
@@ -722,9 +892,17 @@ export function useAutoBuildGenerate() {
                   setStatus(doc.id, 'error');
                   setDocError(doc.id, result.summary);
                 }
+                persistRunState(statuses);
               },
             },
           );
+          // t18: verifica visione post-loop (1 call con preview dei 3 draft).
+          // Il revisore vede il brief reale, non solo l'id cliente.
+          await runVerifyAfterAgent(
+            [agentBrief.businessName, agentBrief.sector, agentBrief.description].filter(Boolean).join(' — '),
+          );
+          // t21: coherence palette/fonte unificata
+          await runCoherenceAfterAgent();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           logger.error('Auto-build agente fallito', { route: 'useAutoBuildGenerate', err: msg });
@@ -736,18 +914,21 @@ export function useAutoBuildGenerate() {
               setDocError(d.id, msg);
             }
           }
+          persistRunState(statuses);
         }
+        // t17: tutti fatti → pulisci lo stato run.
+        if (Object.values(statuses).every((s) => s === 'done')) clearRunState();
         setState((prev) => ({ ...prev, running: false, currentStep: null }));
         return { statuses, errors };
       }
 
-      for (let i = 0; i < targets.length; i++) {
-        const doc = targets[i];
+      for (let i = 0; i < resumed.length; i++) {
+        const doc = resumed[i];
         setStatus(doc.id, 'running');
         setDocError(doc.id, null);
         setState((prev) => ({
           ...prev,
-          currentStep: `Genero ${STEP_LABEL[doc.documentType] ?? doc.documentType}… (${i + 1}/${targets.length})`,
+          currentStep: `Genero ${STEP_LABEL[doc.documentType] ?? doc.documentType}… (${resumedSkip + i + 1}/${targets.length})`,
         }));
         const runTrace: RunTraceOptions = {
           runId,
@@ -769,7 +950,11 @@ export function useAutoBuildGenerate() {
           setStatus(doc.id, 'error');
           setDocError(doc.id, msg);
         }
+        // t17: salva dopo ogni step → resume salta i done anche se crasha a metà.
+        persistRunState(statuses);
       }
+      // t17: tutti fatti → pulisci lo stato run.
+      if (Object.values(statuses).every((s) => s === 'done')) clearRunState();
       setState((prev) => ({ ...prev, running: false, currentStep: null }));
       return { statuses, errors };
     },

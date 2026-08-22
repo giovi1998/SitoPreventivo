@@ -20,7 +20,7 @@ import { compressDataUrl } from '../utils/card/imageCompress';
 import { logger } from '../utils/logger';
 import { injectLogoIntoHtml } from '../utils/website/logoInjection';
 import { injectImagesIntoHtml } from '../utils/website/imageInjection';
-import { sanitizeGeneratedWebsite, enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss } from '../utils/website/sanitizeGenerated';
+import { sanitizeGeneratedWebsite, enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss, ensureMenuToggleButton } from '../utils/website/sanitizeGenerated';
 import { analyzeSiteCode } from '../utils/website/siteAnalyser';
 import { repairCssStructure, repairHtmlStructure } from '../utils/website/repairStructure';
 import { normalizeInlineImages } from '../utils/website/imageNormalize';
@@ -200,6 +200,10 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
     const patch: Record<string, unknown> = { skipSync: true };
     if (b.font) patch.font = b.font;
     if (b.preferredColors) patch.preferredColors = b.preferredColors;
+    if (b.pages) patch.pages = b.pages;
+    if (b.sections) patch.sections = b.sections;
+    if (b.cta) patch.cta = b.cta;
+    if (b.features) patch.features = b.features;
     const contacts: Record<string, unknown> = { ...custContacts };
     if (b.address) contacts.address = b.address;
     if (b.phone) contacts.phone = b.phone;
@@ -284,14 +288,21 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
   }, []);
 
   const handleGenerate = useCallback(async () => {
-    if (!website.brief.businessName.trim()) {
+    // Fallback per i documenti legacy senza brief idratato (creati da CRM
+    // auto-build prima del wiring brief): con contenuto esistente la
+    // rigenerazione non deve bloccarsi sulla validazione — il titolo fa
+    // da businessName, il contesto resta quello del sito corrente.
+    const hasContent = websiteHasContent(website);
+    const businessName = website.brief.businessName.trim() || (hasContent ? website.title.trim() : '');
+    if (!businessName) {
       addToast('error', 'Inserisci il nome dell\'attività');
       return;
     }
-    if (!website.brief.description.trim()) {
+    if (!website.brief.description.trim() && !hasContent) {
       addToast('error', 'Inserisci una descrizione dell\'attività');
       return;
     }
+    const brief = { ...website.brief, businessName };
     try {
       let scrapedRef = '';
       const urlMatch = website.brief.notes.match(/(https?:\/\/[^\s]+)/i);
@@ -304,7 +315,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
           }
         } catch { /* scrape fallisce silenziosamente */ }
       }
-      const result = await generate(website.brief, {
+      const result = await generate(brief, {
         style: website.style,
         briefContext: website.briefContext,
         modelId: aiModel || undefined,
@@ -333,16 +344,18 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       });
       const cleaned = sanitizeGeneratedWebsite(result.site.html, result.site.css);
       const finalCss = ensureHamburgerCss(cleaned.css);
-      const withLogo = (h: string) => injectImagesIntoHtml(injectLogoIntoHtml(h, website.logoUrl), website.images);
-      const withMap = (h: string) => enforceMapIframe(h, website.brief.contacts);
+      // Hamburger garantito nel DOM (il prompt lo chiede ma l'AI a volte
+      // omette il bottone → menu mobile morto).
+      const withNav = (h: string) => enforceMapIframe(ensureMenuToggleButton(h), website.brief.contacts);
+      const withLogo = (h: string) => injectImagesIntoHtml(injectLogoIntoHtml(withNav(h), website.logoUrl), website.images);
       const pagesHtml: Record<string, string> = {};
       for (const [name, pageHtml] of Object.entries(result.site.pagesHtml)) {
         const cleanedPage = sanitizeGeneratedWebsite(pageHtml, result.site.css).html;
-        pagesHtml[name] = withMap(injectLogoIntoHtml(cleanedPage, website.logoUrl));
+        pagesHtml[name] = withLogo(cleanedPage);
       }
       const merged = {
         ...website,
-        html: withMap(withLogo(cleaned.html)),
+        html: withLogo(cleaned.html),
         css: finalCss,
         js: sanitizeGeneratedJs(result.site.js),
         pages: result.site.pages,
@@ -370,7 +383,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       if (result.changes.some((c) => c.startsWith('repair:applied'))) {
         setWebsite((prev) => ({
           ...prev,
-          html: enforceMapIframe(result.site.html, prev.brief.contacts),
+          html: enforceMapIframe(ensureMenuToggleButton(result.site.html), prev.brief.contacts),
           css: ensureHamburgerCss(result.site.css),
           js: sanitizeGeneratedJs(result.site.js),
           pages: result.site.pages,
@@ -459,7 +472,7 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
       if (!jsCheck.ok && wasBroken.js) preExisting.push(...jsCheck.issues);
       setWebsite((prev) => ({
         ...prev,
-        html: enforceMapIframe(result.site.html, prev.brief.contacts),
+        html: enforceMapIframe(ensureMenuToggleButton(result.site.html), prev.brief.contacts),
         css: ensureHamburgerCss(result.site.css),
         js: sanitizeGeneratedJs(result.site.js),
         pages: result.site.pages,
@@ -1048,7 +1061,10 @@ export default function WebsiteEditor({ userEmail, initialWebsite, tier = 'unloc
               <div className="preview-wrapper" style={{ width: viewport }}>
                 <iframe
                   ref={previewIframeRef}
-                  sandbox="allow-scripts allow-same-origin"
+                  // allow-popups: i siti generati hanno CTA esterne (form,
+                  // prenotazioni) — senza, i link target=_blank sono bloccati
+                  // ("Blocked opening ... allow-popups not set").
+                  sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                   srcDoc={fullDocument}
                   title="Anteprima sito"
                   className="preview-iframe"

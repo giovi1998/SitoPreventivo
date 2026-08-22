@@ -323,10 +323,10 @@ export default defineConfig(({ mode }) => {
             const perImage = GEMINI_PER_IMAGE[model] ?? GEMINI_PER_IMAGE['gemini-3.1-flash-image'];
             return Math.round(perImage * 1_000_000) / 1_000_000;
           };
-          // TB-029: kimi-k3:cloud è l'unico model Ollama pay-per-token
-          // (extra usage, $3/$15 per 1M — stesso mirror di ai.ts). Gli altri
-          // Ollama sono flat $20/mo → costUsd omesso (0).
-          const OLLAMA_PER_TOKEN_PRICE = { 'kimi-k3:cloud': { input: 3.0, output: 15.0 } };
+          // TB-029: Ollama tutto flat $20/mo dal 2026-08-20 (kimi-k3:cloud
+          // incluso) → costUsd omesso (0). Tabella vuota per backward compat:
+          // un futuro model pay-per-token va aggiunto qui e in ai.ts.
+          const OLLAMA_PER_TOKEN_PRICE = {};
           const ollamaCostUsd = (model, usage) => {
             const p = OLLAMA_PER_TOKEN_PRICE[model];
             if (!p || !usage) return undefined;

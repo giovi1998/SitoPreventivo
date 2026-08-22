@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cosineSimilarity, topKChunks, mergeKnowledgeIntoBrief } from '../knowledgeTopK';
+import { cosineSimilarity, topKChunks, mergeKnowledgeIntoBrief, isJunkChunk, filterJunkChunks, cleanMarkdownForKnowledge } from '../knowledgeTopK';
 
 describe('knowledgeTopK', () => {
   it('cosineSimilarity: vettori identici → 1, ortogonali → 0, opposti → -1', () => {
@@ -55,5 +55,58 @@ describe('knowledgeTopK', () => {
     const brief = 'Attività: Bar';
     expect(mergeKnowledgeIntoBrief(brief, [])).toBe(brief);
     expect(mergeKnowledgeIntoBrief(brief, null)).toBe(brief);
+  });
+
+  describe('isJunkChunk (filtro spam research)', () => {
+    it('chunk con caratteri di replacement (mojibake) → junk', () => {
+      expect(isJunkChunk(`Odkryj ekscytuj${String.fromCharCode(0xfffd)}cy wiat${String.fromCharCode(0xfffd)} gier online i poczuj dreszczyk adrenaliny`)).toBe(true);
+    });
+
+    it('chunk dominato da URL di link (spam link farm) → junk', () => {
+      const spam = '[vavada aplikacja](https://cor.com.pl/x) e [altra](https://spam.example/y) testo breve';
+      expect(isJunkChunk(spam)).toBe(true);
+    });
+
+    it('testo italiano pulito → NON junk', () => {
+      expect(isJunkChunk('La nostra storia nasce dalla passione per la cucina thailandese autentica.')).toBe(false);
+    });
+
+    it('chunk con un link markdown normale → NON junk', () => {
+      expect(isJunkChunk('Prenota su [il nostro form](https://example.com/prenota) o chiamaci.')).toBe(false);
+    });
+
+    it('filterJunkChunks scarta junk e tiene il pulito', () => {
+      const bad = String.fromCharCode(0xfffd);
+      const out = filterJunkChunks([
+        'Pad Thai autentico nel cuore di Cagliari.',
+        `Odkryj ekscytuj${bad}cy wiat${bad} gier online`,
+        '[spam](https://a.example/1) [spam](https://b.example/2) [spam](https://c.example/3)',
+      ]);
+      expect(out).toEqual(['Pad Thai autentico nel cuore di Cagliari.']);
+    });
+
+    it('input non stringa o vuoto → junk / array vuoto', () => {
+      expect(isJunkChunk('')).toBe(true);
+      expect(isJunkChunk(null)).toBe(true);
+      expect(filterJunkChunks([])).toEqual([]);
+    });
+
+    it('cleanMarkdownForKnowledge: paragrafi spam rimossi, puliti uniti', () => {
+      const bad = String.fromCharCode(0xfffd);
+      const md = [
+        'Un angolo di Thailandia nel cuore della Sardegna.',
+        `Odkryj ekscytuj${bad}cy wiat${bad} gier online`,
+        'Pad Thai autentico, ingredienti freschi.',
+      ].join('\n\n');
+      const out = cleanMarkdownForKnowledge(md);
+      expect(out).toContain('Thailandia');
+      expect(out).toContain('Pad Thai');
+      expect(out).not.toContain('Odkryj');
+    });
+
+    it('cleanMarkdownForKnowledge: markdown vuoto/non stringa → stringa vuota', () => {
+      expect(cleanMarkdownForKnowledge('')).toBe('');
+      expect(cleanMarkdownForKnowledge(null)).toBe('');
+    });
   });
 });

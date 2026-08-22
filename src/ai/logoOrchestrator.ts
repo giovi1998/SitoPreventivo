@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Logo, LogoBuilder } from '../utils/documentSchemas';
-import { promptRegistry } from './prompts/registry';
+import { resolveSystemPrompt } from './skillLibrary';
 import { buildLogoGeneratePrompt, sanitizeLogoBrief } from './prompts/logoSystem';
 import { BaseOrchestrator } from './BaseOrchestrator';
 import { isValidLucideIcon } from '../utils/logoGenerator';
@@ -38,11 +38,46 @@ export const logoAIOutputSchema = z.object({
   gradientFill: z.boolean().optional(),
   decorativeElements: z.array(z.enum(['underline', 'dotRing', 'topAccent'])).optional(),
   imagePrompt: z.string().max(600).optional(),
+  /** t19: auto-giudizio qualità (0-1) per la selezione best-of-N. */
+  qualityScore: z.number().min(0).max(1).optional(),
+  /** t19: motivazione breve del punteggio. */
+  scoreReason: z.string().max(200).optional(),
 });
 export type LogoAIOutput = z.infer<typeof logoAIOutputSchema>;
 
 export const logoAIConceptsSchema = z.array(logoAIOutputSchema).min(1).max(3);
 export type LogoAIConcepts = z.infer<typeof logoAIConceptsSchema>;
+
+/**
+ * t22: pre-clamp deterministico PRIMA dello schema — i campi lunghi
+ * vengono troncati, non rigettati (un tagline da 70 char faceva fallire
+ * l'intero parse → placeholder "Brand" salvato come successo).
+ */
+export function clampLogoAIOutput(raw: unknown): unknown {
+  if (!Array.isArray(raw)) return raw;
+  return raw.map((c) => {
+    if (!c || typeof c !== 'object') return c;
+    const o = c as Record<string, unknown>;
+    const out: Record<string, unknown> = { ...o };
+    if (typeof out.primaryText === 'string') out.primaryText = (out.primaryText as string).slice(0, 30);
+    if (typeof out.tagline === 'string') out.tagline = (out.tagline as string).slice(0, 60);
+    if (typeof out.monogram === 'string') out.monogram = (out.monogram as string).slice(0, 2);
+    if (typeof out.iconName === 'string') out.iconName = (out.iconName as string).slice(0, 40);
+    if (typeof out.imagePrompt === 'string') out.imagePrompt = (out.imagePrompt as string).slice(0, 600);
+    if (typeof out.qualityScore === 'number') out.qualityScore = Math.min(1, Math.max(0, out.qualityScore as number));
+    if (typeof out.scoreReason === 'string') out.scoreReason = (out.scoreReason as string).slice(0, 200);
+    return out;
+  });
+}
+
+/** t19: indice del concept con qualityScore più alto; -1 se assente. */
+export function pickBestScoredConcept(concepts: LogoAIOutput[]): number {
+  const scored = concepts.map((c) => c.qualityScore);
+  if (scored.some((s) => s === undefined)) return -1;
+  const values = scored as number[];
+  if (values.length === 0) return -1;
+  return values.indexOf(Math.max(...values));
+}
 
 export interface LogoProcessResult {
   logo: Logo;
@@ -81,7 +116,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
   ): Promise<LogoProcessResult> {
     const changes: string[] = [];
     const sessionId = this.ensureSession();
-    const systemPrompt = promptRegistry.getPrompt('logo-system');
+    const systemPrompt = await resolveSystemPrompt('logo-system');
     // TB-027 auto-build: brief vuoto → fallback al briefContext del draft.
     // Se l'utente ha scritto un brief, il briefContext passa come sezione
     // "Contesto cliente" separata nel prompt.
@@ -143,14 +178,16 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
 
     // Provider che rispondono con un singolo concept (oggetto) invece di un
     // array: normalizza a array prima della validazione Zod.
-    let content = response.content ?? '';
+    // t22: pre-clamp deterministico (tronca i campi oltre il limite schema)
+    // prima della validazione: un campo troppo lungo NON deve far fallire
+    // l'intero concept → placeholder "Brand".
+    let clampedContent = response.content ?? '';
     try {
-      const raw = JSON.parse(this.sanitizeAIResponse(content)) as unknown;
-      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-        content = JSON.stringify([raw]);
-      }
-    } catch { /* lascia parseJsonResponse gestire l'errore */ }
-    const parsed = this.parseJsonResponse(content, logoAIConceptsSchema);
+      const raw = JSON.parse(this.sanitizeAIResponse(clampedContent)) as unknown;
+      const asArray = raw && typeof raw === 'object' && !Array.isArray(raw) ? [raw] : raw;
+      clampedContent = JSON.stringify(clampLogoAIOutput(asArray));
+    } catch { /* parseJsonResponse gestisce l'errore sotto */ }
+    const parsed = this.parseJsonResponse(clampedContent, logoAIConceptsSchema);
     let conceptsInput: LogoAIOutput[];
     if (!parsed.ok) {
       // Provider ha risposto con testo non JSON o schema non rispettato:
@@ -163,7 +200,10 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
     }
 
     const concepts = ensureThreeDistinctConcepts(conceptsInput).map((c) => convertAIOutputToBuilder(c));
-    const first = concepts[0];
+    // t19: best-of-N — il modello valuta i concept (qualityScore 0-1);
+    // vince il più alto. Senza qualityScore (tutti), selected resta -1.
+    const selected = pickBestScoredConcept(conceptsInput);
+    const first = selected >= 0 ? concepts[selected] : concepts[0];
     const merged = first ? { ...logo, builder: first, updatedAt: new Date().toISOString() } : logo;
     this.trackUsage(response.usage, options.userEmail);
     chatStoreAddMessage(this.chatStore, sessionId, {
@@ -178,7 +218,7 @@ export class LogoAIOrchestrator extends BaseOrchestrator {
       rawResponse: response.content ?? '',
       applied: true,
       concepts,
-      selected: -1,
+      selected,
     };
   }
 

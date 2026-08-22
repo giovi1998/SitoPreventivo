@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AIConsole from '../AIConsole';
-import { getAiConsoleExpanded } from '../../../utils/uiPrefs';
+import { getAiConsoleExpanded, isAiSkillDisabled } from '../../../utils/uiPrefs';
 
 const baseProps = {
   isProcessing: false,
@@ -111,5 +111,33 @@ describe('AIConsole (REQ-AI-001/003/006)', () => {
     expect(document.querySelector('.ai-console__panel')).not.toBeNull();
     // Lo stato persistito NON viene sovrascritto dal forceExpanded.
     expect(getAiConsoleExpanded('website')).toBe(false);
+  });
+
+  it('t13: editor con skill curata mostra il toggle Skill design e persiste', () => {
+    render(<AIConsole {...baseProps} editorKind="card" />);
+    expect(screen.getByLabelText('Skill di progetto')).toBeChecked();
+    fireEvent.click(screen.getByLabelText('Skill di progetto'));
+    expect(isAiSkillDisabled('card')).toBe(true);
+    expect(screen.getByLabelText('Skill di progetto')).not.toBeChecked();
+  });
+
+  it('t13: editor senza skill (quote) non mostra il toggle', () => {
+    render(<AIConsole {...baseProps} editorKind="editor" />);
+    expect(screen.queryByLabelText('Skill di progetto')).not.toBeInTheDocument();
+  });
+
+  it('t13: toggle esterno (onSkillToggle) controlla lo stato invece dell\u2019auto-wiring', () => {
+    const onSkillToggle = vi.fn();
+    render(<AIConsole {...baseProps} editorKind="logo" skillDisabled={false} onSkillToggle={onSkillToggle} />);
+    fireEvent.click(screen.getByLabelText('Skill di progetto'));
+    expect(onSkillToggle).toHaveBeenCalledTimes(1);
+    // non persistito automaticamente (controllo esterno)
+    expect(isAiSkillDisabled('logo')).toBe(false);
+  });
+
+  it('t13: label toggle mostra il nome della skill per l\u2019editor', () => {
+    render(<AIConsole {...baseProps} editorKind="card" />);
+    expect(screen.getByLabelText('Skill di progetto')).toBeInTheDocument();
+    expect(screen.getByText('Skill design: web-design-guidelines')).toBeInTheDocument();
   });
 });

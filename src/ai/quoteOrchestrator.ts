@@ -7,7 +7,7 @@ import { ToolRegistry } from './tools/registry';
 import { getToolDefinition } from './tools/definitions';
 import type { ToolResult } from '../utils/quoteTools';
 import { chatStore } from './chat/store';
-import { promptRegistry } from './prompts/registry';
+import { resolveSystemPrompt } from './skillLibrary';
 import { buildAIContext } from './prompts/context';
 import { mergeAIResponse } from './merge';
 import { needsAnalysis } from './promptUtils';
@@ -238,7 +238,7 @@ export class AIOrchestrator extends ToolAwareOrchestrator<PremiumQuote> {
       session.messages.push({
         role: 'system',
         // TB-029 fase 2: registry → override remoto Langfuse possibile.
-        content: promptRegistry.getPrompt('quote-system', { compact: true }),
+        content: await resolveSystemPrompt('quote-system', { compact: true }),
       });
     }
 

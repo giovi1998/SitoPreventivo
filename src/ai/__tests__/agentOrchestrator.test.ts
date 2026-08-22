@@ -202,4 +202,77 @@ describe('AgentOrchestrator (T9)', () => {
     // esegue perché il tool non esiste (fallback "Tool sconosciuto").
     expect(mockProcessPrompt).not.toHaveBeenCalled();
   });
+
+  it('load_skill: carica una skill del catalogo e ne passa il contenuto al modello', async () => {
+    chatResponses.push(
+      {
+        toolCalls: [{ id: 'c2', type: 'function', function: { name: 'load_skill', arguments: '{"name":"web-design-guidelines"}' } }],
+        content: '',
+        usage: usage(),
+      },
+      { content: 'fatto', usage: usage() },
+    );
+
+    const agent = new AgentOrchestrator();
+    // load_skill deve restare disponibile anche con include ristretto.
+    const { results } = await agent.run(brief, docs, {}, { include: ['logo'] });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe('load_skill');
+    expect(results[0].ok).toBe(true);
+    expect((results[0].content ?? '').length).toBeGreaterThan(200);
+  });
+
+  it('load_skill: skill fuori catalogo → ok=false senza crash', async () => {
+    chatResponses.push(
+      {
+        toolCalls: [{ id: 'c3', type: 'function', function: { name: 'load_skill', arguments: '{"name":"lean-code"}' } }],
+        content: '',
+        usage: usage(),
+      },
+      { content: 'fatto', usage: usage() },
+    );
+
+    const agent = new AgentOrchestrator();
+    const { results } = await agent.run(brief, docs, {});
+    expect(results[0].ok).toBe(false);
+    expect(results[0].summary).toContain('lean-code');
+  });
+
+  it('t12: 2 fallimenti consecutivi → round di sintesi senza tools, poi stop', async () => {
+    mockGenerateLogo.mockResolvedValue({ applied: false, changes: 'schema_fail', concepts: [], response: { usage: usage() } });
+    // round 1: tool fail (1°), round 2: tool fail (2°), round 3: sintesi (no tools)
+    chatResponses.push(
+      { toolCalls: [{ id: 'f1', type: 'function', function: { name: 'generate_logo', arguments: '{}' } }], content: '', usage: usage() },
+      { toolCalls: [{ id: 'f2', type: 'function', function: { name: 'generate_logo', arguments: '{}' } }], content: '', usage: usage() },
+      { content: 'Riepilogo: logo non generato per schema fail', usage: usage() },
+    );
+
+    const agent = new AgentOrchestrator();
+    const { results, response } = await agent.run(brief, docs, {});
+
+    expect(results).toHaveLength(2);
+    expect(results.every((r) => r.ok === false)).toBe(true);
+    expect(mockGenerateLogo).toHaveBeenCalledTimes(2);
+    // il terzo round è di sintesi: nessun tool eseguito
+    expect(response.content).toContain('Riepilogo');
+  });
+
+  it('t12: fallimento poi successo resetta il contatore (nessun early-stop)', async () => {
+    mockGenerateLogo
+      .mockResolvedValueOnce({ applied: false, changes: 'schema_fail', concepts: [], response: { usage: usage() } })
+      .mockResolvedValueOnce({ applied: true, selected: 0, changes: 'ok', concepts: [{ primaryText: 'Gigi', layout: 'centered' }], response: { usage: usage() } });
+    chatResponses.push(
+      { toolCalls: [{ id: 'r1', type: 'function', function: { name: 'generate_logo', arguments: '{}' } }], content: '', usage: usage() },
+      { toolCalls: [{ id: 'r2', type: 'function', function: { name: 'generate_logo', arguments: '{}' } }], content: '', usage: usage() },
+      { content: 'fatto', usage: usage() },
+    );
+
+    const agent = new AgentOrchestrator();
+    const { results } = await agent.run(brief, docs, {});
+
+    expect(results).toHaveLength(2);
+    expect(results[0].ok).toBe(false);
+    expect(results[1].ok).toBe(true);
+  });
 });

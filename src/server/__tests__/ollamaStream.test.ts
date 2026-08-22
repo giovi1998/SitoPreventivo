@@ -174,7 +174,7 @@ describe('POST /api/ai/chat/stream Ollama routing', () => {
     expect(tags).toEqual(['feature:card', 'subfeature:chat', 'provider:ollama', 'streaming:true', 'status:ok']);
   });
 
-  it('TB-029: kimi-k3:cloud pay-per-token → cost_details su Langfuse (non più flat 0)', async () => {
+  it('2026-08-20: kimi-k3:cloud flat → cost_details assente su Langfuse (incluso in subscription)', async () => {
     process.env.LANGFUSE_PUBLIC_KEY = 'pk-test';
     process.env.LANGFUSE_SECRET_KEY = 'sk-test';
     process.env.LANGFUSE_BASE_URL = 'https://cloud.langfuse.com';
@@ -197,7 +197,6 @@ describe('POST /api/ai/chat/stream Ollama routing', () => {
           getReader() {
             const lines = [
               JSON.stringify({ message: { content: '' } }),
-              // 1M prompt + 1M output → $3.00 + $15.00 = $18.00
               JSON.stringify({ message: { content: 'ok' }, done: true, prompt_eval_count: 1_000_000, eval_count: 1_000_000 }),
             ];
             let i = 0;
@@ -224,10 +223,8 @@ describe('POST /api/ai/chat/stream Ollama routing', () => {
     expect(res.statusCode).toBe(200);
     await vi.waitFor(() => expect(otlpCalls.length).toBe(1));
     const span = JSON.parse(otlpCalls[0].init.body).resourceSpans[0].scopeSpans[0].spans[0];
-    const attrs = Object.fromEntries(
-      span.attributes.map((a: any) => [a.key, a.value.stringValue ?? a.value.stringArrayValue ?? JSON.parse(a.value.stringValue ?? 'null')])
-    );
-    expect(JSON.parse(attrs['langfuse.observation.cost_details'])).toEqual({ total: 18 });
+    const costDetails = span.attributes.find((a: any) => a.key === 'langfuse.observation.cost_details');
+    expect(costDetails).toBeUndefined();
   });
 
   it('TB-029: minimax-m3:cloud flat → cost_details assente sulla trace', async () => {
@@ -282,7 +279,7 @@ describe('POST /api/ai/chat/stream Ollama routing', () => {
     expect(costDetails).toBeUndefined();
   });
 
-  it('TB-029: /ai/chat non-stream con kimi-k3:cloud emette cost_details (usage server-side)', async () => {
+  it('2026-08-20: /ai/chat non-stream kimi-k3:cloud flat → cost_details assente', async () => {
     process.env.LANGFUSE_PUBLIC_KEY = 'pk-test';
     process.env.LANGFUSE_SECRET_KEY = 'sk-test';
     process.env.LANGFUSE_BASE_URL = 'https://cloud.langfuse.com';
@@ -304,7 +301,6 @@ describe('POST /api/ai/chat/stream Ollama routing', () => {
         json: async () => ({
           message: { role: 'assistant', content: 'ciao' },
           done: true,
-          // 1M prompt + 1M output → $3.00 + $15.00 = $18.00
           prompt_eval_count: 1_000_000,
           eval_count: 1_000_000,
         }),
@@ -322,9 +318,7 @@ describe('POST /api/ai/chat/stream Ollama routing', () => {
     expect(res.statusCode).toBe(200);
     await vi.waitFor(() => expect(otlpCalls.length).toBe(1));
     const span = JSON.parse(otlpCalls[0].init.body).resourceSpans[0].scopeSpans[0].spans[0];
-    const attrs = Object.fromEntries(
-      span.attributes.map((a: any) => [a.key, a.value.stringValue ?? a.value.stringArrayValue ?? JSON.parse(a.value.stringValue ?? 'null')])
-    );
-    expect(JSON.parse(attrs['langfuse.observation.cost_details'])).toEqual({ total: 18 });
+    const costDetails = span.attributes.find((a: any) => a.key === 'langfuse.observation.cost_details');
+    expect(costDetails).toBeUndefined();
   });
 });

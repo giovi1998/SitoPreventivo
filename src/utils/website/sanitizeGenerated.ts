@@ -118,6 +118,40 @@ export function ensureHamburgerCss(css: string): string {
 `;
 }
 
+/**
+ * t21: allinea le variabili palette del sito già generato alla palette del
+ * logo (coherence pass CRM). Il prompt impone `:root { --primary, ... }`,
+ * quindi un blocco override in coda vince per cascade senza riscrivere il
+ * CSS. lean-code: siti con colori hardcoded (fuori convenzione) restano
+ * non coperti — upgrade = riscrittura regole, solo se le trace lo mostrano.
+ */
+export function applyPaletteVars(css: string, colors: { primary?: string; secondary?: string }): string {
+  const { primary, secondary } = colors;
+  if (!css || !primary) return css;
+  const vars = [`--primary: ${primary}`, `--accent: ${primary}`];
+  if (secondary) vars.push(`--secondary: ${secondary}`);
+  return `${css}\n\n/* t21: coherence — palette allineata al logo */\n:root {\n  ${vars.join(';\n  ')};\n}\n`;
+}
+
+/**
+ * Garantisce il bottone hamburger nel HTML generato: il prompt lo impone ma
+ * l'AI a volte lo omette → senza bottone il menu mobile è morto anche con
+ * CSS e JS corretti (bug live 2026-08-21). Iniezione deterministica: dopo
+ * il .brand se presente, altrimenti subito dopo l'apertura di <nav>/<header>.
+ */
+export function ensureMenuToggleButton(html: string): string {
+  if (!html) return html;
+  if (/<button[^>]*class\s*=\s*"[^"]*\bmenu-toggle\b/i.test(html)) return html;
+  const btn = '<button class="menu-toggle" aria-label="Apri menu di navigazione"></button>';
+  const brandRe = /(<div[^>]*class\s*=\s*"[^"]*\bbrand\b[^"]*"[^>]*>[\s\S]*?<\/div>)/i;
+  if (brandRe.test(html)) return html.replace(brandRe, `$1${btn}`);
+  const navRe = /(<nav\b[^>]*>)/i;
+  if (navRe.test(html)) return html.replace(navRe, `$1${btn}`);
+  const headerRe = /(<header\b[^>]*>)/i;
+  if (headerRe.test(html)) return html.replace(headerRe, `$1${btn}`);
+  return html;
+}
+
 export function sanitizeGeneratedWebsite(html: string, css: string): { html: string; css: string } {
   return { html: sanitizeGeneratedHtml(html), css: ensureResponsiveGallery(sanitizeGeneratedCss(css)) };
 }
@@ -138,7 +172,10 @@ export function enforceMapIframe(html: string, contacts: string): string {
   if (!address) return html;
   const mapSrc = `https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed`;
   const iframeTag = `<iframe src="${mapSrc}" width="100%" height="400" style="border:0;" allowfullscreen="" loading="lazy" title="Mappa"></iframe>`;
-  const iframeRe = /<iframe[^>]*src\s*=\s*["'][^"']*google\.com\/maps[^"']*["'][^>]*>[\s\S]*?<\/iframe>/gi;
+  // Qualsiasi mappa embed AI (google.com/maps, openstreetmap.org, bing,
+  // mapbox): l'AI a volte genera OSM invece di Google Maps (bug live
+  // 2026-08-21) — la sostituzione deterministica la normalizza.
+  const iframeRe = /<iframe[^>]*src\s*=\s*["'][^"']*(?:google\.com\/maps|openstreetmap\.org|maps\.google|bing\.com\/maps)[^"']*["'][^>]*>[\s\S]*?<\/iframe>/gi;
   if (iframeRe.test(html)) {
     return html.replace(iframeRe, iframeTag);
   }

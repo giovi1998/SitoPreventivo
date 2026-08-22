@@ -1,5 +1,61 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeGeneratedCss, sanitizeGeneratedHtml, sanitizeGeneratedWebsite, ensureResponsiveGallery, enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss } from '../sanitizeGenerated';
+import { sanitizeGeneratedCss, sanitizeGeneratedHtml, sanitizeGeneratedWebsite, ensureResponsiveGallery, enforceMapIframe, sanitizeGeneratedJs, ensureHamburgerCss, applyPaletteVars, ensureMenuToggleButton } from '../sanitizeGenerated';
+
+describe('ensureMenuToggleButton (hamburger garantito nel HTML)', () => {
+  it('inietta il bottone nel nav se manca (dopo il brand)', () => {
+    const html = '<nav class="nav"><div class="brand">Pad Thai</div><ul class="nav-links"><li><a href="#">Home</a></li></ul></nav>';
+    const out = ensureMenuToggleButton(html);
+    expect(out).toContain('<button class="menu-toggle" aria-label="Apri menu di navigazione"></button>');
+    expect(out.indexOf('menu-toggle')).toBeGreaterThan(out.indexOf('class="brand"'));
+    expect(out.indexOf('menu-toggle')).toBeLessThan(out.indexOf('nav-links'));
+  });
+
+  it('html con menu-toggle già presente → invariato', () => {
+    const html = '<header><button class="menu-toggle" aria-label="Menu"></button><ul class="nav-links"></ul></header>';
+    expect(ensureMenuToggleButton(html)).toBe(html);
+  });
+
+  it('senza nav ma con header → inietta nell\'header', () => {
+    const html = '<header><div class="brand">X</div></header>';
+    const out = ensureMenuToggleButton(html);
+    expect(out).toContain('<button class="menu-toggle"');
+    expect(out).toContain('<header>');
+  });
+
+  it('né nav né header → html invariato', () => {
+    const html = '<main><p>testo</p></main>';
+    expect(ensureMenuToggleButton(html)).toBe(html);
+  });
+
+  it('html vuoto → vuoto', () => {
+    expect(ensureMenuToggleButton('')).toBe('');
+  });
+});
+
+describe('applyPaletteVars (t21: coherence palette logo → sito)', () => {
+  it('appende override :root con primary/secondary/accent', () => {
+    const css = ':root { --primary: #D94625; --bg: #FFFBEB; }\n.hero { color: var(--primary); }';
+    const out = applyPaletteVars(css, { primary: '#01696F', secondary: '#1A1A2E' });
+    expect(out).toContain(css);
+    expect(out).toContain('--primary: #01696F');
+    expect(out).toContain('--secondary: #1A1A2E');
+    expect(out).toContain('--accent: #01696F');
+  });
+
+  it('l\'override vince in cascade su un :root precedente', () => {
+    const css = ':root { --primary: #D94625; --secondary: #999; --accent: #D94625; }';
+    const out = applyPaletteVars(css, { primary: '#01696F', secondary: '#1A1A2E' });
+    const lastRoot = out.slice(out.lastIndexOf(':root'));
+    expect(lastRoot).toContain('--primary: #01696F');
+    expect(lastRoot).not.toContain('#D94625');
+  });
+
+  it('css vuoto o palette incompleta → invariato', () => {
+    expect(applyPaletteVars('', { primary: '#01696F' })).toBe('');
+    expect(applyPaletteVars('.hero { padding: 2rem; }', {})).toBe('.hero { padding: 2rem; }');
+    expect(applyPaletteVars('.hero { padding: 2rem; }', { secondary: '#111' })).toBe('.hero { padding: 2rem; }');
+  });
+});
 
 describe('sanitizeGeneratedCss', () => {
   it('rimuove ::before con content emoji', () => {
@@ -111,6 +167,13 @@ describe('enforceMapIframe', () => {
     expect(out).toContain('google.com/maps?q=Via%20Dante%20Alighieri%205%2FA%20Cagliari');
     expect(out).toContain('title="Mappa"');
     expect(out).toContain('<p>Via Dante 5/A</p>');
+  });
+
+  it('iframe OpenStreetMap (AI lo genera al posto di Google Maps) → sostituito con embed Google', () => {
+    const html = '<section id="contatti"><div class="map-shell"><iframe title="Mappa interattiva" src="https://www.openstreetmap.org/export/embed.html?bbox=9.11%2C39.21%2C9.12%2C39.22&amp;layer=mapnik&amp;marker=39.22%2C9.12" loading="lazy"></iframe></div></section>';
+    const out = enforceMapIframe(html, 'Via Boiardo, Cagliari');
+    expect(out).toContain('google.com/maps?q=Via%20Boiardo%20Cagliari');
+    expect(out).not.toContain('openstreetmap.org');
   });
 });
 

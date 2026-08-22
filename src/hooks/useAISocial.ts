@@ -9,11 +9,11 @@ import { useAILogs } from './useAILogs';
 import { newRequestId } from '../utils/ai/requestId';
 import dataService from '../utils/dataService';
 import { resolveProviderId, providerSupportsVision } from '../utils/resolveProviderId';
-import { calculateCostUsd, geminiImagePricingId } from '../ai/providerPricing';
+import { calculateCostUsd } from '../ai/providerPricing';
 import { getAiVisionEnabled, getAiImageModelDefault } from '../utils/uiPrefs';
 import { captureElementAsBase64 } from '../utils/ai/captureElement';
 import { mapAiError } from '../utils/ai/mapAiError';
-import { IMAGE_TOKEN_COST } from '../ai/costs';
+import { postAiImage } from '../utils/ai/imageCall';
 
 export interface UseAISocialReturn {
   generate: (
@@ -120,10 +120,9 @@ export function useAISocial(userEmail?: string, sessionId?: string): UseAISocial
       info(`Immagine post ${platform}…`, prompt.slice(0, 300), { requestId });
       try {
         const model = imageModel || getAiImageModelDefault();
-        const res = await fetch(`${import.meta.env?.VITE_API_BASE || ''}/api/ai/image-flash`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Request-Id': requestId },
-          body: JSON.stringify({
+        const { dataUrl, costUsd } = await postAiImage({
+          endpoint: '/api/ai/image-flash',
+          payload: {
             prompt: prompt.slice(0, 1000),
             kind: 'custom',
             aspectRatio: '1:1',
@@ -131,21 +130,15 @@ export function useAISocial(userEmail?: string, sessionId?: string): UseAISocial
             imageModel: model,
             userEmail: userEmail || undefined,
             ...(sessionId ? { sessionId } : {}),
-          }),
+          },
+          requestId,
+          imageModel: model,
+          userEmail,
+          fallbackError: 'Errore generazione immagine AI',
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: `Immagine AI (${res.status})` }));
-          throw new Error(err.error || `Immagine AI ${res.status}`);
-        }
-        const { data } = (await res.json()) as { data: { imageBase64: string; mimeType: string } };
-        const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
-        const costUsd = calculateCostUsd(geminiImagePricingId(model), undefined, 1);
-        if (userEmail && userEmail !== 'admin@gmail.com') {
-          dataService.trackTokens(userEmail, IMAGE_TOKEN_COST, costUsd).catch(() => {});
-        }
         setLastCostUsd((c) => c + costUsd);
         setPostImages((prev) => ({ ...prev, [platform]: dataUrl }));
-        success(`Immagine ${platform} generata`, `${Math.round(data.imageBase64.length * 0.75 / 1024)}KB`, { requestId, costUsd, hasImage: true, imagePreviewBase64: dataUrl });
+        success(`Immagine ${platform} generata`, `${Math.round(dataUrl.length * 0.75 / 1024)}KB`, { requestId, costUsd, hasImage: true, imagePreviewBase64: dataUrl });
         return dataUrl;
       } catch (err) {
         const hint = mapAiError(err);

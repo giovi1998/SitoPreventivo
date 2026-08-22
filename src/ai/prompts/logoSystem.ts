@@ -6,6 +6,8 @@
  * pick it up when wired in.
  */
 
+import { GOLDEN_LOGO_EXAMPLE } from './goldenExamples';
+
 const LUCIDE_ALLOWLIST = [
   'Coffee', 'Pizza', 'Utensils', 'ChefHat', 'Wheat', 'Cookie',
   'Cloud', 'Code', 'Cpu', 'Database', 'Server', 'Terminal',
@@ -118,7 +120,9 @@ VINCOLI:
 - NON inventare campi fuori contract.
 - Lingua: italiano per primaryText/tagline.
 - Se il brief è davvero vuoto/insensato: genera 3 loghi neutri (iconType="shape" o "lucide", colori grigio/blu).
-- I 3 concept DEVONO essere distinti: nessuno deve essere identico a un altro.`;
+ - I 3 concept DEVONO essere distinti: nessuno deve essere identico a un altro.
+
+${GOLDEN_LOGO_EXAMPLE}`;
 }
 
 export function buildLogoGeneratePrompt(brief: string, sector?: string, briefContext?: string): string {
@@ -134,6 +138,7 @@ ${safeSector ? `Settore: ${safeSector}` : ''}${contextSection}
 Ogni concept DEVE differire per almeno 2 campi tra nome, icona, layout, colori o decorazioni.
 Rispetta l'allowlist lucide se usi iconType=lucide.
 L'imagePrompt DEVE preservare una text legibility zone: la zona centrale dell'immagine resta più scura e priva di dettagli, perché sopra viene sovrapposto il wordmark bianco.
+Per ogni concept aggiungi qualityScore (0-1, quanto questo concept è impattante, coerente col brand e credibile per il settore) e scoreReason (motivazione in max 10 parole). Il punteggio più alto indica il concept migliore.
 Rispondi con SOLO il JSON array (nessun testo extra).`;
 }
 

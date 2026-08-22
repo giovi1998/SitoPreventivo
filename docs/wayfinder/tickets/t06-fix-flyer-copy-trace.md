@@ -2,7 +2,7 @@
 
 Labels: `wayfinder:ticket`, `wayfinder:task`
 Blocked by: —
-Status: open, unassigned
+Status: closed (2026-08-20, verificato — fix già in main)
 
 ## Question
 

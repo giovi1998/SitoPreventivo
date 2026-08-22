@@ -233,7 +233,9 @@ export function createDocumentsMethods(svc) {
         lsSet('precisionQuote_documents:v1', all.filter(d => d.id !== documentId));
         return { success: true };
       }
-      const result = await api('DELETE', `/documents/${documentId}`, { email });
+      // Vercel a volte non inoltra body su DELETE → passa email anche in query.
+      const qs = email ? `?email=${encodeURIComponent(email)}` : '';
+      const result = await api('DELETE', `/documents/${encodeURIComponent(documentId)}${qs}`, { email });
       if (result.error && result.error === 'Documento non trovato') {
         return { success: true };
       }

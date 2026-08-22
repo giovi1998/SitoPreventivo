@@ -12,6 +12,7 @@ import { CardAIOrchestrator, buildCardDraftPrompt } from './cardOrchestrator';
 import { FlyerAIOrchestrator } from './flyerOrchestrator';
 import { WebsiteOrchestrator } from './websiteOrchestrator';
 import { providerRegistry } from './providers/registry';
+import { SKILL_CATALOG, loadSkillContent } from './skillLibrary';
 import { newSpanId } from './runTrace';
 import type { AIResponse, AIStreamChunk, AIToolCall, RunTraceOptions } from './types';
 import type { BusinessCard, Flyer, FlyerTone, Logo } from '../utils/documentSchemas';
@@ -20,6 +21,8 @@ export interface AgentToolResult {
   name: string;
   ok: boolean;
   summary: string;
+  /** Testo completo da mostrare al modello (es. contenuto skill per load_skill). */
+  content?: string;
   data?: unknown;
 }
 
@@ -69,7 +72,25 @@ export interface AgentRunOptions {
   onToolResult?: (result: AgentToolResult) => void | Promise<void>;
 }
 
-const MAX_TOOL_ROUNDS = 6;
+// 8 round: un round extra per eventuale load_skill + margine su un retry.
+const MAX_TOOL_ROUNDS = 8;
+
+// Skill di design del progetto richiamabili on-demand dal modello.
+const LOAD_SKILL_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'load_skill',
+    description:
+      'Carica una skill di design del progetto per ispirare la generazione con regole di qualità concrete. Chiamala PRIMA di generare se vuoi applicarne una. Disponibili: ' +
+      SKILL_CATALOG.map((s) => `${s.name} (${s.summary})`).join('; ') +
+      '.',
+    parameters: {
+      type: 'object',
+      properties: { name: { type: 'string', enum: SKILL_CATALOG.map((s) => s.name) } },
+      required: ['name'],
+    },
+  },
+};
 
 const AGENT_TOOLS = [
   {
@@ -133,14 +154,24 @@ export class AgentOrchestrator extends BaseOrchestrator {
     const sessionId = this.ensureSession();
     const provider = providerRegistry.getProvider(ctx.modelId);
     const include = options.include ?? ['logo', 'card', 'flyer', 'website'];
-    const tools = AGENT_TOOLS.filter((t) => include.includes(t.function.name.replace('generate_', '') as any)).map(toolToOpenAi);
+    const tools = [
+      ...AGENT_TOOLS.filter((t) => include.includes(t.function.name.replace('generate_', '') as any)).map(toolToOpenAi),
+      LOAD_SKILL_TOOL,
+    ];
     const messages = this.buildMessages(AGENT_SYSTEM_PROMPT, buildAgentUserPrompt(brief, include));
     const results: AgentToolResult[] = [];
     let response: AIResponse = { content: null, toolCalls: undefined, usage: undefined };
+    // t12: guardia anti-fix-loop — 2 fallimenti consecutivi di generate_*
+    // (misurato su Langfuse 17-19/08: 9/30 run bloccati su verify:fix
+    // senza mai convergere) → stop e riepilogo parziale.
+    let consecutiveFailures = 0;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      // t12: dopo 2 fallimenti consecutivi il fix non converge → round di
+      // sintesi senza tools (il modello riassume in testo), poi stop.
+      const roundTools = consecutiveFailures >= 2 ? [] : tools;
       response = await this.handleStream(provider, messages, {
-        tools,
+        tools: roundTools,
         reasoningEffort: 'max',
         sessionId: ctx.sessionId,
         customerId: ctx.customerId,
@@ -155,15 +186,19 @@ export class AgentOrchestrator extends BaseOrchestrator {
 
       const toolCalls = response.toolCalls ?? [];
       if (toolCalls.length === 0) break;
+      // t12: round di sintesi (senza tools) → il modello riassume e termina.
+      if (roundTools.length === 0) break;
 
       for (const tc of toolCalls) {
         const toolDoc = tc.function.name.replace('generate_', '') as (typeof include)[number];
-        if (!include.includes(toolDoc)) continue;
+        // load_skill resta disponibile a prescindere dal filtro include.
+        if (tc.function.name !== 'load_skill' && !include.includes(toolDoc)) continue;
         const result = await this.executeTool(tc, brief, docs, ctx);
         results.push(result);
         messages.push({ role: 'assistant', content: response.content ?? '', toolCalls: [tc] });
-        messages.push({ role: 'tool', content: JSON.stringify(result.summary), toolCallId: tc.id, name: tc.function.name });
+        messages.push({ role: 'tool', content: result.content ?? JSON.stringify(result.summary), toolCallId: tc.id, name: tc.function.name });
         await options.onToolResult?.(result);
+        consecutiveFailures = result.ok ? 0 : consecutiveFailures + 1;
       }
     }
 
@@ -172,9 +207,21 @@ export class AgentOrchestrator extends BaseOrchestrator {
 
   private async executeTool(tc: AIToolCall, brief: AgentBrief, docs: AgentDoc, ctx: AgentContext): Promise<AgentToolResult> {
     const name = tc.function.name;
-    const runTrace = { ...ctx.runTrace, stepName: name.replace('generate_', ''), stepSpanId: newSpanId() };
+    // t24: i tool sono figli del root agent — mai startRun true (evita root duplicata)
+    const runTrace = { ...ctx.runTrace, stepName: name.replace('generate_', ''), stepSpanId: newSpanId(), startRun: false };
     try {
       switch (name) {
+        case 'load_skill': {
+          let skillName = '';
+          try {
+            skillName = String((JSON.parse(tc.function.arguments) as { name?: unknown }).name ?? '');
+          } catch {
+            return { name, ok: false, summary: `Args non JSON: ${name}` };
+          }
+          const content = await loadSkillContent(skillName);
+          if (!content) return { name, ok: false, summary: `Skill fuori catalogo: ${skillName}` };
+          return { name, ok: true, summary: `Skill "${skillName}" caricata.`, content };
+        }
         case 'generate_logo': {
           const result = await new LogoAIOrchestrator().generateLogo(docs.logo, brief.description, {
             modelId: ctx.modelId,

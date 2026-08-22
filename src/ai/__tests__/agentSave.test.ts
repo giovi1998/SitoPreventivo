@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { agentResultData, agentTypeOfDoc, docTypeOfTool } from '../agentSave';
+import { agentResultData, agentTypeOfDoc, docTypeOfTool, buildAgentBrief } from '../agentSave';
 
 describe('agentResultData', () => {
   it('logo con selected:-1 (scelta UI) salva il primo concept — regressione 2026-08-13', () => {
@@ -31,6 +31,29 @@ describe('agentResultData', () => {
 
   it('result non ok → null (niente save)', () => {
     expect(agentResultData('flyer', { name: 'generate_flyer', ok: false, summary: 'x', data: { flyer: {} } })).toBeNull();
+  });
+});
+
+describe('buildAgentBrief', () => {
+  it('propaga logoUrl dal doc website al brief website.logoBase64', () => {
+    const brief = buildAgentBrief(
+      [{ data: { documentType: 'website', logoUrl: 'data:image/png;base64,LOGO123', briefContext: 'b' } }],
+      { businessName: 'X' },
+    );
+    expect(brief.website?.logoBase64).toBe('data:image/png;base64,LOGO123');
+  });
+
+  it('fallback logoUrl da customer.logoUrl/detectedLogoUrl', () => {
+    const brief = buildAgentBrief(
+      [{ data: { documentType: 'flyer' } }],
+      { businessName: 'X', logoUrl: null, detectedLogoUrl: 'data:image/png;base64,DETECT' },
+    );
+    expect(brief.website?.logoBase64).toBe('data:image/png;base64,DETECT');
+  });
+
+  it('senza logo logoBase64 è undefined', () => {
+    const brief = buildAgentBrief([{ data: { documentType: 'website' } }], { businessName: 'X' });
+    expect(brief.website?.logoBase64).toBeUndefined();
   });
 });
 

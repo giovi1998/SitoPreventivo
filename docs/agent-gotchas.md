@@ -1334,18 +1334,20 @@ non serve). Dettaglio per provider:
 | `ollama-qwen3.5-397b` | OllamaProProvider | qwen3.5:397b:cloud | sì | $20/mo flat |
 | `ollama-glm-5.2` | OllamaProProvider | glm-5.2:cloud | no | $20/mo flat |
 | `ollama-glm-5.1` | OllamaProProvider | glm-5.1:cloud | no | $20/mo flat |
-| `ollama-kimi-k3` | OllamaProProvider | kimi-k3:cloud | sì | **$3.0/$15.0 per 1M tok (extra usage)** |
+| `ollama-kimi-k3` | OllamaProProvider | kimi-k3:cloud | sì | $20/mo flat |
 | `ollama-kimi-k2.7-code` | OllamaProProvider | kimi-k2.7-code:cloud | sì | $20/mo flat |
 | `ollama-mistral-large-3` | OllamaProProvider | mistral-large-3:675b:cloud | sì | $20/mo flat |
 | `ollama-gemma4-31b` | OllamaProProvider | gemma4:31b:cloud | sì | $20/mo flat |
 | `ollama-gpt-oss-120b` | OllamaProProvider | gpt-oss:120b:cloud | no | $20/mo flat |
 | `ollama-nemotron-3-ultra` | OllamaProProvider | nemotron-3-ultra:cloud | no | $20/mo flat |
 
-**kimi-k3:cloud NON è flat** (2026-08): richiede piano Pro/Max ma consuma
-extra usage credits pay-per-token ($3.0/$15.0 per 1M) oltre il flat. Prezzi
-in **3 punti** (mai solo 1, regressione 2026-08-19 quando mancava su server
-e dev proxy → cost_details Langfuse assente in prod e locale):
-1. `src/ai/providerPricing.ts` — `PRICING['ollama-kimi-k3']` (client: badge,
+**kimi-k3:cloud è FLAT dal 2026-08-20** (incluso nella subscription
+Ollama Pro/Max, nessun extra usage — conferma utente). In precedenza era
+pay-per-token ($3.0/$15.0 per 1M): se in futuro un model torna
+pay-per-token, registrarlo in **3 punti** (mai solo 1, regressione
+2026-08-19 quando mancava su server e dev proxy → cost_details Langfuse
+assente in prod e locale):
+1. `src/ai/providerPricing.ts` — `PRICING['ollama-<id>']` (client: badge,
    aiStats, UI) + test `providerPricing.test.ts`
 2. `src/server/ai.ts` — `OLLAMA_PER_TOKEN_PRICE` + `computeCostUsd` (trace
    Langfuse prod); la chiave è il **model** (`kimi-k3:cloud`), non il
@@ -1383,11 +1385,12 @@ altrimenti su Langfuse risulta gratis (flat 0).
 7. **KV cache**: `usage.cachedTokens` = `prompt_cache_hit_tokens` (DeepSeek).
    Se un giorno si tracciano costi reali, i token cache-hit vanno fatturati
    a tariffa cache (più bassa), non a quella full.
-8. **kimi-k3:cloud pay-per-token su 3 livelli**: pricing in
-   `providerPricing.ts` (client), `OLLAMA_PER_TOKEN_PRICE` in `ai.ts`
-   (server prod) e `vite.config.js` (dev proxy). Un model Ollama registrato
-   solo in uno dei 3 punti → cost_details Langfuse mancante o errato
-   (regressione 2026-08-19).
+8. **kimi-k3:cloud FLAT dal 2026-08-20** (era pay-per-token $3/$15 per
+   1M, incluso in subscription ora). Se un futuro model Ollama torna
+   pay-per-token: registrarlo in `providerPricing.ts` (client),
+   `OLLAMA_PER_TOKEN_PRICE` in `ai.ts` (server prod) e `vite.config.js`
+   (dev proxy). Un model registrato solo in uno dei 3 punti →
+   cost_details Langfuse mancante o errato (regressione 2026-08-19).
 
 ---
 
@@ -2302,3 +2305,17 @@ const isDoc = target.nodeType === 9; // DOCUMENT_NODE
 `nodeType` è una proprietà dati (number), legge identica in entrambi i realm. `instanceof` su oggetti cross-realm è sempre inaffidabile: stesso pattern già fixato per `getComputedStyle` in §639903e (commit 2026-08-18 "picker website cross-realm getComputedStyle"). Regola: **mai `instanceof Element|Document|HTMLElement` su oggetti che possano vivere in un iframe (contentDocument)** — usa `nodeType`/`ownerDocument`/`tagName`.
 
 **Test**: `elementPicker.test.ts` — nuovo regression "funziona su contentDocument di iframe (cross-realm, non instanceof Document)": iframe sandboxed, `enablePicker(doc, cb)` + click su un bottone nel doc → elemento selezionato. Verifica live Playwright 2026-08-18: iframe `about:srcdoc`, picker attivo → click su `h2.hero-title` → "1 elemento selezionato" + contesto `<h2 class="hero-title">Pane Artigianale</h2>` + badge `index 100%` + toggle on/off pulito, 0 errori console.
+
+## 28. Fix sessione 2026-08-21 — RAG spam, JS fallback preview, logo removal, coherence website CSS
+
+**RAG chunk spam/mojibake nel briefContext AI**: il knowledge del cliente (13 chunk, `firecrawl:homepage`) conteneva comment-spam/link-farm nel markdown scrapeato (es. chunk casino in polacco con mojibake U+FFFD e link esterni) — i chunk finivano interi nel briefContext di auto-build e ai-fill (`Contenuto sito web:`), inquinando la generazione. Root cause doppia: (1) nessun filtro junk; (2) `runCustomerResearch` APPENDeva chunk a ogni run (re-search = duplicati + vecchio spam permanente). Fix: `isJunkChunk`/`filterJunkChunks`/`cleanMarkdownForKnowledge` in `knowledgeTopK.js` (euristiche deterministiche: >=2 U+FFFD, >50% char dentro URL markdown) applicate ai PARAGRAFI prima del chunking (`cleanMarkdownForKnowledge(markdown)` poi `chunkMarkdown`) in `crm.ts` server E `dataService/crm.js` locale — filtro post-chunk su markdown corti meschierebbe spam e contenuto nello stesso chunk da 1000 char. `saveCustomerKnowledge` ora filtra ed è IDEMPOTENTE: DELETE dei chunk stesso customer+source prima degli insert (research sostituisce, non accumula). Attenzione encoding: mai scrivere U+FFFD letterale nei regex/stringhe via tool di edit (viene perso/raddoppiato come `\uFFFD`) — usare `String.fromCharCode(0xfffd)` o escape `\uFFFD`. Test: knowledgeTopK +8, customers research spam regression +1, intake mock DB +`.delete()`.
+
+**Preview sito morta: "Unexpected token 'else'" (about:srcdoc)**: JS generato dall'AI con sintassi rotta (output troncato, if senza else) iniettato verbatim in `<script>` uccide TUTTO il JS della pagina (nav, hamburger, smooth scroll) — la preview sembra "morta" ma non c'è nessun errore visibile lato editor. Fix alla fonte singola: `buildWebsiteFullDocument` (funnel unico preview+export+vision) ora parsa il JS con `new Function(js)` SENZA eseguirlo; se SyntaxError o vuoto → fallback minimo hamburger menu (`MENU_FALLBACK_JS`, toggle .nav-open) invece del codice rotto. In più: iframe preview sandbox esteso con `allow-popups allow-popups-to-escape-sandbox` — i siti generati hanno CTA esterne (form Jotform ecc.) che senza permission apparivano bloccate ("Blocked opening ... sandboxed frame"). Regola: MAI iniettare JS AI non parse-checkato in un documento intero.
+
+**CRM "Logo rimosso" loggato ma logo ancora visibile**: `handleRemoveLogo` azzerava solo `logoUrl`, ma la preview Materiali è `logoUrl || detectedLogoUrl` — il logo RILEVATO dalla research restava renderizzato (spesso hotlink protetto → placeholder "This image was hotlinked"). Doppio fix: (1) UI rimuove ENTRAMBI (`logoUrl: null, detectedLogoUrl: null`) con log onesto ("Logo rimosso" vs "Logo rilevato rimosso"); (2) API: `UpdateCustomerSchema.logoUrl` era `z.string().optional()` → null falliva Zod in PROD (400 silenzioso) e `detectedLogoUrl` non era nella copy-list PATCH di `handler.ts`. Ora nullable entrambi + chiave aggiunta. Regression test PATCH null in `customers.test.ts`.
+
+**t21 coherence pass inefficace su website**: il patch scriveva solo `brief.preferredColors` nei dati — l'HTML/CSS del sito era già generato con i colori vecchi → sito visualmente incoerente col logo. Fix: `applyPaletteVars(css, {primary, secondary})` in `sanitizeGenerated.ts` appende un blocco `:root { --primary/--secondary/--accent }` in coda al CSS (cascade vince senza riscrivere regole); `useAutoBuildGenerate.runCoherenceAfterAgent` lo applica sul css salvato. Ceiling (lean-code): siti con colori hardcoded fuori convenzione `:root` restano scoperti — upgrade = riscrittura regole solo se le trace lo mostrano.
+
+**t18 verify miglioramenti**: brief reale al revisore (prima `"Cliente <id>"`: giudizio cieco) via nuovo parametro `briefText` di `runVerifyAfterAgent`; preview rasterizzate 256→512px (sotto ~400px il modello non legge le gerarchie tipografiche card).
+
+**Bidirezionale CRM↔editor (semi-completa, 2026-08-22)**: prima solo `customer→website` (font/colori/contatti/social). Ora anche `website→customer` include `pages/sections/cta/features` (`src/components/WebsiteEditor.tsx:196` `syncWebsiteToCustomer` esteso) e `customer→website` le include già (`src/server/crm.ts:13`/`src/utils/dataService/crm.js:13`). In più `card↔CRM` semi-completo: `customer→card` via `syncCustomerToCardDocs/Local` (contatti/social/businessName/ownerName/sector/font/accent) e `card→customer` via `src/hooks/useCardAutoSave.ts:45` `syncCardToCustomer` (contatti/social/company/name/title/font/accent) su save/autosave con `skipSync:true` per evitare loop. Altri editor (logo/flyer) seguono stesso pattern — estendere `customerPatchFrom*` se serve. Last-write-wins via `updatedAt` in entrambe le direzioni.

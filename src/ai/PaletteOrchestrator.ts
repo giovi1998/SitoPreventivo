@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import { BaseOrchestrator } from './BaseOrchestrator';
+import { resolveSystemPrompt } from './skillLibrary';
 import { promptRegistry } from './prompts/registry';
 import { buildPaletteSystemPrompt, buildPaletteUserPrompt, type PaletteBrief } from './prompts/paletteSystem';
 import type { AIResponse, AIStreamChunk } from './types';
@@ -45,7 +46,7 @@ export class PaletteAIOrchestrator extends BaseOrchestrator {
     } = {},
   ): Promise<PaletteProcessResult> {
     const sessionId = this.ensureSession();
-    const systemPrompt = promptRegistry.getPrompt('palette-system');
+    const systemPrompt = await resolveSystemPrompt('palette-system');
     const userPrompt = buildPaletteUserPrompt(brief);
     const providerId = options.modelId || 'deepseek-v4-flash';
     const provider = providerRegistry.getProvider(providerId);

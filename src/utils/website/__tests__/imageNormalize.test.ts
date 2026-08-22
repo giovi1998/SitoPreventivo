@@ -51,6 +51,16 @@ describe('normalizeInlineImages', () => {
     expect(normalizeInlineImages(html, 1000)).toBe(html);
   });
 
+  it('logo iniettato (data-qb-logo) MAI sostituito dal placeholder, anche oversize (bug logo sparito in preview)', () => {
+    const big = `data:image/svg+xml;base64,${'A'.repeat(10_000)}`;
+    const tag = `<img src="${big}" alt="Logo" data-qb-logo="1" referrerpolicy="no-referrer">`;
+    const out = normalizeInlineImages(`<div class="brand">${tag}</div><img src="data:image/jpeg;base64,${'B'.repeat(10_000)}">`, 5_000);
+    // Il logo resta intatto; le altre img oversize prendono il placeholder.
+    expect(out).toContain(tag);
+    expect(out).toContain('data:image/gif;base64,R0lGODlhAQAB');
+    expect((out.match(/@@QB_LOGO_/g) || []).length).toBe(0);
+  });
+
   it('html vuoto resta vuoto', () => {
     expect(normalizeInlineImages('', 1000)).toBe('');
   });

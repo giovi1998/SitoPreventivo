@@ -16,8 +16,43 @@ function googleFontsLink(fontFamily: string): string {
   return `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${name.replace(/ /g, '+')}:wght@400;600;700&display=swap">`;
 }
 
+// Fallback minimo: hamburger menu funzionante. Usato quando il JS generato
+// non parsa O va in errore a runtime (l'AI a volte richiama funzioni mai
+// dichiarate — bug live 2026-08-21: "Unexpected token 'else'" / menu mobile
+// morto). Un <script> rotto uccide tutto il JS della pagina.
+const MENU_FALLBACK_JS = "document.querySelectorAll('.menu-toggle').forEach(function(b){b.addEventListener('click',function(){var n=b.closest('nav,header')||document.querySelector('nav');if(n)n.classList.toggle('nav-open');});});";
+
+/** Parse-check senza eseguire: l'AI a volte tronca il JS (if senza else). */
+function isParseableWebsiteJs(js: string): boolean {
+  try {
+    new Function(js);
+    return true;
+  } catch (err) {
+    console.warn('[websiteExport] JS generato non parsabile, uso fallback menu:', err instanceof Error ? err.message : err);
+    return false;
+  }
+}
+
+/**
+ * Script tag finale del documento: il JS generato viaggia dentro try/catch;
+ * se a runtime fallisce (ReferenceError ecc.) il flag __qbSiteJsFailed
+ * attiva il binding di fallback dell'hamburger. Se il JS è sano, nessun
+ * doppio binding. lean-code: nel raro caso di JS che bindea il toggle E poi
+ * throwa altrove, il fallback aggiunge un secondo listener (toggle doppio)
+ * — ceiling accettabile vs menu completamente morto.
+ */
+function websiteScriptTag(js: string): string {
+  const trimmed = js.trim();
+  if (!trimmed || !isParseableWebsiteJs(trimmed)) {
+    return `<script>${MENU_FALLBACK_JS}</script>`;
+  }
+  const guarded = `try{\n${js}\n}catch(e){window.__qbSiteJsFailed=true;if(window.console&&console.warn)console.warn('[site] JS generato fallito:',e&&e.message);}`;
+  return `<script>${guarded}</script><script>if(window.__qbSiteJsFailed){${MENU_FALLBACK_JS}}</script>`;
+}
+
 export function buildWebsiteFullDocument(html: string, css: string, js: string, fontFamily?: string): string {
   const fontLink = fontFamily ? googleFontsLink(fontFamily) : '';
+  const scriptTag = websiteScriptTag(js);
   if (/<!DOCTYPE html>/i.test(html)) {
     // Il documento è già completo (AI genera html full-page): inietta
     // css/font nel <head> esistente e js prima di </body>.
@@ -29,12 +64,11 @@ export function buildWebsiteFullDocument(html: string, css: string, js: string, 
         ? out.slice(0, headEnd) + inject + out.slice(headEnd)
         : inject + out;
     }
-    if (js) {
+    if (js.trim()) {
       const bodyEnd = out.lastIndexOf('</body>');
-      const script = `<script>${js}</script>`;
       out = bodyEnd >= 0
-        ? out.slice(0, bodyEnd) + script + out.slice(bodyEnd)
-        : out + script;
+        ? out.slice(0, bodyEnd) + scriptTag + out.slice(bodyEnd)
+        : out + scriptTag;
     }
     return out;
   }
@@ -47,7 +81,7 @@ ${fontLink}<style>${css}</style>
 </head>
 <body>
 ${html}
-<script>${js}</script>
+${scriptTag}
 </body>
 </html>`;
 }

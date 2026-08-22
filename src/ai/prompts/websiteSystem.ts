@@ -1,5 +1,8 @@
+import { GOLDEN_WEBSITE_EXAMPLE } from './goldenExamples';
+
 export function buildWebsiteSystemPrompt(): string {
   return `Sei un web designer AI per Quickbrand. Generi siti web HTML5 completi, responsive, pronti per l'uso.
+⛔ NON inventare mai dati: usa ESATTAMENTE nome, settore, descrizione, indirizzo/città e contatti del brief. Se i contatti dicono Cagliari, NON scrivere Milano/Roma.
 
 REGOLE FONDAMENTALI:
 - Rispondi SOLO con un oggetto JSON contenente: html, css, js, pages[], heroPrompts[] (opzionale).
@@ -31,7 +34,9 @@ VINCOLI:
 - Il codice deve essere completo e funzionante se aperto in un browser.
 - I link tra pagine devono essere relativi (href="about.html").
 - Il CSS deve usare variabili CSS custom per colori primari/secondari (facile rebranding).
-- Ogni sezione ha un solo scopo chiaro: non mescolare 2 intenti nello stesso blocco.`;
+ - Ogni sezione ha un solo scopo chiaro: non mescolare 2 intenti nello stesso blocco.
+
+${GOLDEN_WEBSITE_EXAMPLE}`;
 }
 
 export function buildWebsiteGeneratePrompt(
@@ -76,7 +81,8 @@ export function buildWebsiteGeneratePrompt(
   if (brief.features) parts.push(`- Feature speciali: ${brief.features}`);
 
   parts.push('\n## Contatti e social');
-  if (brief.contacts) parts.push(`- Contatti: ${brief.contacts}`);
+  if (brief.contacts) parts.push(`- Contatti: ${brief.contacts} (usa ESATTAMENTE questa città/indirizzo, NON inventare Milano/Roma o altre)`);
+  parts.push('- ⛔ VIETATO inventare città diverse dai contatti: usa solo quella fornita');
   if (brief.socials && brief.socials.length > 0) {
     const socialLines = brief.socials.filter(s => s.platform || s.url).map(s => `  - ${s.platform}: ${s.url}`);
     if (socialLines.length > 0) parts.push(`- Social:\n${socialLines.join('\n')}`);
@@ -181,6 +187,7 @@ export function buildWebsiteHtmlPrompt(
   parts.push('- Ogni sezione deve avere <div class="section-inner"> per contenuto centrato');
   parts.push('- Aggiungi classe .current-year nel footer per l\'anno automatico via JS');
   parts.push('- I link social devono avere target="_blank" rel="noopener"');
+  parts.push('- Il FORM contatti è OPZIONALE: includilo SOLO se il brief lo richiede (feature/CTA di contatto). Se lo includi senza backend, il submit deve mostrare un messaggio (mai action="#" finto che non fa nulla); in alternativa usa link mailto/tel o la CTA.');
   parts.push('🚫 FOOTER MINIMALE: il footer DEVE essere semplice — una riga con copyright (.current-year) e al massimo i contatti essenziali. VIETATO: footer-brand con logo/nome duplicato (il brand è già nella nav), colonne multiple, footer-bottom separato, crediti "Sito web:". Un solo <footer> con <div class="section-inner"> e testo inline.');
   parts.push('\n⚠️ MULTI-PAGINA (se il brief richiede più di una pagina):');
   parts.push('- Restituisci UN SOLO HTML, quello della pagina index. Le altre pagine (about, contact...) vengono generate in uno step successivo.');

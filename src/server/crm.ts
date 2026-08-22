@@ -4,7 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { getDb, customersTable, customerKnowledgeTable, documentsTable } from './db.ts';
 import { clampDataUrl } from './core.ts';
 import { ingestLangfuse } from './langfuse.ts';
-import { topKChunks } from '../utils/knowledgeTopK.js';
+import { topKChunks, filterJunkChunks, cleanMarkdownForKnowledge } from '../utils/knowledgeTopK.js';
 import type { FirecrawlResult } from './types.ts';
 // TB-030 sync customer→website: aggiorna i doc website del cliente con i
 // campi brand (font/colori/contatti/social). Last-write-wins con confronto
@@ -21,6 +21,10 @@ export async function syncCustomerToWebsiteDocs(customerId: string, cust: Record
   const socials = Array.isArray(cust.socials) ? cust.socials as Array<{ platform?: string; url?: string }> : [];
   const font = typeof cust.font === 'string' ? cust.font : '';
   const preferredColors = typeof cust.preferredColors === 'string' ? cust.preferredColors : '';
+  const pages = typeof cust.pages === 'string' ? cust.pages : '';
+  const sections = typeof cust.sections === 'string' ? cust.sections : '';
+  const cta = typeof cust.cta === 'string' ? cust.cta : '';
+  const features = typeof cust.features === 'string' ? cust.features : '';
   // Indirizzo per la mappa: preferisce l'indirizzo COMPLETO dal research
   // Firecrawl (webData.json.addresses, es. "Via Dante 5/A, Cagliari") —
   // contacts.address è spesso solo via senza città → Google risolve male.
@@ -43,6 +47,10 @@ export async function syncCustomerToWebsiteDocs(customerId: string, cust: Record
       ...brief,
       font: font || brief.font,
       preferredColors: preferredColors || brief.preferredColors,
+      pages: pages || brief.pages,
+      sections: sections || brief.sections,
+      cta: cta || brief.cta,
+      features: features || brief.features,
       address,
       phone,
       email,
@@ -51,6 +59,61 @@ export async function syncCustomerToWebsiteDocs(customerId: string, cust: Record
     };
     await db.update(documentsTable).set({
       data: { ...data, brief: nextBrief } as never,
+      updatedAt: new Date(),
+    }).where(eq(documentsTable.id, doc.id));
+    synced++;
+  }
+  return synced;
+}
+
+// TB-030b sync customer→card: aggiorna i bigliettini del cliente con i
+// contatti/social/business del CRM (semi-completo, last-write-wins).
+export async function syncCustomerToCardDocs(customerId: string, cust: Record<string, unknown>): Promise<number> {
+  const db = await getDb();
+  const docs = await db.select().from(documentsTable).where(and(
+    eq(documentsTable.customerId, customerId),
+    eq(documentsTable.documentType, 'businessCard'),
+  ));
+  if (docs.length === 0) return 0;
+  const contacts = (cust.contacts || {}) as Record<string, unknown>;
+  const socials = Array.isArray(cust.socials) ? cust.socials as Array<{ platform?: string; url?: string }> : [];
+  const businessName = typeof cust.businessName === 'string' ? cust.businessName : '';
+  const ownerName = typeof cust.ownerName === 'string' ? cust.ownerName : '';
+  const sector = typeof cust.sector === 'string' ? cust.sector : '';
+  const font = typeof cust.font === 'string' ? cust.font : '';
+  const preferredColors = typeof cust.preferredColors === 'string' ? cust.preferredColors : '';
+  const custUpdated = cust.updatedAt ? new Date(cust.updatedAt as string).getTime() : Date.now();
+  let synced = 0;
+  for (const doc of docs) {
+    const docUpdated = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
+    if (docUpdated > custUpdated) continue;
+    const data = (doc.data as Record<string, unknown> | null) || {};
+    const front = (data.front as Record<string, unknown> | null) || {};
+    const back = (data.back as Record<string, unknown> | null) || {};
+    const style = (data.style as Record<string, unknown> | null) || {};
+    const nextFront: Record<string, unknown> = { ...front };
+    const nextBack: Record<string, unknown> = { ...back };
+    const nextStyle: Record<string, unknown> = { ...style };
+    // Contatti: sovrascrive solo se il valore customer non è vuoto e diverso.
+    if (contacts.phone && contacts.phone !== back.phone) nextBack.phone = String(contacts.phone);
+    if (contacts.email && contacts.email !== back.email) nextBack.email = String(contacts.email);
+    if (contacts.website && contacts.website !== back.website) nextBack.website = String(contacts.website);
+    if (contacts.address && contacts.address !== back.address) nextBack.address = String(contacts.address);
+    if (socials.length > 0) nextBack.socials = socials;
+    if (businessName && businessName !== front.company) nextFront.company = businessName;
+    if (ownerName && ownerName !== front.name) nextFront.name = ownerName;
+    if (sector && sector !== front.title) nextFront.title = sector;
+    if (font && font !== style.fontFamily) nextStyle.fontFamily = font;
+    if (preferredColors && preferredColors !== style.accentColor) {
+      // Usa primo colore della palette come accent se diverso.
+      const firstColor = preferredColors.split(/[,\s]+/).find((c) => c.startsWith('#'));
+      if (firstColor) nextStyle.accentColor = firstColor;
+    }
+    // Skip se nessun cambiamento.
+    const changed = JSON.stringify({ front, back, style }) !== JSON.stringify({ front: nextFront, back: nextBack, style: nextStyle });
+    if (!changed) continue;
+    await db.update(documentsTable).set({
+      data: { ...data, front: nextFront, back: nextBack, style: nextStyle } as never,
       updatedAt: new Date(),
     }).where(eq(documentsTable.id, doc.id));
     synced++;
@@ -72,6 +135,11 @@ export function buildBriefContextApi(cust: Record<string, unknown>): string {  c
   if (c.target) parts.push(`Target: ${c.target}`);
   if (brandingColors) parts.push(`Colori sito (USA QUESTI per logo/card/flyer): ${JSON.stringify(brandingColors)}`);
   if (c.preferredColors) parts.push(`Palette preferita cliente (secondaria): ${c.preferredColors}`);
+  if (c.font) parts.push(`Font: ${c.font}`);
+  if (c.pages) parts.push(`Pagine: ${c.pages}`);
+  if (c.sections) parts.push(`Sezioni: ${c.sections}`);
+  if (c.cta) parts.push(`CTA: ${c.cta}`);
+  if (c.features) parts.push(`Feature: ${c.features}`);
   if (contacts.address) parts.push(`Indirizzo: ${contacts.address}`);
   if (contacts.website) parts.push(`Sito: ${contacts.website}`);
   if (contacts.phone) parts.push(`Telefono: ${contacts.phone}`);
@@ -160,10 +228,18 @@ export function chunkMarkdown(markdown: string, maxLen = 1000): string[] {
 }
 
 export async function saveCustomerKnowledge(customerId: string, chunks: string[], source: string, metadata?: Record<string, unknown>): Promise<number> {
-  if (!chunks.length) return 0;
+  // Filtro spam/mojibake PRIMA del salvataggio: i chunk junk finirebbero
+  // nel briefContext AI (auto-build/ai-fill) inquinando la generazione.
+  const clean = filterJunkChunks(chunks);
+  if (!clean.length) return 0;
   const db = await getDb();
+  // Research idempotente: una nuova scrape della stessa source sostituisce
+  // i chunk vecchi (prima si accumulavano run dopo run, spam incluso).
+  await db.delete(customerKnowledgeTable).where(
+    and(eq(customerKnowledgeTable.customerId, customerId), eq(customerKnowledgeTable.source, source)),
+  );
   let inserted = 0;
-  for (const chunk of chunks) {
+  for (const chunk of clean) {
     await db.insert(customerKnowledgeTable).values({
       customerId,
       chunk,
@@ -363,7 +439,10 @@ export async function runCustomerResearch(cust: any): Promise<{
     const firecrawl = await fetchFirecrawlPage(website);
     researchStatus.web = firecrawl.status;
     if (firecrawl.status === 'ok') {
-      const chunks = chunkMarkdown(firecrawl.markdown || '');
+      // Pre-filter paragrafi junk (spam/mojibake) PRIMA del chunking:
+      // chunkMarkdown taglia a 1000 char e un filtro post mischierebbe
+      // spam e contenuto pulito nello stesso chunk su markdown corti.
+      const chunks = chunkMarkdown(cleanMarkdownForKnowledge(firecrawl.markdown || ''));
       knowledgeCount = await saveCustomerKnowledge(cust.id, chunks, 'firecrawl:homepage', {
         title: firecrawl.title,
         description: firecrawl.description,
